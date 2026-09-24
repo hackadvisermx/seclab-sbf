@@ -52,6 +52,7 @@ jobs:
           scan-type: fs
           scan-ref: .
           scanners: vuln,misconfig,secret
+          trivyignores: .trivyignore.yaml
           severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: false

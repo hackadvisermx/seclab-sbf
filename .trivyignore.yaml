@@ -1,0 +1,6 @@
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - images/base/Dockerfile
+      - images/light/Dockerfile
+    statement: Runtime root is required for sshd, ttyd supervision and the controlled TUN service.

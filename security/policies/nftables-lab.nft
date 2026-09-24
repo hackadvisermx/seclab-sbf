@@ -1,0 +1,39 @@
+define SECLAB_DOCKER_CIDR = 172.20.0.0/16
+define SECLAB_DOCKER_GATEWAY = 172.20.0.1
+define SECLAB_TAILSCALE4 = 100.64.0.0/10
+define SECLAB_TAILSCALE6 = fd7a:115c:a1e0::/48
+define SECLAB_METADATA4 = 169.254.169.254
+define SECLAB_AZURE4 = 168.63.129.16
+define SECLAB_ORACLE4 = 192.0.0.192
+define SECLAB_METADATA6 = fd00:ec2::254
+
+table inet seclab_security {
+  chain forward {
+    type filter hook forward priority -10; policy accept;
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 127.0.0.0/8 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 169.254.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr $SECLAB_TAILSCALE4 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr $SECLAB_METADATA4 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr $SECLAB_AZURE4 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr $SECLAB_ORACLE4 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr $SECLAB_DOCKER_GATEWAY drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.17.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.18.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.19.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.20.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.21.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.22.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.23.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.24.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.25.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.26.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.27.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.28.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.29.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.30.0.0/16 drop
+    ip saddr $SECLAB_DOCKER_CIDR ip daddr 172.31.0.0/16 drop
+    ip6 daddr fe80::/10 drop
+    ip6 daddr $SECLAB_TAILSCALE6 drop
+    ip6 daddr $SECLAB_METADATA6 drop
+  }
+}

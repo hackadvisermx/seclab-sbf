@@ -851,6 +851,13 @@ pt-forward doctor
 - Probar túneles desde macOS y VPS.
 - Pendiente el consumo externo mediante Tailscale y nftables/cloud.
 
+### Fase 6.5 — Seguridad de exposición (v1 en curso)
+
+- Preparar `security/policies/nftables-lab.nft` sin cargarlo automáticamente.
+- Mantener Tailscale en el host, sin Funnel, Exit Node ni rutas DNS automáticas.
+- Validar `make security-check` en Linux y omitir explícitamente en macOS.
+- Dejar el consumo externo del proxy pendiente hasta definir un transporte host-only.
+
 ### Fase 7 — Imagen `full`
 
 - Añadir Metasploit.
@@ -871,8 +878,8 @@ pt-forward doctor
 
 ### Fase 9 — Seguridad cloud
 
-- Instalar nftables.
-- Configurar DOCKER-USER.
+- Aplicar y verificar la plantilla nftables en el host Linux/cloud.
+- Configurar Tailscale ACL, MFA y device approval.
 - Añadir fail2ban.
 - Bloquear metadata.
 - Deshabilitar IP pública cuando sea posible.
@@ -906,6 +913,7 @@ pt-forward doctor
 - `pt-forward`, `pt-socks` y `pt-web` escuchan solo en loopback, validan `tun0` y se detienen al perder la VPN.
 - `pt-web` rechaza absolute-form y no puede seleccionar un destino distinto al origen configurado.
 - Los proxies no alcanzan Tailscale, metadata o Docker.
+- `security-check` valida la política en Linux; la aplicación host queda bajo revisión del operador.
 - Fail2ban bloquea ataques de autenticación repetidos.
 - Las imágenes tienen SBOM, provenance y firma.
 - CVEs críticos no pueden publicarse.

@@ -10,7 +10,7 @@ VPN_PROFILE ?= tryhackme
 VPN_COMPOSE := -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml
 
 help:
-	@printf '%s\n' 'verify         Ejecuta las verificaciones locales disponibles' 'verify-secrets Escanea secretos con Gitleaks' 'lint-docker    Ejecuta Hadolint sobre el Dockerfile base' 'lint-shell     Ejecuta ShellCheck sobre scripts versionados' 'build-base     Construye la imagen base' 'build-light    Construye la imagen light' 'env-init       Crea .env desde .env.example con permisos 600' 'keys           Genera una clave local compartida para lab/SFTP' 'compose config Valida compose.yaml' 'compose up     Levanta lab, daemon VPN y tun0; no conecta un túnel' 'compose down   Detiene lab y daemon VPN' 'compose shell  Abre Bash como lab para depuración' 'compose zsh    Abre Zsh efímero para previsualización' 'compose tmux   Entra a la sesión tmux del servicio activo' 'vpn-up         Asegura el daemon/control VPN y tun0; no conecta un túnel' 'vpn-tun-check  Comprueba /dev/net/tun, tun0, NET_ADMIN y estado inside' 'vpn-down       Detiene el daemon VPN interno' 'vpn-list       Lista perfiles VPN del modo inside' 'vpn-status     Muestra el estado de la VPN inside' 'vpn-connect    Conecta VPN_PROFILE a demanda dentro del contenedor' 'vpn-disconnect Desconecta la VPN activa' 'vpn-switch     Cambia al perfil VPN_PROFILE' 'vpn-doctor     Valida perfiles y capacidades VPN'
+	@printf '%s\n' 'verify         Ejecuta las verificaciones locales disponibles' 'verify-secrets Escanea secretos con Gitleaks' 'lint-docker    Ejecuta Hadolint sobre el Dockerfile base' 'lint-shell     Ejecuta ShellCheck sobre scripts versionados' 'build-base     Construye la imagen base' 'build-light    Construye la imagen light' 'env-init       Crea .env desde .env.example con permisos 600' 'keys           Genera una clave local para tester' 'compose config Valida compose.yaml' 'compose up     Levanta tester, daemon VPN y tun0; no conecta un túnel' 'compose down   Detiene tester y daemon VPN' 'compose shell  Abre Bash como tester para depuración' 'compose zsh    Abre Zsh efímero para previsualización' 'compose tmux   Entra a la sesión tmux del servicio activo' 'vpn-up         Asegura el daemon/control VPN y tun0; no conecta un túnel' 'vpn-tun-check  Comprueba /dev/net/tun, tun0, NET_ADMIN y estado inside' 'vpn-down       Detiene el daemon VPN interno' 'vpn-list       Lista perfiles VPN del modo inside' 'vpn-status     Muestra el estado de la VPN inside' 'vpn-connect    Conecta VPN_PROFILE a demanda dentro del contenedor' 'vpn-disconnect Desconecta la VPN activa' 'vpn-switch     Cambia al perfil VPN_PROFILE' 'vpn-doctor     Valida perfiles y capacidades VPN'
 
 verify: verify-secrets lint-docker lint-shell
 
@@ -38,7 +38,7 @@ env-init:
 	fi
 	@cp .env.example "$(ENV_FILE)"
 	@chmod 600 "$(ENV_FILE)"
-	@case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-lab-keys.sh ;; esac
+	@case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-keys.sh ;; esac
 	@printf 'creado %s desde .env.example\n' "$(ENV_FILE)"
 
 ensure-env:
@@ -48,7 +48,7 @@ ensure-env:
 		printf 'creado %s desde .env.example\n' "$(ENV_FILE)"; \
 	fi
 	@if [ "$(ENV_FILE)" = ".env" ]; then chmod 600 "$(ENV_FILE)"; fi
-	@case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-lab-keys.sh ;; esac
+	@case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-keys.sh ;; esac
 
 keys: ensure-env
 

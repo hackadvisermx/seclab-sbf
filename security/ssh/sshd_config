@@ -12,7 +12,7 @@ PermitEmptyPasswords no
 UsePAM yes
 PubkeyAuthentication yes
 AuthenticationMethods publickey
-AllowUsers lab transfer
+AllowUsers tester
 X11Forwarding no
 AllowAgentForwarding no
 AllowTcpForwarding no
@@ -28,11 +28,3 @@ ClientAliveCountMax 2
 UseDNS no
 LogLevel VERBOSE
 PrintMotd no
-Subsystem sftp internal-sftp
-
-Match User transfer
-  ChrootDirectory /srv/sftp
-  ForceCommand internal-sftp -d /files
-  AllowTcpForwarding no
-  X11Forwarding no
-  PermitTunnel no

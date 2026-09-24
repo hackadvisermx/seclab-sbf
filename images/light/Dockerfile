@@ -33,20 +33,15 @@ COPY shell/tools.json /usr/local/share/seclab/tools.json
 COPY shell/zshrc /usr/local/share/seclab/zshrc
 COPY shell/pentest-lab /usr/local/share/seclab/pentest-lab
 COPY scripts/install-shell.sh /usr/local/bin/install-shell
-RUN usermod --login lab --home /home/lab --move-home --shell /usr/bin/zsh ubuntu \
- && groupmod --new-name lab ubuntu \
- && usermod --groups lab lab \
- && groupadd --gid 1001 transfer \
- && useradd --uid 1001 --gid 1001 --create-home --shell /usr/sbin/nologin transfer \
- && install -d -m 0755 /srv/sftp \
- && install -d -m 0755 /srv/sftp/files \
+RUN usermod --login tester --home /home/tester --move-home --shell /usr/bin/zsh ubuntu \
+ && groupmod --new-name tester ubuntu \
+ && usermod --groups tester tester \
+ && install -d -m 0755 /home/tester \
  && install -d -m 0700 /var/lib/seclab/ssh \
- && chown root:root /srv/sftp \
-  && chown lab:lab /home/lab \
-  && chown transfer:transfer /home/transfer
-COPY .tmux.conf /home/lab/.tmux.conf
-RUN chown root:root /home/lab/.tmux.conf \
- && chmod 0444 /home/lab/.tmux.conf
+ && chown tester:tester /home/tester
+COPY .tmux.conf /home/tester/.tmux.conf
+RUN chown root:root /home/tester/.tmux.conf \
+ && chmod 0444 /home/tester/.tmux.conf
 RUN chmod 0555 /usr/local/bin/install-shell \
  && OH_MY_ZSH_COMMIT=74965c96098134b192f00084f966b4b02438a739 \
     ZSH_AUTOSUGGESTIONS_COMMIT=85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5 \
@@ -54,16 +49,16 @@ RUN chmod 0555 /usr/local/bin/install-shell \
     ZSH_COMPLETIONS_COMMIT=b5e8e0a22deb05a807bb8655aef809a29f3cffed \
     ZOXIDE_PLUGIN_COMMIT=09a18b4424b3f1033094ffd97da6d47585e38259 \
     /usr/local/bin/install-shell \
- && install -m 0644 -o lab -g lab /usr/local/share/seclab/zshrc /home/lab/.zshrc
+  && install -m 0644 -o tester -g tester /usr/local/share/seclab/zshrc /home/tester/.zshrc
 COPY security/ssh/sshd_config /etc/ssh/sshd_config.seclab
 
 COPY scripts/entrypoint/light-entrypoint.sh /usr/local/bin/light-entrypoint
-COPY scripts/entrypoint/ttyd-as-lab.sh /usr/local/bin/ttyd-as-lab
-COPY scripts/entrypoint/ttyd-as-lab-shell.sh /usr/local/bin/ttyd-as-lab-shell
+COPY scripts/entrypoint/ttyd-as-tester.sh /usr/local/bin/ttyd-as-tester
+COPY scripts/entrypoint/ttyd-as-tester-shell.sh /usr/local/bin/ttyd-as-tester-shell
 COPY scripts/vpn-manager.sh /usr/local/bin/vpn-manager
 COPY scripts/vpn-control.py /usr/local/bin/vpn-control
 COPY scripts/health/light-healthcheck.sh /usr/local/bin/light-healthcheck
-RUN chmod 0555 /usr/local/bin/light-entrypoint /usr/local/bin/ttyd-as-lab /usr/local/bin/ttyd-as-lab-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/light-healthcheck
+RUN chmod 0555 /usr/local/bin/light-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/light-healthcheck
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/light-entrypoint"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/usr/local/bin/light-healthcheck"]

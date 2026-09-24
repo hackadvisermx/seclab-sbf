@@ -66,11 +66,6 @@
       "command": "rg",
       "description": "Búsqueda rápida de texto"
     },
-    "sftp": {
-      "category": "access",
-      "command": "sftp",
-      "description": "Transferencia SFTP"
-    },
     "socat": {
       "category": "network",
       "command": "socat",
@@ -136,7 +131,6 @@
       "openvpn",
       "python3",
       "rg",
-      "sftp",
       "socat",
       "sqlmap",
       "ssh",

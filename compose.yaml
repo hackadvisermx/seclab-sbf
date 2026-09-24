@@ -51,11 +51,6 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${WORKSPACE_DIR:-./workspace}
-        target: /srv/sftp/files
-        bind:
-          create_host_path: false
-      - type: bind
         source: ${LAB_ENV_FILE:-.env}
         target: /run/secrets/lab.env
         read_only: true

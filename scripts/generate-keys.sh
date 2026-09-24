@@ -35,15 +35,9 @@ write_env_value() {
 }
 
 ssh_value="$(read_env_value SSH_PUBLIC_KEY)"
-sftp_value="$(read_env_value SFTP_PUBLIC_KEY)"
 
-if [ -n "$ssh_value" ] && [ -n "$sftp_value" ] && [ "$ssh_value" != "$sftp_value" ]; then
-  printf '%s\n' 'SSH_PUBLIC_KEY y SFTP_PUBLIC_KEY deben usar la misma clave; no se modifican.' >&2
-  exit 65
-fi
-
-if [ -n "$ssh_value" ] || [ -n "$sftp_value" ]; then
-  public_value="${ssh_value:-$sftp_value}"
+if [ -n "$ssh_value" ]; then
+  public_value="$ssh_value"
   key_source=existing-env
 else
   if [ -e "$private_key" ] || [ -e "$public_key" ]; then
@@ -67,5 +61,4 @@ else
 fi
 
 write_env_value SSH_PUBLIC_KEY "$public_value"
-write_env_value SFTP_PUBLIC_KEY "$public_value"
-printf 'ssh_keys=ready source=%s shared_user_key=yes\n' "$key_source"
+printf 'ssh_keys=ready source=%s user=tester\n' "$key_source"

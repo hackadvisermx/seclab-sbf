@@ -1,8 +1,8 @@
 # seclab-sbf
 
-Laboratorio privado de pentesting en contenedores, con terminal interactiva, SSH/SFTP, herramientas base y VPN bajo demanda.
+Laboratorio privado de pentesting en contenedores, con terminal interactiva, SSH, herramientas base y VPN bajo demanda.
 
-El objetivo es que el usuario `lab` trabaje dentro del contenedor y solicite el túnel VPN que necesite sin convertir el laboratorio en un proxy abierto ni ejecutar una VPN en el host.
+El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite el túnel VPN que necesite sin convertir el laboratorio en un proxy abierto ni ejecutar una VPN en el host.
 
 ## Estado actual
 
@@ -32,10 +32,10 @@ La Fase 5 fue validada en Docker Desktop macOS ARM64 con TUN y un perfil oficial
 
 ```bash
 make env-init                 # solo si .env no existe
-make keys                     # genera .secrets/ssh/ y completa claves públicas
+make keys                     # genera .secrets/ssh/ y completa la clave pública
 ```
 
-Edita `.env` y establece al menos `TTYD_PASSWORD`, `SSH_PUBLIC_KEY` y `SFTP_PUBLIC_KEY` si el generador no las completó. `.env` debe conservar permisos `600` y nunca se sube a Git.
+Edita `.env` y establece al menos `TTYD_PASSWORD` y `SSH_PUBLIC_KEY` si el generador no las completó. `.env` debe conservar permisos `600` y nunca se sube a Git.
 
 ### Levantar el laboratorio
 
@@ -44,7 +44,7 @@ make compose up
 make compose tmux
 ```
 
-`make compose up` levanta `lab`, el daemon VPN interno y `tun0`, pero no conecta ningún perfil. Dentro de la sesión tmux:
+`make compose up` levanta `tester`, el daemon VPN interno y `tun0`, pero no conecta ningún perfil. Dentro de la sesión tmux:
 
 ```text
 pt-help
@@ -70,12 +70,12 @@ make compose down
 
 El flujo normal usa `VPN_MODE=inside`:
 
-- `lab` contiene la sesión del usuario y comparte el namespace de red con el servicio root `vpn`.
+- `tester` contiene la sesión del usuario y comparte el namespace de red con el servicio root `vpn`.
 - El servicio `vpn` precrea `tun0` y expone un socket Unix allowlistado.
 - `vpntry`, `vpnhtb` y `vpncli` solicitan el túnel bajo demanda.
 - El gestor genera una copia sanitizada en el volumen de estado; los perfiles originales permanecen fuera de la imagen.
 - Se filtran `redirect-gateway`, `route-gateway` y opciones DNS; no se permite cambiar la ruta por defecto.
-- El usuario `lab` no recibe root ni `NET_ADMIN`; OpenVPN se ejecuta en el servicio controlado.
+- El usuario `tester` no recibe root ni `NET_ADMIN`; OpenVPN se ejecuta en el servicio controlado.
 
 Comandos adicionales:
 
@@ -87,18 +87,20 @@ make compose vpn-status VPN_DIR=./vpn VPN_MODE=inside
 
 `vpn-up` es idempotente y deja preparado el daemon/TUN; no inicia una VPN por sí solo. `VPN_MODE=host` queda únicamente como compatibilidad explícita y no se usa en el flujo normal.
 
-## SSH, SFTP y tmux
+## SSH, tmux y proxy controlado
 
-`make keys` genera un par Ed25519 local:
+`make keys` genera un par Ed25519 local para `tester`:
 
 ```text
 .secrets/ssh/seclab_ed25519       # privado, 0600, ignorado
 .secrets/ssh/seclab_ed25519.pub   # público
 ```
 
-La misma clave pública se usa para `lab` y `transfer`, y el archivo privado nunca se monta en el contenedor. Las claves se generan automáticamente en `.env` mediante `SSH_PUBLIC_KEY` y `SFTP_PUBLIC_KEY`.
+El archivo privado nunca se monta en el contenedor. La clave se configura mediante `SSH_PUBLIC_KEY`; SFTP está desactivado y no existe una cuenta SFTP separada. El acceso SSH usa únicamente claves y shell con Zsh/tmux.
 
-`.tmux.conf` se copia a `/home/lab/.tmux.conf` durante el build con permisos `0444` y propietario `root`. El estado de plugins de TPM vive en `/tmp/tmux-plugins`, porque el rootfs es read-only.
+La capacidad de proxy se expone para `tester` mediante `pt-forward` y un route guard; no existe un usuario `proxy` independiente. Es una interfaz controlada, no una frontera contra el propio `tester`: el firewall/nftables de la fase cloud será la barrera adicional para impedir destinos fuera de la VPN activa.
+
+`.tmux.conf` se copia a `/home/tester/.tmux.conf` durante el build con permisos `0444` y propietario `root`. El estado de plugins de TPM vive en `/tmp/tmux-plugins`, porque el rootfs es read-only.
 
 ## Seguridad y límites
 

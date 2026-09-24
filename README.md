@@ -15,8 +15,9 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | 4 | Completada v1 | Zsh, Oh My Zsh, fzf, zoxide, banner, herramientas y tmux |
 | 5 | Completada v1 | VPN inside, TUN, socket autenticado, aliases y sanitización |
 | 6 | En curso v1 | `pt-forward` TCP, `pt-socks` SOCKS5, `pt-web` HTTP/WebSocket y route guard |
+| 6.5 | En curso | Política nftables y contrato Tailscale host-only; no se aplican automáticamente |
 | 7 | Pendiente | Imagen `full`; Ghidra/reversing quedan diferidos |
-| 8–10 | Pendiente | Terraform/cloud, nftables, Tailscale, fail2ban y operación |
+| 8–10 | Pendiente | Terraform/cloud, aplicación host de nftables/Tailscale, fail2ban y operación |
 
 La Fase 5 fue validada en Docker Desktop macOS ARM64 con TUN y un perfil oficial de TryHackMe. Las pruebas reales de los otros perfiles y la matriz nativa Linux siguen pendientes.
 
@@ -127,6 +128,15 @@ make compose proxy-stop
 
 La route guard es una interfaz de uso, no una frontera contra `tester`; nftables/cloud queda como refuerzo de seguridad.
 
+En Linux, las comprobaciones de host se ejecutan sin aplicar cambios:
+
+```bash
+make security-check
+make tailscale-check
+```
+
+La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tailscale están en `security/`; Docker Desktop/macOS omite esos checks.
+
 ## Seguridad y límites
 
 - No se publican puertos Docker.
@@ -183,8 +193,8 @@ No se modifica `main` directamente. Cada fase debe terminar en un Pull Request c
 
 ## Siguientes pasos
 
-1. Exponer el consumo de proxy mediante Tailscale de forma controlada.
-2. Endurecer la route guard con firewall/nftables.
+1. Validar la política nftables en un host Linux y configurar Tailscale host-only.
+2. Diseñar el transporte privado para el consumo externo del proxy sin publicar puertos.
 3. Probar los perfiles `hackthebox` y `client` autorizados.
 4. Ejecutar la matriz nativa Linux.
-5. Retomar `full`, Terraform/cloud y Tailscale en fases posteriores.
+5. Retomar `full`, Terraform/cloud y operación en fases posteriores.

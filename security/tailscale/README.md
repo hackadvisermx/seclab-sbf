@@ -43,6 +43,6 @@ sudo nft -c -f security/policies/nftables-lab.nft
 sudo nft list table inet seclab_security
 ```
 
-La política bloquea desde la red Docker hacia metadata cloud, Azure/Oracle metadata, Tailscale, loopback, gateways Docker y bridges Docker. La CIDR y el gateway deben ajustarse al deployment real antes de cargarla.
+La política se evalúa en `prerouting` antes de la decisión local/forward y bloquea desde la red Docker hacia metadata cloud, Azure/Oracle metadata, Tailscale, loopback, gateways Docker y bridges Docker. La CIDR y el gateway deben ajustarse al deployment real antes de cargarla.
 
 En macOS con Docker Desktop, `scripts/security/check-isolation.sh` informa `skipped`; no simula nftables ni modifica el host.

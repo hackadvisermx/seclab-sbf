@@ -29,4 +29,8 @@ if command -v docker >/dev/null 2>&1; then
 fi
 
 nft -c -f "$policy"
+if ! grep -Fq 'hook prerouting' "$policy"; then
+  printf '%s\n' 'nftables_check=invalid-hook expected=prerouting'
+  exit 78
+fi
 printf '%s\n' 'nftables_check=ok policy=security/policies/nftables-lab.nft'

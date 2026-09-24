@@ -32,7 +32,7 @@ La auth key se revoca manualmente después de verificar la unión. No se guarda 
 - No habilitar Funnel, Exit Node, subnet routes ni rutas DNS automáticas.
 - No abrir puertos Docker para consumir `ttyd`, SSH o el proxy.
 - `pt-forward`, `pt-socks` y `pt-web` escuchan en loopback dentro del contenedor; su consumo externo requiere un transporte host-only que aún no se habilita.
-- El firewall `security/policies/nftables-lab.nft` es una política de host para Linux/cloud y no se carga automáticamente.
+- En OCI se validó una ruta por NAT gateway con el nodo sin `public_ip`; la topología final debe conservar esa dependencia y las rutas por NAT.
 
 ## Verificación de firewall
 

@@ -30,7 +30,7 @@
 - `light` ejecuta `sshd` como servicio root con capabilities mínimas y las sesiones como `tester`; no existen usuarios `transfer` ni `proxy`.
 - El acceso SSH es únicamente con claves. El único usuario planeado es `tester` (shell con tmux); SFTP está desactivado y la capacidad de proxy será un comando controlado con frontera de red, no otra cuenta Unix (`plan.md:235-282`).
 - `pt-forward`, `pt-socks` y `pt-web` se ejecutan como `tester`, escuchan solo en loopback y validan la tabla de rutas contra `tun0`; el consumo externo queda pendiente.
-- La política `security/policies/nftables-lab.nft` es una plantilla de host Linux y no se carga automáticamente; `security/tailscale/README.md` define el contrato host-only. La validación efímera OCI confirmó el hook `prerouting`; Tailscale sin IP pública requiere validar un NAT gateway y queda pendiente.
+- La política `security/policies/nftables-lab.nft` es una plantilla de host Linux y no se carga automáticamente; `security/tailscale/README.md` define el contrato host-only. La validación efímera OCI confirmó el hook `prerouting` y una ruta NAT gateway sin `public_ip`; la aplicación final queda pendiente.
 - `vpntry`, `vpnhtb` y `vpncli` corresponden a `tryhackme.ovpn`, `hackthebox.ovpn` y `client.ovpn` respectivamente; el socket Unix solo permite esas acciones y el servicio root conserva las rutas. Mantén los perfiles aislados y limpia las rutas al desconectarse (`plan.md:430-483`).
 - Oh My Zsh y los plugins externos están fijados a commits concretos; el plugin local `pentest-lab` contiene `pt-help`, `pt-tools`, `pt-banner`, `pentest-reset`, los alias VPN de la Fase 5 y `pt-forward`/`pt-socks`/`pt-web` de la Fase 6 (`plan.md:537-614`).
 

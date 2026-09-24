@@ -38,11 +38,11 @@ El check de Tailscale no imprime el JSON de estado ni claves; en macOS se omite.
 
 El 2026-09-24 se validó en OCI `mx-monterrey-1` un host Ubuntu 24.04 AMD64, `VM.Standard.E5.Flex` de 2 OCPU/8 GB, nftables 1.0.9, Docker 29.1.3 y Tailscale 1.102.4. Antes de cargar la política, el contenedor de prueba alcanzaba metadata AWS, el host Tailscale y el gateway Docker. Con el hook `prerouting`, esos tres destinos y las metadata Azure/Oracle quedaron bloqueados; la salida pública siguió disponible.
 
-El acceso de administración se probó por Tailscale después de retirar el ingress SSH público, manteniendo la IP OCI efímera. Al retirar también la IP, el ping overlay dejó de responder; falta validar un NAT gateway con subnet privada antes de afirmar que Tailscale funciona sin IP pública. El host y sus recursos de red son temporales y no forman parte del despliegue del laboratorio.
+El acceso de administración se probó por Tailscale después de retirar el ingress SSH público. En una segunda prueba, el mismo nodo se relanzó sin `public_ip` y con ruta por NAT gateway; `tailscale ping`, SSH overlay, `netcheck` UDP/IPv4 y egress funcionaron. Todos los recursos temporales fueron destruidos. La aplicación de esta topología en el host/cloud final sigue pendiente.
 
 ## Pendiente
 
-- Aplicar y verificar la plantilla en el host Linux/cloud de destino final.
+- Aplicar y verificar la plantilla y la topología NAT en el host Linux/cloud de destino final.
 - Diseñar el transporte host-only para consumir `pt-web` sin `ports:`.
 - Probar Tailscale en una VM/VPS con ACL y auth key one-off.
 - Mantener Ghidra/reversing fuera de esta fase.

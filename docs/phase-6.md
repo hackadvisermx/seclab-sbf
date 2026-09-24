@@ -2,13 +2,13 @@
 
 ## Estado
 
-La v1 de `pt-forward` y `pt-socks` está implementada para el usuario único `tester`. Ambos comandos escuchan únicamente en `127.0.0.1`, exigen una VPN activa y validan cada conexión contra `tun0`. `pt-web` permanece pendiente.
+La v1 de `pt-forward`, `pt-socks` y `pt-web` está implementada para el usuario único `tester`. Todos escuchan únicamente en `127.0.0.1`, exigen una VPN activa y validan cada conexión contra `tun0`.
 
 ## Componentes
 
-- `scripts/proxy-control.py`: helper Python sin dependencias externas para TCP loopback, SOCKS5, estado, arranque, parada y diagnóstico.
+- `scripts/proxy-control.py`: helper Python sin dependencias externas para TCP loopback, SOCKS5, HTTP/HTTPS/WebSocket loopback, estado, arranque, parada y diagnóstico.
 - `images/light/Dockerfile`: instala el helper como `/usr/local/bin/pt-forward` con permisos `0555`.
-- `shell/pentest-lab/pentest-lab.plugin.zsh`: aliases `pt-forward` y `pt-socks`.
+- `shell/pentest-lab/pentest-lab.plugin.zsh`: aliases `pt-forward`, `pt-socks` y `pt-web`.
 - `Makefile`: objetivos `proxy-status`, `proxy-doctor` y `proxy-stop`.
 - `shell/tools.json`: registra `pt-forward` como herramienta de red.
 
@@ -28,13 +28,14 @@ El monitor interno detiene el proxy cuando la VPN deja de estar activa. El estad
 ```text
 pt-forward start tcp <host> <port> [listen_port]
 pt-socks [listen_port]
+pt-web start <http-or-https-origin> [listen_port]
 pt-forward status
 pt-forward doctor [host port]
 pt-forward stop
 pt-forward clean
 ```
 
-El puerto por defecto de `pt-forward` es `18080`; el de SOCKS5 es `1080`. No se publican puertos Docker.
+El puerto por defecto de `pt-forward` es `18080`; el de SOCKS5 es `1080`; el de `pt-web` es `18081`. `pt-web` acepta solo un origen sin ruta, query, fragmento o credenciales, rechaza absolute-form HTTP y permite WebSocket sobre el mismo relay. No se publican puertos Docker.
 
 Desde el host:
 
@@ -51,6 +52,7 @@ make compose proxy-stop
 - `pt-forward doctor` devuelve 78 sin VPN y no inicia listeners.
 - Con `tryhackme.ovpn` activo, una dirección con ruta `tun0` es permitida y `127.0.0.1` es rechazado.
 - `pt-forward` y `pt-socks` arrancan, muestran estado y respetan permisos `0700`/`0600`.
+- `pt-web` acepta un origen HTTP/HTTPS, rechaza absolute-form HTTP y permite el relay WebSocket; el listener permanece en loopback.
 - Al ejecutar `vpn-disconnect`, el proxy se detiene automáticamente.
 - `pt-tools` muestra `pt-forward`.
 
@@ -58,5 +60,6 @@ make compose proxy-stop
 
 - El usuario `tester` conserva shell y puede ejecutar herramientas de red directamente; la route guard es una interfaz controlada, no una frontera de seguridad contra ese usuario.
 - La barrera de red definitiva para metadata, Tailscale, gateway Docker e interfaces del host queda en nftables/cloud.
-- `pt-web`, el consumo externo mediante Tailscale y las pruebas VPS quedan pendientes.
+- El consumo externo mediante Tailscale y las pruebas VPS quedan pendientes.
+- `pt-web` no implementa Caddy, terminating TLS local ni publicación de puertos; solo valida y reenvía HTTP/HTTPS/WebSocket a un origen fijo.
 - No se deben añadir listeners `0.0.0.0` ni forwarding SSH.

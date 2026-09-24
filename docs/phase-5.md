@@ -89,4 +89,4 @@ En `VPN_MODE=host`, `vpn-connect`, `vpn-switch` y los aliases devuelven una nega
 
 ## Siguiente fase
 
-- Fase 6: `pt-forward` TCP y `pt-socks` SOCKS5 para `tester`; `pt-web` queda pendiente.
+- Fase 6: `pt-forward` TCP, `pt-socks` SOCKS5 y `pt-web` HTTP/HTTPS/WebSocket para `tester`; consumo externo pendiente.

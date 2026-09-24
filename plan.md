@@ -484,7 +484,7 @@ No se usará `--privileged` ni `mknod` como solución al problema de TUN.
 
 ## 13. Proxy Lab
 
-Estado v1: `pt-forward` TCP y `pt-socks` SOCKS5 están implementados para `tester`; `pt-web` permanece pendiente.
+Estado v1: `pt-forward` TCP, `pt-socks` SOCKS5 y `pt-web` HTTP/HTTPS/WebSocket están implementados para `tester`; el consumo externo y nftables siguen pendientes.
 
 El proxy solo permitirá destinos alcanzables a través de la tabla de rutas de la VPN activa. “Cualquier destino” significa cualquier destino de la VPN, no Internet público ni metadata cloud.
 
@@ -493,7 +493,7 @@ El proxy solo permitirá destinos alcanzables a través de la tabla de rutas de 
 ```text
 pt-forward   -> TCP explícito en loopback
 pt-socks     -> SOCKS5 en loopback
-pt-web       -> HTTP/HTTPS/WebSocket reverse proxy (pendiente)
+pt-web       -> HTTP/HTTPS/WebSocket reverse proxy loopback
 ```
 
 ### Consumo local
@@ -508,9 +508,7 @@ No se publicarán puertos Docker.
 
 La capacidad de proxy se implementará como comandos controlados para `tester`, con sockets privados o listeners loopback autorizados y un route guard. No se usará forwarding SSH ni una cuenta Unix `proxy`; el firewall/nftables de la fase cloud reforzará la frontera de destinos. Con un único usuario, el route guard es una interfaz controlada y no una frontera contra `tester`, que conserva acceso de shell.
 
-La v1 ejecuta `scripts/proxy-control.py` como `tester`, escucha solo en `127.0.0.1`, valida cada conexión con `vpn-control` e `ip route get`, bloquea loopback/link-local/metadata/Tailscale/gateways Docker y detiene el proceso cuando la VPN deja de estar activa.
-
-El reverse proxy se implementará en una iteración posterior; no se instalará Caddy ni se expondrá un servicio web antes de definir sus límites.
+La v1 ejecuta `scripts/proxy-control.py` como `tester`, escucha solo en `127.0.0.1`, valida cada conexión con `vpn-control` e `ip route get`, bloquea loopback/link-local/metadata/Tailscale/gateways Docker y detiene el proceso cuando la VPN deja de estar activa. `pt-web` solo acepta un origen fijo HTTP/HTTPS, rechaza absolute-form y reenvía WebSocket; no instala Caddy ni publica un servicio web.
 
 ### Control de destinos
 
@@ -758,10 +756,10 @@ vpn-status
 vpn-disconnect
 pt-forward start tcp <host> <port> [listen_port]
 pt-socks [listen_port]
+pt-web start <http-or-https-origin> [listen_port]
 pt-forward status
 pt-forward stop
 pt-forward doctor
-pt-web (pendiente)
 ```
 
 ## 18. Health checks
@@ -847,10 +845,11 @@ pt-web (pendiente)
 
 - `pt-forward` TCP loopback implementado para `tester`.
 - `pt-socks` SOCKS5 loopback implementado para `tester`.
+- `pt-web` HTTP/HTTPS/WebSocket loopback implementado para `tester`.
 - Route guard por conexión contra `tun0` implementado.
 - Stop automático al desconectar VPN implementado.
-- `pt-web` reverse proxy permanece pendiente.
 - Probar túneles desde macOS y VPS.
+- Pendiente el consumo externo mediante Tailscale y nftables/cloud.
 
 ### Fase 7 — Imagen `full`
 
@@ -904,7 +903,8 @@ pt-web (pendiente)
 - `vpntry`, `vpnhtb` y `vpncli` son independientes.
 - Las VPN no cambian la ruta por defecto.
 - Los proxies solo alcanzan destinos de la VPN activa.
-- `pt-forward` y `pt-socks` escuchan solo en loopback, validan `tun0` y se detienen al perder la VPN.
+- `pt-forward`, `pt-socks` y `pt-web` escuchan solo en loopback, validan `tun0` y se detienen al perder la VPN.
+- `pt-web` rechaza absolute-form y no puede seleccionar un destino distinto al origen configurado.
 - Los proxies no alcanzan Tailscale, metadata o Docker.
 - Fail2ban bloquea ataques de autenticación repetidos.
 - Las imágenes tienen SBOM, provenance y firma.
@@ -924,8 +924,8 @@ pt-web (pendiente)
 - Las claves de autenticación de Tailscale en Terraform state son un riesgo; se preferirán claves one-off o el bootstrap manual.
 - El estado de Terraform contiene datos sensibles aunque use `sensitive`.
 - Un contenedor no es un sandbox seguro frente a exploits de kernel.
-- La route guard de `pt-forward`/`pt-socks` no es una frontera contra `tester`; el firewall/nftables debe reforzarla.
-- `pt-web` permanece pendiente hasta definir su exposición y validación.
+- La route guard de `pt-forward`/`pt-socks`/`pt-web` no es una frontera contra `tester`; el firewall/nftables debe reforzarla.
+- `pt-web` está limitado a loopback y origen fijo; el consumo externo y TLS local siguen pendientes.
 - Los targets deben estar correctamente autorizados.
 - El workspace contiene datos que requieren backup y limpieza.
 

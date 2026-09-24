@@ -56,6 +56,11 @@
       "command": "openvpn",
       "description": "Cliente OpenVPN"
     },
+    "pt-forward": {
+      "category": "network",
+      "command": "pt-forward",
+      "description": "Forwarding TCP y SOCKS5 con route guard"
+    },
     "python3": {
       "category": "development",
       "command": "python3",
@@ -129,6 +134,7 @@
       "jq",
       "nmap",
       "openvpn",
+      "pt-forward",
       "python3",
       "rg",
       "socat",

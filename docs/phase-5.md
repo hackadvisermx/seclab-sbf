@@ -89,4 +89,4 @@ En `VPN_MODE=host`, `vpn-connect`, `vpn-switch` y los aliases devuelven una nega
 
 ## Siguiente fase
 
-- Fase 6: capacidad de proxy `pt-forward` para `tester`, únicamente sobre destinos de la VPN activa.
+- Fase 6: `pt-forward` TCP y `pt-socks` SOCKS5 para `tester`; `pt-web` queda pendiente.

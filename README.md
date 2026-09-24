@@ -14,7 +14,7 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | 3 | Completada v1 | Imagen Ubuntu `base`/`light`, ARM64 y build AMD64 |
 | 4 | Completada v1 | Zsh, Oh My Zsh, fzf, zoxide, banner, herramientas y tmux |
 | 5 | Completada v1 | VPN inside, TUN, socket autenticado, aliases y sanitización |
-| 6 | Siguiente | Proxy Lab: `pt-forward`, SOCKS5, reverse proxy y route guard |
+| 6 | En curso v1 | `pt-forward` TCP, `pt-socks` SOCKS5 y route guard; `pt-web` pendiente |
 | 7 | Pendiente | Imagen `full`; Ghidra/reversing quedan diferidos |
 | 8–10 | Pendiente | Terraform/cloud, nftables, Tailscale, fail2ban y operación |
 
@@ -102,6 +102,30 @@ La capacidad de proxy se expone para `tester` mediante `pt-forward` y un route g
 
 `.tmux.conf` se copia a `/home/tester/.tmux.conf` durante el build con permisos `0444` y propietario `root`. El estado de plugins de TPM vive en `/tmp/tmux-plugins`, porque el rootfs es read-only.
 
+## Proxy controlado
+
+`pt-forward` y `pt-socks` ejecutan como `tester` y escuchan únicamente en `127.0.0.1`. Cada conexión exige una VPN activa y una ruta real mediante `tun0`; se bloquean loopback, metadata, Tailscale, gateways Docker y destinos fuera de la tabla VPN.
+
+```text
+pt-forward start tcp <host> <port> [listen_port]
+pt-socks [listen_port]
+pt-forward status
+pt-forward doctor
+pt-forward stop
+```
+
+Ejemplos: `pt-forward start tcp 192.168.192.1 80 18080` y `pt-socks 1080`. El proxy se detiene automáticamente cuando se desconecta la VPN. `pt-web` todavía no está implementado.
+
+Desde el host:
+
+```bash
+make compose proxy-status
+make compose proxy-doctor
+make compose proxy-stop
+```
+
+La route guard es una interfaz de uso, no una frontera contra `tester`; nftables/cloud queda como refuerzo de seguridad.
+
 ## Seguridad y límites
 
 - No se publican puertos Docker.
@@ -128,14 +152,15 @@ Resultados verificados actualmente:
 - TUN, `NET_ADMIN` y `tun0` presentes en Docker Desktop macOS.
 - `vpntry` real validado con `tryhackme.ovpn`.
 - Rutas por defecto y DNS sin cambios; `vpn-disconnect` limpia el túnel.
-- `make verify`, Compose, Actionlint y smoke tests pasan.
+- `pt-forward`/`pt-socks` bloquean destinos sin VPN, permiten rutas `tun0` y se detienen al desconectar la VPN.
+- `pt-web` reverse proxy permanece pendiente.
 
 ## Estructura principal
 
 ```text
 images/                 Dockerfiles base/light
 compose*.yaml           servicios lab y VPN
-scripts/                entrypoints, healthchecks, VPN y claves locales
+scripts/                entrypoints, healthchecks, VPN, proxy y claves locales
 shell/                  Zsh, tmux y pentest-lab
 security/               configuración SSH
 supply-chain/           lockfiles de acciones, shell y herramientas
@@ -157,8 +182,7 @@ No se modifica `main` directamente. Cada fase debe terminar en un Pull Request c
 
 ## Siguientes pasos
 
-1. Probar los perfiles `hackthebox` y `client` autorizados.
-2. Ejecutar la matriz nativa Linux.
-3. Implementar el route guard/firewall y validar metadata, Tailscale y gateway Docker.
-4. Comenzar la Fase 6 — Proxy Lab.
-5. Retomar `full`, Terraform/cloud y Tailscale en fases posteriores.
+1. Probar `pt-web` y endurecer la route guard con firewall/nftables.
+2. Probar los perfiles `hackthebox` y `client` autorizados.
+3. Ejecutar la matriz nativa Linux.
+4. Retomar `full`, Terraform/cloud y Tailscale en fases posteriores.

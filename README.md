@@ -143,7 +143,7 @@ La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tai
 - No se usa `privileged`, `docker.sock` ni `network_mode: host`.
 - El acceso administrativo previsto es por Tailscale/SSH/ttyd privado.
 - No se comparten claves privadas, `.env`, `.ovpn`, `workspace/` ni `tmp/`.
-- La plantilla nftables y la ruta NAT gateway de OCI fueron validadas en hosts desechables; la aplicación final y el transporte host-only siguen pendientes.
+- La plantilla nftables y la ruta NAT gateway de OCI fueron validadas y aplicadas en el host final; el transporte host-only del proxy sigue pendiente.
 - Usa únicamente objetivos y perfiles VPN autorizados.
 
 ## Verificación
@@ -164,7 +164,7 @@ Resultados verificados actualmente:
 - `vpntry` real validado con `tryhackme.ovpn`.
 - Rutas por defecto y DNS sin cambios; `vpn-disconnect` limpia el túnel.
 - `pt-forward`/`pt-socks`/`pt-web` bloquean destinos sin VPN, permiten rutas `tun0` y se detienen al desconectar la VPN.
-- `pt-web` rechaza absolute-form y permanece loopback; el consumo externo queda pendiente. La sintaxis y el smoke `prerouting` de nftables fueron validados en un host Linux desechable.
+- `pt-web` rechaza absolute-form y permanece loopback; el consumo externo queda pendiente. La sintaxis, el smoke `prerouting` y la persistencia systemd de nftables fueron validados en el host final.
 
 ## Estructura principal
 
@@ -193,7 +193,7 @@ No se modifica `main` directamente. Cada fase debe terminar en un Pull Request c
 
 ## Siguientes pasos
 
-1. Aplicar la política nftables y la topología NAT gateway en el host Linux/cloud final.
+1. Rotar y revocar el material sensible expuesto en metadata previa.
 2. Diseñar el transporte privado para el consumo externo del proxy sin publicar puertos.
 3. Probar los perfiles `hackthebox` y `client` autorizados.
 4. Ejecutar la matriz nativa Linux.

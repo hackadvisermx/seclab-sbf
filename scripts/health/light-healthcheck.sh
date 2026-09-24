@@ -12,6 +12,7 @@ test -x /usr/sbin/sshd
 test -x /usr/bin/ttyd
 test -x /usr/local/bin/vpn-manager
 test -x /usr/local/bin/vpn-control
+test -x /usr/local/bin/pt-forward
 test -r /etc/ssh/sshd_config.seclab
 test -s /run/ssh/sshd.pid
 test -s /run/ttyd.pid

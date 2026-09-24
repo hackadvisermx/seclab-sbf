@@ -856,6 +856,7 @@ pt-forward doctor
 - Preparar `security/policies/nftables-lab.nft` sin cargarlo automáticamente.
 - Mantener Tailscale en el host, sin Funnel, Exit Node ni rutas DNS automáticas.
 - Validar `make security-check` en Linux y omitir explícitamente en macOS.
+- Validar en OCI una ruta NAT gateway para Tailscale sin `public_ip`; la aplicación final queda pendiente.
 - Dejar el consumo externo del proxy pendiente hasta definir un transporte host-only.
 
 ### Fase 7 — Imagen `full`
@@ -882,7 +883,7 @@ pt-forward doctor
 - Configurar Tailscale ACL, MFA y device approval.
 - Añadir fail2ban.
 - Bloquear metadata.
-- Deshabilitar IP pública cuando sea posible.
+- Aplicar una ruta NAT gateway cuando el host no tenga `public_ip`.
 - Ejecutar pruebas externas controladas.
 
 ### Fase 10 — CI/CD y operación

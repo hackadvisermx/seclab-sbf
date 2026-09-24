@@ -143,7 +143,7 @@ La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tai
 - No se usa `privileged`, `docker.sock` ni `network_mode: host`.
 - El acceso administrativo previsto es por Tailscale/SSH/ttyd privado.
 - No se comparten claves privadas, `.env`, `.ovpn`, `workspace/` ni `tmp/`.
-- La plantilla nftables fue validada en un host OCI desechable con hook `prerouting`; la aplicación final y el transporte host-only siguen pendientes. En OCI, Tailscale sin IP pública requiere validar un NAT gateway.
+- La plantilla nftables y la ruta NAT gateway de OCI fueron validadas en hosts desechables; la aplicación final y el transporte host-only siguen pendientes.
 - Usa únicamente objetivos y perfiles VPN autorizados.
 
 ## Verificación
@@ -193,7 +193,7 @@ No se modifica `main` directamente. Cada fase debe terminar en un Pull Request c
 
 ## Siguientes pasos
 
-1. Validar NAT gateway/subnet privada y aplicar la política nftables en el host Linux final.
+1. Aplicar la política nftables y la topología NAT gateway en el host Linux/cloud final.
 2. Diseñar el transporte privado para el consumo externo del proxy sin publicar puertos.
 3. Probar los perfiles `hackthebox` y `client` autorizados.
 4. Ejecutar la matriz nativa Linux.

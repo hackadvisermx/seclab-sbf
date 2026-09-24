@@ -4,11 +4,13 @@ import json
 import os
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 STATE_DIR = Path(os.environ.get("PROXY_STATE_DIR", "/var/lib/seclab/tester/proxy"))
 PID_FILE = STATE_DIR / "pt-forward.pid"
@@ -18,6 +20,8 @@ LISTEN_HOST = "127.0.0.1"
 MAX_CONNECTIONS = 32
 VPN_INTERFACE = "tun0"
 VPN_CONTROL = "/usr/local/bin/vpn-control"
+MAX_HTTP_HEADER = 65536
+WEB_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 BLOCKED_NETWORKS = tuple(
     ipaddress.ip_network(value)
     for value in (
@@ -168,7 +172,7 @@ def resolve_target(host, port):
     return addresses[0]
 
 
-def open_target(host, port):
+def open_target(host, port, tls=False):
     address = resolve_target(host, port)
     family = socket.AF_INET6 if address.version == 6 else socket.AF_INET
     upstream = socket.socket(family, socket.SOCK_STREAM)
@@ -176,6 +180,9 @@ def open_target(host, port):
     try:
         destination = (str(address), port, 0, 0) if address.version == 6 else (str(address), port)
         upstream.connect(destination)
+        if tls:
+            context = ssl.create_default_context()
+            upstream = context.wrap_socket(upstream, server_hostname=host)
     except OSError as error:
         upstream.close()
         raise ProxyError(f"no se pudo conectar con {host}:{port}: {error}") from error
@@ -264,6 +271,53 @@ def handle_tcp(client, host, port):
             leave_connection()
 
 
+def read_http_request(client):
+    client.settimeout(10)
+    data = bytearray()
+    while b"\r\n\r\n" not in data:
+        chunk = client.recv(4096)
+        if not chunk:
+            raise ProxyError("peticion HTTP incompleta")
+        data.extend(chunk)
+        if len(data) > MAX_HTTP_HEADER:
+            raise ProxyError("cabeceras HTTP demasiado grandes")
+    header, remainder = bytes(data).split(b"\r\n\r\n", 1)
+    try:
+        request_line = header.split(b"\r\n", 1)[0].decode("ascii")
+    except UnicodeDecodeError as error:
+        raise ProxyError("request line HTTP invalida") from error
+    parts = request_line.split(" ")
+    if len(parts) != 3 or parts[0] not in WEB_METHODS or not parts[2].startswith("HTTP/1."):
+        raise ProxyError("request line HTTP no permitido")
+    target = parts[1]
+    if target.startswith("http://") or target.startswith("https://"):
+        raise ProxyError("absolute-form HTTP no permitido")
+    if not target.startswith("/") and not (parts[0] == "OPTIONS" and target == "*"):
+        raise ProxyError("request target HTTP no permitido")
+    return header + b"\r\n\r\n" + remainder
+
+
+def handle_web(client, host, port, tls):
+    upstream = None
+    entered = False
+    try:
+        if not enter_connection():
+            return
+        entered = True
+        request = read_http_request(client)
+        upstream, _ = open_target(host, port, tls)
+        upstream.sendall(request)
+        relay(client, upstream)
+    except ProxyError as error:
+        log(str(error))
+    finally:
+        if upstream is not None:
+            upstream.close()
+        client.close()
+        if entered:
+            leave_connection()
+
+
 def handle_socks(client):
     upstream = None
     entered = False
@@ -330,13 +384,26 @@ def process_alive(pid):
     return True
 
 
-def write_metadata(mode, target, target_port, listen_port):
+def write_metadata(mode, target, target_port, listen_port, tls=False):
     ensure_state_dir()
-    META_FILE.write_text(json.dumps({"mode": mode, "target": target, "target_port": target_port, "listen_port": listen_port}) + "\n")
+    META_FILE.write_text(json.dumps({"mode": mode, "target": target, "target_port": target_port, "listen_port": listen_port, "tls": tls}) + "\n")
     os.chmod(META_FILE, 0o600)
 
 
-def serve(mode, host, target_port, listen_port):
+def parse_web_target(value):
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError as error:
+        raise ProxyError(f"URL web invalida: {error}") from error
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ProxyError("pt-web requiere una URL http:// o https://")
+    if parsed.username or parsed.password or parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise ProxyError("pt-web solo admite un origen sin ruta, query o credenciales")
+    return parsed.hostname, port, parsed.scheme == "https"
+
+
+def serve(mode, host, target_port, listen_port, tls=False):
     global stop_event
     if os.geteuid() == 0:
         log("debe ejecutarse como tester, no como root")
@@ -358,7 +425,7 @@ def serve(mode, host, target_port, listen_port):
     os.chmod(STATE_DIR, 0o700)
     PID_FILE.write_text(f"{os.getpid()}\n")
     os.chmod(PID_FILE, 0o600)
-    write_metadata(mode, host or "", target_port, listen_port)
+    write_metadata(mode, host or "", target_port, listen_port, tls)
     stop_event.clear()
 
     def stop_handler(_signum, _frame):
@@ -370,7 +437,8 @@ def serve(mode, host, target_port, listen_port):
 
     signal.signal(signal.SIGTERM, stop_handler)
     signal.signal(signal.SIGINT, stop_handler)
-    log(f"started mode={mode} listen={LISTEN_HOST}:{listen_port} target={host or '-'}:{target_port or '-'}")
+    scheme = "https" if tls else "http"
+    log(f"started mode={mode} listen={LISTEN_HOST}:{listen_port} target={scheme}://{host or '-'}:{target_port or '-'}")
 
     def monitor_vpn():
         while not stop_event.wait(2):
@@ -390,6 +458,8 @@ def serve(mode, host, target_port, listen_port):
                 break
             if mode == "socks5":
                 threading.Thread(target=handle_socks, args=(client,), daemon=True).start()
+            elif mode == "web":
+                threading.Thread(target=handle_web, args=(client, host, target_port, tls), daemon=True).start()
             else:
                 threading.Thread(target=handle_tcp, args=(client, host, target_port), daemon=True).start()
     finally:
@@ -406,17 +476,20 @@ def serve(mode, host, target_port, listen_port):
     return 0
 
 
-def start(mode, host, target_port, listen_port):
+def start(mode, host, target_port, listen_port, tls=False):
     if os.geteuid() == 0:
         log("debe ejecutarse como tester, no como root")
         return 77
-    if mode == "tcp" and (not host or not target_port):
+    if mode in {"tcp", "web"} and (not host or not target_port):
         log("uso: pt-forward start tcp <host> <port> [listen_port]")
         return 64
     if mode == "socks5" and (host or target_port):
         log("uso: pt-forward start socks5 [listen_port]")
         return 64
-    if mode == "tcp":
+    if mode not in {"tcp", "socks5", "web"}:
+        log("modo de proxy no permitido")
+        return 64
+    if mode in {"tcp", "web"}:
         try:
             resolve_target(host, target_port)
         except ProxyError as error:
@@ -437,14 +510,15 @@ def start(mode, host, target_port, listen_port):
     META_FILE.unlink(missing_ok=True)
     LOG_FILE.touch(mode=0o600, exist_ok=True)
     os.chmod(LOG_FILE, 0o600)
-    command = [sys.executable, str(Path(__file__).resolve()), "__serve__", mode, host or "", str(target_port or 0), str(listen_port)]
+    command = [sys.executable, str(Path(__file__).resolve()), "__serve__", mode, host or "", str(target_port or 0), str(listen_port), "tls" if tls else "plain"]
     with LOG_FILE.open("ab") as output:
         child = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT, start_new_session=True, close_fds=True)
     time.sleep(0.4)
     if not process_alive(child.pid):
         log("el proxy no pudo iniciarse; revisa el log")
         return 69
-    print(f"pt-forward=started mode={mode} pid={child.pid} listen={LISTEN_HOST}:{listen_port} target={host or '-'} target_port={target_port or '-'}")
+    scheme = "https" if tls else "http"
+    print(f"pt-forward=started mode={mode} pid={child.pid} listen={LISTEN_HOST}:{listen_port} target={scheme}://{host or '-'}:{target_port or '-'}")
     return 0
 
 
@@ -459,7 +533,7 @@ def status():
     except (OSError, json.JSONDecodeError):
         pass
     vpn = vpn_status() or {}
-    print(f"pt-forward=active pid={pid} mode={metadata.get('mode', '-')} listen={LISTEN_HOST}:{metadata.get('listen_port', '-')} target={metadata.get('target') or '-'} target_port={metadata.get('target_port') or '-'}")
+    print(f"pt-forward=active pid={pid} mode={metadata.get('mode', '-')} listen={LISTEN_HOST}:{metadata.get('listen_port', '-')} target={metadata.get('target') or '-'} target_port={metadata.get('target_port') or '-'} tls={metadata.get('tls', False)}")
     print(f"vpn_active={vpn.get('active', '-')} tun={vpn.get('tun', False)}")
     return 0
 
@@ -513,6 +587,7 @@ def doctor(host=None, port=None):
 
 def usage():
     print("Uso: pt-forward start tcp <host> <port> [listen_port]", file=sys.stderr)
+    print("     pt-forward start web <url> [listen_port]", file=sys.stderr)
     print("     pt-forward start socks5 [listen_port]", file=sys.stderr)
     print("     pt-forward status|stop|clean|doctor [host port]", file=sys.stderr)
     return 64
@@ -523,9 +598,10 @@ def main():
         return usage()
     command = sys.argv[1]
     if command == "__serve__":
-        if len(sys.argv) != 6:
+        if len(sys.argv) != 7:
             return usage()
-        return serve(sys.argv[2], sys.argv[3] or None, int(sys.argv[4]), int(sys.argv[5]))
+        tls = sys.argv[6] == "tls"
+        return serve(sys.argv[2], sys.argv[3] or None, int(sys.argv[4]), int(sys.argv[5]), tls)
     if command == "start":
         if len(sys.argv) < 3:
             return usage()
@@ -533,6 +609,14 @@ def main():
         if mode == "socks5":
             listen_port = int(sys.argv[3]) if len(sys.argv) == 4 else 1080
             return start("socks5", None, None, listen_port)
+        if mode == "web" and len(sys.argv) in {4, 5}:
+            try:
+                host, target_port, tls = parse_web_target(sys.argv[3])
+            except ProxyError as error:
+                log(str(error))
+                return 64
+            listen_port = int(sys.argv[4]) if len(sys.argv) == 5 else 18081
+            return start("web", host, target_port, listen_port, tls)
         if mode == "tcp" and len(sys.argv) in {5, 6}:
             host = sys.argv[3]
             target_port = int(sys.argv[4])
@@ -542,6 +626,16 @@ def main():
     if command in {"socks", "socks5"}:
         listen_port = int(sys.argv[2]) if len(sys.argv) == 3 else 1080
         return start("socks5", None, None, listen_port)
+    if command in {"web", "pt-web"}:
+        if len(sys.argv) < 3:
+            return usage()
+        try:
+            host, target_port, tls = parse_web_target(sys.argv[2])
+        except ProxyError as error:
+            log(str(error))
+            return 64
+        listen_port = int(sys.argv[3]) if len(sys.argv) == 4 else 18081
+        return start("web", host, target_port, listen_port, tls)
     if command == "status":
         return status()
     if command == "stop":

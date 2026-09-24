@@ -14,7 +14,7 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | 3 | Completada v1 | Imagen Ubuntu `base`/`light`, ARM64 y build AMD64 |
 | 4 | Completada v1 | Zsh, Oh My Zsh, fzf, zoxide, banner, herramientas y tmux |
 | 5 | Completada v1 | VPN inside, TUN, socket autenticado, aliases y sanitización |
-| 6 | En curso v1 | `pt-forward` TCP, `pt-socks` SOCKS5 y route guard; `pt-web` pendiente |
+| 6 | En curso v1 | `pt-forward` TCP, `pt-socks` SOCKS5, `pt-web` HTTP/WebSocket y route guard |
 | 7 | Pendiente | Imagen `full`; Ghidra/reversing quedan diferidos |
 | 8–10 | Pendiente | Terraform/cloud, nftables, Tailscale, fail2ban y operación |
 
@@ -104,17 +104,18 @@ La capacidad de proxy se expone para `tester` mediante `pt-forward` y un route g
 
 ## Proxy controlado
 
-`pt-forward` y `pt-socks` ejecutan como `tester` y escuchan únicamente en `127.0.0.1`. Cada conexión exige una VPN activa y una ruta real mediante `tun0`; se bloquean loopback, metadata, Tailscale, gateways Docker y destinos fuera de la tabla VPN.
+`pt-forward`, `pt-socks` y `pt-web` ejecutan como `tester` y escuchan únicamente en `127.0.0.1`. Cada conexión exige una VPN activa y una ruta real mediante `tun0`; se bloquean loopback, metadata, Tailscale, gateways Docker y destinos fuera de la tabla VPN.
 
 ```text
 pt-forward start tcp <host> <port> [listen_port]
 pt-socks [listen_port]
+pt-web start <http-or-https-origin> [listen_port]
 pt-forward status
 pt-forward doctor
 pt-forward stop
 ```
 
-Ejemplos: `pt-forward start tcp 192.168.192.1 80 18080` y `pt-socks 1080`. El proxy se detiene automáticamente cuando se desconecta la VPN. `pt-web` todavía no está implementado.
+Ejemplos: `pt-forward start tcp 192.168.192.1 80 18080`, `pt-socks 1080` y `pt-web start http://192.168.192.1:80 18081`. `pt-web` acepta un origen fijo, rechaza absolute-form y permite WebSocket; el proxy se detiene automáticamente cuando se desconecta la VPN.
 
 Desde el host:
 
@@ -152,8 +153,8 @@ Resultados verificados actualmente:
 - TUN, `NET_ADMIN` y `tun0` presentes en Docker Desktop macOS.
 - `vpntry` real validado con `tryhackme.ovpn`.
 - Rutas por defecto y DNS sin cambios; `vpn-disconnect` limpia el túnel.
-- `pt-forward`/`pt-socks` bloquean destinos sin VPN, permiten rutas `tun0` y se detienen al desconectar la VPN.
-- `pt-web` reverse proxy permanece pendiente.
+- `pt-forward`/`pt-socks`/`pt-web` bloquean destinos sin VPN, permiten rutas `tun0` y se detienen al desconectar la VPN.
+- `pt-web` rechaza absolute-form y permanece loopback; el consumo externo y nftables quedan pendientes.
 
 ## Estructura principal
 
@@ -182,7 +183,8 @@ No se modifica `main` directamente. Cada fase debe terminar en un Pull Request c
 
 ## Siguientes pasos
 
-1. Probar `pt-web` y endurecer la route guard con firewall/nftables.
-2. Probar los perfiles `hackthebox` y `client` autorizados.
-3. Ejecutar la matriz nativa Linux.
-4. Retomar `full`, Terraform/cloud y Tailscale en fases posteriores.
+1. Exponer el consumo de proxy mediante Tailscale de forma controlada.
+2. Endurecer la route guard con firewall/nftables.
+3. Probar los perfiles `hackthebox` y `client` autorizados.
+4. Ejecutar la matriz nativa Linux.
+5. Retomar `full`, Terraform/cloud y Tailscale en fases posteriores.

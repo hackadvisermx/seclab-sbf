@@ -1,0 +1,152 @@
+{
+  "schema": 1,
+  "categories": {
+    "access": "Acceso",
+    "development": "Desarrollo",
+    "network": "Red",
+    "recon": "Reconocimiento",
+    "terminal": "Terminal",
+    "utilities": "Utilidades",
+    "vpn": "VPN",
+    "web": "Web"
+  },
+  "tools": {
+    "curl": {
+      "category": "network",
+      "command": "curl",
+      "description": "Cliente HTTP y HTTPS"
+    },
+    "fzf": {
+      "category": "terminal",
+      "command": "fzf",
+      "description": "Selector difuso"
+    },
+    "fd": {
+      "category": "terminal",
+      "command": "fdfind",
+      "description": "Búsqueda de archivos"
+    },
+    "gdb": {
+      "category": "development",
+      "command": "gdb",
+      "description": "Depurador GNU"
+    },
+    "git": {
+      "category": "development",
+      "command": "git",
+      "description": "Control de versiones"
+    },
+    "ip": {
+      "category": "network",
+      "command": "ip",
+      "description": "Configuración de red"
+    },
+    "jq": {
+      "category": "utilities",
+      "command": "jq",
+      "description": "Procesamiento JSON"
+    },
+    "nmap": {
+      "category": "recon",
+      "command": "nmap",
+      "description": "Descubrimiento de puertos y servicios"
+    },
+    "openvpn": {
+      "category": "vpn",
+      "command": "openvpn",
+      "description": "Cliente OpenVPN"
+    },
+    "python3": {
+      "category": "development",
+      "command": "python3",
+      "description": "Runtime Python"
+    },
+    "rg": {
+      "category": "terminal",
+      "command": "rg",
+      "description": "Búsqueda rápida de texto"
+    },
+    "sftp": {
+      "category": "access",
+      "command": "sftp",
+      "description": "Transferencia SFTP"
+    },
+    "socat": {
+      "category": "network",
+      "command": "socat",
+      "description": "Relaciones de entrada y salida"
+    },
+    "sqlmap": {
+      "category": "web",
+      "command": "sqlmap",
+      "description": "Pruebas automatizadas de inyección SQL"
+    },
+    "ssh": {
+      "category": "access",
+      "command": "ssh",
+      "description": "Cliente SSH"
+    },
+    "ttyd": {
+      "category": "access",
+      "command": "ttyd",
+      "description": "Terminal web privada"
+    },
+    "tmux": {
+      "category": "terminal",
+      "command": "tmux",
+      "description": "Sesiones de terminal persistentes"
+    },
+    "wireguard": {
+      "category": "vpn",
+      "command": "wg",
+      "description": "Utilidades WireGuard"
+    },
+    "vpn-control": {
+      "category": "utilities",
+      "command": "vpn-control",
+      "description": "Cliente y socket de control VPN"
+    },
+    "vpn-manager": {
+      "category": "utilities",
+      "command": "vpn-manager",
+      "description": "Gestor seguro de perfiles VPN"
+    },
+    "zsh": {
+      "category": "terminal",
+      "command": "zsh",
+      "description": "Shell interactiva"
+    },
+    "zoxide": {
+      "category": "terminal",
+      "command": "zoxide",
+      "description": "Navegación memorable de directorios"
+    }
+  },
+  "profiles": {
+    "full": [],
+    "light": [
+      "curl",
+      "fzf",
+      "fd",
+      "gdb",
+      "git",
+      "ip",
+      "jq",
+      "nmap",
+      "openvpn",
+      "python3",
+      "rg",
+      "sftp",
+      "socat",
+      "sqlmap",
+      "ssh",
+      "ttyd",
+      "tmux",
+      "vpn-control",
+      "vpn-manager",
+      "wireguard",
+      "zsh",
+      "zoxide"
+    ]
+  }
+}

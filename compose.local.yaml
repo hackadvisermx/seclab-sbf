@@ -1,0 +1,8 @@
+services:
+  lab:
+    build:
+      context: .
+      dockerfile: images/light/Dockerfile
+      args:
+        BASE_IMAGE: seclab-sbf:base
+    image: seclab-sbf:light

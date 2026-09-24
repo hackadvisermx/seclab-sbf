@@ -1,0 +1,78 @@
+services:
+  lab:
+    build:
+      context: .
+      dockerfile: images/light/Dockerfile
+      args:
+        BASE_IMAGE: seclab-sbf:base
+    image: seclab-sbf:light
+    working_dir: /workspace
+    command:
+      - /bin/bash
+    init: true
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - AUDIT_WRITE
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - NET_RAW
+      - SETGID
+      - SETPCAP
+      - SETUID
+      - SYS_CHROOT
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: ${LAB_PIDS_LIMIT:-256}
+    mem_limit: ${LAB_MEMORY_LIMIT:-1g}
+    cpus: ${LAB_CPUS:-2.0}
+    environment:
+      PENTEST_PROFILE: ${PENTEST_PROFILE:-light}
+      VPN_MODE: ${VPN_MODE:-inside}
+      VPNTRY_CONFIG: ${VPNTRY_CONFIG:-/vpn/tryhackme.ovpn}
+      VPNHTB_CONFIG: ${VPNHTB_CONFIG:-/vpn/hackthebox.ovpn}
+      VPNCLI_CONFIG: ${VPNCLI_CONFIG:-/vpn/client.ovpn}
+      VPN_STATE_DIR: /var/lib/seclab/vpn
+      WORKSPACE_DIR: /workspace
+      TZ: ${TZ:-UTC}
+      LANG: ${LANG:-C.UTF-8}
+      TMUX_PLUGIN_MANAGER_PATH: /tmp/tmux-plugins
+    volumes:
+      - lab-state:/var/lib/seclab
+      - type: bind
+        source: ${WORKSPACE_DIR:-./workspace}
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${WORKSPACE_DIR:-./workspace}
+        target: /srv/sftp/files
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${LAB_ENV_FILE:-.env}
+        target: /run/secrets/lab.env
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/tmp
+    healthcheck:
+      test:
+        - CMD
+        - /usr/local/bin/light-healthcheck
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  lab-state:

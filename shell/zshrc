@@ -1,0 +1,50 @@
+export SECLAB_STATE_DIR="${SECLAB_STATE_DIR:-/var/lib/seclab/lab}"
+export TERM="${TERM:-xterm-256color}"
+export SECLAB_TOOLS_FILE="${SECLAB_TOOLS_FILE:-/usr/local/share/seclab/tools.json}"
+export ZSH="/opt/seclab/oh-my-zsh"
+export ZSH_CUSTOM="$ZSH/custom"
+export ZSH_CACHE_DIR="$SECLAB_STATE_DIR/oh-my-zsh-cache"
+export ZSH_THEME="${ZSH_THEME:-robbyrussell}"
+export HISTFILE="$SECLAB_STATE_DIR/.zsh_history"
+export HISTSIZE=50000
+export SAVEHIST=50000
+export _ZO_DATA_DIR="$SECLAB_STATE_DIR/zoxide"
+export PENTEST_PROFILE="${PENTEST_PROFILE:-light}"
+
+plugins=(
+  git
+  tmux
+  ssh
+  extract
+  history
+  aliases
+  jsontools
+  zsh-completions
+  pentest-lab
+)
+
+if [[ -t 0 && -t 1 ]]; then
+  plugins+=(zsh-autosuggestions)
+fi
+
+if (( $+commands[zoxide] )); then
+  plugins+=(zoxide)
+fi
+
+if [[ -t 0 && -t 1 ]]; then
+  plugins+=(zsh-syntax-highlighting)
+fi
+
+source "$ZSH/oh-my-zsh.sh"
+
+if [[ -t 0 && -t 1 ]] && (( $+commands[fzf] )); then
+  eval "$(fzf --zsh)"
+fi
+
+if [[ -o interactive && -z "${TMUX:-}" && ( -n "${SSH_CONNECTION:-}" || "${SECLAB_TMUX:-0}" == "1" ) ]]; then
+  exec /usr/bin/tmux new-session -A -s pentest-lab /usr/bin/zsh -il
+fi
+
+if (( $+functions[pt-banner] )); then
+  pt-banner
+fi

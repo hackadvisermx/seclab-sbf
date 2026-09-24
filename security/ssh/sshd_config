@@ -1,0 +1,38 @@
+Port 2222
+ListenAddress 0.0.0.0
+AddressFamily any
+HostKey /var/lib/seclab/ssh/ssh_host_ed25519_key
+PidFile /run/ssh/sshd.pid
+AuthorizedKeysFile /run/ssh/authorized_keys/%u
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PermitEmptyPasswords no
+UsePAM yes
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+AllowUsers lab transfer
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+PermitTunnel no
+GatewayPorts no
+PermitUserEnvironment no
+PermitUserRC no
+MaxAuthTries 3
+MaxSessions 4
+LoginGraceTime 20
+ClientAliveInterval 300
+ClientAliveCountMax 2
+UseDNS no
+LogLevel VERBOSE
+PrintMotd no
+Subsystem sftp internal-sftp
+
+Match User transfer
+  ChrootDirectory /srv/sftp
+  ForceCommand internal-sftp -d /files
+  AllowTcpForwarding no
+  X11Forwarding no
+  PermitTunnel no

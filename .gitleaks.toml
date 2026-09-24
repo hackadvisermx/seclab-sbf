@@ -1,0 +1,13 @@
+title = "seclab-sbf"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Local VPN, workspace, environment and SSH secrets are never versioned"
+paths = [
+  '''(^|/)\.env($|\.)''',
+  '''(^|/)vpn/''',
+  '''(^|/)workspace/''',
+  '''(^|/)\.secrets/'''
+]

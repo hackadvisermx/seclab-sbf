@@ -1,0 +1,84 @@
+schema_version: 2
+verified_at: 2026-09-23
+apt:
+  distribution: noble
+  snapshot: 20260922T000000Z
+  packages:
+    binutils: 2.42-4ubuntu2.10
+    ca-certificates: 20260601~24.04.1
+    curl: 8.5.0-2ubuntu10.13
+    dnsutils: 1:9.18.39-0ubuntu0.24.04.7
+    fd-find: 9.0.0-1
+    file: 1:5.45-3build1
+    gdb: 15.1-1ubuntu1~24.04.1
+    git: 1:2.43.0-1ubuntu7.3
+    iproute2: 6.1.0-1ubuntu6.4
+    iputils-ping: 3:20240117-1ubuntu0.1
+    jq: 1.7.1-3ubuntu0.24.04.2
+    less: 590-2ubuntu2.1
+    nmap: 7.94+git20230807.3be01efb1+dfsg-3build2
+    openssh-client: 1:9.6p1-3ubuntu13.19
+    openssh-server: 1:9.6p1-3ubuntu13.19
+    openssh-sftp-server: 1:9.6p1-3ubuntu13.19
+    openvpn: 2.6.19-0ubuntu0.24.04.3
+    p7zip-full: 16.02+transitional.1
+    procps: 2:4.0.4-4ubuntu3.3
+    python3: 3.12.3-0ubuntu2.1
+    ripgrep: 14.1.0-1
+    socat: 1.8.0.0-4ubuntu0.1
+    sqlmap: 1.8.4-1
+    tmux: 3.4-1ubuntu0.1
+    unzip: 6.0-28ubuntu4.1
+    util-linux: 2.39.3-9ubuntu6.6
+    wireguard-tools: 1.0.20210914-1ubuntu4
+    zsh: 5.9-6ubuntu2
+base_images:
+  - name: ubuntu
+    reference: docker.io/library/ubuntu:24.04
+    digest: sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
+    platforms:
+      linux/amd64: sha256:496754492fb28b4d3049432f2ca787449331e23fb14f0dd3fffea86bf5a93eb4
+      linux/arm64: sha256:11dc1ccb427f0464a2369e645454c272bb0baece7357c892ba69d313b3a332cf
+    source: https://hub.docker.com/_/ubuntu
+third_party_binaries:
+  - name: ttyd
+    version: 1.7.7
+    source: https://github.com/tsl0922/ttyd/releases/download/1.7.7/
+    assets:
+      linux/amd64:
+        file: ttyd.x86_64
+        sha256: 8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+      linux/arm64:
+        file: ttyd.aarch64
+        sha256: b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165
+  - name: zoxide
+    version: 0.10.0
+    source: https://github.com/ajeetdsouza/zoxide/releases/download/v0.10.0/
+    assets:
+      linux/amd64:
+        file: zoxide-0.10.0-x86_64-unknown-linux-musl.tar.gz
+        sha256: 2d93385b99f3e82cf2701609a1bffcad863fbeb75aa3fe7eb6be4d29be68b1ae
+      linux/arm64:
+        file: zoxide-0.10.0-aarch64-unknown-linux-musl.tar.gz
+        sha256: f1f16c5d6298d63dee467eedea1cdcd8490e43e493bea43acd416dc9033ef641
+built_binaries:
+  - name: fzf
+    version: 0.74.4
+    source: https://github.com/junegunn/fzf
+    commit: a140afeb4d733cad3c96a56bf6db7e26853b6757
+    builder: docker.io/library/golang:1.25.13@sha256:cbff9d1a9041b316010f2da6b701b6c0d597718cb90928c85eb597334a0d23d4
+    go: 1.25.13
+    go_directive: 1.25.0
+    cgo: false
+    dependency_overrides:
+      golang.org/x/sys:
+        version: 0.44.0
+        sum: h1:ildZl3J4uzeKP07r2F++Op7E9B29JRUy+a27EibtBTQ=
+        go_mod_sum: h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+    assets:
+      linux/amd64:
+        file: fzf
+        sha256: 634bdd2a61ec82ce5d893dd045bdbcf2532ce9e417a8506e81568b04b326e2cb
+      linux/arm64:
+        file: fzf
+        sha256: 2cadb71a909bf08e54db3cc38116a64efd5cefbd4fb9286008f03ef88dcf5519

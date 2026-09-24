@@ -1,0 +1,48 @@
+services:
+  vpn:
+    image: ${VPN_IMAGE:-seclab-sbf:light}
+    user: "0:0"
+    network_mode: service:lab
+    depends_on:
+      - lab
+    restart: unless-stopped
+    read_only: true
+    environment:
+      VPN_MODE: inside
+      VPNTRY_CONFIG: /vpn/tryhackme.ovpn
+      VPNHTB_CONFIG: /vpn/hackthebox.ovpn
+      VPNCLI_CONFIG: /vpn/client.ovpn
+      VPN_STATE_DIR: /var/lib/seclab/vpn
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - lab-state:/var/lib/seclab
+      - type: bind
+        source: ${VPN_DIR:-./vpn}
+        target: /vpn
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/tmp
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -S /var/lib/seclab/vpn-control/control.sock
+        - test -e /sys/class/net/tun0
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    entrypoint:
+      - /usr/local/bin/vpn-control
+    command:
+      - serve

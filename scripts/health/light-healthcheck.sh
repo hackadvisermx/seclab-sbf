@@ -5,8 +5,8 @@ test -d /workspace
 test -x /usr/local/bin/light-entrypoint
 test -x /usr/bin/zsh
 test -r /opt/seclab/oh-my-zsh/oh-my-zsh.sh
-test -r /home/lab/.zshrc
-test -r /home/lab/.tmux.conf
+test -r /home/tester/.zshrc
+test -r /home/tester/.tmux.conf
 test -x /usr/bin/zoxide
 test -x /usr/sbin/sshd
 test -x /usr/bin/ttyd

@@ -10,10 +10,11 @@ La fase 0 de diseño está completada. Esta fase no construye todavía una image
 - Perfiles: `light` y `full`.
 - `full` se ejecuta en una VM dedicada y desechable.
 - Acceso administrativo: Tailscale privado; sin puertos públicos.
-- Terminal: `ttyd`, SSH y SFTP reutilizando una sesión tmux.
+- Terminal: `ttyd` y SSH con un único usuario `tester`, reutilizando una sesión tmux.
+- SFTP: desactivado; no se crea una cuenta de transferencia separada.
 - Workspace: `./workspace:/workspace`, inicialmente vacío.
 - VPN: `vpntry`, `vpnhtb` y `vpncli`.
-- Proxy: TCP explícito, SOCKS5 y reverse proxy web, solo sobre destinos de la VPN activa.
+- Proxy: capacidad de `pt-forward` para `tester`, con TCP explícito, SOCKS5 y reverse proxy web solo sobre destinos de la VPN activa; no existe un usuario `proxy`.
 - Despliegue cloud: VM + Docker mediante Terraform para OCI, Azure y DigitalOcean.
 - Identidad: repositorio `hackadvisermx/seclab-sbf` e imágenes `ghcr.io/hackadvisermx/seclab-sbf`.
 
@@ -50,14 +51,14 @@ Docker Desktop para macOS puede ejecutar el cliente OpenVPN dentro de un contene
 
 - El contenedor no monta el filesystem del host ni `docker.sock`.
 - Tailscale corre en el host y no en el contenedor.
-- El acceso web, SSH y proxy no se expone fuera del tailnet.
+- El acceso web y SSH no se expone fuera del tailnet; la capacidad de proxy tampoco.
 - Las rutas VPN no sustituyen el firewall del host.
 - El proxy no puede alcanzar Tailscale, metadata cloud, gateway Docker ni destinos fuera de la tabla VPN activa.
 - El workspace es la única superficie de escritura para el usuario.
 
 ## Layout de secretos
 
-- `.env`: credenciales de ttyd, SSH, SFTP, rutas VPN y configuración de ejecución.
+- `.env`: credenciales de ttyd, SSH, rutas VPN y configuración de ejecución.
 - `.secrets/ssh/`: par Ed25519 local ignorado por Git; la clave privada nunca se monta en el contenedor.
 - `deploy/.env`: auth key de Tailscale y credenciales de bootstrap/Terraform.
 - Ambos archivos deben tener permisos `600` y no versionarse.

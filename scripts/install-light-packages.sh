@@ -25,7 +25,6 @@ apt-get install -y --no-install-recommends \
   nmap \
   openssh-client \
   openssh-server \
-  openssh-sftp-server \
   openvpn \
   p7zip-full \
   procps \

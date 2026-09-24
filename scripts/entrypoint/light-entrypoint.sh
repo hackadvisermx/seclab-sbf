@@ -37,8 +37,6 @@ TTYD_INTERFACE="$(read_value TTYD_INTERFACE)"
 TTYD_PORT="$(read_value TTYD_PORT)"
 SSH_USER="$(read_value SSH_USER)"
 SSH_PUBLIC_KEY="$(read_value SSH_PUBLIC_KEY)"
-SFTP_USER="$(read_value SFTP_USER)"
-SFTP_PUBLIC_KEY="$(read_value SFTP_PUBLIC_KEY)"
 PENTEST_PROFILE="$(read_value PENTEST_PROFILE)"
 
 TTYD_INTERFACE="${TTYD_INTERFACE:-0.0.0.0}"
@@ -49,16 +47,14 @@ require_value TTYD_USER "$TTYD_USER"
 require_value TTYD_PASSWORD "$TTYD_PASSWORD"
 require_value SSH_USER "$SSH_USER"
 require_value SSH_PUBLIC_KEY "$SSH_PUBLIC_KEY"
-require_value SFTP_USER "$SFTP_USER"
-require_value SFTP_PUBLIC_KEY "$SFTP_PUBLIC_KEY"
 
 if [[ "$PENTEST_PROFILE" != "light" && "$PENTEST_PROFILE" != "full" ]]; then
   printf 'PENTEST_PROFILE must be light or full\n' >&2
   exit 64
 fi
 
-if [[ "$SSH_USER" != "lab" || "$SFTP_USER" != "transfer" ]]; then
-  printf 'SSH_USER must be lab and SFTP_USER must be transfer\n' >&2
+if [[ "$SSH_USER" != "tester" || "$TTYD_USER" != "tester" ]]; then
+  printf 'SSH_USER and TTYD_USER must both be tester\n' >&2
   exit 64
 fi
 
@@ -70,26 +66,17 @@ case "$SSH_PUBLIC_KEY" in
     ;;
 esac
 
-case "$SFTP_PUBLIC_KEY" in
-  ssh-*|ecdsa-*|sk-*) ;;
-  *)
-    printf 'SFTP_PUBLIC_KEY is not a supported public key\n' >&2
-    exit 65
-    ;;
-esac
-
 if [[ ! -d /workspace || ! -w /workspace ]]; then
   printf 'workspace is not writable: /workspace\n' >&2
   exit 1
 fi
 
 id "$SSH_USER" >/dev/null
-id "$SFTP_USER" >/dev/null
 
 install -d -m 0700 -o "$SSH_USER" -g "$SSH_USER" \
-  /var/lib/seclab/lab \
-  /var/lib/seclab/lab/oh-my-zsh-cache \
-  /var/lib/seclab/lab/zoxide
+  /var/lib/seclab/tester \
+  /var/lib/seclab/tester/oh-my-zsh-cache \
+  /var/lib/seclab/tester/zoxide
 
 install -d -m 0755 /run/sshd
 install -d -m 0755 -o root -g root /run/ssh
@@ -98,10 +85,8 @@ install -d -m 0700 -o root -g root /var/lib/seclab/ssh
 chown -R root:root /var/lib/seclab/ssh
 
 printf '%s\n' "$SSH_PUBLIC_KEY" > "/run/ssh/authorized_keys/$SSH_USER"
-printf '%s\n' "$SFTP_PUBLIC_KEY" > "/run/ssh/authorized_keys/$SFTP_USER"
 chown "$SSH_USER:$SSH_USER" "/run/ssh/authorized_keys/$SSH_USER"
-chown "$SFTP_USER:$SFTP_USER" "/run/ssh/authorized_keys/$SFTP_USER"
-chmod 0600 "/run/ssh/authorized_keys/$SSH_USER" "/run/ssh/authorized_keys/$SFTP_USER"
+chmod 0600 "/run/ssh/authorized_keys/$SSH_USER"
 
 if [[ ! -s /var/lib/seclab/ssh/ssh_host_ed25519_key ]]; then
   ssh-keygen -q -t ed25519 -N '' -f /var/lib/seclab/ssh/ssh_host_ed25519_key
@@ -127,7 +112,7 @@ trap 'exit 143' INT TERM
 sshd_pid=$!
 printf '%s\n' "$sshd_pid" > /run/ssh/sshd.pid
 
-TTYD_USER="$TTYD_USER" TTYD_PASSWORD="$TTYD_PASSWORD" TTYD_INTERFACE="$TTYD_INTERFACE" TTYD_PORT="$TTYD_PORT" su -m -s /bin/bash "$SSH_USER" -c /usr/local/bin/ttyd-as-lab &
+TTYD_USER="$TTYD_USER" TTYD_PASSWORD="$TTYD_PASSWORD" TTYD_INTERFACE="$TTYD_INTERFACE" TTYD_PORT="$TTYD_PORT" su -m -s /bin/bash "$SSH_USER" -c /usr/local/bin/ttyd-as-tester &
 ttyd_pid=$!
 printf '%s\n' "$ttyd_pid" > /run/ttyd.pid
 

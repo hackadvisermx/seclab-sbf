@@ -1,4 +1,4 @@
-export SECLAB_STATE_DIR="${SECLAB_STATE_DIR:-/var/lib/seclab/lab}"
+export SECLAB_STATE_DIR="${SECLAB_STATE_DIR:-/var/lib/seclab/tester}"
 export TERM="${TERM:-xterm-256color}"
 export SECLAB_TOOLS_FILE="${SECLAB_TOOLS_FILE:-/usr/local/share/seclab/tools.json}"
 export ZSH="/opt/seclab/oh-my-zsh"

@@ -8,7 +8,7 @@ Construir un laboratorio reutilizable para:
 - CTFs de CTFtime, picoCTF y plataformas similares.
 - TryHackMe y Hack The Box mediante VPN.
 - Engagements con clientes mediante VPN.
-- Terminal web, SSH y SFTP.
+- Terminal web y SSH para un único usuario `tester`.
 - Ejecución local y despliegue en OCI, Azure y DigitalOcean.
 - Arquitecturas `linux/amd64` y `linux/arm64`.
 
@@ -21,15 +21,15 @@ El contenedor no será una distribución basada en Kali ni Parrot. Las herramien
 - `full` se ejecuta en una VM dedicada desechable.
 - Terminal web: `ttyd`.
 - Acceso remoto: Tailscale.
-- SSH dentro del contenedor mediante OpenSSH.
-- SFTP limitado al workspace.
+- SSH dentro del contenedor mediante OpenSSH, con un único usuario Unix `tester`.
+- SFTP desactivado; no existe una cuenta separada de transferencia.
 - Workspace local: `./workspace` montado en `/workspace`.
 - El workspace comienza vacío y no se crean subcarpetas automáticamente.
 - Credenciales de ejecución: `.env` local no versionado.
 - Credenciales de bootstrap/cloud: `deploy/.env` separado.
 - Oh My Zsh con plugins seleccionados y pinneados.
 - VPN: tres perfiles gestionados.
-- Proxy: forwarding TCP, SOCKS5 y reverse proxy web.
+- Proxy: capacidad controlada de `tester` con forwarding TCP, SOCKS5 y reverse proxy web; no existe una cuenta Unix `proxy`.
 - Terraform: VM + Docker, sin Kubernetes.
 - Estado Terraform: backend nativo por proveedor.
 - Política de CVEs: basada en riesgo.
@@ -75,7 +75,7 @@ Contenedor
 - No se montan el home, `/`, claves SSH ni credenciales del host.
 - Tailscale se ejecuta en el host, no dentro del contenedor.
 - `ttyd` se enlaza a loopback o a un proxy privado del host.
-- SSH y el Proxy Lab se consumen mediante Tailscale y túneles SSH.
+- SSH y la capacidad de proxy se consumen mediante Tailscale y túneles privados del host.
 - Los puertos de proxy no se publican mediante `ports:`.
 
 ## 4. Estructura del repositorio
@@ -232,7 +232,7 @@ Herramientas de escaneo:
 
 No se puede garantizar ausencia absoluta de CVEs. La garantía será que no existan vulnerabilidades críticas o altas explotables sin una excepción aprobada y vigente.
 
-## 7. Acceso web, SSH y SFTP
+## 7. Acceso web, SSH y capacidad de proxy
 
 ### ttyd
 
@@ -248,39 +248,30 @@ No se puede garantizar ausencia absoluta de CVEs. La garantía será que no exis
 
 ### SSH
 
-Usuarios previstos:
+Usuario previsto:
 
 ```text
-lab       -> shell + tmux
-transfer  -> SFTP limitado, sin shell
-proxy     -> forwarding local, sin shell
+tester     -> shell + tmux + capacidad controlada de proxy
 ```
+
+No existen usuarios Unix `transfer` ni `proxy`. SFTP está desactivado y el acceso al workspace se realiza desde la shell.
 
 Configuración:
 
 - `PermitRootLogin no`.
 - `PasswordAuthentication no`.
 - `AuthenticationMethods publickey`.
-- `AllowUsers lab transfer proxy`.
+- `AllowUsers tester`.
 - `MaxAuthTries 3`.
 - `MaxSessions` limitado.
 - Sin X11.
 - Sin agent forwarding.
-- Sin túneles arbitrarios.
+- Sin túneles SSH arbitrarios ni reenvío TCP.
 - Host keys persistentes.
 - Claves públicas desde `.env`.
 - Sin claves privadas en el servidor.
 
-El usuario `lab` inicia en `/workspace` y reutiliza la misma sesión tmux que ttyd.
-
-### SFTP
-
-- Usuario separado.
-- Sin shell.
-- Chroot real a `/workspace`.
-- Sin acceso a `.env`, `/vpn` ni filesystem del host.
-- Sin TCP forwarding.
-- Clave pública independiente.
+El usuario `tester` inicia en `/workspace` y reutiliza la misma sesión tmux que ttyd.
 
 ## 8. `.env` y secretos
 
@@ -293,8 +284,7 @@ Existirán dos archivos con propósitos separados:
 Contiene credenciales de ejecución:
 
 - Usuario y contraseña de ttyd.
-- Usuario y clave pública SSH.
-- Usuario y clave pública SFTP.
+- Usuario y clave pública SSH de `tester`.
 - Rutas de perfiles VPN.
 - Configuración de workspace.
 
@@ -432,7 +422,7 @@ Fail2ban no se utilizará como sustituto del firewall ni como detector genérico
 - `MaxAuthTries 3`.
 - `LoginGraceTime` reducido.
 - `AllowUsers` explícito.
-- Forwarding solo para el usuario `proxy`.
+- Forwarding SSH deshabilitado; la capacidad de proxy usa un comando controlado y privado.
 - Servicios innecesarios deshabilitados.
 - Metadata cloud bloqueada.
 - Gateway Docker bloqueado desde el contenedor.
@@ -486,7 +476,7 @@ El flujo normal del tester será:
 VPN_MODE=inside
 ```
 
-El daemon de control se inicia antes de la sesión, precrea `tun0` y no conecta OpenVPN hasta que el usuario `lab` ejecuta `vpntry`, `vpnhtb` o `vpncli`. En macOS, Docker Desktop debe exponer `/dev/net/tun` al contenedor; en Linux, el host debe exponer el dispositivo de caracteres. La prueba de prerrequisitos es `make compose vpn-tun-check`.
+El daemon de control se inicia antes de la sesión, precrea `tun0` y no conecta OpenVPN hasta que el usuario `tester` ejecuta `vpntry`, `vpnhtb` o `vpncli`. En macOS, Docker Desktop debe exponer `/dev/net/tun` al contenedor; en Linux, el host debe exponer el dispositivo de caracteres. La prueba de prerrequisitos es `make compose vpn-tun-check`.
 
 `VPN_MODE=host` queda como compatibilidad explícita, no como flujo normal, y no inicia un cliente VPN fuera del contenedor.
 
@@ -514,7 +504,7 @@ Mac -> Tailscale -> SSH -> contenedor -> VPN -> target
 
 No se publicarán puertos Docker.
 
-SOCKS5 se implementará preferentemente con forwarding dinámico SSH. `microsocks` queda como alternativa para procesos que necesiten un SOCKS server dentro del contenedor.
+La capacidad de proxy se implementará como comandos controlados para `tester`, con sockets privados o listeners loopback autorizados y un route guard. No se usará forwarding SSH ni una cuenta Unix `proxy`; el firewall/nftables de la fase cloud reforzará la frontera de destinos. Con un único usuario, el route guard es una interfaz controlada y no una frontera contra `tester`, que conserva acceso de shell.
 
 El reverse proxy utilizará Caddy dentro del contenedor y se consumirá mediante túnel SSH local.
 
@@ -536,10 +526,10 @@ El cliente puede seleccionar cualquier destino de la red VPN, pero no puede conv
 ### Gestión
 
 ```text
-pt-proxy status
-pt-proxy stop
-pt-proxy clean
-pt-proxy doctor
+pt-forward status
+pt-forward stop
+pt-forward clean
+pt-forward doctor
 ```
 
 Al desconectar una VPN se cancelarán sus forwards.
@@ -616,7 +606,7 @@ Mostrará:
 - Categorías.
 - Comandos de uso.
 - VPN.
-- SSH, ttyd y SFTP.
+- SSH y ttyd; SFTP permanece desactivado.
 - Workspace.
 - Ejemplos de herramientas.
 - Estado de seguridad.
@@ -765,9 +755,9 @@ vpn-disconnect
 pt-forward
 pt-socks
 pt-web
-pt-proxy status
-pt-proxy stop
-pt-proxy doctor
+pt-forward status
+pt-forward stop
+pt-forward doctor
 ```
 
 ## 18. Health checks
@@ -781,7 +771,7 @@ pt-proxy doctor
 - Tailscale.
 - Ttyd.
 - SSH.
-- SFTP.
+- SFTP desactivado.
 - Fail2ban.
 - TUN disponible o modo host.
 - Rutas VPN.
@@ -823,7 +813,7 @@ pt-proxy doctor
 ### Fase 3 — Imagen `base` y `light` (v1 completada en ARM64; build AMD64 verificado)
 
 - Construir `base` y `light` con snapshot de Ubuntu.
-- Añadir ttyd, SSH, SFTP y shell con usuario no root.
+- Añadir ttyd, SSH y shell de `tester` sin SFTP.
 - Añadir herramientas light oficiales de Ubuntu; compilar `fzf` desde commit fijo y registrar las upstream pendientes.
 - Configurar no-root y capabilities.
 - Ejecutar escaneo y smoke tests: Scout no reporta Critical/High en ARM64 ni AMD64; el escaneo completo conserva Medium/Low del snapshot Ubuntu pendientes de actualización.
@@ -846,15 +836,14 @@ pt-proxy doctor
 - Implementar validación de rutas.
 - Validar TUN y la conexión real en macOS Docker Desktop cuando el dispositivo esté expuesto, y en Linux con TUN antes de release.
 - Mantener `VPN_MODE=host` solo como compatibilidad explícita; no forma parte del flujo del tester.
-- El modo inside usa un servicio opcional con `NET_ADMIN`, `CHOWN` para asignar el socket a `lab` y `/dev/net/tun`, nunca `--privileged`; un socket Unix autenticado permite que los aliases de `lab` soliciten solo acciones allowlistadas. `tryhackme.ovpn` fue validado en macOS Docker Desktop; la prueba nativa en Linux queda pendiente.
+- El modo inside usa un servicio opcional con `NET_ADMIN`, `CHOWN` para asignar el socket a `tester` y `/dev/net/tun`, nunca `--privileged`; un socket Unix autenticado permite que los aliases de `tester` soliciten solo acciones allowlistadas. `tryhackme.ovpn` fue validado en macOS Docker Desktop; la prueba nativa en Linux queda pendiente.
 
 ### Fase 6 — Proxy Lab
 
 - Añadir `pt-forward`.
 - Añadir SOCKS5.
 - Añadir reverse proxy web.
-- Añadir route guard.
-- Añadir usuario `proxy`.
+- Añadir route guard para la capacidad de proxy de `tester`.
 - Probar túneles desde macOS y VPS.
 
 ### Fase 7 — Imagen `full`
@@ -901,7 +890,7 @@ pt-proxy doctor
 - El contenedor no tiene puertos públicos.
 - Solo Tailscale puede acceder a ttyd y SSH.
 - SSH utiliza únicamente claves públicas.
-- SFTP no puede salir de `/workspace`.
+- SFTP permanece desactivado.
 - El workspace conserva archivos entre reinicios.
 - ttyd y SSH reutilizan tmux.
 - El banner aparece una vez por sesión.

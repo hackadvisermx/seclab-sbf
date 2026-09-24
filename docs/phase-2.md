@@ -2,7 +2,7 @@
 
 ## Estado
 
-La fase 2 está implementada y verificada en Docker Desktop para macOS con arquitectura `linux/arm64`. Esta fase todavía no instala ttyd, SSH, SFTP, shell interactiva ni herramientas de pentest; esas capacidades pertenecen a las fases siguientes.
+La fase 2 está implementada y verificada en Docker Desktop para macOS con arquitectura `linux/arm64`. Esta fase todavía no instala ttyd, SSH, shell interactiva ni herramientas de pentest; esas capacidades pertenecen a las fases siguientes.
 
 ## Artefactos
 
@@ -11,7 +11,7 @@ La fase 2 está implementada y verificada en Docker Desktop para macOS con arqui
 - `scripts/entrypoint/base-entrypoint.sh`: valida perfil y workspace antes de ejecutar el comando.
 - `scripts/health/base-healthcheck.sh`: comprueba workspace, sistema base y entrypoint.
 - `images/base/Dockerfile`: copia los scripts, establece entrypoint y healthcheck.
-- `scripts/generate-lab-keys.sh` genera un par local Ed25519 en `.secrets/ssh/`, ignorado por Git, y comparte la misma clave pública entre `lab` y `transfer`.
+- `scripts/generate-keys.sh` genera un par local Ed25519 en `.secrets/ssh/`, ignorado por Git, para el usuario `tester`.
 - `Makefile`: agrega `compose config`, `compose up`, `compose down`, `compose shell` y `keys`.
 
 ## Seguridad de la configuración
@@ -19,7 +19,7 @@ La fase 2 está implementada y verificada en Docker Desktop para macOS con arqui
 - No existe `ports:`; el contenedor no publica ttyd, SSH ni otro servicio.
 - `${WORKSPACE_DIR:-./workspace}` se monta como bind mount en `/workspace` y no se crea automáticamente.
 - `${LAB_ENV_FILE:-.env}` se monta como lectura en `/run/secrets/lab.env`; los secretos no se inyectan como `environment`.
-- Las claves privadas locales viven en `.secrets/ssh/` con permisos `600` y nunca se montan en el contenedor; las claves públicas se escriben en `.env` para `lab` y `transfer`.
+- Las claves privadas locales viven en `.secrets/ssh/` con permisos `600` y nunca se montan en el contenedor; la clave pública se escribe en `.env` para `tester`.
 - El filesystem raíz es read-only; `/tmp`, `/run` y `/var/tmp` son tmpfs.
 - `PENTEST_PROFILE` solo acepta `light` o `full`.
 - El healthcheck no ejecuta red ni herramientas de pentest.
@@ -42,7 +42,7 @@ make compose up
 make compose shell
 ```
 
-`make keys` genera automáticamente la clave local compartida y completa `SSH_PUBLIC_KEY` y `SFTP_PUBLIC_KEY` sin imprimir el contenido. `make compose up` ejecuta esa preparación cuando usa `.env`.
+`make keys` genera automáticamente la clave local de `tester` y completa `SSH_PUBLIC_KEY` sin imprimir el contenido. `make compose up` ejecuta esa preparación cuando usa `.env`.
 
 `make compose shell` abre una shell interactiva en el servicio `lab`. La carpeta `workspace/` permanece vacía hasta que el usuario la use.
 
@@ -59,6 +59,6 @@ make compose shell
 
 ## Límites
 
-- `.env` está ignorado por Git; el archivo local puede existir con valores vacíos y debe completarse antes de habilitar ttyd, SSH o SFTP.
+- `.env` está ignorado por Git; el archivo local puede existir con valores vacíos y debe completarse antes de habilitar ttyd o SSH.
 - La imagen actual es únicamente la base mínima.
-- Tailscale, VPN, proxy, SSH, ttyd, SFTP y Oh My Zsh se implementarán en fases posteriores.
+- Tailscale, VPN, capacidad de proxy, SSH, ttyd y Oh My Zsh se implementarán en fases posteriores.

@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help verify verify-secrets lint-docker lint-shell build-base build-light env-init keys ensure-env compose config up down shell zsh tmux vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop security-check tailscale-check
+.PHONY: help verify verify-secrets lint-docker lint-shell build-base build-light env-init keys ensure-env compose config up down shell zsh tmux vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check
 
 ENV_FILE ?= .env
 VPN_DIR ?= ./vpn
@@ -10,7 +10,7 @@ VPN_PROFILE ?= tryhackme
 VPN_COMPOSE := -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml
 
 help:
-	@printf '%s\n' 'verify         Ejecuta las verificaciones locales disponibles' 'verify-secrets Escanea secretos con Gitleaks' 'lint-docker    Ejecuta Hadolint sobre el Dockerfile base' 'lint-shell     Ejecuta ShellCheck sobre scripts versionados' 'build-base     Construye la imagen base' 'build-light    Construye la imagen light' 'env-init       Crea .env desde .env.example con permisos 600' 'keys           Genera una clave local para tester' 'compose config Valida compose.yaml' 'compose up     Levanta tester, daemon VPN y tun0; no conecta un túnel' 'compose down   Detiene tester y daemon VPN' 'compose shell  Abre Bash como tester para depuración' 'compose zsh    Abre Zsh efímero para previsualización' 'compose tmux   Entra a la sesión tmux del servicio activo' 'vpn-up         Asegura el daemon/control VPN y tun0; no conecta un túnel' 'vpn-tun-check  Comprueba /dev/net/tun, tun0, NET_ADMIN y estado inside' 'vpn-down       Detiene el daemon VPN interno' 'vpn-list       Lista perfiles VPN del modo inside' 'vpn-status     Muestra el estado de la VPN inside' 'vpn-connect    Conecta VPN_PROFILE a demanda dentro del contenedor' 'vpn-disconnect Desconecta la VPN activa' 'vpn-switch     Cambia al perfil VPN_PROFILE' 'vpn-doctor     Valida perfiles y capacidades VPN' 'proxy-status  Muestra el estado de pt-forward' 'proxy-doctor  Valida la route guard del proxy' 'proxy-stop    Detiene pt-forward y SOCKS5' 'security-check Valida la sintaxis nftables en Linux' 'tailscale-check Valida Tailscale host-only en Linux'
+	@printf '%s\n' 'verify         Ejecuta las verificaciones locales disponibles' 'verify-secrets Escanea secretos con Gitleaks' 'lint-docker    Ejecuta Hadolint sobre el Dockerfile base' 'lint-shell     Ejecuta ShellCheck sobre scripts versionados' 'build-base     Construye la imagen base' 'build-light    Construye la imagen light' 'env-init       Crea .env desde .env.example con permisos 600' 'keys           Genera una clave local para tester' 'compose config Valida compose.yaml' 'compose up     Levanta tester, daemon VPN y tun0; no conecta un túnel' 'compose down   Detiene tester y daemon VPN' 'compose shell  Abre Bash como tester para depuración' 'compose zsh    Abre Zsh efímero para previsualización' 'compose tmux   Entra a la sesión tmux del servicio activo' 'vpn-up         Asegura el daemon/control VPN y tun0; no conecta un túnel' 'vpn-tun-check  Comprueba /dev/net/tun, tun0, NET_ADMIN y estado inside' 'vpn-down       Detiene el daemon VPN interno' 'vpn-list       Lista perfiles VPN del modo inside' 'vpn-status     Muestra el estado de la VPN inside' 'vpn-connect    Conecta VPN_PROFILE a demanda dentro del contenedor' 'vpn-disconnect Desconecta la VPN activa' 'vpn-switch     Cambia al perfil VPN_PROFILE' 'vpn-doctor     Valida perfiles y capacidades VPN' 'proxy-status  Muestra el estado de pt-forward' 'proxy-doctor  Valida la route guard del proxy' 'proxy-stop    Detiene pt-forward y SOCKS5' 'proxy-bridge  Puente host-only 127.0.0.1 hacia pt-forward (SERVICE=tcp|socks|web)' 'security-check Valida la sintaxis nftables en Linux' 'tailscale-check Valida Tailscale host-only en Linux'
 
 verify: verify-secrets lint-docker lint-shell
 
@@ -21,7 +21,7 @@ lint-docker:
 	hadolint images/base/Dockerfile images/light/Dockerfile
 
 lint-shell:
-	@for file in scripts/*.sh scripts/entrypoint/*.sh scripts/health/*.sh scripts/security/*.sh; do \
+	@for file in scripts/*.sh scripts/entrypoint/*.sh scripts/health/*.sh scripts/security/*.sh scripts/host/*.sh; do \
 		if [ -f "$$file" ]; then shellcheck "$$file"; fi; \
 	done
 
@@ -116,6 +116,9 @@ proxy-doctor: ensure-env
 
 proxy-stop: ensure-env
 	LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml exec -T --user 1000:1000 lab /usr/local/bin/pt-forward stop
+
+proxy-bridge:
+	/bin/sh scripts/host/pt-proxy-bridge.sh "$(SERVICE)" "$(HOST_PORT)" "$(CONTAINER_PORT)"
 
 security-check:
 	/bin/sh scripts/security/check-isolation.sh

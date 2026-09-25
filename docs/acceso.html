@@ -75,7 +75,7 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
     <tr><td><code>Permission denied (publickey)</code></td><td>Usa <code>-i</code> con la llave correcta (<code>seclab_ed25519</code>, no la de consola).</td></tr>
     <tr><td>Timeout al puerto 7681/2222</td><td>Tailscale caído en Mac o host; revisa <code>tailscale status</code> en ambos. Revisa los servicios systemd del host.</td></tr>
     <tr><td>ttyd pide login en bucle / 401</td><td>Contraseña incorrecta: verifica <code>TTYD_PASSWORD</code> de tu <code>.env</code> local.</td></tr>
-    <tr><td><code>exec request failed</code> / PTY</td><td>Estás en Warp u otra terminal con wrapper SSH: usa <code>/usr/bin/ssh</code> o Terminal.app.</td></tr>
+    <tr><td><code>exec request failed</code> / PTY, <code>warptmp</code>, <code>/.zshenv</code> read-only, o SSH sin tmux ni banner</td><td>Estás en Warp: su integración remota rompe el login (fija <code>ZDOTDIR=/</code>). Atajo en sesión: <code>ZDOTDIR=/home/tester exec /usr/bin/zsh -il</code>. Permanente: usa <code>/usr/bin/ssh</code>, Terminal.app, o desactiva por completo la integración SSH/shell de Warp.</td></tr>
     <tr><td>Todo el tailnet falla</td><td>Último recurso: <strong>console connection de OCI</strong> (llave <code>seclab_console_rsa</code>, login <code>ubuntu</code> + contraseña de consola). Pregunta por el comando vigente.</td></tr>
   </table>
 

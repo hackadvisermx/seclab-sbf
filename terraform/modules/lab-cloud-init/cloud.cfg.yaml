@@ -2,7 +2,9 @@
 # Módulo compartido de cloud-init para los stacks de seclab-sbf.
 # No recibe secretos: ni .env, ni claves Tailscale, ni credenciales.
 # Tailscale se instala y une MANUALMENTE por consola (ver docs/phase-8.md).
-# Variables templatefile: admin_user, workspace_device, workspace_mount.
+# Variables templatefile: admin_user, workspace_device, workspace_mount,
+# admin_password (opcional, "" = sin contraseña; solo para login por
+# consola serie; SSH sigue siendo solo con llave).
 hostname: seclab-sbf
 manage_etc_hosts: true
 users:
@@ -11,6 +13,12 @@ users:
     shell: /bin/bash
     ssh_authorized_keys:
       - ${ssh_public_key}
+%{ if admin_password != "" }
+chpasswd:
+  list:
+    - ${admin_user}:${admin_password}
+  expire: false
+%{ endif }
 package_update: true
 packages:
   - docker.io

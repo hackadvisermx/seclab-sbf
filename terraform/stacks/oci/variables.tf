@@ -46,6 +46,13 @@ variable "admin_user" {
   default     = "ubuntu"
 }
 
+variable "admin_password" {
+  description = "Contraseña del admin solo para consola serie (SSH sigue con llave). Vacío la desactiva."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "ocpus" {
   description = "OCPUs de la VM Flex."
   type        = number

@@ -61,6 +61,7 @@ resource "digitalocean_droplet" "lab" {
 
   user_data = templatefile("${path.module}/../../modules/lab-cloud-init/cloud.cfg.yaml", {
     admin_user       = var.admin_user
+    admin_password   = var.admin_password
     ssh_public_key   = var.ssh_public_key
     workspace_device = local.workspace_device
     workspace_mount  = local.workspace_mount

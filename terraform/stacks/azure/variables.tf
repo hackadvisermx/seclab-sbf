@@ -27,6 +27,13 @@ variable "admin_user" {
   default     = "azureuser"
 }
 
+variable "admin_password" {
+  description = "Contraseña del admin solo para consola serie (SSH sigue con llave). Vacío la desactiva."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "vm_size" {
   description = "Tamaño de la VM (2 vCPU / 8 GB por defecto)."
   type        = string

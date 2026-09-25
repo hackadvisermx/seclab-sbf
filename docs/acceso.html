@@ -57,6 +57,9 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
 
   <h2>2. Contenedor por SSH (usuario tester)</h2>
   <div class="card">
+    <h3>En tu Mac (un comando)</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh</code></pre>
+    <p>Levanta el lab si hace falta, publica <code>127.0.0.1:2222</code> vía override temporal (sin tocar <code>compose.yaml</code>) y entra como <code>tester</code> con banner + tmux. Si el puerto está ocupado: <code>make lab-ssh LAB_SSH_PORT=2223</code>.</p>
     <h3>Directo por el tailnet, sin túnel (puerto 2222, solo llaves)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i /Users/castr/tmp/t01/.secrets/ssh/seclab_ed25519 -p 2222 tester@100.113.178.15</code></pre>
     <p>Entrarás al shell del laboratorio (banner <code>SECLAB-SBF</code>). Alternativa desde el host con <code>docker compose exec</code> (no usa red).</p>

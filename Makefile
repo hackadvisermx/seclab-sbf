@@ -1,16 +1,22 @@
 SHELL := /bin/sh
 
-.PHONY: help verify verify-secrets lint-docker lint-shell build-base build-light build-full env-init keys ensure-env compose config up down shell zsh tmux vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check tf-fmt tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do
+.PHONY: help verify verify-secrets lint-docker lint-shell build-base build-light build-full env-init keys ensure-env compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check tf-fmt tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do
 
 ENV_FILE ?= .env
+WORKSPACE_DIR ?= ./workspace
 VPN_DIR ?= ./vpn
 VPN_MODE ?= inside
 VPN_IMAGE ?= seclab-sbf:light
 VPN_PROFILE ?= tryhackme
 VPN_COMPOSE := -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml
+LAB_SSH_PORT ?= 2222
+LAB_SSH_KEY ?= .secrets/ssh/seclab_ed25519
+LAB_SSH_HOST ?= 127.0.0.1
+COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml
+COMPOSE_VPN := VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE)
 
 help:
-	@printf '%s\n' 'verify         Ejecuta las verificaciones locales disponibles' 'verify-secrets Escanea secretos con Gitleaks' 'lint-docker    Ejecuta Hadolint sobre el Dockerfile base' 'lint-shell     Ejecuta ShellCheck sobre scripts versionados' 'build-base     Construye la imagen base' 'build-light    Construye la imagen light' 'build-full     Construye la imagen full (VM desechable)' 'env-init       Crea .env desde .env.example con permisos 600' 'keys           Genera una clave local para tester' 'compose config Valida compose.yaml' 'compose up     Levanta tester, daemon VPN y tun0; no conecta un túnel' 'compose down   Detiene tester y daemon VPN' 'compose shell  Abre Bash como tester para depuración' 'compose zsh    Abre Zsh efímero para previsualización' 'compose tmux   Entra a la sesión tmux del servicio activo' 'vpn-up         Asegura el daemon/control VPN y tun0; no conecta un túnel' 'vpn-tun-check  Comprueba /dev/net/tun, tun0, NET_ADMIN y estado inside' 'vpn-down       Detiene el daemon VPN interno' 'vpn-list       Lista perfiles VPN del modo inside' 'vpn-status     Muestra el estado de la VPN inside' 'vpn-connect    Conecta VPN_PROFILE a demanda dentro del contenedor' 'vpn-disconnect Desconecta la VPN activa' 'vpn-switch     Cambia al perfil VPN_PROFILE' 'vpn-doctor     Valida perfiles y capacidades VPN' 'proxy-status  Muestra el estado de pt-forward' 'proxy-doctor  Valida la route guard del proxy' 'proxy-stop    Detiene pt-forward y SOCKS5' 'proxy-bridge  Puente host-only 127.0.0.1 hacia pt-forward (SERVICE=tcp|socks|web)' 'security-check Valida la sintaxis nftables en Linux' 'tailscale-check Valida Tailscale host-only en Linux' 'tf-fmt       Revisa formato Terraform' 'tf-plan-*    Plan por proveedor (oci|azure|do)' 'tf-apply-*   Aplica por proveedor' 'tf-destroy-* Destruye por proveedor' 'env-copy-*   Copia .env al host por tailnet (TF_HOST=...)'
+	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_SSH_PORT=2222)' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell
 
@@ -60,25 +66,49 @@ keys: ensure-env
 compose:
 	@:
 
-config: ensure-env vpn-require-dir
-	LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml config --quiet
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) config --quiet
+# Forma canonica con guiones; 'up', 'down', 'shell', 'zsh', 'tmux' y
+# 'config' se conservan como alias para compatibilidad.
+config: compose-config
 
-up: ensure-env vpn-require-dir build-light
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) up -d
+compose-config: ensure-env vpn-require-dir
+	$(COMPOSE_BASE) config --quiet
+	$(COMPOSE_VPN) config --quiet
 
-down: ensure-env
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) down --remove-orphans
+up: compose-up
+
+compose-up: ensure-env vpn-require-dir build-light
+	$(COMPOSE_VPN) up -d
+
+down: compose-down
+
+compose-down: ensure-env
+	$(COMPOSE_VPN) down --remove-orphans
 
 
-shell: ensure-env build-light
-	LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml run --rm --user 1000:1000 --entrypoint /bin/bash lab
+shell: compose-shell
 
-zsh: ensure-env build-light
-	LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml run --rm -it --user 1000:1000 --entrypoint /usr/bin/zsh lab -il
+compose-shell: ensure-env build-light
+	$(COMPOSE_BASE) run --rm --user 1000:1000 --entrypoint /bin/bash lab
 
-tmux: ensure-env
-	LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml exec -it --user 1000:1000 lab env SECLAB_TMUX=1 TERM=xterm-256color /usr/bin/tmux new-session -A -s pentest-lab /usr/bin/zsh -il
+zsh: compose-zsh
+
+compose-zsh: ensure-env build-light
+	$(COMPOSE_BASE) run --rm -it --user 1000:1000 --entrypoint /usr/bin/zsh lab -il
+
+tmux: compose-tmux
+
+compose-tmux: ensure-env
+	$(COMPOSE_BASE) exec -it --user 1000:1000 lab env SECLAB_TMUX=1 TERM=xterm-256color /usr/bin/tmux new-session -A -s pentest-lab /usr/bin/zsh -il
+
+# SSH al contenedor en un comando: publica 127.0.0.1:LAB_SSH_PORT
+# via override temporal en tmp/ (ignorado, sin tocar compose.yaml)
+# y entra como tester. En el host cloud antepone
+# WORKSPACE_DIR=/opt/seclab-sbf/workspace.
+lab-ssh: ensure-env vpn-require-dir build-light
+	@mkdir -p tmp
+	@printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n' "$(LAB_SSH_PORT)" > tmp/compose.ssh.yaml
+	WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml -f tmp/compose.ssh.yaml up -d lab
+	ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(LAB_SSH_PORT)" tester@$(LAB_SSH_HOST)
 
 vpn-require-dir:
 	@if [ ! -d "$(VPN_DIR)" ]; then \
@@ -87,40 +117,40 @@ vpn-require-dir:
 	fi
 
 vpn-up: ensure-env vpn-require-dir build-light
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) up -d vpn
+	$(COMPOSE_VPN) up -d vpn
 
 vpn-tun-check: vpn-up
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) exec -T vpn /bin/sh -c 'test -c /dev/net/tun && test -e /sys/class/net/tun0 && /usr/local/bin/vpn-manager status'
+	$(COMPOSE_VPN) exec -T vpn /bin/sh -c 'test -c /dev/net/tun && test -e /sys/class/net/tun0 && /usr/local/bin/vpn-manager status'
 
 vpn-down: ensure-env
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) rm -f -s vpn
+	$(COMPOSE_VPN) rm -f -s vpn
 
 vpn-list: vpn-up
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) exec -T vpn /usr/local/bin/vpn-manager list
+	$(COMPOSE_VPN) exec -T vpn /usr/local/bin/vpn-manager list
 
 vpn-status: vpn-up
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) exec -T vpn /usr/local/bin/vpn-manager status
+	$(COMPOSE_VPN) exec -T vpn /usr/local/bin/vpn-manager status
 
 vpn-connect: vpn-up
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) exec -T vpn /usr/local/bin/vpn-manager connect "$(VPN_PROFILE)"
+	$(COMPOSE_VPN) exec -T vpn /usr/local/bin/vpn-manager connect "$(VPN_PROFILE)"
 
 vpn-disconnect: vpn-up
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) exec -T vpn /usr/local/bin/vpn-manager disconnect
+	$(COMPOSE_VPN) exec -T vpn /usr/local/bin/vpn-manager disconnect
 
 vpn-switch: vpn-up
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) exec -T vpn /usr/local/bin/vpn-manager switch "$(VPN_PROFILE)"
+	$(COMPOSE_VPN) exec -T vpn /usr/local/bin/vpn-manager switch "$(VPN_PROFILE)"
 
 vpn-doctor: vpn-up
-	VPN_IMAGE="$(VPN_IMAGE)" VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" LAB_ENV_FILE="$(ENV_FILE)" docker compose $(VPN_COMPOSE) exec -T vpn /usr/local/bin/vpn-manager doctor
+	$(COMPOSE_VPN) exec -T vpn /usr/local/bin/vpn-manager doctor
 
 proxy-status: ensure-env
-	LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml exec -T --user 1000:1000 lab /usr/local/bin/pt-forward status
+	$(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward status
 
 proxy-doctor: ensure-env
-	LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml exec -T --user 1000:1000 lab /usr/local/bin/pt-forward doctor
+	$(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward doctor
 
 proxy-stop: ensure-env
-	LAB_ENV_FILE="$(ENV_FILE)" docker compose -f compose.yaml -f compose.local.yaml exec -T --user 1000:1000 lab /usr/local/bin/pt-forward stop
+	$(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward stop
 
 proxy-bridge:
 	/bin/sh scripts/host/pt-proxy-bridge.sh "$(SERVICE)" "$(HOST_PORT)" "$(CONTAINER_PORT)"

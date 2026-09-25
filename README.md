@@ -41,11 +41,11 @@ Edita `.env` y establece al menos `TTYD_PASSWORD` y `SSH_PUBLIC_KEY` si el gener
 ### Levantar el laboratorio
 
 ```bash
-make compose up
-make compose tmux
+make compose-up
+make compose-tmux
 ```
 
-`make compose up` levanta `tester`, el daemon VPN interno y `tun0`, pero no conecta ningún perfil. Dentro de la sesión tmux:
+`make compose-up` levanta `tester`, el daemon VPN interno y `tun0`, pero no conecta ningún perfil. Dentro de la sesión tmux:
 
 ```text
 pt-help
@@ -64,7 +64,7 @@ vpn-disconnect
 Desde el host:
 
 ```bash
-make compose down
+make compose-down
 ```
 
 ## VPN
@@ -81,9 +81,9 @@ El flujo normal usa `VPN_MODE=inside`:
 Comandos adicionales:
 
 ```bash
-make compose vpn-tun-check VPN_DIR=./vpn VPN_MODE=inside
-make compose vpn-doctor VPN_DIR=./vpn VPN_MODE=inside
-make compose vpn-status VPN_DIR=./vpn VPN_MODE=inside
+make compose-vpn-tun-check VPN_DIR=./vpn VPN_MODE=inside
+make compose-vpn-doctor VPN_DIR=./vpn VPN_MODE=inside
+make compose-vpn-status VPN_DIR=./vpn VPN_MODE=inside
 ```
 
 `vpn-up` es idempotente y deja preparado el daemon/TUN; no inicia una VPN por sí solo. `VPN_MODE=host` queda únicamente como compatibilidad explícita y no se usa en el flujo normal.
@@ -121,9 +121,9 @@ Ejemplos: `pt-forward start tcp 192.168.192.1 80 18080`, `pt-socks 1080` y `pt-w
 Desde el host:
 
 ```bash
-make compose proxy-status
-make compose proxy-doctor
-make compose proxy-stop
+make compose-proxy-status
+make compose-proxy-doctor
+make compose-proxy-stop
 ```
 
 La route guard es una interfaz de uso, no una frontera contra `tester`; nftables/cloud queda como refuerzo de seguridad.
@@ -151,7 +151,7 @@ La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tai
 ```bash
 make verify
 make build-light
-make compose config ENV_FILE=.env.example
+make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 docker scout cves local://seclab-sbf:light --only-severity critical,high --exit-code
 ```

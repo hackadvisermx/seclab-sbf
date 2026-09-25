@@ -15,5 +15,8 @@ vpn/*
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.tfvars
+*.tfvars.json
+deploy/backend-*.hcl
 *.log
 .DS_Store

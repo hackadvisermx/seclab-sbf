@@ -1,0 +1,12 @@
+# Backend S3-compatible (Spaces). Sin credenciales aquí: se inyectan por
+# entorno (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY del Spaces key).
+# El bucket y la ruta se definen en deploy/backend-do.hcl (ignorado).
+bucket                      = "REEMPLAZAR-bucket-state"
+key                         = "seclab-sbf/do/terraform.tfstate"
+region                      = "us-east-1"
+endpoint                    = "https://REEMPLAZAR-region.digitaloceanspaces.com"
+skip_credentials_validation = true
+skip_metadata_api_check     = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+use_path_style              = true

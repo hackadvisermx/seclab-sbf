@@ -224,9 +224,11 @@ COPY scripts/install-shell.sh /usr/local/bin/install-shell
 RUN usermod --login tester --home /home/tester --move-home --shell /usr/bin/zsh ubuntu \
  && groupmod --new-name tester ubuntu \
  && usermod --groups tester tester \
- && install -d -m 0755 /home/tester \
- && install -d -m 0700 /var/lib/seclab/ssh \
- && chown tester:tester /home/tester
+&& install -d -m 0755 /home/tester \
+  && install -d -m 0700 /var/lib/seclab/ssh \
+  && install -d -m 0700 /home/tester/.config/subfinder \
+  && printf 'sources: []\n' > /home/tester/.config/subfinder/config.yaml \
+  && chown -R tester:tester /home/tester
 COPY .tmux.conf /home/tester/.tmux.conf
 RUN chown root:root /home/tester/.tmux.conf \
  && chmod 0444 /home/tester/.tmux.conf

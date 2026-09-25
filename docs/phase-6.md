@@ -70,7 +70,41 @@ ssh -L 18081:127.0.0.1:18081 usuario@<tailnet-host>
 
 El route guard no cambia: el puente solo transporta bytes hasta el listener
 existente, que sigue exigiendo VPN activa y ruta `tun0`, y se detiene al
-desconectar la VPN. La validación en VPS con Tailscale queda pendiente.
+desconectar la VPN.
+
+## Validación en VPS con Tailscale
+
+El 2026-09-25 se validó en el host final `seclab-cloud-20260924154553`
+(`mx-monterrey-1`, Ubuntu 24.04 AMD64) con el árbol en `06380b2`:
+
+- En el host se instalaron `socat` 1.8.0.0 y `make` 4.3 desde Ubuntu, y
+  `docker-compose-plugin` 5.5.1 desde el repo oficial de Docker; el usuario
+  `ubuntu` se añadió al grupo `docker`. Tailscale y nftables no se tocaron.
+- `make build-light` construyó `seclab-sbf:base` y `seclab-sbf:light`;
+  `make compose up` levantó `lab` y `vpn`; `vpn-tun-check` mostró `tun0` y
+  `NET_ADMIN` presentes sin perfil conectado.
+- `vpn-connect tryhackme` conectó. La única ruta por `tun0` era
+  `192.168.192.0/18`; el rango 10.x de THM no tenía ruta VPN (sin sala
+  activa). El route guard rechazó `10.10.10.10` (exit 78), la IP local de
+  `tun0` (sale por `lo`, correcto) y `169.254.169.254` (metadata).
+- Destino vivo vía VPN: `192.168.192.1:443` acepta TCP (habla protocolo
+  OpenVPN, no TLS ni HTTP).
+- `pt-forward start tcp 192.168.192.1 443 18080` + puente
+  `127.0.0.1:18080` en el host + `ssh -L 18099:127.0.0.1:18080` desde la
+  Mac: el TCP se estableció de extremo a extremo (el servidor cerró al
+  recibir HTTP plano, comportamiento esperado del servicio).
+- `pt-socks` en `1080` + puente `127.0.0.1:11080` + `ssh -L` + handshake
+  SOCKS5 desde la Mac: `CONNECT 192.168.192.1:443` devolvió `0x00` (éxito,
+  bytes de ida y vuelta por toda la cadena) y
+  `CONNECT 169.254.169.254:80` devolvió `0x01` (guard enforced).
+- `vpn-disconnect` detuvo el proxy automáticamente (`pt-forward=inactive`).
+- Limpieza: puentes y túneles cerrados, stack con `down`, VPN
+  desconectada. En el host quedan las imágenes y `~/seclab-sbf` con `.env`
+  (600) y perfiles `.ovpn`, como despliegue normal.
+
+Observaciones no bloqueantes: compose avisa que la red
+`seclab-sbf_default` ya existe y no la creó él; cada invocación de `make`
+reconstruye las imágenes aunque no haya cambios.
 
 ## Verificación realizada
 
@@ -88,7 +122,7 @@ desconectar la VPN. La validación en VPS con Tailscale queda pendiente.
 - El usuario `tester` conserva shell y puede ejecutar herramientas de red directamente; la route guard es una interfaz controlada, no una frontera de seguridad contra ese usuario.
 - La barrera de red definitiva para metadata, Tailscale, gateway Docker e interfaces del host queda en nftables/cloud.
 - El consumo externo se hace solo mediante el puente host-only
-  `scripts/host/pt-proxy-bridge.sh` más `ssh -L` sobre Tailscale; las pruebas
-  en VPS quedan pendientes.
+  `scripts/host/pt-proxy-bridge.sh` más `ssh -L` sobre Tailscale, validado
+  en VPS el 2026-09-25 (ver sección de validación).
 - `pt-web` no implementa Caddy, terminating TLS local ni publicación de puertos; solo valida y reenvía HTTP/HTTPS/WebSocket a un origen fijo.
 - No se deben añadir listeners `0.0.0.0` ni forwarding SSH.

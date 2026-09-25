@@ -1,0 +1,6 @@
+# Backend nativo Azure. Sin credenciales aquí: se inyectan por entorno
+# (ARM_* / AZURE_*) y el storage de estado se crea antes (ver docs/phase-8.md).
+resource_group_name  = "REEMPLAZAR-rg-state"
+storage_account_name = "REEMPLAZARstseclab"
+container_name       = "tfstate"
+key                  = "seclab-sbf/azure/terraform.tfstate"

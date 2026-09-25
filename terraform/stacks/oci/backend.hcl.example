@@ -1,0 +1,13 @@
+# Backend S3-compatible (Object Storage OCI). Sin credenciales aquí:
+# se inyectan por entorno (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY de
+# Customer Secret Keys) y archivo -backend-config (ver deploy/).
+# El bucket y la ruta se definen en deploy/backend-oci.hcl (ignorado).
+bucket                      = "REEMPLAZAR-bucket-state"
+key                         = "seclab-sbf/oci/terraform.tfstate"
+region                      = "mx-monterrey-1"
+endpoint                    = "https://REEMPLAZAR-namespace.compat.objectstorage.mx-monterrey-1.oraclecloud.com"
+skip_credentials_validation = true
+skip_metadata_api_check     = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+use_path_style              = true

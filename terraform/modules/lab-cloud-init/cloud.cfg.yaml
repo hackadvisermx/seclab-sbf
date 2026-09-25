@@ -1,0 +1,45 @@
+#cloud-config
+# Módulo compartido de cloud-init para los stacks de seclab-sbf.
+# No recibe secretos: ni .env, ni claves Tailscale, ni credenciales.
+# Tailscale se instala y une MANUALMENTE por consola (ver docs/phase-8.md).
+# Variables templatefile: admin_user, workspace_device, workspace_mount.
+hostname: seclab-sbf
+manage_etc_hosts: true
+users:
+  - name: ${admin_user}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+package_update: true
+packages:
+  - docker.io
+  - socat
+  - make
+  - git
+  - open-iscsi
+  - nftables
+  - unattended-upgrades
+write_files:
+  - path: /etc/seclab-sbf/motd
+    permissions: "0644"
+    content: |
+      seclab-sbf: host gestionado por Terraform. Sin puertos públicos.
+      Acceso solo por Tailscale (unión manual). Ver docs/phase-8.md.
+runcmd:
+  - systemctl enable --now docker
+  - usermod -aG docker ${admin_user}
+  - systemctl enable --now iscsid || true
+  - mkdir -p ${workspace_mount}
+  - |
+    if [ -b "${workspace_device}" ] && ! findmnt -n "${workspace_mount}" >/dev/null 2>&1; then
+      if ! blkid -o value -s TYPE "${workspace_device}" >/dev/null 2>&1; then
+        mkfs.ext4 -L seclab-workspace "${workspace_device}"
+      fi
+      UUID="$(blkid -o value -s UUID "${workspace_device}")"
+      printf 'UUID=%s %s ext4 defaults,nofail 0 2\n' "$UUID" "${workspace_mount}" >> /etc/fstab
+      mount "${workspace_mount}"
+      chown ${admin_user}:${admin_user} "${workspace_mount}"
+    fi
+  - systemctl enable --now unattended-upgrades || true
+final_message: "seclab-sbf listo. Une Tailscale manualmente y copia .env por SSH sobre el tailnet."

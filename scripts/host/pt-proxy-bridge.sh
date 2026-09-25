@@ -1,12 +1,14 @@
 #!/bin/sh
 # Puente host-only para consumir pt-forward/pt-socks/pt-web sin publicar puertos.
-# Solo escucha en 127.0.0.1 del host y reenvia al loopback del contenedor
-# mediante `docker compose exec`. No usa `ports:`, `network_mode: host`
-# ni Tailscale dentro del contenedor. El consumo remoto se hace con
-# `ssh -L` sobre el tailnet hacia este loopback del host.
+# Solo escucha en loopback del host por defecto; con BIND=<ip-tailscale>
+# se ata a la IP Tailscale del host (tailnet, nunca internet) para
+# exponer ttyd/ssh del contenedor a dispositivos del tailnet vía ACL.
+# Reenvía al loopback del contenedor mediante `docker compose exec`.
+# No usa `ports:`, `network_mode: host` ni Tailscale dentro del contenedor.
+# El consumo con túnel (`ssh -L` sobre el tailnet) sigue disponible.
 set -eu
 
-BIND=127.0.0.1
+BIND="${BIND:-127.0.0.1}"
 SERVICE="${1:-}"
 HOST_PORT="${2:-}"
 CONTAINER_PORT="${3:-}"
@@ -56,7 +58,7 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 78
 fi
 
-printf '%s\n' "bridge=127.0.0.1:${HOST_PORT} -> container=127.0.0.1:${CONTAINER_PORT} service=${SERVICE}"
+printf '%s\n' "bridge=${BIND}:${HOST_PORT} -> container=127.0.0.1:${CONTAINER_PORT} service=${SERVICE}"
 printf '%s\n' 'el proxy del contenedor sigue validando tun0; este puente no abre puertos publicos'
 
 # Cada conexion del host se transporta por stdio de `docker compose exec`

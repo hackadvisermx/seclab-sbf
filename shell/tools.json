@@ -36,6 +36,11 @@
       "command": "ffuf",
       "description": "Fuzzing web rápido"
     },
+    "feroxbuster": {
+      "category": "web",
+      "command": "feroxbuster",
+      "description": "Fuzzing de contenido web"
+    },
     "gdb": {
       "category": "development",
       "command": "gdb",
@@ -76,6 +81,11 @@
       "command": "nmap",
       "description": "Descubrimiento de puertos y servicios"
     },
+    "naabu": {
+      "category": "recon",
+      "command": "naabu",
+      "description": "Escaneo rápido de puertos"
+    },
     "nuclei": {
       "category": "web",
       "command": "nuclei",
@@ -85,6 +95,11 @@
       "category": "vpn",
       "command": "openvpn",
       "description": "Cliente OpenVPN"
+    },
+    "pwn": {
+      "category": "development",
+      "command": "pwn",
+      "description": "CTF y exploits con pwntools"
     },
     "pt-forward": {
       "category": "network",
@@ -164,6 +179,7 @@
       "dalfox",
       "fzf",
       "fd",
+      "feroxbuster",
       "ffuf",
       "gdb",
       "git",
@@ -172,10 +188,12 @@
       "ip",
       "jq",
       "katana",
+      "naabu",
       "nmap",
       "nuclei",
       "openvpn",
       "pt-forward",
+      "pwn",
       "python3",
       "rg",
       "socat",

@@ -16,6 +16,7 @@ apt:
     iputils-ping: 3:20240117-1ubuntu0.1
     jq: 1.7.1-3ubuntu0.24.04.2
     less: 590-2ubuntu2.1
+    libpcap0.8t64: 1.10.4-4.1ubuntu3
     nmap: 7.94+git20230807.3be01efb1+dfsg-3build2
     openssh-client: 1:9.6p1-3ubuntu13.19
     openssh-server: 1:9.6p1-3ubuntu13.19
@@ -24,6 +25,7 @@ apt:
     p7zip-full: 16.02+transitional.1
     procps: 2:4.0.4-4ubuntu3.3
     python3: 3.12.3-0ubuntu2.1
+    python3-pip: 24.0+dfsg-1ubuntu1.3
     ripgrep: 14.1.0-1
     socat: 1.8.0.0-4ubuntu0.1
     sqlmap: 1.8.4-1
@@ -74,6 +76,49 @@ third_party_binaries:
         file: dalfox-v3.2.1-linux-aarch64-musl.tar.gz
         sha256: e10f3f95e3033899c0912c1b9032d35f754caeeb002b0b8153e2958e54485694
         binary_sha256: 41b0347ce064c58d535ed201a226368e7916042d81e51bc7441b379c381a6164
+  - name: feroxbuster
+    version: 2.13.1
+    source: https://github.com/epi052/feroxbuster/releases/download/v2.13.1/
+    note: upstream sin checksums publicados; sha256 medidos sobre TLS y fijados
+    assets:
+      linux/amd64:
+        file: x86_64-linux-feroxbuster.tar.gz
+        sha256: 7985c00e6803b0f25d5e9139f7472279f3f4d891429627a5cedc629e53992d80
+        binary_sha256: 24e7f3dfefc96b5bde3043b1c0e1016e4f947eb28275def1ec2ea59fddeb9b40
+      linux/arm64:
+        file: aarch64-linux-feroxbuster.zip
+        sha256: 1e5244e1f52e55a647b65e0c76ae7afe0b9983c1fbea30ed7c67e477175eb381
+        binary_sha256: 6db5d0b24b5345951be35ce4130efb12576d70c7a4a2dd0d1a1cc28374194200
+templates:
+  - name: nuclei-templates
+    version: v10.4.9
+    source: https://github.com/projectdiscovery/nuclei-templates
+    commit: 893122ffce8ebf8e264f15d2cd3960cb1dd36d6c
+    path: /usr/local/share/seclab/nuclei-templates
+wordlists:
+  - source: SecLists
+    commit: eccfbd405af82194e125a450a0076dbe4252d6f9
+    path: /usr/local/share/seclab/wordlists
+    files:
+      common.txt:
+        upstream: Discovery/Web-Content/common.txt
+        sha256: 47fb86ca6fb3f97e5491161581900d6d99851fb16764eacddf16aa85617c956a
+      raft-small-words.txt:
+        upstream: Discovery/Web-Content/raft-small-words.txt
+        sha256: 1aadf7dafde5ca68f5e5160c9206f7be6f6fc701775cdea30ba01bbb6d8db8ad
+      subdomains-top5000.txt:
+        upstream: Discovery/DNS/subdomains-top1million-5000.txt
+        sha256: e331367c140298cb179114fdeefa78f58f696219f0dec017a28bb79487cfcf19
+      directory-list-2.3-small.txt:
+        upstream: Discovery/Web-Content/DirBuster-2007_directory-list-2.3-small.txt
+        sha256: 77f7aba81570b24c30965bfc4652cf6c99ee4e5ed38f1eab96f2e102981a6d90
+python:
+  - name: pwntools
+    version: 4.15.0
+    requirements:
+      - scripts/pwntools-requirements-aarch64.txt
+      - scripts/pwntools-requirements-x86_64.txt
+    note: 34 paquetes con hashes por arquitectura; psutil pineado por arch
 built_binaries:
   - name: fzf
     version: 0.74.4
@@ -213,3 +258,25 @@ built_binaries:
       linux/arm64:
         file: gobuster
         sha256: 8154b1802209e9a483c05370b128d27dcdcb183c0ca6a01839867fe10c39ace8
+  - name: naabu
+    version: 2.6.1
+    source: https://github.com/projectdiscovery/naabu
+    commit: 5a0ca8bde91b5bb16213e9e8b5c6871eac954bd8
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.24.0
+    cgo: true
+    cgo_cross:
+      amd64: gcc-x86-64-linux-gnu=4:14.2.0-1 + libpcap-dev:amd64=1.10.5-2
+      arm64: gcc-aarch64-linux-gnu=4:14.2.0-1 + libpcap-dev:arm64=1.10.5-2
+    package: ./cmd/naabu
+    dependency_overrides:
+      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.58.0
+    assets:
+      linux/amd64:
+        file: naabu
+        sha256: acb5a5cf1a84fdbfeb8714e8879aa75be582426aed2b827468ffa4b5adcf860f
+      linux/arm64:
+        file: naabu
+        sha256: d0d3834f5f6bf8b5c77deb0a86c109df0f26da7d6231e5e2bae551bd846becd3

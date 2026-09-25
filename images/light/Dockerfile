@@ -13,6 +13,8 @@ ARG FFUF_VERSION=2.2.0
 ARG FFUF_COMMIT=0aa36bcfa45c255f0d719f7d5bc58f7cc9c93659
 ARG GOBUSTER_VERSION=3.8.2
 ARG GOBUSTER_COMMIT=e8410cad6cacf08b82e2f610055f636f0be61c40
+ARG NAABU_VERSION=2.6.1
+ARG NAABU_COMMIT=5a0ca8bde91b5bb16213e9e8b5c6871eac954bd8
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS fzf-builder
 ARG FZF_VERSION=0.74.4
 ARG FZF_COMMIT=a140afeb4d733cad3c96a56bf6db7e26853b6757
@@ -33,6 +35,52 @@ RUN GOTOOLCHAIN=local go mod edit -go=1.25.0 \
       -ldflags "-s -w -X main.version=${FZF_VERSION} -X main.revision=${FZF_COMMIT}" \
       -o /out/fzf .
 
+FROM --platform=$BUILDPLATFORM ${GO_UPSTREAM} AS naabu-builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG NAABU_COMMIT
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gcc=4:14.2.0-1 libpcap-dev=1.10.5-2 \
+ && if [ "$(dpkg --print-architecture)" = "arm64" ] && [ "${TARGETARCH}" = "amd64" ]; then \
+      dpkg --add-architecture amd64 && apt-get update \
+      && apt-get install -y --no-install-recommends gcc-x86-64-linux-gnu=4:14.2.0-1 libpcap-dev:amd64=1.10.5-2; \
+    fi \
+ && if [ "$(dpkg --print-architecture)" = "amd64" ] && [ "${TARGETARCH}" = "arm64" ]; then \
+      dpkg --add-architecture arm64 && apt-get update \
+      && apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu=4:14.2.0-1 libpcap-dev:arm64=1.10.5-2; \
+    fi \
+ && rm -rf /var/lib/apt/lists/*
+RUN git init /src/naabu \
+ && git -C /src/naabu remote add origin https://github.com/projectdiscovery/naabu.git \
+ && git -C /src/naabu fetch --depth 1 origin "${NAABU_COMMIT}" \
+ && git -C /src/naabu checkout --detach "${NAABU_COMMIT}" \
+ && test "$(git -C /src/naabu rev-parse HEAD)" = "${NAABU_COMMIT}"
+WORKDIR /src/naabu
+RUN GOTOOLCHAIN=local go mod edit -json >/dev/null \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
+ && if GOTOOLCHAIN=local go list -m google.golang.org/grpc >/dev/null 2>&1; then GOTOOLCHAIN=local go get google.golang.org/grpc@v1.83.2; fi \
+ && if GOTOOLCHAIN=local go list -m github.com/go-git/go-git/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/go-git/go-git/v5@v5.19.2; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && GOTOOLCHAIN=local go mod tidy
+RUN mkdir -p /out \
+ && if [ "${TARGETARCH}" = "$(GOTOOLCHAIN=local go env GOARCH)" ]; then \
+      GOTOOLCHAIN=local CGO_ENABLED=1 CC=gcc GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+        go build -mod=readonly -trimpath -buildvcs=false \
+        -ldflags "-s -w" \
+        -o /out/naabu ./cmd/naabu; \
+    elif [ "${TARGETARCH}" = "amd64" ]; then \
+      GOTOOLCHAIN=local CGO_ENABLED=1 CC=x86_64-linux-gnu-gcc CGO_LDFLAGS="-L/usr/lib/x86_64-linux-gnu" GOOS=linux GOARCH=amd64 \
+        go build -mod=readonly -trimpath -buildvcs=false \
+        -ldflags "-s -w" \
+        -o /out/naabu ./cmd/naabu; \
+    else \
+      GOTOOLCHAIN=local CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc CGO_LDFLAGS="-L/usr/lib/aarch64-linux-gnu" GOOS=linux GOARCH=arm64 \
+        go build -mod=readonly -trimpath -buildvcs=false \
+        -ldflags "-s -w" \
+        -o /out/naabu ./cmd/naabu; \
+    fi
 FROM --platform=$BUILDPLATFORM ${GO_UPSTREAM} AS upstream-builder
 ARG TARGETOS
 ARG TARGETARCH
@@ -158,9 +206,11 @@ LABEL org.opencontainers.image.source="https://github.com/hackadvisermx/seclab-s
       org.opencontainers.image.title="seclab-sbf light" \
       org.opencontainers.image.version="0.3.0-phase3"
 COPY scripts/install-light-packages.sh /usr/local/bin/install-light-packages
+COPY scripts/pwntools-requirements-aarch64.txt scripts/pwntools-requirements-x86_64.txt /tmp/
 RUN chmod 0555 /usr/local/bin/install-light-packages \
  && SNAPSHOT_ID="${UBUNTU_SNAPSHOT}" /usr/local/bin/install-light-packages
 COPY --from=fzf-builder /out/fzf /usr/bin/fzf
+COPY --from=naabu-builder /out/naabu /usr/bin/naabu
 COPY --from=upstream-builder /out/subfinder /usr/bin/subfinder
 COPY --from=upstream-builder /out/httpx /usr/bin/httpx
 COPY --from=upstream-builder /out/katana /usr/bin/katana

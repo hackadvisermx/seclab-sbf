@@ -68,6 +68,16 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - seclab
 
 volumes:
   lab-state:
+
+networks:
+  seclab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

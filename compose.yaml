@@ -5,7 +5,7 @@ services:
       dockerfile: images/light/Dockerfile
       args:
         BASE_IMAGE: seclab-sbf:base
-    image: seclab-sbf:light
+    image: ${LAB_IMAGE:-seclab-sbf:light}
     working_dir: /workspace
     command:
       - /bin/bash

@@ -22,6 +22,7 @@ apt-get install -y --no-install-recommends \
   iputils-ping \
   jq \
   less \
+  libpcap0.8t64 \
   nmap \
   openssh-client \
   openssh-server \
@@ -29,6 +30,7 @@ apt-get install -y --no-install-recommends \
   p7zip-full \
   procps \
   python3 \
+  python3-pip \
   ripgrep \
   socat \
   sqlmap \
@@ -46,6 +48,8 @@ case "$(dpkg --print-architecture)" in
     zoxide_sha256=2d93385b99f3e82cf2701609a1bffcad863fbeb75aa3fe7eb6be4d29be68b1ae
     dalfox_asset=dalfox-v3.2.1-linux-x86_64-musl.tar.gz
     dalfox_sha256=99d2bbe01a7c0ac6e455cba0363900c5aef2866bd08a2cd5f00b83d7b9671c20
+    ferox_asset=x86_64-linux-feroxbuster.tar.gz
+    ferox_sha256=7985c00e6803b0f25d5e9139f7472279f3f4d891429627a5cedc629e53992d80
     ;;
   arm64)
     ttyd_asset=ttyd.aarch64
@@ -54,6 +58,8 @@ case "$(dpkg --print-architecture)" in
     zoxide_sha256=f1f16c5d6298d63dee467eedea1cdcd8490e43e493bea43acd416dc9033ef641
     dalfox_asset=dalfox-v3.2.1-linux-aarch64-musl.tar.gz
     dalfox_sha256=e10f3f95e3033899c0912c1b9032d35f754caeeb002b0b8153e2958e54485694
+    ferox_asset=aarch64-linux-feroxbuster.zip
+    ferox_sha256=1e5244e1f52e55a647b65e0c76ae7afe0b9983c1fbea30ed7c67e477175eb381
     ;;
   *)
     printf 'unsupported architecture: %s\n' "$(dpkg --print-architecture)" >&2
@@ -87,6 +93,58 @@ mkdir /tmp/dalfox
 tar -xzf /tmp/dalfox.tar.gz -C /tmp/dalfox
 install -m 0555 "/tmp/dalfox/$(basename "$dalfox_asset" .tar.gz)/dalfox" /usr/bin/dalfox
 rm -rf /tmp/dalfox /tmp/dalfox.tar.gz
+
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "https://github.com/epi052/feroxbuster/releases/download/v2.13.1/${ferox_asset}" \
+  --output "/tmp/ferox.${ferox_asset##*.}"
+printf '%s  %s\n' "$ferox_sha256" "/tmp/ferox.${ferox_asset##*.}" | sha256sum -c -
+rm -rf /tmp/ferox
+mkdir /tmp/ferox
+case "$ferox_asset" in
+  *.tar.gz) tar -xzf "/tmp/ferox.${ferox_asset##*.}" -C /tmp/ferox ;;
+  *.zip) unzip -q -o "/tmp/ferox.${ferox_asset##*.}" -d /tmp/ferox ;;
+esac
+install -m 0555 /tmp/ferox/feroxbuster /usr/bin/feroxbuster
+rm -rf /tmp/ferox "/tmp/ferox.${ferox_asset##*.}"
+
+git clone --depth 1 --branch v10.4.9 https://github.com/projectdiscovery/nuclei-templates.git /tmp/nuclei-templates
+test "$(git -C /tmp/nuclei-templates rev-parse HEAD)" = "893122ffce8ebf8e264f15d2cd3960cb1dd36d6c"
+rm -rf /tmp/nuclei-templates/.git
+install -d -m 0755 /usr/local/share/seclab/nuclei-templates
+cp -r /tmp/nuclei-templates/. /usr/local/share/seclab/nuclei-templates/
+rm -rf /tmp/nuclei-templates
+
+SECLAB_SECLISTS_COMMIT=eccfbd405af82194e125a450a0076dbe4252d6f9
+SECLAB_SECLISTS_BASE="https://raw.githubusercontent.com/danielmiessler/SecLists/${SECLAB_SECLISTS_COMMIT}"
+install -d -m 0755 /usr/local/share/seclab/wordlists
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${SECLAB_SECLISTS_BASE}/Discovery/Web-Content/common.txt" \
+  --output /usr/local/share/seclab/wordlists/common.txt
+printf '%s  %s\n' '47fb86ca6fb3f97e5491161581900d6d99851fb16764eacddf16aa85617c956a' /usr/local/share/seclab/wordlists/common.txt | sha256sum -c -
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${SECLAB_SECLISTS_BASE}/Discovery/Web-Content/raft-small-words.txt" \
+  --output /usr/local/share/seclab/wordlists/raft-small-words.txt
+printf '%s  %s\n' '1aadf7dafde5ca68f5e5160c9206f7be6f6fc701775cdea30ba01bbb6d8db8ad' /usr/local/share/seclab/wordlists/raft-small-words.txt | sha256sum -c -
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${SECLAB_SECLISTS_BASE}/Discovery/DNS/subdomains-top1million-5000.txt" \
+  --output /usr/local/share/seclab/wordlists/subdomains-top5000.txt
+printf '%s  %s\n' 'e331367c140298cb179114fdeefa78f58f696219f0dec017a28bb79487cfcf19' /usr/local/share/seclab/wordlists/subdomains-top5000.txt | sha256sum -c -
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${SECLAB_SECLISTS_BASE}/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-small.txt" \
+  --output /usr/local/share/seclab/wordlists/directory-list-2.3-small.txt
+printf '%s  %s\n' '77f7aba81570b24c30965bfc4652cf6c99ee4e5ed38f1eab96f2e102981a6d90' /usr/local/share/seclab/wordlists/directory-list-2.3-small.txt | sha256sum -c -
+chmod 0644 /usr/local/share/seclab/wordlists/*
+
+case "$(dpkg --print-architecture)" in
+  amd64) pwntools_requirements=/tmp/pwntools-requirements-x86_64.txt ;;
+  arm64) pwntools_requirements=/tmp/pwntools-requirements-aarch64.txt ;;
+esac
+python3 -m pip install --no-cache-dir --break-system-packages --require-hashes \
+  -r "$pwntools_requirements"
+rm -f /tmp/pwntools-requirements-aarch64.txt /tmp/pwntools-requirements-x86_64.txt
+python3 -c "from pwn import p32; assert p32(1) == b'\x01\x00\x00\x00'"
+apt-get purge -y python3-pip python3-setuptools python3-wheel
+apt-get autoremove -y --purge
 
 rm -f /etc/ssh/ssh_host_*
 apt-get clean

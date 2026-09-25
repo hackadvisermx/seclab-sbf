@@ -2,7 +2,7 @@
 
 ## Estado
 
-La fase 3 v1 está implementada y verificada en Docker Desktop ARM64, con build y comprobación básica de la variante AMD64. Incluye imagen `light`, ttyd, OpenSSH, shell no root para `tester` y herramientas base de Ubuntu. SFTP y las cuentas separadas de transferencia/proxy se eliminan del diseño. La subfase de herramientas upstream Go está incorporada con commits fijados, builder Go pineado y hashes por arquitectura en el lockfile.
+La fase 3 v1 está implementada y verificada en Docker Desktop ARM64, con build y comprobación básica de la variante AMD64. Incluye imagen `light`, ttyd, OpenSSH, shell no root para `tester` y herramientas base de Ubuntu. SFTP y las cuentas separadas de transferencia/proxy se eliminan del diseño. La subfase de herramientas upstream Go está incorporada con commits fijados, builder Go pineado y hashes por arquitectura en el lockfile. El cierre suma `naabu`, `feroxbuster`, plantillas Nuclei versionadas, wordlists curadas y `pwntools` con hashes pip.
 
 ## Artefactos
 
@@ -42,6 +42,27 @@ según grafo, `x/mod` v0.40.0, `pgx/v5` v5.9.0, `grpc` v1.83.2,
 las 7). Quedan fuera de esta tanda: `naabu` (requiere libpcap/CGO),
 `feroxbuster` (requiere toolchain Rust), plantillas de Nuclei, wordlists
 y pwntools.
+
+## Cierre Fase 3: naabu, feroxbuster, plantillas, wordlists y pwntools
+
+- `naabu` 2.6.1 (commit `5a0ca8bd`): se compila desde fuente con CGO
+  (stage `naabu-builder`, `libpcap-dev` pineado, cross-compiler
+  `gcc-x86-64/aarch64-linux-gnu` cuando el target difiere del host) con
+  los mismos bumps de dependencias; SYN scan dispone de `NET_RAW`.
+  `libpcap0.8t64` queda explícito en APT aunque el binario final solo
+  enlaza libc.
+- `feroxbuster` 2.13.1: binario oficial; el upstream no publica checksums,
+  así que los SHA-256 se midieron sobre TLS y quedaron fijados.
+- Plantillas Nuclei v10.4.9 (commit `893122ff`, ~13700 YAML) en
+  `/usr/local/share/seclab/nuclei-templates` (usar con `nuclei -t`).
+- Wordlists SecLists (commit `eccfbd40`, 4 archivos pequeños, ~1.1 MB) en
+  `/usr/local/share/seclab/wordlists`; el resto sigue bajo demanda.
+- `pwntools` 4.15.0 por pip con 34 paquetes y hashes por arquitectura
+  (`scripts/pwntools-requirements-{aarch64,x86_64}.txt`, `psutil` pineado
+  por arch porque el resolver elige versión distinta por plataforma);
+  `asm()` para arch extranjera requiere binutils cruzados (estándar
+  pwntools, no defecto).
+- `pt-tools` lista `naabu`, `feroxbuster` y `pwn` (CLI).
 
 ## Paquetes light
 
@@ -111,8 +132,9 @@ make compose down
 
 ## Pendiente de fase 3
 
-- `naabu` (libpcap/CGO) y `feroxbuster` (toolchain Rust).
-- Nuclei templates versionados.
+Nada pendiente: la fase queda cerrada con esta tanda. Futuro (otras
+fases): actualización del snapshot Ubuntu con correcciones Medium/Low y
+pruebas de humo nativas AMD64.
 - wordlists controladas.
 - Pruebas de humo nativas AMD64, no solo build y ejecución básica bajo QEMU.
 - Actualizar el snapshot Ubuntu cuando existan correcciones para los hallazgos Medium/Low.

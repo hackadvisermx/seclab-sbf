@@ -1,5 +1,5 @@
 schema_version: 2
-verified_at: 2026-09-23
+verified_at: 2026-09-25
 apt:
   distribution: noble
   snapshot: 20260922T000000Z
@@ -61,6 +61,19 @@ third_party_binaries:
       linux/arm64:
         file: zoxide-0.10.0-aarch64-unknown-linux-musl.tar.gz
         sha256: f1f16c5d6298d63dee467eedea1cdcd8490e43e493bea43acd416dc9033ef641
+  - name: dalfox
+    version: 3.2.1
+    source: https://github.com/hahwul/dalfox/releases/download/v3.2.1/
+    note: upstream reescrito en Rust; se consume binario musl oficial verificado
+    assets:
+      linux/amd64:
+        file: dalfox-v3.2.1-linux-x86_64-musl.tar.gz
+        sha256: 99d2bbe01a7c0ac6e455cba0363900c5aef2866bd08a2cd5f00b83d7b9671c20
+        binary_sha256: e18fbb782da8502f6aef71396df2963cb89b579b1c3652c868c7bd5e54d2bd3f
+      linux/arm64:
+        file: dalfox-v3.2.1-linux-aarch64-musl.tar.gz
+        sha256: e10f3f95e3033899c0912c1b9032d35f754caeeb002b0b8153e2958e54485694
+        binary_sha256: 41b0347ce064c58d535ed201a226368e7916042d81e51bc7441b379c381a6164
 built_binaries:
   - name: fzf
     version: 0.74.4
@@ -82,3 +95,121 @@ built_binaries:
       linux/arm64:
         file: fzf
         sha256: 2cadb71a909bf08e54db3cc38116a64efd5cefbd4fb9286008f03ef88dcf5519
+  - name: subfinder
+    version: 2.16.0
+    source: https://github.com/projectdiscovery/subfinder
+    commit: b360529eebcd29345e44b3a9da3b2b0c04a13ff2
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.25.0
+    cgo: false
+    package: ./cmd/subfinder
+    dependency_overrides:
+      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.58.0
+    assets:
+      linux/amd64:
+        file: subfinder
+        sha256: ae8368ed6af742ef68b4720b330a173c0ab71a469e8948f85fe0422ba8885dc9
+      linux/arm64:
+        file: subfinder
+        sha256: 713cd33e1ae335550681b34be0c1e9bcbdef47a4e892f4b8205a893f0ce7d93c
+  - name: httpx
+    version: 1.11.0
+    source: https://github.com/projectdiscovery/httpx
+    commit: c5f67adce6c57c05a6837ebb4f0eba8e81fdcf00
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.26.0
+    cgo: false
+    package: ./cmd/httpx
+    dependency_overrides:
+      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.58.0
+    assets:
+      linux/amd64:
+        file: httpx
+        sha256: 095c33c8e803d343173276c96427aa62fe6b344bf4776a79ce51a0b4b8b3c543
+      linux/arm64:
+        file: httpx
+        sha256: f9b2beaae7f88692c976a7d26bfc647767a2d5fbbc832025df977a7e41285758
+  - name: katana
+    version: 1.7.0
+    source: https://github.com/projectdiscovery/katana
+    commit: 17b0af27a79098a1634c915ca7fca51ed1171e41
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.26
+    cgo: false
+    package: ./cmd/katana
+    dependency_overrides:
+      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.58.0
+      github.com/jackc/pgx/v5: v5.9.0
+    assets:
+      linux/amd64:
+        file: katana
+        sha256: 8cfd7634755172867a6c4ac41e98c2d6c1e423154f11f69da20b4e8965f96974
+      linux/arm64:
+        file: katana
+        sha256: d027f0cccb82f40753d3e360dfd72f58c7a7fb5c3bdb22f969c133fa6f512b50
+  - name: nuclei
+    version: 3.11.1
+    source: https://github.com/projectdiscovery/nuclei
+    commit: a8c88feb4a1c8e961b7902534ce3af97e9d524a4
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.26
+    cgo: false
+    package: ./cmd/nuclei
+    dependency_overrides:
+      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.58.0
+      golang.org/x/mod: v0.40.0
+      google.golang.org/grpc: v1.83.2
+      github.com/go-git/go-git/v5: v5.19.2
+    assets:
+      linux/amd64:
+        file: nuclei
+        sha256: 571b1750011292afa587bebaae54d3a280ca2d8fc01b9e0becb01019378d1922
+      linux/arm64:
+        file: nuclei
+        sha256: a2257bdbedf66df45ab9d6e0f6ff37ebd2b99e5d1fbabbbc6c6a657422894331
+  - name: ffuf
+    version: 2.2.0
+    source: https://github.com/ffuf/ffuf
+    commit: 0aa36bcfa45c255f0d719f7d5bc58f7cc9c93659
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.17
+    cgo: false
+    package: .
+    note: el tag v2.2.0 conserva VERSION 2.1.0-dev en pkg/ffuf/constants.go
+    dependency_overrides:
+      golang.org/x/net: v0.57.0
+    assets:
+      linux/amd64:
+        file: ffuf
+        sha256: c36876beba0b10a9c90432248ee8e38120e3d280eda353b39e9b432a3a883859
+      linux/arm64:
+        file: ffuf
+        sha256: 048fd4a4c6c07b13c1758ba4b00018976624502b061f43614cfad8d5bcce2060
+  - name: gobuster
+    version: 3.8.2
+    source: https://github.com/OJ/gobuster
+    commit: e8410cad6cacf08b82e2f610055f636f0be61c40
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.25
+    cgo: false
+    package: .
+    dependency_overrides:
+      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.58.0
+    assets:
+      linux/amd64:
+        file: gobuster
+        sha256: 9e01c1854a2a17ab92d381c5e4c3639c0ea9ce708d3c10202277df1d3ad4b913
+      linux/arm64:
+        file: gobuster
+        sha256: 8154b1802209e9a483c05370b128d27dcdcb183c0ca6a01839867fe10c39ace8

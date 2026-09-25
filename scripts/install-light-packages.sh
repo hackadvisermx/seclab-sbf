@@ -44,12 +44,16 @@ case "$(dpkg --print-architecture)" in
     ttyd_sha256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
     zoxide_asset=zoxide-0.10.0-x86_64-unknown-linux-musl.tar.gz
     zoxide_sha256=2d93385b99f3e82cf2701609a1bffcad863fbeb75aa3fe7eb6be4d29be68b1ae
+    dalfox_asset=dalfox-v3.2.1-linux-x86_64-musl.tar.gz
+    dalfox_sha256=99d2bbe01a7c0ac6e455cba0363900c5aef2866bd08a2cd5f00b83d7b9671c20
     ;;
   arm64)
     ttyd_asset=ttyd.aarch64
     ttyd_sha256=b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165
     zoxide_asset=zoxide-0.10.0-aarch64-unknown-linux-musl.tar.gz
     zoxide_sha256=f1f16c5d6298d63dee467eedea1cdcd8490e43e493bea43acd416dc9033ef641
+    dalfox_asset=dalfox-v3.2.1-linux-aarch64-musl.tar.gz
+    dalfox_sha256=e10f3f95e3033899c0912c1b9032d35f754caeeb002b0b8153e2958e54485694
     ;;
   *)
     printf 'unsupported architecture: %s\n' "$(dpkg --print-architecture)" >&2
@@ -73,6 +77,16 @@ mkdir /tmp/zoxide
 tar -xzf /tmp/zoxide.tar.gz -C /tmp/zoxide
 install -m 0555 /tmp/zoxide/zoxide /usr/bin/zoxide
 rm -rf /tmp/zoxide /tmp/zoxide.tar.gz
+
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "https://github.com/hahwul/dalfox/releases/download/v3.2.1/${dalfox_asset}" \
+  --output /tmp/dalfox.tar.gz
+printf '%s  %s\n' "$dalfox_sha256" /tmp/dalfox.tar.gz | sha256sum -c -
+rm -rf /tmp/dalfox
+mkdir /tmp/dalfox
+tar -xzf /tmp/dalfox.tar.gz -C /tmp/dalfox
+install -m 0555 "/tmp/dalfox/$(basename "$dalfox_asset" .tar.gz)/dalfox" /usr/bin/dalfox
+rm -rf /tmp/dalfox /tmp/dalfox.tar.gz
 
 rm -f /etc/ssh/ssh_host_*
 apt-get clean

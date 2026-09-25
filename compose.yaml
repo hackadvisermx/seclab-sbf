@@ -22,6 +22,7 @@ services:
       - DAC_OVERRIDE
       - FOWNER
       - KILL
+      - NET_ADMIN
       - NET_RAW
       - SETGID
       - SETPCAP
@@ -29,6 +30,8 @@ services:
       - SYS_CHROOT
     security_opt:
       - no-new-privileges:true
+    devices:
+      - /dev/net/tun:/dev/net/tun
     pids_limit: ${LAB_PIDS_LIMIT:-256}
     mem_limit: ${LAB_MEMORY_LIMIT:-1g}
     cpus: ${LAB_CPUS:-2.0}
@@ -53,6 +56,12 @@ services:
       - type: bind
         source: ${LAB_ENV_FILE:-.env}
         target: /run/secrets/lab.env
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${VPN_DIR:-./vpn}
+        target: /vpn
         read_only: true
         bind:
           create_host_path: false

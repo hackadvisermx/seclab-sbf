@@ -16,6 +16,11 @@
       "command": "curl",
       "description": "Cliente HTTP y HTTPS"
     },
+    "dalfox": {
+      "category": "web",
+      "command": "dalfox",
+      "description": "Detección de XSS"
+    },
     "fzf": {
       "category": "terminal",
       "command": "fzf",
@@ -25,6 +30,11 @@
       "category": "terminal",
       "command": "fdfind",
       "description": "Búsqueda de archivos"
+    },
+    "ffuf": {
+      "category": "web",
+      "command": "ffuf",
+      "description": "Fuzzing web rápido"
     },
     "gdb": {
       "category": "development",
@@ -36,6 +46,16 @@
       "command": "git",
       "description": "Control de versiones"
     },
+    "gobuster": {
+      "category": "web",
+      "command": "gobuster",
+      "description": "Enumeración de rutas y DNS"
+    },
+    "httpx": {
+      "category": "recon",
+      "command": "httpx",
+      "description": "Sondeo HTTP de hosts y URLs"
+    },
     "ip": {
       "category": "network",
       "command": "ip",
@@ -46,10 +66,20 @@
       "command": "jq",
       "description": "Procesamiento JSON"
     },
+    "katana": {
+      "category": "recon",
+      "command": "katana",
+      "description": "Rastreo web y descubrimiento de endpoints"
+    },
     "nmap": {
       "category": "recon",
       "command": "nmap",
       "description": "Descubrimiento de puertos y servicios"
+    },
+    "nuclei": {
+      "category": "web",
+      "command": "nuclei",
+      "description": "Escaneo de vulnerabilidades por plantillas"
     },
     "openvpn": {
       "category": "vpn",
@@ -80,6 +110,11 @@
       "category": "web",
       "command": "sqlmap",
       "description": "Pruebas automatizadas de inyección SQL"
+    },
+    "subfinder": {
+      "category": "recon",
+      "command": "subfinder",
+      "description": "Descubrimiento pasivo de subdominios"
     },
     "ssh": {
       "category": "access",
@@ -126,19 +161,26 @@
     "full": [],
     "light": [
       "curl",
+      "dalfox",
       "fzf",
       "fd",
+      "ffuf",
       "gdb",
       "git",
+      "gobuster",
+      "httpx",
       "ip",
       "jq",
+      "katana",
       "nmap",
+      "nuclei",
       "openvpn",
       "pt-forward",
       "python3",
       "rg",
       "socat",
       "sqlmap",
+      "subfinder",
       "ssh",
       "ttyd",
       "tmux",

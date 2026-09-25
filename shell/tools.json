@@ -2,7 +2,9 @@
   "schema": 1,
   "categories": {
     "access": "Acceso",
+    "crack": "Cracking",
     "development": "Desarrollo",
+    "exploit": "Explotación",
     "network": "Red",
     "recon": "Reconocimiento",
     "terminal": "Terminal",
@@ -61,6 +63,11 @@
       "command": "httpx",
       "description": "Sondeo HTTP de hosts y URLs"
     },
+    "hashcat": {
+      "category": "crack",
+      "command": "hashcat",
+      "description": "Cracking de hashes (CPU)"
+    },
     "ip": {
       "category": "network",
       "command": "ip",
@@ -71,10 +78,25 @@
       "command": "jq",
       "description": "Procesamiento JSON"
     },
+    "john": {
+      "category": "crack",
+      "command": "john",
+      "description": "Cracking de contraseñas"
+    },
     "katana": {
       "category": "recon",
       "command": "katana",
       "description": "Rastreo web y descubrimiento de endpoints"
+    },
+    "msfconsole": {
+      "category": "exploit",
+      "command": "msfconsole",
+      "description": "Framework Metasploit"
+    },
+    "msfvenom": {
+      "category": "exploit",
+      "command": "msfvenom",
+      "description": "Generador de payloads de Metasploit"
     },
     "nmap": {
       "category": "recon",
@@ -120,6 +142,11 @@
       "category": "network",
       "command": "socat",
       "description": "Relaciones de entrada y salida"
+    },
+    "searchsploit": {
+      "category": "exploit",
+      "command": "searchsploit",
+      "description": "Búsqueda en Exploit-DB local"
     },
     "sqlmap": {
       "category": "web",
@@ -173,7 +200,45 @@
     }
   },
   "profiles": {
-    "full": [],
+    "full": [
+      "curl",
+      "dalfox",
+      "feroxbuster",
+      "ffuf",
+      "fzf",
+      "fd",
+      "gdb",
+      "git",
+      "gobuster",
+      "hashcat",
+      "httpx",
+      "ip",
+      "john",
+      "jq",
+      "katana",
+      "msfconsole",
+      "msfvenom",
+      "naabu",
+      "nmap",
+      "nuclei",
+      "openvpn",
+      "pt-forward",
+      "pwn",
+      "python3",
+      "rg",
+      "searchsploit",
+      "socat",
+      "sqlmap",
+      "subfinder",
+      "ssh",
+      "ttyd",
+      "tmux",
+      "vpn-control",
+      "vpn-manager",
+      "wireguard",
+      "zsh",
+      "zoxide"
+    ],
     "light": [
       "curl",
       "dalfox",

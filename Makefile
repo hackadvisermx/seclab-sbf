@@ -49,7 +49,7 @@ build-light: build-base
 FULL_BASE ?= seclab-sbf:light
 
 build-full: build-light
-	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg FULL_BASE="$(FULL_BASE)" --file images/full/Dockerfile --tag seclab-sbf:full --load .
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg FULL_BASE="$(FULL_BASE)" --file images/full/Dockerfile --label seclab.base=$$(docker image inspect -f "{{.Id}}" "$(FULL_BASE)") --tag seclab-sbf:full --load .
 
 env-init:
 	@if [ -e "$(ENV_FILE)" ]; then \
@@ -136,6 +136,14 @@ ensure-image:
 	@IMG="$(LAB_IMAGE_NORMALIZED)"; \
 	if docker image inspect "$$IMG" >/dev/null 2>&1; then \
 		printf 'imagen lista: %s\n' "$$IMG"; \
+		if [ "$$IMG" = "seclab-sbf:full" ]; then \
+			base_id=$$(docker image inspect -f '{{.Id}}' "$(FULL_BASE)" 2>/dev/null || true); \
+			built_from=$$(docker image inspect -f '{{index .Config.Labels "seclab.base"}}' "$$IMG" 2>/dev/null || true); \
+			if [ -n "$$base_id" ] && [ "$$base_id" != "$$built_from" ]; then \
+				printf 'aviso: %s se construyo sobre una base anterior; se reconstruye.\n' "$$IMG"; \
+				$(MAKE) build-full; \
+			fi; \
+		fi; \
 	else \
 		printf 'imagen ausente, construyendo: %s\n' "$$IMG"; \
 		case "$$IMG" in \

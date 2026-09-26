@@ -247,9 +247,10 @@ COPY scripts/entrypoint/ttyd-as-tester.sh /usr/local/bin/ttyd-as-tester
 COPY scripts/entrypoint/ttyd-as-tester-shell.sh /usr/local/bin/ttyd-as-tester-shell
 COPY scripts/vpn-manager.sh /usr/local/bin/vpn-manager
 COPY scripts/vpn-control.py /usr/local/bin/vpn-control
+COPY scripts/pt-vpn-ip.sh /usr/local/bin/pt-vpn-ip
 COPY scripts/proxy-control.py /usr/local/bin/pt-forward
 COPY scripts/health/light-healthcheck.sh /usr/local/bin/light-healthcheck
-RUN chmod 0555 /usr/local/bin/light-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-forward /usr/local/bin/light-healthcheck
+RUN chmod 0555 /usr/local/bin/light-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/light-healthcheck
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/light-entrypoint"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/usr/local/bin/light-healthcheck"]

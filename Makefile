@@ -88,6 +88,9 @@ sync-secrets:
 	@chmod 700 "$(SECRETS_DIR)"
 	@cp "$(ENV_FILE)" "$(SECRETS_DIR)/lab.env"
 	@chmod 600 "$(SECRETS_DIR)/lab.env"
+	@awk -v profile="$(LAB_PROFILE)" '/^PENTEST_PROFILE=/ { print "PENTEST_PROFILE=" profile; seen = 1; next } { print } END { if (!seen) print "PENTEST_PROFILE=" profile }' "$(SECRETS_DIR)/lab.env" > "$(SECRETS_DIR)/lab.env.tmp"
+	@chmod 600 "$(SECRETS_DIR)/lab.env.tmp"
+	@mv "$(SECRETS_DIR)/lab.env.tmp" "$(SECRETS_DIR)/lab.env"
 
 compose:
 	@:

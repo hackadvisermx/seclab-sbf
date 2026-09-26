@@ -53,6 +53,12 @@ if [[ "$PENTEST_PROFILE" != "light" && "$PENTEST_PROFILE" != "full" ]]; then
   exit 64
 fi
 
+# sshd no propaga su entorno a la sesion (solo una lista blanca), asi que
+# el perfil se publica en un archivo que el shell de login lee.
+install -d -m 0755 -o root -g root /run/seclab
+printf '%s\n' "$PENTEST_PROFILE" > /run/seclab/pentest-profile
+chmod 0644 /run/seclab/pentest-profile
+
 if [[ "$SSH_USER" != "tester" || "$TTYD_USER" != "tester" ]]; then
   printf 'SSH_USER and TTYD_USER must both be tester\n' >&2
   exit 64

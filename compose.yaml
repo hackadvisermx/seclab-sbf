@@ -54,8 +54,8 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${LAB_ENV_FILE:-.env}
-        target: /run/secrets/lab.env
+        source: ${SECRETS_DIR:-./.secrets/runtime}
+        target: /run/secrets
         read_only: true
         bind:
           create_host_path: false

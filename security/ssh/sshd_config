@@ -1,6 +1,10 @@
 Port 2222
 ListenAddress 0.0.0.0
 AddressFamily any
+# sshd arma el entorno de la sesion con su propia lista y descarta el del
+# servicio, asi que el PATH de la imagen (ruby en /opt/ruby/bin, usado por
+# msfconsole) se fija aqui. Un directorio inexistente es inocuo.
+SetEnv PATH=/opt/ruby/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 HostKey /var/lib/seclab/ssh/ssh_host_ed25519_key
 PidFile /run/ssh/sshd.pid
 AuthorizedKeysFile /run/ssh/authorized_keys/%u

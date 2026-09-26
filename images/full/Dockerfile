@@ -80,8 +80,13 @@ RUN chmod 0555 /usr/local/bin/install-full-packages \
 COPY --from=msf-builder /out/ruby /opt/ruby
 COPY --from=msf-builder /out/metasploit-framework /opt/metasploit-framework
 RUN ln -sf /opt/metasploit-framework/msfconsole /usr/local/bin/msfconsole \
- && ln -sf /opt/metasploit-framework/msfvenom /usr/local/bin/msfvenom \
- && ln -sf /opt/metasploit-framework/msfdb /usr/local/bin/msfdb
+  && ln -sf /opt/metasploit-framework/msfvenom /usr/local/bin/msfvenom \
+  && ln -sf /opt/metasploit-framework/msfdb /usr/local/bin/msfdb
+# Metasploit necesita ~/.msf4 para cache, logs y loot, pero /home/tester
+# es de solo lectura en runtime. El symlink se crea en build y apunta al
+# volumen escribible; el entrypoint crea el destino.
+RUN ln -sfn /var/lib/seclab/tester/.msf4 /home/tester/.msf4 \
+  && chown -h tester:tester /home/tester/.msf4
 ENV PATH="/opt/ruby/bin:${PATH}"
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/light-entrypoint"]

@@ -65,6 +65,9 @@ services:
         read_only: true
         bind:
           create_host_path: false
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     tmpfs:
       - /tmp
       - /run

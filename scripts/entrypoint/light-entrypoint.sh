@@ -116,8 +116,13 @@ TTYD_USER="$TTYD_USER" TTYD_PASSWORD="$TTYD_PASSWORD" TTYD_INTERFACE="$TTYD_INTE
 ttyd_pid=$!
 printf '%s\n' "$ttyd_pid" > /run/ttyd.pid
 
+# Start vpn-control daemon for VPN management
+/usr/local/bin/vpn-control serve &
+vpn_control_pid=$!
+printf '%s\n' "$vpn_control_pid" > /run/vpn-control.pid
+
 set +e
-wait -n "$sshd_pid" "$ttyd_pid"
+wait -n "$sshd_pid" "$ttyd_pid" "$vpn_control_pid"
 status=$?
 set -e
 exit "$status"

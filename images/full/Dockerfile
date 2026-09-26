@@ -44,7 +44,9 @@ RUN git init /src/nxc \
 RUN python3 -m venv /opt/nxc \
  && /opt/nxc/bin/pip install --no-cache-dir --upgrade pip \
  && /opt/nxc/bin/pip install --no-cache-dir "git+https://github.com/Pennyw0rth/NetExec.git@${NXC_COMMIT}" \
- && /opt/nxc/bin/python -c 'import nxc.netexec, nxc.nxcdb' \
+ && /opt/nxc/bin/pip install --no-cache-dir --upgrade "cryptography>=46.0.5" "pyOpenSSL>=26.0.0" "setuptools>=78.1.1" \
+ && /opt/nxc/bin/python -c 'import nxc.netexec, nxc.nxcdb, cryptography, OpenSSL' \
+ && /opt/nxc/bin/python -c 'import cryptography, OpenSSL, setuptools; from importlib.metadata import version; m={"cryptography": "46.0.5", "pyOpenSSL": "26.0.0", "setuptools": "78.1.1"}; [(_ for _ in ()).throw(SystemExit("%s=%s por debajo de %s" % (k, version(k), v))) if tuple(int(x) for x in version(k).split(".")[:3]) < tuple(int(x) for x in v.split(".")) else None for k, v in m.items()]; print("nxc deps ok")' \
  && mkdir -p /out \
  && cp -r /opt/nxc /out/nxc \
  && printf '%s\n' "${NXC_VERSION}" > /out/version \
@@ -103,9 +105,15 @@ RUN git init /src/msf \
  && git -C /src/msf checkout --detach "refs/tags/${MSF_VERSION}" \
  && test "$(git -C /src/msf rev-parse HEAD)" = "${MSF_COMMIT}"
 WORKDIR /src/msf
+# concurrent-ruby 1.3.5 (CVE-2026-54906) entra por el Gemfile.lock de MSF
+# 6.5.5. Se sube con bundle update y se verifica el minimo con rubygems: si
+# Metasploit vuelve a traer una version vulnerable, el build falla aqui en vez
+# de colarse en una imagen firmada.
 RUN /opt/ruby/bin/gem install bundler -v 2.5.22 --no-document \
  && /opt/ruby/bin/bundle _2.5.22_ config set --local without 'development test' \
  && /opt/ruby/bin/bundle _2.5.22_ install --jobs "$(nproc)" \
+ && /opt/ruby/bin/bundle _2.5.22_ update concurrent-ruby \
+ && /opt/ruby/bin/ruby -e 'g = Gem::Specification.find_by_name("concurrent-ruby"); v = Gem::Version.new(g.version.to_s); raise "concurrent-ruby #{g.version} por debajo de 1.3.7" if v < Gem::Version.new("1.3.7"); puts "concurrent-ruby=#{g.version}"' \
  && test "$(/opt/ruby/bin/ruby /src/msf/msfconsole --version 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | grep -o '6\.5\.5' | head -n 1)" = "${MSF_VERSION}"
 RUN mkdir -p /out \
  && cp -r /opt/ruby /out/ruby \

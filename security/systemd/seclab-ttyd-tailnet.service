@@ -1,0 +1,16 @@
+[Unit]
+Description=Seclab SBF ttyd en tailnet (solo IP Tailscale, sin puertos publicos)
+After=tailscaled.service docker.service
+Wants=tailscaled.service
+BindsTo=tailscaled.service
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/home/ubuntu/seclab-sbf
+Environment=WORKSPACE_DIR=/opt/seclab-sbf/workspace
+ExecStart=/bin/sh -c 'BIND=$(tailscale ip -4) exec ./scripts/host/pt-proxy-bridge.sh tcp 7681 7681'
+
+[Install]
+WantedBy=multi-user.target

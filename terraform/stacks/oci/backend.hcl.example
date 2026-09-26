@@ -1,13 +1,11 @@
-# Backend S3-compatible (Object Storage OCI). Sin credenciales aquí:
-# se inyectan por entorno (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY de
-# Customer Secret Keys) y archivo -backend-config (ver deploy/).
+# Backend nativo OCI (Object Storage via API, sin S3). Sin secretos aquí:
+# auth por ~/.oci/config (config_file_profile) o variables del provider.
 # El bucket y la ruta se definen en deploy/backend-oci.hcl (ignorado).
-bucket                      = "REEMPLAZAR-bucket-state"
-key                         = "seclab-sbf/oci/terraform.tfstate"
-region                      = "mx-monterrey-1"
-endpoint                    = "https://REEMPLAZAR-namespace.compat.objectstorage.mx-monterrey-1.oraclecloud.com"
-skip_credentials_validation = true
-skip_metadata_api_check     = true
-skip_region_validation      = true
-skip_requesting_account_id  = true
-use_path_style              = true
+# Nota: el backend "s3" falla con Terraform >= 1.16 contra OCI
+# (501 AWS chunked encoding not supported); por eso el stack OCI usa
+# el backend nativo. Azure/DO quedan diferidas.
+bucket              = "REEMPLAZAR-bucket-state"
+namespace           = "REEMPLAZAR-namespace"
+key                 = "seclab-sbf/oci/terraform.tfstate"
+region              = "mx-monterrey-1"
+config_file_profile = "DEFAULT"

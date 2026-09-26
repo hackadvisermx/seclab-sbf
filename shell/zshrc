@@ -1,6 +1,12 @@
 export SECLAB_STATE_DIR="${SECLAB_STATE_DIR:-/var/lib/seclab/tester}"
 export TERM="${TERM:-xterm-256color}"
 export SECLAB_TOOLS_FILE="${SECLAB_TOOLS_FILE:-/usr/local/share/seclab/tools.json}"
+# sshd reemplaza el PATH de la sesion por su propia lista, asi que el
+# ruby de la imagen full (usado por msfconsole/msfvenom) no llega al
+# login. Se antepone aqui solo si existe.
+if [ -d /opt/ruby/bin ]; then
+  export PATH="/opt/ruby/bin:$PATH"
+fi
 export ZSH="/opt/seclab/oh-my-zsh"
 export ZSH_CUSTOM="$ZSH/custom"
 export ZSH_CACHE_DIR="$SECLAB_STATE_DIR/oh-my-zsh-cache"
@@ -10,6 +16,12 @@ export HISTSIZE=50000
 export SAVEHIST=50000
 export _ZO_DATA_DIR="$SECLAB_STATE_DIR/zoxide"
 export PENTEST_PROFILE="${PENTEST_PROFILE:-light}"
+# sshd no pasa su entorno a la sesion; el entrypoint publica el perfil
+# resuelto en /run/seclab/pentest-profile y esa fuente manda.
+if [ -r /run/seclab/pentest-profile ]; then
+  PENTEST_PROFILE="$(head -n 1 /run/seclab/pentest-profile)"
+fi
+export PENTEST_PROFILE
 
 plugins=(
   git

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acceso al laboratorio — seclab-sbf</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: #0d1117; color: #e6edf3; line-height: 1.55; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 1.7rem; margin-bottom: 0; }
+  h2 { margin-top: 2.2em; border-bottom: 1px solid #30363d; padding-bottom: .3em; }
+  p.sub { color: #8b949e; margin-top: .3em; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 18px 20px; margin: 16px 0; }
+  .card h3 { margin-top: 0; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px 14px; overflow-x: auto; position: relative; }
+  button.copy { position: absolute; top: 8px; right: 8px; background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: .8rem; }
+  button.copy:hover { background: #30363d; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #30363d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; }
+  .warn { background: #2a1a05; border: 1px solid #9e6a03; border-radius: 10px; padding: 14px 18px; margin: 16px 0; }
+  .ok { color: #3fb950; } .bad { color: #f85149; }
+  a { color: #58a6ff; }
+  footer { color: #8b949e; font-size: .85rem; margin-top: 3em; }
+  ol li, ul li { margin-bottom: .5em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Acceso al laboratorio <span class="ok">●</span></h1>
+  <p class="sub">seclab-sbf-prod · tailnet únicamente · sin puertos públicos · VM sin IP pública</p>
+
+  <div class="card">
+    <h3>0. Requisitos (una vez)</h3>
+    <ol>
+      <li><strong>Tailscale conectado</strong> en tu Mac: <code>tailscale status</code> debe mostrar <code>seclab-sbf-prod</code> con IP <code>100.113.178.15</code>.</li>
+      <li><strong>Llaves del proyecto</strong> en <code>/Users/castr/tmp/t01/.secrets/ssh/</code>:
+        <code>seclab_ed25519</code> (lab) y <code>seclab_console_rsa</code> (consola OCI).</li>
+      <li><strong>Contraseña web</strong>: la obtienes con
+        <code>grep TTYD_PASSWORD /Users/castr/tmp/t01/.env</code> (cámbiala si aún es la de defecto).</li>
+    </ol>
+  </div>
+
+  <h2>1. VPS por SSH (host Ubuntu)</h2>
+  <div class="card">
+    <h3>Sesión de administración del host</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i /Users/castr/tmp/t01/.secrets/ssh/seclab_ed25519 ubuntu@100.113.178.15</code></pre>
+    <p>Desde ahí, el repo vive en <code>~/seclab-sbf</code>. Comandos útiles:</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>cd ~/seclab-sbf
+export WORKSPACE_DIR=/opt/seclab-sbf/workspace LAB_ENV_FILE=.env
+sudo systemctl status seclab-nftables seclab-ttyd-tailnet seclab-ssh-tailnet --no-pager
+docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml ps</code></pre>
+  </div>
+
+  <h2>2. Contenedor por SSH (usuario tester)</h2>
+  <div class="card">
+    <h3>En tu Mac (un comando)</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh</code></pre>
+    <p>Levanta el lab si hace falta, publica <code>127.0.0.1:2222</code> vía override temporal (sin tocar <code>compose.yaml</code>) y entra como <code>tester</code> con banner + tmux. Solo construye la imagen si no existe. Si el puerto está ocupado: <code>make lab-ssh LAB_SSH_PORT=2223</code>. Para la imagen full: <code>make lab-ssh-full</code>. La imagen <code>base</code> no admite sesi&oacute;n (no trae sshd ni usuario tester); se valida con <code>make base-check</code>.</p>
+    <h3>En el contenedor del host cloud (un comando)</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud TF_HOST=100.113.178.15</code></pre>
+    <p>Entra directo por el tailnet, sin túnel. El puente lo publica el servicio systemd <code>seclab-ssh-tailnet</code> en la IP Tailscale del host, así que no hace falta ningún override de puertos. Acepta <code>TF_HOST</code> o <code>CLOUD_HOST</code> (queda en el <code>.env</code>). Para la imagen full: <code>make lab-ssh-cloud-full</code>, que recreate el lab en el host antes de entrar.</p>
+    <h3>Directo por el tailnet, sin túnel (puerto 2222, solo llaves)</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i /Users/castr/tmp/t01/.secrets/ssh/seclab_ed25519 -p 2222 tester@100.113.178.15</code></pre>
+    <p>Entrarás al shell del laboratorio (banner <code>SECLAB-SBF</code>). Alternativa desde el host con <code>docker compose exec</code> (no usa red).</p>
+  </div>
+
+  <h2>3. Contenedor por web (ttyd)</h2>
+  <div class="card">
+    <h3>Terminal en el navegador</h3>
+    <p>Abre <a href="http://100.113.178.15:7681">http://100.113.178.15:7681</a> e inicia sesión con usuario <code>tester</code> y tu <code>TTYD_PASSWORD</code>.</p>
+    <p>La sesión es tmux persistente: cerrar el navegador no la mata. El túnel <code>ssh -L</code> ya no hace falta (quedó como alternativa).</p>
+  </div>
+
+  <h2>4. Si algo falla</h2>
+  <table>
+    <tr><th>Síntoma</th><th>Causa probable / solución</th></tr>
+    <tr><td><code>Permission denied (publickey)</code></td><td>Usa <code>-i</code> con la llave correcta (<code>seclab_ed25519</code>, no la de consola).</td></tr>
+    <tr><td>Timeout al puerto 7681/2222</td><td>Tailscale caído en Mac o host; revisa <code>tailscale status</code> en ambos. Revisa los servicios systemd del host.</td></tr>
+    <tr><td>ttyd pide login en bucle / 401</td><td>Contraseña incorrecta: verifica <code>TTYD_PASSWORD</code> de tu <code>.env</code> local.</td></tr>
+    <tr><td><code>exec request failed</code> / PTY, <code>warptmp</code>, <code>/.zshenv</code> read-only, o SSH sin tmux ni banner</td><td>Estás en Warp: su integración remota rompe el login (fija <code>ZDOTDIR=/</code>). Atajo en sesión: <code>ZDOTDIR=/home/tester exec /usr/bin/zsh -il</code>. Permanente: usa <code>/usr/bin/ssh</code>, Terminal.app, o desactiva por completo la integración SSH/shell de Warp.</td></tr>
+    <tr><td>Todo el tailnet falla</td><td>Último recurso: <strong>console connection de OCI</strong> (llave <code>seclab_console_rsa</code>, login <code>ubuntu</code> + contraseña de consola). Pregunta por el comando vigente.</td></tr>
+  </table>
+
+  <div class="warn">
+    <strong>Pendientes de seguridad (tu lado admin):</strong> ACL del tailnet en deny-by-default,
+    MFA y device approval (<code>admin.tailscale.com</code>), y eliminar la máquina vieja
+    <code>seclab-cloud-20260924154553</code>. Además: cambia <code>TTYD_PASSWORD</code> si sigue
+    siendo el valor de defecto y reinicia el contenedor lab para aplicarlo.
+  </div>
+
+  <footer>Generado 2026-09-25 · rama phase/09-oci · Sin secretos en este archivo: las credenciales viven en tu <code>.env</code> y <code>.secrets/</code> locales.</footer>
+</main>
+<script>
+function copiar(btn) {
+  const code = btn.parentElement.querySelector('code').innerText;
+  navigator.clipboard.writeText(code).then(() => {
+    const t = btn.innerText; btn.innerText = 'ok';
+    setTimeout(() => btn.innerText = t, 1200);
+  });
+}
+</script>
+</body>
+</html>

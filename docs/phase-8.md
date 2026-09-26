@@ -32,9 +32,10 @@ credenciales van por entorno y el `backend.hcl` vive en `deploy/`
 - Sin reglas de ingress; egress mínimo: 443/tcp, 41641/udp (Tailscale),
   53 y 123/udp.
 - Volumen de workspace formateado y montado por cloud-init.
-- cloud-init instala docker/socat/make/git/nftables y endurece con
-  unattended-upgrades. **No instala ni une Tailscale**: eso es manual
-  por consola con one-off key (ver `security/tailscale/README.md`).
+- cloud-init instala docker/socat/make/git/nftables, Tailscale preinstalado
+  (paquete fijado `tailscale=1.102.4` + llave del repo fijada en el módulo)
+  y endurece con unattended-upgrades. **No une Tailscale**: eso sigue
+  siendo manual por consola con one-off key (ver `security/tailscale/README.md`).
 
 ## Flujo de despliegue
 

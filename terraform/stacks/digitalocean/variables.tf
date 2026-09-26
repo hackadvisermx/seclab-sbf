@@ -32,6 +32,13 @@ variable "admin_user" {
   default     = "root"
 }
 
+variable "admin_password" {
+  description = "Contraseña del admin solo para consola serie (SSH sigue con llave). Vacío la desactiva."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "droplet_size" {
   description = "Tamaño del droplet (2 vCPU / 8 GB por defecto)."
   type        = string

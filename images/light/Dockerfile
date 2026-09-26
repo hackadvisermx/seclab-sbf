@@ -224,9 +224,11 @@ COPY scripts/install-shell.sh /usr/local/bin/install-shell
 RUN usermod --login tester --home /home/tester --move-home --shell /usr/bin/zsh ubuntu \
  && groupmod --new-name tester ubuntu \
  && usermod --groups tester tester \
- && install -d -m 0755 /home/tester \
- && install -d -m 0700 /var/lib/seclab/ssh \
- && chown tester:tester /home/tester
+&& install -d -m 0755 /home/tester \
+  && install -d -m 0700 /var/lib/seclab/ssh \
+  && install -d -m 0700 /home/tester/.config/subfinder \
+  && printf 'sources: []\n' > /home/tester/.config/subfinder/config.yaml \
+  && chown -R tester:tester /home/tester
 COPY .tmux.conf /home/tester/.tmux.conf
 RUN chown root:root /home/tester/.tmux.conf \
  && chmod 0444 /home/tester/.tmux.conf
@@ -245,9 +247,10 @@ COPY scripts/entrypoint/ttyd-as-tester.sh /usr/local/bin/ttyd-as-tester
 COPY scripts/entrypoint/ttyd-as-tester-shell.sh /usr/local/bin/ttyd-as-tester-shell
 COPY scripts/vpn-manager.sh /usr/local/bin/vpn-manager
 COPY scripts/vpn-control.py /usr/local/bin/vpn-control
+COPY scripts/pt-vpn-ip.sh /usr/local/bin/pt-vpn-ip
 COPY scripts/proxy-control.py /usr/local/bin/pt-forward
 COPY scripts/health/light-healthcheck.sh /usr/local/bin/light-healthcheck
-RUN chmod 0555 /usr/local/bin/light-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-forward /usr/local/bin/light-healthcheck
+RUN chmod 0555 /usr/local/bin/light-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/light-healthcheck
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/light-entrypoint"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/usr/local/bin/light-healthcheck"]

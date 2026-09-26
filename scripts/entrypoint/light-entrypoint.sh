@@ -53,6 +53,12 @@ if [[ "$PENTEST_PROFILE" != "light" && "$PENTEST_PROFILE" != "full" ]]; then
   exit 64
 fi
 
+# sshd no propaga su entorno a la sesion (solo una lista blanca), asi que
+# el perfil se publica en un archivo que el shell de login lee.
+install -d -m 0755 -o root -g root /run/seclab
+printf '%s\n' "$PENTEST_PROFILE" > /run/seclab/pentest-profile
+chmod 0644 /run/seclab/pentest-profile
+
 if [[ "$SSH_USER" != "tester" || "$TTYD_USER" != "tester" ]]; then
   printf 'SSH_USER and TTYD_USER must both be tester\n' >&2
   exit 64
@@ -76,7 +82,9 @@ id "$SSH_USER" >/dev/null
 install -d -m 0700 -o "$SSH_USER" -g "$SSH_USER" \
   /var/lib/seclab/tester \
   /var/lib/seclab/tester/oh-my-zsh-cache \
-  /var/lib/seclab/tester/zoxide
+  /var/lib/seclab/tester/zoxide \
+  /var/lib/seclab/tester/.msf4 \
+  /var/lib/seclab/tester/.nxc
 
 install -d -m 0755 /run/sshd
 install -d -m 0755 -o root -g root /run/ssh
@@ -116,8 +124,13 @@ TTYD_USER="$TTYD_USER" TTYD_PASSWORD="$TTYD_PASSWORD" TTYD_INTERFACE="$TTYD_INTE
 ttyd_pid=$!
 printf '%s\n' "$ttyd_pid" > /run/ttyd.pid
 
+# Start vpn-control daemon for VPN management
+/usr/local/bin/vpn-control serve &
+vpn_control_pid=$!
+printf '%s\n' "$vpn_control_pid" > /run/vpn-control.pid
+
 set +e
-wait -n "$sshd_pid" "$ttyd_pid"
+wait -n "$sshd_pid" "$ttyd_pid" "$vpn_control_pid"
 status=$?
 set -e
 exit "$status"

@@ -1,0 +1,16 @@
+[Unit]
+Description=Seclab SBF aislamiento del host (nftables)
+Documentation=file:///home/ubuntu/seclab-sbf/docs/phase-7-security.md
+After=network-pre.target docker.service
+Before=network.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/nftables/seclab-lab.nft
+ExecReload=/bin/sh -c '/usr/sbin/nft delete table inet seclab_security; /usr/sbin/nft -f /etc/nftables/seclab-lab.nft'
+ExecStop=-/usr/sbin/nft delete table inet seclab_security
+
+[Install]
+WantedBy=multi-user.target

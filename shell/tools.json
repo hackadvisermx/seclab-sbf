@@ -98,6 +98,11 @@
       "command": "msfvenom",
       "description": "Generador de payloads de Metasploit"
     },
+    "nxc": {
+      "category": "exploit",
+      "command": "nxc",
+      "description": "Credenciales y ejecucion en red (NetExec)"
+    },
     "nmap": {
       "category": "recon",
       "command": "nmap",
@@ -218,6 +223,7 @@
       "katana",
       "msfconsole",
       "msfvenom",
+      "nxc",
       "naabu",
       "nmap",
       "nuclei",

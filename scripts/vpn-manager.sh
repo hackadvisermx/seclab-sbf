@@ -4,6 +4,7 @@ set -eu
 VPN_MODE="${VPN_MODE:-inside}"
 VPN_DIR="${VPN_DIR:-/vpn}"
 VPN_STATE_DIR="${VPN_STATE_DIR:-/var/lib/seclab/vpn}"
+VPN_CREDENTIALS_FILE="${VPN_CREDENTIALS_FILE:-/run/secrets/lab.env}"
 VPNTRY_CONFIG="${VPNTRY_CONFIG:-${VPN_DIR}/tryhackme.ovpn}"
 VPNHTB_CONFIG="${VPNHTB_CONFIG:-${VPN_DIR}/hackthebox.ovpn}"
 VPNCLI_CONFIG="${VPNCLI_CONFIG:-${VPN_DIR}/client.ovpn}"
@@ -39,6 +40,29 @@ host_only_notice() {
   printf 'VPN_MODE=host: este modo no inicia una VPN; solo conserva la compatibilidad explicita del host.\n' >&2
   printf 'Perfil: %s\n' "$1" >&2
   return 78
+}
+
+# Credenciales opcionales por perfil, leidas del archivo de secretos.
+# Nunca se imprimen ni se versionan.
+credential_value() {
+  [ -r "$VPN_CREDENTIALS_FILE" ] || return 0
+  key="$1"
+  awk -v wanted="$key" '
+    $0 ~ "^" wanted "=" {
+      sub(/^[^=]*=/, "")
+      print
+      exit
+    }
+  ' "$VPN_CREDENTIALS_FILE"
+}
+
+profile_credential_key() {
+  case "$1" in
+    tryhackme|try) printf 'VPNTRY' ;;
+    hackthebox|htb) printf 'VPNHTB' ;;
+    client|cli) printf 'VPNCLI' ;;
+    *) return 1 ;;
+  esac
 }
 
 has_net_admin() {
@@ -95,12 +119,21 @@ validate_profile() {
   : > "$temporary"
   chmod 0600 "$temporary"
   route_count=0
+  needs_auth=0
+  inline_auth=0
 
   while IFS= read -r line || [ -n "$line" ]; do
     skip_line=0
     line="$(printf '%s' "$line" | tr -d '\r')"
     compact="$(printf '%s' "$line" | tr '[:lower:]' '[:upper:]' | tr -d '[:space:]')"
     case "$compact" in
+      '<AUTH-USER-PASS>')
+        inline_auth=1
+        ;;
+      'AUTH-USER-PASS')
+        needs_auth=1
+        skip_line=1
+        ;;
       REDIRECT-GATEWAY*)
         skip_line=1
         ;;
@@ -155,6 +188,23 @@ validate_profile() {
       printf '%s\n' "$line" >> "$temporary"
     fi
   done < "$path"
+
+  if [ "$needs_auth" -eq 1 ] && [ "$inline_auth" -eq 0 ]; then
+    prefix="$(profile_credential_key "$profile")"
+    user_value="$(credential_value "${prefix}_USER")"
+    pass_value="$(credential_value "${prefix}_PASSWORD")"
+    if [ -z "$user_value" ] || [ -z "$pass_value" ]; then
+      printf 'el perfil pide usuario y faltan %s_USER o %s_PASSWORD en el archivo de credenciales.\n' "$prefix" "$prefix" >&2
+      printf 'definelas para que la conexion no se quede esperando entrada.\n' >&2
+      rm -f "$temporary"
+      return 65
+    fi
+    auth_file="${VPN_STATE_DIR}/$(profile_label "$profile").auth"
+    umask 077
+    printf '%s\n%s\n' "$user_value" "$pass_value" > "$auth_file"
+    chmod 0600 "$auth_file"
+    printf 'auth-user-pass %s\n' "$auth_file" >> "$temporary"
+  fi
 
   if [ "$route_count" -gt 0 ]; then
     printf '%s\n' 'route-nopull' >> "$temporary"
@@ -262,7 +312,7 @@ disconnect() {
       fi
     fi
   fi
-  rm -f "$active_file" "$pid_file" "$log_file" "${VPN_STATE_DIR}"/*.sanitized.ovpn
+  rm -f "$active_file" "$pid_file" "$log_file" "${VPN_STATE_DIR}"/*.sanitized.ovpn "${VPN_STATE_DIR}"/*.auth
   printf 'VPN desconectada: %s\n' "$profile"
 }
 
@@ -295,7 +345,7 @@ connect() {
       printf '%s\n' 'ya existe una VPN activa; usa switch.' >&2
       return 75
     fi
-    rm -f "$active_file" "$pid_file" "$log_file" "${VPN_STATE_DIR}"/*.sanitized.ovpn
+    rm -f "$active_file" "$pid_file" "$log_file" "${VPN_STATE_DIR}"/*.sanitized.ovpn "${VPN_STATE_DIR}"/*.auth
   fi
   sanitized="$(validate_profile "$canonical")"
   if ! /usr/sbin/openvpn --config "$sanitized" --daemon --writepid "$pid_file" --log "$log_file" --verb 3; then

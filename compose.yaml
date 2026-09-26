@@ -5,7 +5,7 @@ services:
       dockerfile: images/light/Dockerfile
       args:
         BASE_IMAGE: seclab-sbf:base
-    image: seclab-sbf:light
+    image: ${LAB_IMAGE:-seclab-sbf:light}
     working_dir: /workspace
     command:
       - /bin/bash
@@ -22,6 +22,7 @@ services:
       - DAC_OVERRIDE
       - FOWNER
       - KILL
+      - NET_ADMIN
       - NET_RAW
       - SETGID
       - SETPCAP
@@ -29,6 +30,8 @@ services:
       - SYS_CHROOT
     security_opt:
       - no-new-privileges:true
+    devices:
+      - /dev/net/tun:/dev/net/tun
     pids_limit: ${LAB_PIDS_LIMIT:-256}
     mem_limit: ${LAB_MEMORY_LIMIT:-1g}
     cpus: ${LAB_CPUS:-2.0}
@@ -51,11 +54,20 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${LAB_ENV_FILE:-.env}
-        target: /run/secrets/lab.env
+        source: ${SECRETS_DIR:-./.secrets/runtime}
+        target: /run/secrets
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ${VPN_DIR:-./vpn}
+        target: /vpn
+        read_only: true
+        bind:
+          create_host_path: false
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     tmpfs:
       - /tmp
       - /run
@@ -68,6 +80,16 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - seclab
 
 volumes:
   lab-state:
+
+networks:
+  seclab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

@@ -18,7 +18,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 77
 fi
 
-network_name="${SECLAB_DOCKER_NETWORK:-seclab-sbf_default}"
+network_name="${SECLAB_DOCKER_NETWORK:-seclab-sbf_seclab}"
 if command -v docker >/dev/null 2>&1; then
   network="$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}}{{end}}' "$network_name" 2>/dev/null || true)"
   case "$network" in

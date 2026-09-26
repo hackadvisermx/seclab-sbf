@@ -38,12 +38,38 @@ COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECR
 COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose $(VPN_COMPOSE)
 
 help:
-	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_IMAGE=light|full)' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-full      Atajo local para la imagen full' '  lab-ssh-cloud-full   Atajo cloud: recrea en full y entra' '  (CLOUD_IMAGE=... hace que el host descargue del registry en vez de construir)' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR CLOUD_IMAGE TF_HOST'
+	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto seclab-sbf:full)' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_IMAGE=light|full)' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-full      Atajo local para la imagen full' '  lab-ssh-cloud-full   Atajo cloud: recrea en full y entra' '  (CLOUD_IMAGE=... hace que el host descargue del registry en vez de construir)' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR CLOUD_IMAGE TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell verify-pins
 
 verify-secrets:
 	gitleaks dir . --redact --no-banner --config .gitleaks.toml
+
+# Trivy 0.74.0, la misma version que usaba el gate de release.
+TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+SCAN_IMAGE ?= $(LAB_IMAGE)
+SCAN_SEVERITY ?= HIGH,CRITICAL
+SCAN_IGNORE_UNFIXED ?= true
+
+# Escaneo local de una imagen con el gate de CVEs. Cubre lo que ya no cubre
+# CI: full no se publica en release.yml y se compila en el host, asi que su
+# unica puerta de CVEs es esta. Por defecto full, que es la que lo necesita.
+#   make scan-image SCAN_IMAGE=seclab-sbf:full
+#   SCAN_IMAGE=ghcr.io/hackadvisermx/seclab-sbf@sha256:... make scan-image
+# La imagen se pasa por stdin con docker save para no montar el socket de
+# Docker en un contenedor, que el proyecto no permite en compose.
+scan-image:
+	docker save "$(SCAN_IMAGE)" | docker run --rm -i \
+	  -v "$(CURDIR)/security/trivy/.trivyignore.yaml:/ignore.yaml:ro" \
+	  -v seclab-trivy-cache:/root/.cache/trivy \
+	  $(TRIVY_IMAGE) image \
+	  --input - \
+	  --ignorefile /ignore.yaml \
+	  --scanners vuln \
+	  --severity "$(SCAN_SEVERITY)" \
+	  --ignore-unfixed "$(SCAN_IGNORE_UNFIXED)" \
+	  --format table \
+	  --exit-code 1
 
 verify-pins:
 	@GH_TOKEN="$$(gh auth token 2>/dev/null || true)" ./scripts/verify/check-action-pins.sh

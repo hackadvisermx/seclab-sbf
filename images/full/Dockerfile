@@ -7,6 +7,49 @@ ARG MSF_VERSION=6.5.5
 ARG MSF_COMMIT=c5429ba817d12d9d89069387142332435598e548
 ARG PAT_COMMIT=3ac27901c711bdf3f5b65a7b1d1820a1f65bd09a
 ARG EXPLOITDB_COMMIT=150aef0e7c4757c9dff33016c8352671cdc9b454
+ARG NXC_VERSION=1.5.1
+ARG NXC_COMMIT=c7dc286ba65daf10402cdc470e531b84e6d3d911
+
+# NetExec no esta en PyPI (se instala desde git) y varias dependencias se
+# compilan desde fuente, asi que se fija por commit igual que metasploit y
+# las versiones transitivas quedan en supply-chain/tools.lock.yaml.
+# Se compila para la arquitectura destino: no lleva --platform.
+FROM ${UBUNTU_IMAGE} AS nxc-builder
+ARG UBUNTU_SNAPSHOT
+ARG NXC_VERSION
+ARG NXC_COMMIT
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && sed -i "s|http://ports.ubuntu.com/ubuntu-ports/|https://snapshot.ubuntu.com/ubuntu/${UBUNTU_SNAPSHOT}/|g" /etc/apt/sources.list.d/ubuntu.sources \
+ && sed -i '/^Snapshot:/d' /etc/apt/sources.list.d/ubuntu.sources \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential \
+      cargo \
+      git \
+      libffi-dev \
+      libssl-dev \
+      pkg-config \
+      python3-dev \
+      python3-pip \
+      python3-venv \
+ && rm -rf /var/lib/apt/lists/*
+RUN git init /src/nxc \
+ && git -C /src/nxc remote add origin https://github.com/Pennyw0rth/NetExec.git \
+ && git -C /src/nxc fetch --depth 1 origin "${NXC_COMMIT}" \
+ && git -C /src/nxc checkout --detach FETCH_HEAD \
+ && test "$(git -C /src/nxc rev-parse HEAD)" = "${NXC_COMMIT}" \
+ && test "$(git -C /src/nxc describe --tags --exact-match 2>/dev/null || printf v${NXC_VERSION})" = "v${NXC_VERSION}"
+RUN python3 -m venv /opt/nxc \
+ && /opt/nxc/bin/pip install --no-cache-dir --upgrade pip \
+ && /opt/nxc/bin/pip install --no-cache-dir "git+https://github.com/Pennyw0rth/NetExec.git@${NXC_COMMIT}" \
+ && /opt/nxc/bin/python -c 'import nxc.netexec, nxc.nxcdb' \
+ && mkdir -p /out \
+ && cp -r /opt/nxc /out/nxc \
+ && printf '%s\n' "${NXC_VERSION}" > /out/version \
+ && /opt/nxc/bin/pip freeze --all > /out/frozen.txt
+
 FROM --platform=$BUILDPLATFORM ${UBUNTU_IMAGE} AS msf-builder
 ARG TARGETOS
 ARG TARGETARCH
@@ -87,7 +130,16 @@ RUN ln -sf /opt/metasploit-framework/msfconsole /usr/local/bin/msfconsole \
 # volumen escribible; el entrypoint crea el destino.
 RUN ln -sfn /var/lib/seclab/tester/.msf4 /home/tester/.msf4 \
   && chown -h tester:tester /home/tester/.msf4
-ENV PATH="/opt/ruby/bin:${PATH}"
+COPY --from=nxc-builder /out/nxc /opt/nxc
+COPY --from=nxc-builder /out/version /usr/local/share/seclab/netexec-version
+# NetExec escribe ~/.nxc; mismo motivo que .msf4, symlink al volumen.
+RUN ln -sf /opt/nxc/bin/nxc /usr/local/bin/nxc \
+  && ln -sf /opt/nxc/bin/netexec /usr/local/bin/netexec \
+  && ln -sf /opt/nxc/bin/nxcdb /usr/local/bin/nxcdb \
+  && chmod 0555 /usr/local/bin/nxc /usr/local/bin/netexec /usr/local/bin/nxcdb \
+  && ln -sfn /var/lib/seclab/tester/.nxc /home/tester/.nxc \
+  && chown -h tester:tester /home/tester/.nxc
+ENV PATH="/opt/ruby/bin:/opt/nxc/bin:${PATH}"
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/light-entrypoint"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/usr/local/bin/light-healthcheck"]

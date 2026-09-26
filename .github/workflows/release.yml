@@ -100,7 +100,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            arch: amd64
+          - platform: linux/arm64
+            arch: arm64
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -128,13 +132,13 @@ jobs:
           build-args: BASE_IMAGE=${{ needs.base.outputs.image }}
           platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ env.IMAGE_NAME }}:light-${{ matrix.platform }}
-          cache-from: type=gha,scope=light-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=light-${{ matrix.platform }}
+          tags: ${{ env.IMAGE_NAME }}:light-${{ matrix.arch }}
+          cache-from: type=gha,scope=light-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=light-${{ matrix.arch }}
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:light-${{ matrix.platform }}
+          image-ref: ${{ env.IMAGE_NAME }}:light-${{ matrix.arch }}
           scan-type: image
           scanners: vuln
           severity: HIGH,CRITICAL
@@ -182,17 +186,31 @@ jobs:
             type=raw,value=light
             type=ref,event=tag
             type=sha
+      # imagetools create, no build-push-action: aqui no hay nada que compilar,
+      # solo unir las dos imagenes por arquitectura en un manifiesto.
       - name: Create and push multi-arch manifest
         id: manifest
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          sbom: true
-          provenance: mode=max
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -eu
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            docker buildx imagetools create \
+              --tag "$tag" \
+              "$IMAGE_NAME:light-amd64" \
+              "$IMAGE_NAME:light-arm64"
+          done <<EOF
+          $TAGS
+          EOF
+          digest=$(docker buildx imagetools inspect "$IMAGE_NAME:light" | awk '$1 == "Digest:" { print $2; exit }')
+          case "$digest" in
+            sha256:*) ;;
+            *) echo "no se pudo obtener el digest del manifiesto" >&2; exit 1 ;;
+          esac
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "manifest $IMAGE_NAME:light -> $digest"
       - name: Generate SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
         with:

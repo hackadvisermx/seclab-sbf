@@ -201,7 +201,7 @@ RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       -o /out/gobuster .
 
 FROM ${BASE_IMAGE}
-ARG UBUNTU_SNAPSHOT=20260922T000000Z
+ARG UBUNTU_SNAPSHOT=20260925T000000Z
 LABEL org.opencontainers.image.source="https://github.com/hackadvisermx/seclab-sbf" \
       org.opencontainers.image.title="seclab-sbf light" \
       org.opencontainers.image.version="0.3.0-phase3"

@@ -18,18 +18,27 @@ CLOUD_HOST ?= $(or $(TF_HOST),$(shell sed -n 's/^CLOUD_HOST=//p' "$(ENV_FILE)" 2
 CLOUD_SSH_PORT ?= 2222
 CLOUD_REPO_DIR ?= ~/seclab-sbf
 CLOUD_WORKSPACE_DIR ?= /opt/seclab-sbf/workspace
+# Imagen publicada que usa el host cloud. Vacia = construye en el host.
+# Recomendado: el digest inmutable que publica release.yml, por ejemplo
+# ghcr.io/hackadvisermx/seclab-sbf@sha256:...
+CLOUD_IMAGE ?=
 LAB_SSH_HOST ?= 127.0.0.1
 LAB_IMAGE ?= seclab-sbf:light
-LAB_IMAGE_NORMALIZED = $(if $(filter seclab-sbf:%,$(LAB_IMAGE)),$(LAB_IMAGE),seclab-sbf:$(LAB_IMAGE))
+# Una referencia con "/" es un repositorio remoto (ghcr.io/host/repo:tag o
+# @sha256:digest): esa se trae con docker pull, nunca se construye. Sin "/"
+# es una imagen local y se construye como siempre.
+LAB_IMAGE_REMOTE = $(if $(findstring /,$(LAB_IMAGE)),$(LAB_IMAGE))
+LAB_IMAGE_LOCAL = $(if $(LAB_IMAGE_REMOTE),,$(if $(filter seclab-sbf:%,$(LAB_IMAGE)),$(LAB_IMAGE),seclab-sbf:$(LAB_IMAGE)))
+LAB_IMAGE_RESOLVED = $(if $(LAB_IMAGE_REMOTE),$(LAB_IMAGE_REMOTE),$(LAB_IMAGE_LOCAL))
 # El perfil lo determina la imagen: es lo que decide que herramientas
 # estan instaladas. Sin esto, PENTEST_PROFILE del .env se queda en light
 # aunque la imagen sea full y el banner no refleta lo que hay.
-LAB_PROFILE = $(if $(filter seclab-sbf:full,$(LAB_IMAGE_NORMALIZED)),full,light)
-COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_NORMALIZED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose -f compose.yaml -f compose.local.yaml
-COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_NORMALIZED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose $(VPN_COMPOSE)
+LAB_PROFILE = $(if $(filter %:full %:full@sha256:%,$(LAB_IMAGE_RESOLVED)),full,light)
+COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose -f compose.yaml -f compose.local.yaml
+COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose $(VPN_COMPOSE)
 
 help:
-	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_IMAGE=light|full)' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-full      Atajo local para la imagen full' '  lab-ssh-cloud-full   Atajo cloud: recrea en full y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
+	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_IMAGE=light|full)' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-full      Atajo local para la imagen full' '  lab-ssh-cloud-full   Atajo cloud: recrea en full y entra' '  (CLOUD_IMAGE=... hace que el host descargue del registry en vez de construir)' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR CLOUD_IMAGE TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell
 
@@ -140,8 +149,18 @@ compose-tmux: ensure-env sync-secrets
 # y solo construye si la imagen no existe. En el host cloud antepone
 # WORKSPACE_DIR=/opt/seclab-sbf/workspace.
 ensure-image:
-	@IMG="$(LAB_IMAGE_NORMALIZED)"; \
-	if docker image inspect "$$IMG" >/dev/null 2>&1; then \
+	@IMG="$(LAB_IMAGE_RESOLVED)"; \
+	if [ -n "$(LAB_IMAGE_REMOTE)" ]; then \
+		if docker image inspect "$$IMG" >/dev/null 2>&1; then \
+			printf 'imagen remota lista: %s\n' "$$IMG"; \
+		else \
+			printf 'descargando del registry: %s\n' "$$IMG"; \
+			if ! docker pull "$$IMG"; then \
+				printf 'no se pudo descargar %s. Si es una imagen propia, comprueba que este publicada y que el host tenga acceso.\n' "$$IMG" >&2; \
+				exit 1; \
+			fi; \
+		fi; \
+	elif docker image inspect "$$IMG" >/dev/null 2>&1; then \
 		printf 'imagen lista: %s\n' "$$IMG"; \
 		if [ "$$IMG" = "seclab-sbf:full" ]; then \
 			base_id=$$(docker image inspect -f '{{.Id}}' "$(FULL_BASE)" 2>/dev/null || true); \
@@ -169,7 +188,7 @@ base-check: ensure-image
 lab-ssh: ensure-env vpn-require-dir ensure-image sync-secrets
 	@mkdir -p tmp
 	@printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n' "$(LAB_SSH_PORT)" > tmp/compose.ssh.yaml
-	WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_NORMALIZED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose -f compose.yaml -f compose.local.yaml -f tmp/compose.ssh.yaml up -d lab
+	WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose -f compose.yaml -f compose.local.yaml -f tmp/compose.ssh.yaml up -d lab
 	ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(LAB_SSH_PORT)" tester@$(LAB_SSH_HOST)
 
 # Entrada directa al contenedor del host cloud. Ahi el puente lo publica
@@ -184,9 +203,9 @@ lab-ssh-cloud:
 # alla con la imagen pedida y despues entra.
 lab-ssh-cloud-image:
 	@test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host\n' >&2; exit 2)
-	@printf 'recreando el lab en el host con %s (puede tardar si hay que construir)\n' "$(LAB_IMAGE_NORMALIZED)"
+	@printf 'recreando el lab en el host con %s (puede tardar si hay que construir)\n' "$(LAB_IMAGE_RESOLVED)"
 	ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(TF_ADMIN)@$(CLOUD_HOST)" \
-		'cd '"$(CLOUD_REPO_DIR)"' && WORKSPACE_DIR='"$(CLOUD_WORKSPACE_DIR)"' make compose-up LAB_IMAGE='"$(LAB_IMAGE_NORMALIZED)"
+		'cd '"$(CLOUD_REPO_DIR)"' && WORKSPACE_DIR='"$(CLOUD_WORKSPACE_DIR)"' make compose-up LAB_IMAGE='"$(LAB_IMAGE_RESOLVED)"
 	$(MAKE) lab-ssh-cloud
 
 lab-ssh-full:

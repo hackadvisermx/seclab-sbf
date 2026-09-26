@@ -75,6 +75,36 @@ vulnerabilities:
       esta instalado y es el que activa bundler. Requiere reconstruir Ruby.
     expired_at: 2026-12-31
 
+  - id: CVE-2026-42245
+    statement: >-
+      net-imap 0.4.19, gem por defecto de Ruby 3.3.8. Mismo origen que
+      CVE-2026-42257: el 0.6.7 corregido esta instalado y es el que activa
+      bundler, el vulnerable sigue en disco por ser default gem.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-67432
+    statement: >-
+      mcp 0.13.0. Mismo origen que CVE-2026-67431: el gemspec de
+      metasploit-framework 6.5.5 lo fija con version exacta ('0.13.0'), no con
+      un rango, asi que no se puede subir sin parchear el upstream.
+    expired_at: 2026-12-31
+
+  - id: GHSA-6v7p-g79w-8964
+    statement: >-
+      msgpack 1.1.2. Trivy lo reporta como python-pkg pero no esta instalado en
+      el venv de NetExec ni en el python del sistema: comprobado sobre la
+      imagen construida, donde site-packages solo tiene msgpack ausente y las
+      versiones de cryptography, pyOpenSSL y setuptools ya actualizadas. Sin
+      codigo instalado en runtime.
+    expired_at: 2026-12-31
+
+  - id: CVE-2025-47273
+    statement: >-
+      setuptools 70.3.0. El venv de NetExec lleva setuptools 84.0.0, muy por
+      encima del 78.1.1 fijado como minimo en el build. Trivy sigue reportando
+      la copia antigua desde metadatos, no desde un paquete instalado.
+    expired_at: 2026-12-31
+
   # ---------------------------------------------------------------------------
   # mcp, pineado por Metasploit.
   #

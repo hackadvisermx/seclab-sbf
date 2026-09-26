@@ -113,6 +113,7 @@ RUN /opt/ruby/bin/gem install bundler -v 2.5.22 --no-document \
  && /opt/ruby/bin/bundle _2.5.22_ config set --local without 'development test' \
  && /opt/ruby/bin/bundle _2.5.22_ install --jobs "$(nproc)" \
  && /opt/ruby/bin/bundle _2.5.22_ update concurrent-ruby \
+ && /opt/ruby/bin/ruby -e 'require "rubygems"; min = Gem::Version.new("1.3.7"); Gem::Specification.dirs.each { |d| Dir.glob(File.join(d, "concurrent-ruby-*.gemspec")).each { |f| s = Gem::Specification.load(f); next unless s; next unless Gem::Version.new(s.version.to_s) < min; puts "borrando gemspec obsoleto #{File.basename(f)}"; File.delete(f) } }' \
  && /opt/ruby/bin/ruby -e 'g = Gem::Specification.find_by_name("concurrent-ruby"); v = Gem::Version.new(g.version.to_s); raise "concurrent-ruby #{g.version} por debajo de 1.3.7" if v < Gem::Version.new("1.3.7"); puts "concurrent-ruby=#{g.version}"' \
  && test "$(/opt/ruby/bin/ruby /src/msf/msfconsole --version 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | grep -o '6\.5\.5' | head -n 1)" = "${MSF_VERSION}"
 RUN mkdir -p /out \

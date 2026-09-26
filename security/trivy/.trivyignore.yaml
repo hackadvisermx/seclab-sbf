@@ -95,18 +95,20 @@ vulnerabilities:
 
   - id: GHSA-6v7p-g79w-8964
     statement: >-
-      msgpack 1.1.2. Trivy lo reporta como python-pkg pero no esta instalado en
-      el venv de NetExec ni en el python del sistema: comprobado sobre la
-      imagen construida, donde site-packages solo tiene msgpack ausente y las
-      versiones de cryptography, pyOpenSSL y setuptools ya actualizadas. Sin
-      codigo instalado en runtime.
+      msgpack 1.1.2. Trivy lo reporta sin PkgPath, o sea que no lo lee de
+      ningun fichero del sistema de ficheros: sale de metadatos de Python que
+      no corresponden a un paquete instalado. En la imagen revisada el venv de
+      NetExec tiene setuptools 84.0.0, cryptography 50.0.1 y pyopenssl 26.4.0,
+      y no hay msgpack ni en el venv ni en el python del sistema. Sin codigo
+      instalado en runtime.
     expired_at: 2026-12-31
 
   - id: CVE-2025-47273
     statement: >-
-      setuptools 70.3.0. El venv de NetExec lleva setuptools 84.0.0, muy por
-      encima del 78.1.1 fijado como minimo en el build. Trivy sigue reportando
-      la copia antigua desde metadatos, no desde un paquete instalado.
+      setuptools 70.3.0. Sin PkgPath, igual que msgpack: no viene de un
+      fichero del disco. El venv de NetExec lleva setuptools 84.0.0, muy por
+      encima del 78.1.1 fijado como minimo en el build, asi que la copia que
+      reporta Trivy no es la que se usa.
     expired_at: 2026-12-31
 
   # ---------------------------------------------------------------------------

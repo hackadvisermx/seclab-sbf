@@ -59,10 +59,10 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
   <div class="card">
     <h3>En tu Mac (un comando)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh</code></pre>
-    <p>Levanta el lab si hace falta, publica <code>127.0.0.1:2222</code> vía override temporal (sin tocar <code>compose.yaml</code>) y entra como <code>tester</code> con banner + tmux. Solo construye la imagen si no existe. Si el puerto está ocupado: <code>make lab-ssh LAB_SSH_PORT=2223</code>. Para otra imagen: <code>make lab-ssh LAB_IMAGE=seclab-sbf:full</code> (base|light|full).</p>
+    <p>Levanta el lab si hace falta, publica <code>127.0.0.1:2222</code> vía override temporal (sin tocar <code>compose.yaml</code>) y entra como <code>tester</code> con banner + tmux. Solo construye la imagen si no existe. Si el puerto está ocupado: <code>make lab-ssh LAB_SSH_PORT=2223</code>. Para la imagen full: <code>make lab-ssh-full</code>. La imagen <code>base</code> no admite sesi&oacute;n (no trae sshd ni usuario tester); se valida con <code>make base-check</code>.</p>
     <h3>En el contenedor del host cloud (un comando)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud TF_HOST=100.113.178.15</code></pre>
-    <p>Entra directo por el tailnet, sin túnel. El puente lo publica el servicio systemd <code>seclab-ssh-tailnet</code> en la IP Tailscale del host, así que no hace falta ningún override de puertos. Acepta <code>TF_HOST</code> o <code>CLOUD_HOST</code>.</p>
+    <p>Entra directo por el tailnet, sin túnel. El puente lo publica el servicio systemd <code>seclab-ssh-tailnet</code> en la IP Tailscale del host, así que no hace falta ningún override de puertos. Acepta <code>TF_HOST</code> o <code>CLOUD_HOST</code> (queda en el <code>.env</code>). Para la imagen full: <code>make lab-ssh-cloud-full</code>, que recreate el lab en el host antes de entrar.</p>
     <h3>Directo por el tailnet, sin túnel (puerto 2222, solo llaves)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i /Users/castr/tmp/t01/.secrets/ssh/seclab_ed25519 -p 2222 tester@100.113.178.15</code></pre>
     <p>Entrarás al shell del laboratorio (banner <code>SECLAB-SBF</code>). Alternativa desde el host con <code>docker compose exec</code> (no usa red).</p>

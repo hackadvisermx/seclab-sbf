@@ -50,9 +50,12 @@ RUN python3 -m venv /opt/nxc \
  && printf '%s\n' "${NXC_VERSION}" > /out/version \
  && /opt/nxc/bin/pip freeze --all > /out/frozen.txt
 
-FROM --platform=$BUILDPLATFORM ${UBUNTU_IMAGE} AS msf-builder
-ARG TARGETOS
-ARG TARGETARCH
+# Sin --platform=$BUILDPLATFORM: Ruby y Metasploit no se pueden cross-compilar,
+# asi que este stage tiene que compilar para la plataforma destino. Con
+# $BUILDPLATFORM la imagen arm64 llevaba un Ruby amd64 dentro y msfconsole no
+# arrancaba. Solo lo enmascara en builds locales, donde build platform y
+# destino coinciden.
+FROM ${UBUNTU_IMAGE} AS msf-builder
 ARG UBUNTU_SNAPSHOT
 ARG RUBY_VERSION
 ARG RUBY_SHA256

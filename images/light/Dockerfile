@@ -26,7 +26,7 @@ RUN git init /src/fzf \
  && git -C /src/fzf checkout --detach "${FZF_COMMIT}" \
  && test "$(git -C /src/fzf rev-parse HEAD)" = "${FZF_COMMIT}"
 WORKDIR /src/fzf
-RUN GOTOOLCHAIN=local go mod edit -go=1.25.0 \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -go=1.25.0 \
  && GOTOOLCHAIN=local go get golang.org/x/sys@v0.44.0 \
  && GOTOOLCHAIN=local go mod download \
  && mkdir -p /out \
@@ -56,7 +56,7 @@ RUN git init /src/naabu \
  && git -C /src/naabu checkout --detach "${NAABU_COMMIT}" \
  && test "$(git -C /src/naabu rev-parse HEAD)" = "${NAABU_COMMIT}"
 WORKDIR /src/naabu
-RUN GOTOOLCHAIN=local go mod edit -json >/dev/null \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
  && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
  && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
@@ -96,7 +96,7 @@ RUN git init /src/subfinder \
  && git -C /src/subfinder checkout --detach "${SUBFINDER_COMMIT}" \
  && test "$(git -C /src/subfinder rev-parse HEAD)" = "${SUBFINDER_COMMIT}"
 WORKDIR /src/subfinder
-RUN GOTOOLCHAIN=local go mod edit -json >/dev/null \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
  && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
  && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
@@ -115,7 +115,7 @@ RUN git init /src/httpx \
  && git -C /src/httpx checkout --detach "${HTTPX_COMMIT}" \
  && test "$(git -C /src/httpx rev-parse HEAD)" = "${HTTPX_COMMIT}"
 WORKDIR /src/httpx
-RUN GOTOOLCHAIN=local go mod edit -json >/dev/null \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
  && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
  && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
@@ -133,7 +133,7 @@ RUN git init /src/katana \
  && git -C /src/katana checkout --detach "${KATANA_COMMIT}" \
  && test "$(git -C /src/katana rev-parse HEAD)" = "${KATANA_COMMIT}"
 WORKDIR /src/katana
-RUN GOTOOLCHAIN=local go mod edit -json >/dev/null \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
  && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
  && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
@@ -151,7 +151,7 @@ RUN git init /src/nuclei \
  && git -C /src/nuclei checkout --detach "${NUCLEI_COMMIT}" \
  && test "$(git -C /src/nuclei rev-parse HEAD)" = "${NUCLEI_COMMIT}"
 WORKDIR /src/nuclei
-RUN GOTOOLCHAIN=local go mod edit -json >/dev/null \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
  && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
  && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
@@ -169,7 +169,7 @@ RUN git init /src/ffuf \
  && git -C /src/ffuf checkout --detach "${FFUF_COMMIT}" \
  && test "$(git -C /src/ffuf rev-parse HEAD)" = "${FFUF_COMMIT}"
 WORKDIR /src/ffuf
-RUN GOTOOLCHAIN=local go mod edit -json >/dev/null \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
  && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
  && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
@@ -187,7 +187,7 @@ RUN git init /src/gobuster \
  && git -C /src/gobuster checkout --detach "${GOBUSTER_COMMIT}" \
  && test "$(git -C /src/gobuster rev-parse HEAD)" = "${GOBUSTER_COMMIT}"
 WORKDIR /src/gobuster
-RUN GOTOOLCHAIN=local go mod edit -json >/dev/null \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
  && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
  && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \

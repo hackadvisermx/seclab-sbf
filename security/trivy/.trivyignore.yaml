@@ -1,0 +1,108 @@
+# Excepciones al gate de Trivy para la imagen `full`.
+#
+# NO se aplican a `base` ni a `light`: esos dos siguen con
+# `ignore-unfixed: false` y sin excepciones.
+#
+# Trivy: 0.74.0 (la misma que fija release.yml). Se aplica unicamente a los
+# jobs de publicacion de `full`.
+#
+# Que no se pueda ignorar por paquete: en esta version de Trivy el campo
+# `purls` no casa con los hallazgos de paquetes del sistema operativo. Se
+# comprobo con cuatro formas (purl sin version, purl versionado, purl con el
+# `+` codificado y purl exacto con `?arch=` y `distro=`), todas sin efecto.
+# Solo funciona `id` por CVE, que es lo que se usa aqui.
+#
+# Regla de este fichero: una entrada por CVE, con el motivo tecnico escrito y
+# `expired_at` para que deje de aplicar sola y vuelva a salir en el gate.
+
+vulnerabilities:
+  # ---------------------------------------------------------------------------
+  # Gems por defecto de Ruby 3.3.8 (pineado por SHA256 en el Dockerfile).
+  #
+  # Ruby 3.3.8 instala estas versiones como gems por defecto. Metasploit trae
+  # ademas versiones mas nuevas instaladas como gems normales, y son las que
+  # bundler activa en runtime; las vulnerables siguen en disco porque Ruby las
+  # incluye en /opt/ruby/lib/ruby/gems/3.3.0/specifications/default/, y Trivy
+  # reporta cualquier gemspec que encuentra.
+  #
+  # Es decir: no es que se ejecute el codigo vulnerable, es que el fichero esta
+  # ahi. Arreglarlo exige compilar Ruby con una release que traiga los gems por
+  # defecto ya parcheados, no un gem update.
+  # ---------------------------------------------------------------------------
+
+  - id: CVE-2026-27820
+    statement: >-
+      zlib 3.1.1, gem por defecto de Ruby 3.3.8. Corregido en ~> 3.1.2 o
+      >= 3.2.3, pero updating un gem por defecto no es posible: hay que
+      reconstruir Ruby. Verificar al subir RUBY_VERSION en el Dockerfile.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-42257
+    statement: >-
+      net-imap 0.4.19, gem por defecto de Ruby 3.3.8. El 0.6.7 corregido
+      tambien esta instalado y es el que activa bundler; el vulnerable
+      permanece en disco por ser default gem.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-42246
+    statement: >-
+      net-imap 0.4.19, gem por defecto de Ruby 3.3.8. Corregido en
+      ~> 0.4.24 o >= 0.6.4; requiere reconstruir Ruby.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-42258
+    statement: >-
+      net-imap 0.4.19, gem por defecto de Ruby 3.3.8. Corregido en
+      ~> 0.4.24 o >= 0.6.4; requiere reconstruir Ruby.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-80212
+    statement: >-
+      resolv 0.3.0, gem por defecto de Ruby 3.3.8. Corregido en ~> 0.3.2 o
+      >= 0.7.2; requiere reconstruir Ruby.
+    expired_at: 2026-12-31
+
+  - id: CVE-2025-61594
+    statement: >-
+      uri 0.13.2, gem por defecto de Ruby 3.3.8. El 1.1.1 corregido tambien
+      esta instalado y es el que activa bundler; el vulnerable permanece en
+      disco por ser default gem.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-41316
+    statement: >-
+      erb 4.0.3, gem por defecto de Ruby 3.3.8. El 6.0.7 corregido tambien
+      esta instalado y es el que activa bundler. Requiere reconstruir Ruby.
+    expired_at: 2026-12-31
+
+  # ---------------------------------------------------------------------------
+  # mcp, pineado por Metasploit.
+  #
+  # metasploit-framework.gemspec declara `spec.add_runtime_dependency 'mcp',
+  # '0.13.0'` con version exacta, no un rango. Corregido en >= 0.23.0, asi que
+  # subirlo exige parchear el gemspec de Metasploit, es decir, dejar de
+  # compilar el commit tal cual. No se hace a proposito.
+  # ---------------------------------------------------------------------------
+
+  - id: CVE-2026-67431
+    statement: >-
+      mcp 0.13.0. El gemspec de metasploit-framework 6.5.5 lo fija con
+      version exacta ('0.13.0'), no con un rango, asi que no se puede subir sin
+      parchear el upstream. Corregido en >= 0.23.0.
+    expired_at: 2026-12-31
+
+  # ---------------------------------------------------------------------------
+  # Nota sobre lo que NO esta aqui.
+  #
+  # Las 167 de linux-libc-dev (cabeceras del kernel, sin codigo ejecutable) no
+  # necesitan entrada: no tienen parche en el snapshot de Ubuntu, asi que
+  # `ignore-unfixed: true` en el job de full ya las descarta.
+  #
+  # Tampoco estan los gems que si se arreglaron: concurrent-ruby sube a >= 1.3.7
+  # y los paquetes de Python de NetExec a cryptography >= 46.0.5,
+  # pyOpenSSL >= 26.0.0 y setuptools >= 78.1.1, todo verificado en el build.
+  #
+  # Si anadeis aqui un CVE que si tiene parche disponible, escondais un
+  # hallazgo corregible. La intencion es que esta lista solo contenga lo que de
+  # verdad no se puede arreglar sin reconstruir Ruby o tocar un pin de upstream.
+  # ---------------------------------------------------------------------------

@@ -121,7 +121,7 @@ jobs:
           df -h /
       - name: Build and push light image
         id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737b91b0dc
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: images/light/Dockerfile
@@ -184,7 +184,7 @@ jobs:
             type=sha
       - name: Create and push multi-arch manifest
         id: manifest
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737b91b0dc
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           platforms: linux/amd64,linux/arm64

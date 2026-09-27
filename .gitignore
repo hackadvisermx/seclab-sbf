@@ -20,3 +20,4 @@ vpn/*
 deploy/backend-*.hcl
 *.log
 .DS_Store
+.envrc

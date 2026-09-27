@@ -13,6 +13,12 @@ ARG FFUF_VERSION=2.2.0
 ARG FFUF_COMMIT=0aa36bcfa45c255f0d719f7d5bc58f7cc9c93659
 ARG GOBUSTER_VERSION=3.8.2
 ARG GOBUSTER_COMMIT=e8410cad6cacf08b82e2f610055f636f0be61c40
+ARG DNSX_VERSION=1.3.1
+ARG DNSX_COMMIT=01e315f216db7d36198ec326fac13dd7846b1bec
+ARG ANEW_VERSION=0.1.1
+ARG ANEW_COMMIT=26ebc8ce1f0bdbaaee2930ea7ab191ed0c0da261
+ARG WAYBACKURLS_VERSION=0.1.0
+ARG WAYBACKURLS_COMMIT=86aeb97852707e1a6fb3bcd33e61d5433a6476c5
 ARG NAABU_VERSION=2.6.1
 ARG NAABU_COMMIT=5a0ca8bde91b5bb16213e9e8b5c6871eac954bd8
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS fzf-builder
@@ -90,6 +96,9 @@ ARG KATANA_COMMIT
 ARG NUCLEI_COMMIT
 ARG FFUF_COMMIT
 ARG GOBUSTER_COMMIT
+ARG DNSX_COMMIT
+ARG ANEW_COMMIT
+ARG WAYBACKURLS_COMMIT
 RUN git init /src/subfinder \
  && git -C /src/subfinder remote add origin https://github.com/projectdiscovery/subfinder.git \
  && git -C /src/subfinder fetch --depth 1 origin "${SUBFINDER_COMMIT}" \
@@ -199,6 +208,47 @@ RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
       -o /out/gobuster .
+RUN git init /src/dnsx \
+ && git -C /src/dnsx remote add origin https://github.com/projectdiscovery/dnsx.git \
+ && git -C /src/dnsx fetch --depth 1 origin "${DNSX_COMMIT}" \
+ && git -C /src/dnsx checkout --detach "${DNSX_COMMIT}" \
+ && test "$(git -C /src/dnsx rev-parse HEAD)" = "${DNSX_COMMIT}"
+WORKDIR /src/dnsx
+# dnsx arrastra x/net, x/mod y x/crypto mas viejos que los que ya fijamos
+# para las demas herramientas del mismo autor; se suben al mismo valor.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && GOTOOLCHAIN=local go mod tidy
+RUN mkdir -p /out \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w" \
+      -o /out/dnsx ./cmd/dnsx
+# anew y waybackurls no tienen dependencias: solo biblioteca estandar de Go.
+RUN git init /src/anew \
+ && git -C /src/anew remote add origin https://github.com/tomnomnom/anew.git \
+ && git -C /src/anew fetch --depth 1 origin "${ANEW_COMMIT}" \
+ && git -C /src/anew checkout --detach "${ANEW_COMMIT}" \
+ && test "$(git -C /src/anew rev-parse HEAD)" = "${ANEW_COMMIT}"
+WORKDIR /src/anew
+RUN mkdir -p /out \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w" \
+      -o /out/anew .
+RUN git init /src/waybackurls \
+ && git -C /src/waybackurls remote add origin https://github.com/tomnomnom/waybackurls.git \
+ && git -C /src/waybackurls fetch --depth 1 origin "${WAYBACKURLS_COMMIT}" \
+ && git -C /src/waybackurls checkout --detach "${WAYBACKURLS_COMMIT}" \
+ && test "$(git -C /src/waybackurls rev-parse HEAD)" = "${WAYBACKURLS_COMMIT}"
+WORKDIR /src/waybackurls
+RUN mkdir -p /out \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w" \
+      -o /out/waybackurls .
 
 FROM ${BASE_IMAGE}
 ARG UBUNTU_SNAPSHOT=20260925T000000Z
@@ -217,6 +267,9 @@ COPY --from=upstream-builder /out/katana /usr/bin/katana
 COPY --from=upstream-builder /out/nuclei /usr/bin/nuclei
 COPY --from=upstream-builder /out/ffuf /usr/bin/ffuf
 COPY --from=upstream-builder /out/gobuster /usr/bin/gobuster
+COPY --from=upstream-builder /out/dnsx /usr/bin/dnsx
+COPY --from=upstream-builder /out/anew /usr/bin/anew
+COPY --from=upstream-builder /out/waybackurls /usr/bin/waybackurls
 COPY shell/tools.json /usr/local/share/seclab/tools.json
 COPY shell/zshrc /usr/local/share/seclab/zshrc
 COPY shell/pentest-lab /usr/local/share/seclab/pentest-lab

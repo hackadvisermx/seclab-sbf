@@ -12,6 +12,7 @@ apt-get update
 apt-get install -y --no-install-recommends \
   binutils \
   ca-certificates \
+  crunch \
   curl \
   dnsutils \
   fd-find \
@@ -134,6 +135,7 @@ curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
   --output /usr/local/share/seclab/wordlists/directory-list-2.3-small.txt
 printf '%s  %s\n' '77f7aba81570b24c30965bfc4652cf6c99ee4e5ed38f1eab96f2e102981a6d90' /usr/local/share/seclab/wordlists/directory-list-2.3-small.txt | sha256sum -c -
 chmod 0644 /usr/local/share/seclab/wordlists/*
+
 
 case "$(dpkg --print-architecture)" in
   amd64) pwntools_requirements=/tmp/pwntools-requirements-x86_64.txt ;;

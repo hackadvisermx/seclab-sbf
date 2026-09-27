@@ -202,16 +202,39 @@
       "category": "terminal",
       "command": "zoxide",
       "description": "Navegación memorable de directorios"
+    },
+    "dnsx": {
+      "category": "recon",
+      "command": "dnsx",
+      "description": "Resolución, brute de subdominios y filtro de wildcards"
+    },
+    "anew": {
+      "category": "utilities",
+      "command": "anew",
+      "description": "Filtra líneas nuevas y deduplica entre escaneos"
+    },
+    "waybackurls": {
+      "category": "recon",
+      "command": "waybackurls",
+      "description": "URLs históricas de un dominio vía Wayback"
+    },
+    "crunch": {
+      "category": "crack",
+      "command": "crunch",
+      "description": "Genera wordlists a partir de charset y longitudes"
     }
   },
   "profiles": {
     "full": [
+      "anew",
+      "crunch",
       "curl",
       "dalfox",
+      "dnsx",
+      "fd",
       "feroxbuster",
       "ffuf",
       "fzf",
-      "fd",
       "gdb",
       "git",
       "gobuster",
@@ -223,10 +246,10 @@
       "katana",
       "msfconsole",
       "msfvenom",
-      "nxc",
       "naabu",
       "nmap",
       "nuclei",
+      "nxc",
       "openvpn",
       "pt-forward",
       "pwn",
@@ -235,23 +258,27 @@
       "searchsploit",
       "socat",
       "sqlmap",
-      "subfinder",
       "ssh",
-      "ttyd",
+      "subfinder",
       "tmux",
+      "ttyd",
       "vpn-control",
       "vpn-manager",
+      "waybackurls",
       "wireguard",
-      "zsh",
-      "zoxide"
+      "zoxide",
+      "zsh"
     ],
     "light": [
+      "anew",
+      "crunch",
       "curl",
       "dalfox",
-      "fzf",
+      "dnsx",
       "fd",
       "feroxbuster",
       "ffuf",
+      "fzf",
       "gdb",
       "git",
       "gobuster",
@@ -269,15 +296,16 @@
       "rg",
       "socat",
       "sqlmap",
-      "subfinder",
       "ssh",
-      "ttyd",
+      "subfinder",
       "tmux",
+      "ttyd",
       "vpn-control",
       "vpn-manager",
+      "waybackurls",
       "wireguard",
-      "zsh",
-      "zoxide"
+      "zoxide",
+      "zsh"
     ]
   }
 }

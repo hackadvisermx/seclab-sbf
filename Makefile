@@ -93,15 +93,15 @@ lint-shell:
 	done
 
 build-base:
-	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull --file images/base/Dockerfile --tag seclab-sbf:base --load .
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull --file images/base/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:base --load .
 
 build-light: build-base
-	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base --file images/light/Dockerfile --tag seclab-sbf:light --load .
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base --file images/light/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:light --load .
 
 FULL_BASE ?= seclab-sbf:light
 
 build-full: build-light
-	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg FULL_BASE="$(FULL_BASE)" --file images/full/Dockerfile --label seclab.base=$$(docker image inspect -f "{{.Id}}" "$(FULL_BASE)") --tag seclab-sbf:full --load .
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg FULL_BASE="$(FULL_BASE)" --file images/full/Dockerfile --label seclab.base=$$(docker image inspect -f "{{.Id}}" "$(FULL_BASE)") --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:full --load .
 
 env-init:
 	@if [ -e "$(ENV_FILE)" ]; then \
@@ -253,6 +253,27 @@ check-profile:
 		exit 1; \
 	fi
 
+# Hash de los ficheros que entran en la imagen. Se graba como etiqueta al
+# construir, y ensure-image lo compara con el de la imagen que hay en disco.
+# Si no coinciden, el codigo cambio desde la ultima build y hay que
+# reconstruir. Sin esto, sincronizar el repo e invocar un target reutilizaba
+# en silencio la imagen anterior: con full son 4 GB de diferencia.
+# Se pasan a proposito todos los directorios que可以在 el contexto, para
+# errar hacia reconstruir de mas antes que hacia dejar una imagen vieja.
+BUILD_INPUT_DIRS = images scripts shell security supply-chain
+BUILD_INPUT_FILES = .tmux.conf
+BUILD_INPUTS = $(shell { find $(BUILD_INPUT_DIRS) -type f 2>/dev/null; echo $(BUILD_INPUT_FILES); } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | cut -c1-16)
+
+# Reconstruye la imagen local indicada. Lo usan ensure-image cuando falta o
+# cuando el codigo ha cambiado, para no repetir el case en dos sitios.
+rebuild-image:
+	@case "$(LAB_IMAGE_RESOLVED)" in \
+		seclab-sbf:base) $(MAKE) build-base ;; \
+		seclab-sbf:light) $(MAKE) build-light ;; \
+		seclab-sbf:full) $(MAKE) build-full ;; \
+		*) printf 'LAB_IMAGE desconocida: %s (usa base|light|full)\n' "$(LAB_IMAGE_RESOLVED)" >&2; exit 2 ;; \
+	esac
+
 ensure-image: check-profile
 	@IMG="$(LAB_IMAGE_RESOLVED)"; \
 	if [ -n "$(LAB_IMAGE_REMOTE)" ]; then \
@@ -266,7 +287,16 @@ ensure-image: check-profile
 			fi; \
 		fi; \
 	elif docker image inspect "$$IMG" >/dev/null 2>&1; then \
+		built_inputs=$$(docker image inspect -f '{{index .Config.Labels "seclab.build-inputs"}}' "$$IMG" 2>/dev/null || true); \
+		if [ -z "$$built_inputs" ] || [ "$$built_inputs" = "<no value>" ]; then \
+			printf 'imagen sin etiqueta de insumos, se reconstruye: %s\n' "$$IMG"; \
+			$(MAKE) rebuild-image; \
+		elif [ "$$built_inputs" != "$(BUILD_INPUTS)" ]; then \
+			printf 'el codigo cambio desde la build ($$built_inputs -> $(BUILD_INPUTS)), se reconstruye: %s\n' "$$IMG"; \
+			$(MAKE) rebuild-image; \
+		else \
 		printf 'imagen lista: %s\n' "$$IMG"; \
+		fi; \
 		if [ "$$IMG" = "seclab-sbf:full" ]; then \
 			base_id=$$(docker image inspect -f '{{.Id}}' "$(FULL_BASE)" 2>/dev/null || true); \
 			built_from=$$(docker image inspect -f '{{index .Config.Labels "seclab.base"}}' "$$IMG" 2>/dev/null || true); \
@@ -277,12 +307,7 @@ ensure-image: check-profile
 		fi; \
 	else \
 		printf 'imagen ausente, construyendo: %s\n' "$$IMG"; \
-		case "$$IMG" in \
-			seclab-sbf:base) $(MAKE) build-base ;; \
-			seclab-sbf:light) $(MAKE) build-light ;; \
-			seclab-sbf:full) $(MAKE) build-full ;; \
-			*) printf 'LAB_IMAGE desconocida: %s (usa base|light|full)\n' "$$IMG" >&2; exit 2 ;; \
-		esac; \
+		$(MAKE) rebuild-image; \
 	fi
 
 # La imagen base no trae sshd, ttyd ni usuario tester, asi que no admite

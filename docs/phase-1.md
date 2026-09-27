@@ -2,17 +2,16 @@
 
 ## Estado
 
-La implementación local de la fase 1 está completa. La imagen base es un esqueleto reproducible; la construcción y publicación multiarchivo se ejecutará en GitHub Actions cuando exista un tag de release.
+La implementación local de la fase 1 está completa. La imagen base es un esqueleto reproducible. No hay publicación: la imagen se construye en la máquina que la usa y se revisa con `make scan-image`.
 
 ## Artefactos
 
 - `images/base/Dockerfile`: imagen mínima Ubuntu 24.04 fijada por digest.
 - `.dockerignore`: excluye secretos, workspace, VPN, state y archivos de diseño del contexto Docker.
-- `supply-chain/tools.lock.yaml`: digest multiarch de Ubuntu y digests por plataforma.
+- `supply-chain/tools.lock.yaml`: digests del snapshot de Ubuntu y hashes de artefactos por plataforma.
 - `supply-chain/shell.lock.yaml`: commits exactos de Oh My Zsh y plugins seleccionados.
 - `supply-chain/actions.lock.yaml`: tags, SHAs y versiones de Actions/scanners.
 - `.github/workflows/security.yml`: secret scan, Trivy, Hadolint, ShellCheck, Actionlint y dependency review.
-- `.github/workflows/release.yml`: Buildx multiarch, SBOM, Trivy, Cosign y publicación en GHCR.
 - `.github/dependabot.yml`: actualizaciones de Docker y GitHub Actions.
 - `.github/CODEOWNERS`: ownership de workflows, imágenes y supply chain.
 - `Makefile`: verificaciones locales de Gitleaks, Hadolint y ShellCheck.
@@ -23,7 +22,7 @@ La implementación local de la fase 1 está completa. La imagen base es un esque
 docker.io/library/ubuntu@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
 ```
 
-El digest corresponde al manifest multiarch; los digests de `linux/amd64` y `linux/arm64` están registrados en `supply-chain/tools.lock.yaml`.
+Sin registry no hay manifest ni digest publicado. `supply-chain/tools.lock.yaml` conserva los hashes de los artefactos por arquitectura, y cada imagen local registra en `seclab.build-inputs` el hash del código del que salió.
 
 ## Verificación local
 
@@ -41,7 +40,7 @@ docker image inspect seclab-sbf:base
 - `hadolint images/base/Dockerfile`.
 - `shellcheck` sobre scripts versionados.
 
-El daemon de Docker está activo. La imagen native `linux/arm64` se construyó y el smoke test confirmó `/workspace`, Ubuntu 24.04 y la arquitectura `aarch64`; el push multiarch a GHCR queda para el runner de release.
+El daemon de Docker está activo. La imagen nativa `linux/arm64` se construyó y el smoke test confirmó `/workspace`, Ubuntu 24.04 y la arquitectura `aarch64`; la misma imagen se construyó nativa en `linux/amd64` para el host OCI.
 
 ## Límites de esta fase
 

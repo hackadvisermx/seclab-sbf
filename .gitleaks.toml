@@ -9,5 +9,9 @@ paths = [
   '''(^|/)\.env($|\.)''',
   '''(^|/)vpn/''',
   '''(^|/)workspace/''',
-  '''(^|/)\.secrets/'''
+  '''(^|/)\.secrets/''',
+  # Ficheros locales no versionados que falsean el gate: tmp/ es scratch,
+  # y los .tfvars llevan credenciales de Terraform que .gitignore ya excluye.
+  '''(^|/)tmp/''',
+  '''\.tfvars$'''
 ]

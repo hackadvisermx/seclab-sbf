@@ -9,9 +9,9 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | Fase | Estado | Alcance |
 |---|---|---|
 | 0 | Completada | Decisiones, threat model y matriz de compatibilidad |
-| 1 | Completada | Supply chain, lockfiles, Gitleaks, SBOM/provenance y workflows |
+| 1 | Completada | Supply chain, lockfiles, Gitleaks, escaneo de imagen y workflows |
 | 2 | Completada | Compose, workspace, secretos y healthchecks |
-| 3 | Completada v1 | Imagen Ubuntu `base`/`light`, ARM64 y build AMD64 |
+| 3 | Completada v1 | Imagen Ubuntu `base`/`light`, build nativo arm64 y amd64 |
 | 4 | Completada v1 | Zsh, Oh My Zsh, fzf, zoxide, banner, herramientas y tmux |
 | 5 | Completada v1 | VPN inside, TUN, socket autenticado, aliases y sanitización |
 | 6 | En curso v1 | `pt-forward` TCP, `pt-socks` SOCKS5, `pt-web` HTTP/WebSocket y route guard |
@@ -19,7 +19,7 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | 7 | Pendiente | Imagen `full`; Ghidra/reversing quedan diferidos |
 | 8–10 | Pendiente | Terraform/cloud, aplicación host de nftables/Tailscale, fail2ban y operación |
 
-La Fase 5 fue validada en Docker Desktop macOS ARM64 con TUN y un perfil oficial de TryHackMe. Las pruebas reales de los otros perfiles y la matriz nativa Linux siguen pendientes.
+La Fase 5 fue validada en Docker Desktop macOS arm64 con TUN y un perfil oficial de TryHackMe. Las pruebas reales de los otros perfiles y la matriz nativa Linux siguen pendientes.
 
 ## Inicio rápido
 
@@ -153,13 +153,13 @@ make verify
 make build-light
 make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-docker scout cves local://seclab-sbf:light --only-severity critical,high --exit-code
+make scan-image SCAN_IMAGE=seclab-sbf:light
 ```
 
 Resultados verificados actualmente:
 
-- Builds `linux/arm64` y `linux/amd64`.
-- Scout: 0 vulnerabilidades Critical/High en las imágenes probadas.
+- Builds nativos `linux/arm64` y `linux/amd64`, sin registry: cada máquina construye la suya.
+- `make scan-image`: 0 vulnerabilidades Critical/High en las imágenes probadas.
 - TUN, `NET_ADMIN` y `tun0` presentes en Docker Desktop macOS.
 - `vpntry` real validado con `tryhackme.ovpn`.
 - Rutas por defecto y DNS sin cambios; `vpn-disconnect` limpia el túnel.

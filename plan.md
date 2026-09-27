@@ -10,7 +10,6 @@ Construir un laboratorio reutilizable para:
 - Engagements con clientes mediante VPN.
 - Terminal web y SSH para un único usuario `tester`.
 - Ejecución local y despliegue en OCI, Azure y DigitalOcean.
-- Arquitecturas `linux/amd64` y `linux/arm64`.
 
 El contenedor no será una distribución basada en Kali ni Parrot. Las herramientas se instalarán directamente desde sus fuentes upstream, con versiones controladas.
 
@@ -34,8 +33,22 @@ El contenedor no será una distribución basada en Kali ni Parrot. Las herramien
 - Estado Terraform: backend nativo por proveedor.
 - Política de CVEs: basada en riesgo.
 - Repositorio: `hackadvisermx/seclab-sbf` en GitHub.
-- Imágenes: `ghcr.io/hackadvisermx/seclab-sbf`.
+- Sin registry: no se publican imágenes. Cada máquina construye en caliente la
+  imagen que usa, de forma nativa, y la revisa con `make scan-image`.
 - Full: VM desechable, sin otros servicios ni credenciales.
+
+### Decisiones revocadas
+
+Estas decisiones se tomaron al principio del proyecto y quedaron sin efecto el
+2026-09-28. Se conservan aquí para que no se reintenten sin el motivo.
+
+- **Imágenes publicadas en `ghcr.io/hackadvisermx/seclab-sbf` (revocada).** El
+  paquete se borró por API, con sus 160 versiones. El motivo no fue la
+  seguridad del registry, sino que publicar obligaba a construir `full` bajo
+  emulación y su gate de CVEs paraba releases. Con build nativo en cada
+  máquina no hay artefacto que justifique el almacenamiento. Consecuencia
+  aceptada: si una máquina pierde su imagen, hay que reconstruirla; no hay
+  copia que descargar. Reversión: reconstruir el workflow de publicación.
 
 ## 3. Arquitectura
 
@@ -168,14 +181,23 @@ Se construye desde `light` y añade:
 
 El perfil `full` no debe ejecutarse en un host compartido. Se ejecutará en una VM dedicada y desechable.
 
-### ARM y AMD
+### Arquitecturas
 
-Se publicarán manifests y pruebas para:
+No hay publicación, así que no hay manifest que decidir. Cada máquina construye
+en su arquitectura nativa:
 
-- `linux/amd64`.
-- `linux/arm64`.
+- El host OCI es `x86_64`.
+- El portátil de desarrollo es `arm64`.
 
-El build se verificará en hardware ARM nativo, no solo mediante compilación emulada. Si alguna herramienta no soporta ARM, se publicará una variante explícita en lugar de eliminarla silenciosamente.
+Los Dockerfiles se mantienen parametrizados con `TARGETOS`/`TARGETARCH` para
+que ambos compilen rápido y de forma nativa. Esto resuelve de paso el bloqueo de
+`bettercap`, cuya release oficial solo trae `linux_amd64`: en `arm64` habrá que
+compilarlo desde source con cgo, siguiendo el mismo patrón que ya usa `naabu`.
+Esa compilación está pendiente de implementar.
+
+Se acepta que `arm64` y `amd64` no produzcan binarios bit a bit idénticos. No
+hay reproducibility entre máquinas, solo dentro de cada una: la etiqueta
+`seclab.build-inputs` permite auditar de qué código salió una imagen local.
 
 ## 6. Cadena de suministro y CVEs
 
@@ -197,13 +219,21 @@ No se utilizará `latest` como versión de producción.
 - No se harán actualizaciones automáticas dentro del contenedor.
 - Las actualizaciones llegarán mediante PR de Renovate o Dependabot.
 
-### Gates de publicación
+### Gates de construcción local
+
+Estos gates se aplican a toda imagen antes de usarse, en la máquina que la
+construye. Es la única puerta: sin registry no hay un pipeline que pueda
+sustituirla.
 
 - Bloqueo de CVEs críticos.
 - Bloqueo de CVEs altas explotables o expuestas.
 - Excepciones solo con responsable, justificación, control compensatorio y expiración.
 - No se permite un archivo de ignorancia global sin vencimiento.
 - Escaneo del código fuente, lockfiles, SBOM, imagen final, scripts, Dockerfiles, Terraform y GitHub Actions.
+
+`security.yml` cubre en cada push lo estático (lockfiles, scripts, Dockerfiles
+de `base` y `light`, Terraform y Actions). La imagen ya construida se revisa
+con `make scan-image`, que es el gate de CVEs del perfil elegido.
 
 Herramientas de escaneo:
 
@@ -221,14 +251,16 @@ Herramientas de escaneo:
 - `cargo audit`
 - `pip-audit`
 
-### Evidencia de publicación
+### Evidencia de construcción
 
-- SBOM CycloneDX/SPDX.
-- Provenance BuildKit.
-- Imagen firmada con Cosign.
-- Digest inmutable en GHCR.
-- Deploy únicamente por digest.
-- Verificación de firma y attestation antes de iniciar el contenedor.
+Sin publicación, la evidencia se genera en local y se conserva en el
+repositorio, no en un registry:
+
+- SBOM CycloneDX/SPDX de la imagen construida.
+- Informe de `make scan-image` de la imagen concreta.
+- Registro de la imagen local: `docker image inspect` da el `seclab.build-inputs`
+  con el hash del código del que salió, que es la trazabilidad que sustituye al
+  digest inmutable.
 
 No se puede garantizar ausencia absoluta de CVEs. La garantía será que no existan vulnerabilidades críticas o altas explotables sin una excepción aprobada y vigente.
 
@@ -699,27 +731,24 @@ La key Tailscale se usará solamente durante el bootstrap. El modo manual por co
 
 ### Main o tag
 
-1. Build de imagen.
-2. Build matrix AMD/ARM.
-3. Smoke tests.
-4. SBOM.
-5. Escaneo de imagen.
-6. Firmas.
-7. Provenance.
-8. Push a GHCR por digest.
-9. Verificación de firma.
-10. Deploy por digest.
+Sin publicación, un tag dispara verificación estática, no un build de imagen:
+
+1. `make verify` (gitleaks, hadolint, shellcheck, pines de Actions).
+2. `actionlint` sobre los workflows.
+3. `make compose-config ENV_FILE=.env.example`.
+4. `make tf-fmt` y `terraform validate` por stack.
+
+La imagen se construye después, en cada máquina que la va a usar, y se revisa
+con `make scan-image`.
 
 ### GitHub
 
 - Actions fijadas por SHA.
 - Permisos mínimos.
-- OIDC para GHCR cuando sea posible.
 - Sin secretos en PRs de forks.
 - Branch protection.
 - CODEOWNERS.
 - No force-push.
-- Tags de release firmadas.
 - Rebuild journal para CVEs nuevas.
 
 ## 17. Comandos de operación
@@ -813,15 +842,15 @@ pt-forward doctor
 - Añadir health checks.
 - Validar el servicio local en Docker Desktop macOS.
 
-### Fase 3 — Imagen `base` y `light` (v1 completada en ARM64; build AMD64 verificado)
+### Fase 3 — Imagen `base` y `light` (v1 completada en arm64 y amd64)
 
 - Construir `base` y `light` con snapshot de Ubuntu.
 - Añadir ttyd, SSH y shell de `tester` sin SFTP.
 - Añadir herramientas light oficiales de Ubuntu; compilar `fzf` desde commit fijo y registrar las upstream pendientes.
 - Configurar no-root y capabilities.
-- Ejecutar escaneo y smoke tests: Scout no reporta Critical/High en ARM64 ni AMD64; el escaneo completo conserva Medium/Low del snapshot Ubuntu pendientes de actualización.
+- Ejecutar escaneo y smoke tests: el escaneo de la imagen construida no reporta Critical/High; el escaneo completo conserva Medium/Low del snapshot Ubuntu pendientes de actualización.
 
-### Fase 4 — Terminal, Zsh y banner (v1 completada en ARM64; build AMD64 verificado)
+### Fase 4 — Terminal, Zsh y banner (v1 completada en arm64 y amd64)
 
 - Instalar Zsh y Oh My Zsh pinneado.
 - Añadir plugins curated.
@@ -890,7 +919,6 @@ pt-forward doctor
 
 - Activar gates de CVEs.
 - Firmar y publicar imágenes.
-- Crear releases por digest.
 - Añadir backups y snapshots.
 - Añadir alertas y runbooks.
 - Ejecutar disaster recovery.
@@ -898,7 +926,7 @@ pt-forward doctor
 ## 20. Criterios de aceptación
 
 - Local funciona en macOS Docker Desktop.
-- Linux y ARM tienen tests nativos.
+- La imagen se construye nativa en la maquina que la usa y se escanea con `make scan-image` antes de usarse.
 - Cloud funciona en OCI, Azure y DigitalOcean.
 - El contenedor no tiene puertos públicos.
 - Solo Tailscale puede acceder a ttyd y SSH.
@@ -916,8 +944,8 @@ pt-forward doctor
 - Los proxies no alcanzan Tailscale, metadata o Docker.
 - `security-check` valida la política en Linux; la aplicación host queda bajo revisión del operador.
 - Fail2ban bloquea ataques de autenticación repetidos.
-- Las imágenes tienen SBOM, provenance y firma.
-- CVEs críticos no pueden publicarse.
+- Cada imagen construida tiene SBOM y registro de `make scan-image` con su hash de insumos.
+- Los CVEs críticos bloquean el uso de la imagen.
 - Terraform state está protegido y versionado.
 - El `.env` nunca aparece en Git, imagen o logs.
 - La VM puede destruirse sin dejar rastros de acceso.

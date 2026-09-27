@@ -16,7 +16,7 @@ La fase 0 de diseño está completada. Esta fase no construye todavía una image
 - VPN: `vpntry`, `vpnhtb` y `vpncli`.
 - Proxy: capacidad de `pt-forward` para `tester`, con TCP explícito, SOCKS5 y reverse proxy web solo sobre destinos de la VPN activa; no existe un usuario `proxy`.
 - Despliegue cloud: VM + Docker mediante Terraform para OCI, Azure y DigitalOcean.
-- Identidad: repositorio `hackadvisermx/seclab-sbf` e imágenes `ghcr.io/hackadvisermx/seclab-sbf`.
+- Identidad: repositorio `hackadvisermx/seclab-sbf`. Sin registry: cada máquina construye en caliente la imagen que usa y la revisa con `make scan-image`.
 
 ## Matriz de compatibilidad
 
@@ -35,7 +35,7 @@ Docker Desktop para macOS puede ejecutar el cliente OpenVPN dentro de un contene
 ### Confiables
 
 - Código y configuración versionados del repositorio.
-- Imágenes publicadas por GHCR y verificadas por digest/firma.
+- Imágenes construidas en local y verificadas con `make scan-image`; la trazabilidad es la etiqueta `seclab.build-inputs`.
 - Host cloud administrado por el operador.
 - Tailnet personal con MFA, device approval y ACL deny-by-default.
 

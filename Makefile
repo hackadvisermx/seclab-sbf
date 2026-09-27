@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: sync-secrets base-check help verify verify-secrets lint-docker lint-shell build-base build-light build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check tf-fmt tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
+.PHONY: sync-secrets base-check scan-image profile-info check-profile help verify verify-secrets lint-docker lint-shell build-base build-light build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check tf-fmt tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -56,6 +56,151 @@ verify-secrets:
 	gitleaks dir . --redact --no-banner --config .gitleaks.toml
 
 # Trivy 0.74.0, la misma version que usaba el gate de release.
+TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+SCAN_IMAGE ?= $(LAB_IMAGE)
+SCAN_SEVERITY ?= HIGH,CRITICAL
+SCAN_IGNORE_UNFIXED ?= true
+
+# Escaneo local de una imagen con el gate de CVEs. Cubre lo que ya no cubre
+# CI: full no se publica en release.yml y se compila en el host, asi que su
+# unica puerta de CVEs es esta. Por defecto full, que es la que lo necesita.
+#   make scan-image SCAN_IMAGE=seclab-sbf:full
+#   SCAN_IMAGE=ghcr.io/hackadvisermx/seclab-sbf@sha256:... make scan-image
+# La imagen se pasa por stdin con docker save para no montar el socket de
+# Docker en un contenedor, que el proyecto no permite en compose.
+scan-image:
+	docker save "$(SCAN_IMAGE)" | docker run --rm -i \
+	  -v "$(CURDIR)/security/trivy/.trivyignore.yaml:/ignore.yaml:ro" \
+	  -v seclab-trivy-cache:/root/.cache/trivy \
+	  $(TRIVY_IMAGE) image \
+	  --input - \
+	  --ignorefile /ignore.yaml \
+	  --scanners vuln \
+	  --severity "$(SCAN_SEVERITY)" \
+	  --ignore-unfixed "$(SCAN_IGNORE_UNFIXED)" \
+	  --format table \
+	  --exit-code 1
+
+verify-pins:
+	@GH_TOKEN="$$(gh auth token 2>/dev/null || true)" ./scripts/verify/check-action-pins.sh
+
+lint-docker:
+	hadolint images/base/Dockerfile images/light/Dockerfile images/full/Dockerfile
+
+lint-shell:
+	@for file in scripts/*.sh scripts/entrypoint/*.sh scripts/health/*.sh scripts/security/*.sh scripts/host/*.sh scripts/cloud/*.sh; do \
+		if [ -f "$$file" ]; then shellcheck "$$file"; fi; \
+	done
+
+build-base:
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull --file images/base/Dockerfile --tag seclab-sbf:base --load .
+
+build-light: build-base
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base --file images/light/Dockerfile --tag seclab-sbf:light --load .
+
+FULL_BASE ?= seclab-sbf:light
+
+build-full: build-light
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg FULL_BASE="$(FULL_BASE)" --file images/full/Dockerfile --label seclab.base=$$(docker image inspect -f "{{.Id}}" "$(FULL_BASE)") --tag seclab-sbf:full --load .
+
+env-init:
+	@if [ -e "$(ENV_FILE)" ]; then \
+		printf '%s ya existe; no se sobrescribió\n' "$(ENV_FILE)" >&2; \
+		exit 1; \
+	fi
+	@cp .env.example "$(ENV_FILE)"
+	@chmod 600 "$(ENV_FILE)"
+	@case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-keys.sh ;; esac
+	@printf 'creado %s desde .env.example\n' "$(ENV_FILE)"
+
+ensure-env:
+	@if [ ! -e "$(ENV_FILE)" ]; then \
+		cp .env.example "$(ENV_FILE)"; \
+		chmod 600 "$(ENV_FILE)"; \
+		printf 'creado %s desde .env.example\n' "$(ENV_FILE)"; \
+	fi
+	@if [ "$(ENV_FILE)" = ".env" ]; then chmod 600 "$(ENV_FILE)"; fi
+	@case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-keys.sh ;; esac
+
+keys: ensure-env
+
+# Copia el archivo de secretos a un directorio montado en el contenedor.
+# Se monta el directorio y no el archivo porque un editor que guarda de
+# forma atomica (escribe temporal y renombra) cambia el inode del
+# archivo y deja colgando cualquier bind mount de un archivo suelto.
+sync-secrets:
+	@case "$(ENV_FILE)" in \
+		*.example) exit 0 ;; \
+	esac
+	@mkdir -p "$(SECRETS_DIR)"
+	@chmod 700 "$(SECRETS_DIR)"
+	@cp "$(ENV_FILE)" "$(SECRETS_DIR)/lab.env"
+	@chmod 600 "$(SECRETS_DIR)/lab.env"
+	@awk -v profile="$(LAB_PROFILE)" '/^PENTEST_PROFILE=/ { print "PENTEST_PROFILE=" profile; seen = 1; next } { print } END { if (!seen) print "PENTEST_PROFILE=" profile }' "$(SECRETS_DIR)/lab.env" > "$(SECRETS_DIR)/lab.env.tmp"
+	@chmod 600 "$(SECRETS_DIR)/lab.env.tmp"
+	@mv "$(SECRETS_DIR)/lab.env.tmp" "$(SECRETS_DIR)/lab.env"
+
+compose:
+	@:
+
+# Forma canonica con guiones; 'up', 'down', 'shell', 'zsh', 'tmux' y
+# 'config' se conservan como alias para compatibilidad.
+config: compose-config
+
+compose-config: ensure-env vpn-require-dir
+	$(COMPOSE_BASE) config --quiet
+	$(COMPOSE_VPN) config --quiet
+
+up: compose-up
+
+compose-up: ensure-env vpn-require-dir ensure-image sync-secrets
+	$(COMPOSE_VPN) up -d
+
+down: compose-down
+
+compose-down: ensure-env
+	$(COMPOSE_VPN) down --remove-orphans
+
+
+shell: compose-shell
+
+compose-shell: ensure-env ensure-image sync-secrets
+	$(COMPOSE_BASE) run --rm --user 1000:1000 --entrypoint /bin/bash lab
+
+zsh: compose-zsh
+
+compose-zsh: ensure-env ensure-image sync-secrets
+	$(COMPOSE_BASE) run --rm -it --user 1000:1000 --entrypoint /usr/bin/zsh lab -il
+
+tmux: compose-tmux
+
+compose-tmux: ensure-env sync-secrets
+	$(COMPOSE_BASE) exec -it --user 1000:1000 lab env SECLAB_TMUX=1 TERM=xterm-256color /usr/bin/tmux new-session -A -s pentest-lab /usr/bin/zsh -il
+
+# SSH al contenedor en un comando: publica 127.0.0.1:LAB_SSH_PORT
+# via override temporal en tmp/ (ignorado, sin tocar compose.yaml)
+# y entra como tester. LAB_IMAGE elige base/light/full (default light)
+# y solo construye si la imagen no existe. En el host cloud antepone
+# WORKSPACE_DIR=/opt/seclab-sbf/workspace.
+# SSH al contenedor en un comando: publica 127.0.0.1:LAB_SSH_PORT
+# via override temporal en tmp/ (ignorado, sin tocar compose.yaml)
+# y entra como tester. LAB_IMAGE elige base|light|full (default light)
+# y solo construye si la imagen no existe. En el host cloud antepone
+# WORKSPACE_DIR=/opt/seclab-sbf/workspace.
+# Diagnostico: que imagen y perfil entran, y de donde sale el perfil. Util
+# cuando algo arranca sin las herramientas esperadas.
+profile-info:
+	@echo "LAB_IMAGE          = $(LAB_IMAGE)"
+	@echo "LAB_IMAGE_RESOLVED = $(LAB_IMAGE_RESOLVED)"
+	@echo "origen             = $(if $(LAB_IMAGE_REMOTE),remoto (docker pull),local (build))"
+	@echo "LAB_PROFILE        = $(LAB_PROFILE)"
+	@echo "perfil             = $(if $(LAB_PROFILE_DADO),pasado a mano,deducido del nombre de la imagen)"
+	@if [ -n "$(LAB_PROFILE_OPACO)" ]; then \
+		echo "estado             = AMBIGUO: digest remoto sin perfil, check-profile lo parara"; \
+	else \
+		echo "estado             = correcto"; \
+	fi
+
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
 SCAN_IMAGE ?= $(LAB_IMAGE)
 SCAN_SEVERITY ?= HIGH,CRITICAL

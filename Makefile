@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: sync-secrets base-check scan-image profile-info check-profile help verify verify-secrets lint-docker lint-shell build-base build-light build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check tf-fmt tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
+.PHONY: sync-secrets base-check scan-image profile-info help verify verify-secrets lint-docker lint-shell build-base build-light build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image lab-ssh-full lab-ssh-cloud-full rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check tf-fmt tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -18,37 +18,28 @@ CLOUD_HOST ?= $(or $(TF_HOST),$(shell sed -n 's/^CLOUD_HOST=//p' "$(ENV_FILE)" 2
 CLOUD_SSH_PORT ?= 2222
 CLOUD_REPO_DIR ?= ~/seclab-sbf
 CLOUD_WORKSPACE_DIR ?= /opt/seclab-sbf/workspace
-# Imagen publicada que usa el host cloud. Vacia = construye en el host.
-# Recomendado: el digest inmutable que publica release.yml, por ejemplo
-# ghcr.io/hackadvisermx/seclab-sbf@sha256:...
-CLOUD_IMAGE ?=
 LAB_SSH_HOST ?= 127.0.0.1
 LAB_IMAGE ?= seclab-sbf:light
-# Una referencia con "/" es un repositorio remoto (ghcr.io/host/repo:tag o
-# @sha256:digest): esa se trae con docker pull, nunca se construye. Sin "/"
-# es una imagen local y se construye como siempre.
-LAB_IMAGE_REMOTE = $(if $(findstring /,$(LAB_IMAGE)),$(LAB_IMAGE))
-LAB_IMAGE_LOCAL = $(if $(LAB_IMAGE_REMOTE),,$(if $(filter seclab-sbf:%,$(LAB_IMAGE)),$(LAB_IMAGE),seclab-sbf:$(LAB_IMAGE)))
-LAB_IMAGE_RESOLVED = $(if $(LAB_IMAGE_REMOTE),$(LAB_IMAGE_REMOTE),$(LAB_IMAGE_LOCAL))
+# Todas las imagenes se construyen en caliente en la maquina que las usa:
+# no hay registry, asi que no existe el caso de una referencia remota que
+# haya que traer con docker pull. Un nombre sin prefijo se expande a la
+# imagen local de ese perfil.
+LAB_IMAGE_RESOLVED = $(if $(filter seclab-sbf:%,$(LAB_IMAGE)),$(LAB_IMAGE),seclab-sbf:$(LAB_IMAGE))
 # El perfil lo determina la imagen: es lo que decide que herramientas
 # estan instaladas. Sin esto, PENTEST_PROFILE del .env se queda en light
 # aunque la imagen sea full y el banner no refleta lo que hay.
 #
 # Se deduce del nombre, y se puede pasar explicito para que tenga prioridad.
-# Un digest remoto (ghcr.io/host/repo@sha256:...) no lleva el nombre del
-# perfil, asi que no hay nada que deducir de el. Antes de adivinar light y
-# perder Metasploit en silencio, check-profile lo corta.
-LAB_PROFILE ?= $(if $(filter %:full %:full@sha256:%,$(LAB_IMAGE_RESOLVED)),full,light)
-# $(origin) devuelve "command line" con espacio, asi que no se puede filtrar por
-# esa cadena. Se da por pasado a mano cuando su origen no es el Makefile.
-LAB_PROFILE_DADO = $(if $(filter environment file override,$(origin LAB_PROFILE)),,si)
-# Digest remoto sin perfil deducible y sin perfil pasado a mano.
-LAB_PROFILE_OPACO = $(and $(LAB_IMAGE_REMOTE),$(findstring @sha256:,$(LAB_IMAGE_REMOTE)),$(if $(LAB_PROFILE_DADO),,si))
+LAB_PROFILE ?= $(if $(filter %:full,$(LAB_IMAGE_RESOLVED)),full,light)
+# $(origin) devuelve "command line" y "environment file" con espacio, asi que
+# no se puede filtrar por esa cadena: el unico origen que NO es del usuario es
+# "file" (esta misma asignacion del Makefile), asi que se descarta ese.
+LAB_PROFILE_DADO = $(if $(filter-out file,$(origin LAB_PROFILE)),si,)
 COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose -f compose.yaml -f compose.local.yaml
 COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose $(VPN_COMPOSE)
 
 help:
-	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  profile-info     Imagen y perfil efectivos, y si el perfil es deducible' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto seclab-sbf:full)' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_IMAGE=light|full)' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-full      Atajo local para la imagen full' '  lab-ssh-cloud-full   Atajo cloud: recrea en full y entra' '  (CLOUD_IMAGE=... hace que el host descargue del registry en vez de construir)' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR CLOUD_IMAGE TF_HOST'
+	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  profile-info     Imagen y perfil efectivos, y si el perfil es deducible' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_IMAGE=light|full)' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-full      Atajo local para la imagen full' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell verify-pins
 
@@ -60,26 +51,6 @@ TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a
 SCAN_IMAGE ?= $(LAB_IMAGE)
 SCAN_SEVERITY ?= HIGH,CRITICAL
 SCAN_IGNORE_UNFIXED ?= true
-
-# Escaneo local de una imagen con el gate de CVEs. Cubre lo que ya no cubre
-# CI: full no se publica en release.yml y se compila en el host, asi que su
-# unica puerta de CVEs es esta. Por defecto full, que es la que lo necesita.
-#   make scan-image SCAN_IMAGE=seclab-sbf:full
-#   SCAN_IMAGE=ghcr.io/hackadvisermx/seclab-sbf@sha256:... make scan-image
-# La imagen se pasa por stdin con docker save para no montar el socket de
-# Docker en un contenedor, que el proyecto no permite en compose.
-scan-image:
-	docker save "$(SCAN_IMAGE)" | docker run --rm -i \
-	  -v "$(CURDIR)/security/trivy/.trivyignore.yaml:/ignore.yaml:ro" \
-	  -v seclab-trivy-cache:/root/.cache/trivy \
-	  $(TRIVY_IMAGE) image \
-	  --input - \
-	  --ignorefile /ignore.yaml \
-	  --scanners vuln \
-	  --severity "$(SCAN_SEVERITY)" \
-	  --ignore-unfixed "$(SCAN_IGNORE_UNFIXED)" \
-	  --format table \
-	  --exit-code 1
 
 verify-pins:
 	@GH_TOKEN="$$(gh auth token 2>/dev/null || true)" ./scripts/verify/check-action-pins.sh
@@ -192,25 +163,17 @@ compose-tmux: ensure-env sync-secrets
 profile-info:
 	@echo "LAB_IMAGE          = $(LAB_IMAGE)"
 	@echo "LAB_IMAGE_RESOLVED = $(LAB_IMAGE_RESOLVED)"
-	@echo "origen             = $(if $(LAB_IMAGE_REMOTE),remoto (docker pull),local (build))"
+	@echo "origen             = local (build en caliente)"
 	@echo "LAB_PROFILE        = $(LAB_PROFILE)"
 	@echo "perfil             = $(if $(LAB_PROFILE_DADO),pasado a mano,deducido del nombre de la imagen)"
-	@if [ -n "$(LAB_PROFILE_OPACO)" ]; then \
-		echo "estado             = AMBIGUO: digest remoto sin perfil, check-profile lo parara"; \
-	else \
-		echo "estado             = correcto"; \
-	fi
 
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
-SCAN_IMAGE ?= $(LAB_IMAGE)
-SCAN_SEVERITY ?= HIGH,CRITICAL
-SCAN_IGNORE_UNFIXED ?= true
 
-# Escaneo local de una imagen con el gate de CVEs. Cubre lo que ya no cubre
-# CI: full no se publica en release.yml y se compila en el host, asi que su
-# unica puerta de CVEs es esta. Por defecto la imagen local de full.
+# Escaneo local de una imagen con el gate de CVEs. Sin registry, esta es la
+# unica puerta de CVEs del proyecto: cada imagen se revisa aqui despues de
+# construirse en caliente y antes de usarse. Por defecto la imagen local.
 #   make scan-image
-#   SCAN_IMAGE=ghcr.io/hackadvisermx/seclab-sbf@sha256:... make scan-image
+#   SCAN_IMAGE=seclab-sbf:light make scan-image
 #
 # La imagen entra como tar por --input en vez de por stdin: trivy 0.74.0
 # interpreta un "-" literal como nombre de fichero y falla. Y no se monta el
@@ -239,20 +202,6 @@ scan-image:
 	@if [ "$(SCAN_KEEP_TAR)" != "1" ]; then rm -f "$(SCAN_TAR)"; fi
 
 
-# Un digest remoto no revela si la imagen es full o light. Adivinar light
-# arrancaria el laboratorio sin Metasploit y sin avisar, que es peor que
-# parar aqui. Se pide el perfil explicito.
-check-profile:
-	@if [ -n "$(LAB_PROFILE_OPACO)" ]; then \
-		echo "ERROR: no se deduce el perfil de un digest remoto." >&2; \
-		echo "       $(LAB_IMAGE_REMOTE)" >&2; \
-		echo "       Si la imagen es full y se queda en light, el laboratorio" >&2; \
-		echo "       arranca sin Metasploit y sin NetExec, sin ningun aviso." >&2; \
-		echo "       Pasalo explicito:" >&2; \
-		echo "         make compose-up LAB_IMAGE='$(LAB_IMAGE_REMOTE)' LAB_PROFILE=full" >&2; \
-		exit 1; \
-	fi
-
 # Hash de los ficheros que entran en la imagen. Se graba como etiqueta al
 # construir, y ensure-image lo compara con el de la imagen que hay en disco.
 # Si no coinciden, el codigo cambio desde la ultima build y hay que
@@ -274,19 +223,9 @@ rebuild-image:
 		*) printf 'LAB_IMAGE desconocida: %s (usa base|light|full)\n' "$(LAB_IMAGE_RESOLVED)" >&2; exit 2 ;; \
 	esac
 
-ensure-image: check-profile
+ensure-image:
 	@IMG="$(LAB_IMAGE_RESOLVED)"; \
-	if [ -n "$(LAB_IMAGE_REMOTE)" ]; then \
-		if docker image inspect "$$IMG" >/dev/null 2>&1; then \
-			printf 'imagen remota lista: %s\n' "$$IMG"; \
-		else \
-			printf 'descargando del registry: %s\n' "$$IMG"; \
-			if ! docker pull "$$IMG"; then \
-				printf 'no se pudo descargar %s. Si es una imagen propia, comprueba que este publicada y que el host tenga acceso.\n' "$$IMG" >&2; \
-				exit 1; \
-			fi; \
-		fi; \
-	elif docker image inspect "$$IMG" >/dev/null 2>&1; then \
+	if docker image inspect "$$IMG" >/dev/null 2>&1; then \
 		built_inputs=$$(docker image inspect -f '{{index .Config.Labels "seclab.build-inputs"}}' "$$IMG" 2>/dev/null || true); \
 		if [ -z "$$built_inputs" ] || [ "$$built_inputs" = "<no value>" ]; then \
 			printf 'imagen sin etiqueta de insumos, se reconstruye: %s\n' "$$IMG"; \
@@ -449,8 +388,8 @@ env-copy-do:
 	scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(ENV_FILE)" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/.env"
 
 # Los .ovpn pueden traer usuario y contrasena en linea, asi que viajan
-# por el tailnet igual que el .env y nunca se hornean en la imagen:
-# release.yml publica las imagenes en ghcr.io.
+# por el tailnet igual que el .env y nunca se hornean en la imagen: cada
+# maquina construye la suya y el perfil se monta en /vpn.
 vpn-copy:
 	@test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
 	@set -e; \

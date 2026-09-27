@@ -70,16 +70,18 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud-full</code></pre>
     <p>Que recrea el lab en el host antes de entrar, compilando all&iacute; la imagen si hace falta o si el c&oacute;digo del host cambi&oacute;.</p>
     <p>El repo del host se actualiza por <code>git archive</code> + <code>scp</code>, no es un clon (el repo es privado y el host no tiene credenciales de GitHub). Si has cambiado c&oacute;digo en tu Mac y quieres que el host lo use, resincroniza antes; si no, el host se queda con lo suyo.</p>
-    <h3>Im&aacute;genes: d&oacute;nde est&aacute;n y cu&aacute;l usar digest</h3>
+    <h3>Im&aacute;genes: se construyen donde se usan</h3>
     <table>
       <tr><th>Imagen</th><th>D&oacute;nde se construye</th><th>Notas</th></tr>
-      <tr><td><code>base</code>, <code>light</code></td><td>Se publican en GHCR por <strong>digest</strong> en cada release</td><td>El host no compila nada: hace <code>docker pull</code>. Son multi-arch (amd64 y arm64).</td></tr>
-      <tr><td><code>full</code></td><td><strong>En el host donde va a correr</strong></td><td>No se publica. Se compila all&iacute; de forma nativa porque la pata arm64 emulada con QEMU tarda m&aacute;s de 2 h. Sus CVEs se comprueban con <code>make scan-image</code>.</td></tr>
+      <tr><td><code>base</code>, <code>light</code></td><td><strong>En la m&aacute;quina que las usa</strong></td><td>Construcci&oacute;n nativa: el port&aacute;til en <code>arm64</code>, el host en <code>amd64</code>.</td></tr>
+      <tr><td><code>full</code></td><td><strong>En el host donde va a correr</strong></td><td>VM desechable. Sus CVEs se comprueban con <code>make scan-image</code>.</td></tr>
     </table>
     <div class="warn">
-      <strong>Ojo con los digest.</strong> Una referencia <code>ghcr.io/...@sha256:...</code> no lleva el nombre del perfil, as&iacute; que no hay forma de deducir si la imagen es <code>full</code> o <code>light</code>. Antes de adivinar <code>light</code> y arrancar el laboratorio sin Metasploit sin avisar, <code>check-profile</code> lo corta. P&aacute;salo expl&iacute;cito:
-      <pre style="margin-top:10px"><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud-image LAB_IMAGE=ghcr.io/hackadvisermx/seclab-sbf@sha256:&lt;digest&gt; LAB_PROFILE=full</code></pre>
-      Un tag normal (<code>seclab-sbf:full</code> o <code>:light</code>) s&iacute; se deduce solo.
+      <strong>No hay registry.</strong> El paquete de GHCR se borr&oacute; el 2026-09-28 y no se vuelve a publicar. Cada m&aacute;quina construye en caliente la imagen que necesita, as&iacute; que <code>make scan-image</code> es la &uacute;nica puerta de CVEs. Si el host pierde la imagen, hay que reconstruirla: no hay copia que descargar.
+      <pre style="margin-top:10px"><button class="copy" onclick="copiar(this)">copiar</button><code>make scan-image SCAN_IMAGE=seclab-sbf:full</code></pre>
+    </div>
+    <div class="ok">
+      <strong>El perfil se deduce solo.</strong> Con tags normales (<code>seclab-sbf:light</code> o <code>seclab-sbf:full</code>) no hace falta pasar nada: <code>make profile-info</code> lo ense&ntilde;a.
     </div>
 
     <h3>Directo por el tailnet, sin túnel (puerto 2222, solo llaves)</h3>
@@ -101,7 +103,7 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
     <tr><td>Timeout al puerto 7681/2222</td><td>Tailscale caído en Mac o host; revisa <code>tailscale status</code> en ambos. Revisa los servicios systemd del host.</td></tr>
     <tr><td>ttyd pide login en bucle / 401</td><td>Contraseña incorrecta: verifica <code>TTYD_PASSWORD</code> de tu <code>.env</code> local.</td></tr>
     <tr><td><code>exec request failed</code> / PTY, <code>warptmp</code>, <code>/.zshenv</code> read-only, o SSH sin tmux ni banner</td><td>Estás en Warp: su integración remota rompe el login (fija <code>ZDOTDIR=/</code>). Atajo en sesión: <code>ZDOTDIR=/home/tester exec /usr/bin/zsh -il</code>. Permanente: usa <code>/usr/bin/ssh</code>, Terminal.app, o desactiva por completo la integración SSH/shell de Warp.</td></tr>
-    <tr><td><code>no se deduce el perfil de un digest remoto</code></td><td>Has pasado una imagen por digest sin decir si es <code>full</code> o <code>light</code>. A&ntilde;ade <code>LAB_PROFILE=full</code> (o <code>light</code>) al comando.</td></tr>
+    <tr><td><code>imagen ausente, construyendo</code> tarda mucho</td><td>Sin registry, la primera vez en cada m&aacute;quina construye. En <code>full</code> puede pasar de una hora. Las siguientes reutilizan la imagen si el c&oacute;digo no cambi&oacute; (<code>imagen lista</code>).</td></tr>
     <tr><td>El contenedor arranca pero sin Metasploit ni NetExec</td><td>Se qued&oacute; en perfil <code>light</code>. Comprueba con <code>make profile-info</code> y recrea con <code>make lab-ssh-cloud-full</code>.</td></tr>
     <tr><td>La imagen del host parece vieja</td><td>El repo del host lleva otro c&oacute;digo. Resincroniza el repo al host; <code>ensure-image</code> lo detecta por la etiqueta de insumos y reconstruye solo.</td></tr>
     <tr><td><code>msfconsole: ruby not found</code></td><td>El PATH de <code>/opt/ruby/bin</code> lo a&ntilde;aden <code>sshd_config</code> y el <code>zshrc</code>, no un <code>su</code> a pelo. Entra por SSH o por el terminal web, no con <code>docker exec su tester -c</code>.</td></tr>

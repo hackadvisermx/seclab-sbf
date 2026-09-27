@@ -1,12 +1,13 @@
 # Excepciones al gate de Trivy para la imagen `full`.
 #
-# `full` NO se publica en release.yml: se compila en el host, porque la pata
-# arm64 emulada con QEMU tardaba mas de 6 horas y el job terminaba en timeout.
-# Su unica puerta de CVEs es `make scan-image SCAN_IMAGE=seclab-sbf:full`, que
-# es lo que consume este fichero.
+# Sin registry, toda imagen se revisa en la maquina que la construyo, con
+# `make scan-image`; este fichero lo consume ese gate.
 #
-# NO se aplican a `base` ni a `light`: esos dos se publican en el release con
-# `ignore-unfixed: false` y sin excepciones.
+# Las excepciones de este fichero son todas de paquetes de `full`. `base` y
+# `light` no tienen ninguna entrada aqui; si aparece una, es un error.
+# El gate es el mismo para las tres imagenes: `SCAN_IGNORE_UNFIXED=true` por
+# defecto, asi que los sin parche no bloquean en ninguna. Para cerrarlos:
+#   make scan-image SCAN_IGNORE_UNFIXED=false
 #
 # Trivy: 0.74.0, fijado por digest en la variable TRIVY_IMAGE del Makefile.
 #

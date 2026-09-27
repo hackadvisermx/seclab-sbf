@@ -59,10 +59,29 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
   <div class="card">
     <h3>En tu Mac (un comando)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh</code></pre>
-    <p>Levanta el lab si hace falta, publica <code>127.0.0.1:2222</code> vía override temporal (sin tocar <code>compose.yaml</code>) y entra como <code>tester</code> con banner + tmux. Solo construye la imagen si no existe. Si el puerto está ocupado: <code>make lab-ssh LAB_SSH_PORT=2223</code>. Para la imagen full: <code>make lab-ssh-full</code>. La imagen <code>base</code> no admite sesi&oacute;n (no trae sshd ni usuario tester); se valida con <code>make base-check</code>.</p>
+    <p>Levanta el lab si hace falta, publica <code>127.0.0.1:2222</code> v&iacute;a override temporal (sin tocar <code>compose.yaml</code>) y entra como <code>tester</code> con banner + tmux.</p>
+    <p>Construye la imagen <strong>en tu Mac</strong> si falta <em>o si el c&oacute;digo ha cambiado</em>: la imagen lleva una etiqueta con un hash de sus ficheros de build y <code>ensure-image</code> la compara. Si no coinciden, reconstruye. Si nada cambi&oacute;, no toca nada.</p>
+    <p>Si el puerto est&aacute; ocupado: <code>make lab-ssh LAB_SSH_PORT=2223</code>. Para la imagen <code>full</code>: <code>make lab-ssh-full</code>. La imagen <code>base</code> no admite sesi&oacute;n (no trae sshd ni usuario tester); se valida con <code>make base-check</code>.</p>
+    <p>Dudas de qu&eacute; imagen o perfil van a entrar: <code>make profile-info</code>.</p>
     <h3>En el contenedor del host cloud (un comando)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud TF_HOST=100.113.178.15</code></pre>
-    <p>Entra directo por el tailnet, sin túnel. El puente lo publica el servicio systemd <code>seclab-ssh-tailnet</code> en la IP Tailscale del host, así que no hace falta ningún override de puertos. Acepta <code>TF_HOST</code> o <code>CLOUD_HOST</code> (queda en el <code>.env</code>). Para la imagen full: <code>make lab-ssh-cloud-full</code>, que recreate el lab en el host antes de entrar.</p>
+    <p>Entra directo por el tailnet, sin t&uacute;nel. El puente lo publica el servicio systemd <code>seclab-ssh-tailnet</code> en la IP Tailscale del host, as&iacute; que no hace falta ning&uacute;n override de puertos. Acepta <code>TF_HOST</code> o <code>CLOUD_HOST</code> (queda en el <code>.env</code>).</p>
+    <p>Esto entra tal cual est&aacute; el contenedor. Para la imagen <code>full</code>:</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud-full</code></pre>
+    <p>Que recrea el lab en el host antes de entrar, compilando all&iacute; la imagen si hace falta o si el c&oacute;digo del host cambi&oacute;.</p>
+    <p>El repo del host se actualiza por <code>git archive</code> + <code>scp</code>, no es un clon (el repo es privado y el host no tiene credenciales de GitHub). Si has cambiado c&oacute;digo en tu Mac y quieres que el host lo use, resincroniza antes; si no, el host se queda con lo suyo.</p>
+    <h3>Im&aacute;genes: d&oacute;nde est&aacute;n y cu&aacute;l usar digest</h3>
+    <table>
+      <tr><th>Imagen</th><th>D&oacute;nde se construye</th><th>Notas</th></tr>
+      <tr><td><code>base</code>, <code>light</code></td><td>Se publican en GHCR por <strong>digest</strong> en cada release</td><td>El host no compila nada: hace <code>docker pull</code>. Son multi-arch (amd64 y arm64).</td></tr>
+      <tr><td><code>full</code></td><td><strong>En el host donde va a correr</strong></td><td>No se publica. Se compila all&iacute; de forma nativa porque la pata arm64 emulada con QEMU tarda m&aacute;s de 2 h. Sus CVEs se comprueban con <code>make scan-image</code>.</td></tr>
+    </table>
+    <div class="warn">
+      <strong>Ojo con los digest.</strong> Una referencia <code>ghcr.io/...@sha256:...</code> no lleva el nombre del perfil, as&iacute; que no hay forma de deducir si la imagen es <code>full</code> o <code>light</code>. Antes de adivinar <code>light</code> y arrancar el laboratorio sin Metasploit sin avisar, <code>check-profile</code> lo corta. P&aacute;salo expl&iacute;cito:
+      <pre style="margin-top:10px"><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud-image LAB_IMAGE=ghcr.io/hackadvisermx/seclab-sbf@sha256:&lt;digest&gt; LAB_PROFILE=full</code></pre>
+      Un tag normal (<code>seclab-sbf:full</code> o <code>:light</code>) s&iacute; se deduce solo.
+    </div>
+
     <h3>Directo por el tailnet, sin túnel (puerto 2222, solo llaves)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i /Users/castr/tmp/t01/.secrets/ssh/seclab_ed25519 -p 2222 tester@100.113.178.15</code></pre>
     <p>Entrarás al shell del laboratorio (banner <code>SECLAB-SBF</code>). Alternativa desde el host con <code>docker compose exec</code> (no usa red).</p>
@@ -82,6 +101,10 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
     <tr><td>Timeout al puerto 7681/2222</td><td>Tailscale caído en Mac o host; revisa <code>tailscale status</code> en ambos. Revisa los servicios systemd del host.</td></tr>
     <tr><td>ttyd pide login en bucle / 401</td><td>Contraseña incorrecta: verifica <code>TTYD_PASSWORD</code> de tu <code>.env</code> local.</td></tr>
     <tr><td><code>exec request failed</code> / PTY, <code>warptmp</code>, <code>/.zshenv</code> read-only, o SSH sin tmux ni banner</td><td>Estás en Warp: su integración remota rompe el login (fija <code>ZDOTDIR=/</code>). Atajo en sesión: <code>ZDOTDIR=/home/tester exec /usr/bin/zsh -il</code>. Permanente: usa <code>/usr/bin/ssh</code>, Terminal.app, o desactiva por completo la integración SSH/shell de Warp.</td></tr>
+    <tr><td><code>no se deduce el perfil de un digest remoto</code></td><td>Has pasado una imagen por digest sin decir si es <code>full</code> o <code>light</code>. A&ntilde;ade <code>LAB_PROFILE=full</code> (o <code>light</code>) al comando.</td></tr>
+    <tr><td>El contenedor arranca pero sin Metasploit ni NetExec</td><td>Se qued&oacute; en perfil <code>light</code>. Comprueba con <code>make profile-info</code> y recrea con <code>make lab-ssh-cloud-full</code>.</td></tr>
+    <tr><td>La imagen del host parece vieja</td><td>El repo del host lleva otro c&oacute;digo. Resincroniza el repo al host; <code>ensure-image</code> lo detecta por la etiqueta de insumos y reconstruye solo.</td></tr>
+    <tr><td><code>msfconsole: ruby not found</code></td><td>El PATH de <code>/opt/ruby/bin</code> lo a&ntilde;aden <code>sshd_config</code> y el <code>zshrc</code>, no un <code>su</code> a pelo. Entra por SSH o por el terminal web, no con <code>docker exec su tester -c</code>.</td></tr>
     <tr><td>Todo el tailnet falla</td><td>Último recurso: <strong>console connection de OCI</strong> (llave <code>seclab_console_rsa</code>, login <code>ubuntu</code> + contraseña de consola). Pregunta por el comando vigente.</td></tr>
   </table>
 
@@ -92,7 +115,7 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
     siendo el valor de defecto y reinicia el contenedor lab para aplicarlo.
   </div>
 
-  <footer>Generado 2026-09-25 · rama phase/09-oci · Sin secretos en este archivo: las credenciales viven en tu <code>.env</code> y <code>.secrets/</code> locales.</footer>
+  <footer>Actualizado 2026-09-27 · bootstrap/baseline · Verificado en esa fecha: <code>make lab-ssh</code>, <code>make lab-ssh-cloud</code>, SSH al tailnet p&uacute;rto 2222 (msfconsole 6.5.5-dev y nxc 1.5.1) y ttyd en 7681 con autenticaci&oacute;n (HTTP 200). Sin secretos en este archivo: las credenciales viven en tu <code>.env</code> y <code>.secrets/</code> locales.</footer>
 </main>
 <script>
 function copiar(btn) {

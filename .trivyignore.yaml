@@ -1,6 +1,51 @@
 misconfigurations:
+  # DS-0002 pide un USER no root. Aqui el runtime es root a proposito: sshd
+  # como servicio root, ttyd supervisando la sesion y el daemon VPN que
+  # necesita NET_ADMIN para crear tun0. Las sesiones de usuario son siempre
+  # el usuario `tester`; root no se usa para el trabajo de pentest.
+  # `full` no anade ningun USER nuevo: hereda de `light` y solo instala
+  # herramientas, asi que la misma justificacion le cubre.
   - id: DS-0002
     paths:
       - images/base/Dockerfile
       - images/light/Dockerfile
+      - images/full/Dockerfile
+      # tmp/ es scratch local sin versionar, con Dockerfiles de referencia
+      # ajenos a este proyecto que este gate no tiene que juzgar.
+      - tmp/**
     statement: Runtime root is required for sshd, ttyd supervision and the controlled TUN service.
+
+  # DIG-0003 avisa de cualquier destino 0.0.0.0/0 en el egress. Aqui el
+  # firewall no tiene ninguna regla inbound (deny total de entrada) y el
+  # egress son cuatro puertos concretos, no todos: tcp/443, udp/41641
+  # (Tailscale), udp/53 (DNS) y udp/123 (NTP). El unico abierto de verdad es
+  # tcp/443, imprescindible para un laboratorio de pentest: es por donde se
+  # resuelven los objetivos, los mirrors de paquetes y las descargas de
+  # herramientas, y no se puede restringir a un rango conocido porque los
+  # objetivos los elige el operador en cada trabajo.
+  #
+  # Control compensatorio: DigitalOcean aplica el egress como lista blanca,
+  # asi que todo lo que no sean esos cuatro puertos queda denegado. El acceso
+  # al laboratorio sigue siendo solo por Tailscale, sin puertos publicos.
+  #
+  # Caduca cuando la topologia de egress cambie o tcp/443 deje de ser
+  # necesario, lo que ocurre antes si el laboratorio deja de salir a Internet.
+  - id: DIG-0003
+    paths:
+      - terraform/stacks/digitalocean/main.tf
+    statement: >-
+      Egress del laboratorio a cuatro puertos concretos, con deny total de
+      entrada y lista blanca de salida. Responsable: owner del proyecto.
+    expired_at: 2026-12-28
+
+secrets:
+  # Los .ovpn y las llaves privadas viven solo en la maquina del operador y ya
+  # estan en .gitignore, igual que en .gitleaks.toml. Un checkout de CI no los
+  # tiene, asi que estas entradas solo sirven para que una reproduccion local
+  # del mismo escaneo no arrastre falsos positivos. Las rutas estan acotadas:
+  # una llave commiteada en cualquier otro sitio se sigue detectando.
+  - id: private-key
+    paths:
+      - '**/.secrets/**'
+      - 'vpn/*.ovpn'
+    statement: Claves privadas y perfiles .ovpn locales, sin versionar.

@@ -235,6 +235,14 @@ sustituirla.
 de `base` y `light`, Terraform y Actions). La imagen ya construida se revisa
 con `make scan-image`, que es el gate de CVEs del perfil elegido.
 
+Las excepciones de Trivy viven en dos ficheros, ambos acotados por ruta y con
+`expired_at` en la entrada que lo necesita, que Trivy respeta:
+
+- `.trivyignore.yaml` (raíz): misconfiguración y secretos del escaneo estático
+  de CI, que cubre `base`, `light` y `full`.
+- `security/trivy/.trivyignore.yaml`: CVEs de la imagen `full`, que concentra
+  las excepciones por sus gems de Ruby.
+
 Herramientas de escaneo:
 
 - `trivy`

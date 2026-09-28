@@ -260,6 +260,11 @@ COPY --from=msf-builder /out/metasploit-framework /opt/metasploit-framework
 COPY --from=msf-builder /out/wpscan-gems /opt/wpscan-gems
 COPY scripts/wpscan-wrapper.sh /usr/local/bin/wpscan
 RUN chmod 0555 /usr/local/bin/wpscan
+# wpscan escribe su cache de bases de datos en ~/.cache y aborta con
+# "Read-only file system" si no puede crearlo, porque /home/tester es de solo
+# lectura en runtime. Mismo motivo y mismo patron que .msf4 y .nxc.
+RUN ln -sfn /var/lib/seclab/tester/.cache /home/tester/.cache \
+  && chown -h tester:tester /home/tester/.cache
 RUN ln -sf /opt/metasploit-framework/msfconsole /usr/local/bin/msfconsole \
   && ln -sf /opt/metasploit-framework/msfvenom /usr/local/bin/msfvenom \
   && ln -sf /opt/metasploit-framework/msfdb /usr/local/bin/msfdb

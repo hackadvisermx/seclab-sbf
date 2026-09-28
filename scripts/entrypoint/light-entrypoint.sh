@@ -84,7 +84,8 @@ install -d -m 0700 -o "$SSH_USER" -g "$SSH_USER" \
   /var/lib/seclab/tester/oh-my-zsh-cache \
   /var/lib/seclab/tester/zoxide \
   /var/lib/seclab/tester/.msf4 \
-  /var/lib/seclab/tester/.nxc
+  /var/lib/seclab/tester/.nxc \
+  /var/lib/seclab/tester/.cache
 
 install -d -m 0755 /run/sshd
 install -d -m 0755 -o root -g root /run/ssh

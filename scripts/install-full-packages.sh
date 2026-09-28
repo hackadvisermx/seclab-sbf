@@ -11,7 +11,15 @@ export DEBIAN_FRONTEND=noninteractive
 printf 'snapshot=%s\n' "$snapshot"
 
 apt-get update
+# gdb-multiarch y libusb-1.0-0 van pineados a mano, el resto no.
+#   gdb-multiarch: pedido explicito del owner, para que el script no se
+#     desvíe de lo que registra supply-chain/tools.lock.yaml.
+#   libusb-1.0-0: bettercap lo enlaza en tiempo de ejecucion (gousb es cgo), asi
+#     que una version que no exista rompe el binario. Es un tripwire util.
+# Cuando el snapshot avance hay que subir estos dos pines; el resto lo resuelve
+# el snapshot solo.
 apt-get install -y --no-install-recommends \
+  gdb-multiarch=15.1-1ubuntu1~24.04.1 \
   hashcat \
   john \
   libffi8 \
@@ -19,6 +27,7 @@ apt-get install -y --no-install-recommends \
   libpq5 \
   libreadline8t64 \
   libsqlite3-0 \
+  libusb-1.0-0=2:1.0.27-1 \
   libxml2 \
   libxslt1.1 \
   libyaml-0-2 \

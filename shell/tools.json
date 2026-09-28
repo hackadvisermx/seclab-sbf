@@ -10,7 +10,8 @@
     "terminal": "Terminal",
     "utilities": "Utilidades",
     "vpn": "VPN",
-    "web": "Web"
+    "web": "Web",
+    "pentest": "Pentest"
   },
   "tools": {
     "curl": {
@@ -222,11 +223,32 @@
       "category": "crack",
       "command": "crunch",
       "description": "Genera wordlists a partir de charset y longitudes"
+    },
+    "bettercap": {
+      "category": "pentest",
+      "command": "bettercap",
+      "description": "Suite MITM/spoofing: ARP, DNS, WiFi"
+    },
+    "s3scanner": {
+      "category": "recon",
+      "command": "s3scanner",
+      "description": "Enumera buckets S3 abiertos y su contenido"
+    },
+    "wpscan": {
+      "category": "web",
+      "command": "wpscan",
+      "description": "Escáner de vulnerabilidades en WordPress"
+    },
+    "gdb-multiarch": {
+      "category": "development",
+      "command": "gdb-multiarch",
+      "description": "Depuración de binarios de otras arquitecturas"
     }
   },
   "profiles": {
     "full": [
       "anew",
+      "bettercap",
       "crunch",
       "curl",
       "dalfox",
@@ -236,6 +258,7 @@
       "ffuf",
       "fzf",
       "gdb",
+      "gdb-multiarch",
       "git",
       "gobuster",
       "hashcat",
@@ -255,6 +278,7 @@
       "pwn",
       "python3",
       "rg",
+      "s3scanner",
       "searchsploit",
       "socat",
       "sqlmap",
@@ -266,6 +290,7 @@
       "vpn-manager",
       "waybackurls",
       "wireguard",
+      "wpscan",
       "zoxide",
       "zsh"
     ],

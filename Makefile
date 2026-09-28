@@ -51,6 +51,10 @@ TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a
 SCAN_IMAGE ?= $(LAB_IMAGE)
 SCAN_SEVERITY ?= HIGH,CRITICAL
 SCAN_IGNORE_UNFIXED ?= true
+# El default de Trivy son 5 min por operacion, y con full se queda corto: las
+# capas de SecLists, wordlists y exploitdb tardan mas y el scan muere con
+# "context deadline exceeded", que parece un fallo de CVEs pero no lo es.
+SCAN_TIMEOUT ?= 45m
 
 verify-pins:
 	@GH_TOKEN="$$(gh auth token 2>/dev/null || true)" ./scripts/verify/check-action-pins.sh
@@ -197,6 +201,7 @@ scan-image:
 	  --scanners vuln \
 	  --severity "$(SCAN_SEVERITY)" \
 	  --ignore-unfixed "$(SCAN_IGNORE_UNFIXED)" \
+	  --timeout "$(SCAN_TIMEOUT)" \
 	  --format "$(SCAN_FORMAT)" \
 	  --exit-code 1
 	@if [ "$(SCAN_KEEP_TAR)" != "1" ]; then rm -f "$(SCAN_TAR)"; fi

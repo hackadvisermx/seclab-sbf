@@ -89,6 +89,9 @@ jobs:
       # criterio que usa cloud-init para el plugin de Docker Compose.
       TERRAFORM_VERSION: 1.16.0
       TERRAFORM_SHA256: 41d05b927aa174f15d1228c4eba832a323b716c68b415ef5a00179f46cc602d3
+      # tflint 0.64.0, checksum del checksums.txt de su release.
+      TFLINT_VERSION: 0.64.0
+      TFLINT_SHA256: cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -126,3 +129,14 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check --only-binary :all: pyyaml==6.0.3
           make tf-render-check
+      # tflint con el ruleset terraform embebido en el binario. Los
+      # plugins del registro no se activan (.tflint.hcl): cada uno seria
+      # una dependencia mas que descargar en tiempo de ejecucion.
+      - name: Lint de Terraform
+        run: |
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+            "https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/tflint_linux_amd64.zip" \
+            --output /tmp/tflint.zip
+          printf '%s  %s\n' "$TFLINT_SHA256" /tmp/tflint.zip | sha256sum -c -
+          unzip -o -q /tmp/tflint.zip -d /usr/local/bin
+          make tflint-check

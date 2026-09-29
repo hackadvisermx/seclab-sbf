@@ -14,12 +14,14 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | 3 | Completada v1 | Imagen Ubuntu `base`/`light`, build nativo arm64 y amd64 |
 | 4 | Completada v1 | Zsh, Oh My Zsh, fzf, zoxide, banner, herramientas y tmux |
 | 5 | Completada v1 | VPN inside, TUN, socket autenticado, aliases y sanitización |
-| 6 | En curso v1 | `pt-forward` TCP, `pt-socks` SOCKS5, `pt-web` HTTP/WebSocket y route guard |
-| 6.5 | En curso | Política nftables y contrato Tailscale host-only; no se aplican automáticamente |
-| 7 | Pendiente | Imagen `full`; Ghidra/reversing quedan diferidos |
-| 8–10 | Pendiente | Terraform/cloud, aplicación host de nftables/Tailscale, fail2ban y operación |
+| 6 | Completada v1 | `pt-forward` TCP, `pt-socks` SOCKS5, `pt-web` HTTP/WebSocket y route guard; puente host-only validado en VPS |
+| 6.5 | Completada v1 | Política nftables y contrato Tailscale host-only; aplicada y persistente en el host OCI final |
+| 7 | Completada v1 en arm64 | Imagen `full` con Metasploit, `nxc`, `john`, `hashcat`, `bettercap`, `s3scanner`, `wpscan` y forense; Ghidra/reversing quedan diferidos |
+| 8 | Stacks validados | Terraform OCI/Azure/DO con `fmt`/`validate`; falta `apply` con credenciales reales |
+| 9 | Parcial | nftables aplicado en el host OCI; faltan ACL/MFA/approval de Tailscale, fail2ban y pruebas externas |
+| 10 | Parcial | CI de seguridad y gate local de CVEs; faltan backups/snapshots, alertas, runbooks y disaster recovery |
 
-La Fase 5 fue validada en Docker Desktop macOS arm64 con TUN y un perfil oficial de TryHackMe. Las pruebas reales de los otros perfiles y la matriz nativa Linux siguen pendientes.
+La Fase 5 fue validada en Docker Desktop macOS arm64 con TUN y un perfil oficial de TryHackMe. Las pruebas reales de los otros perfiles y la matriz nativa Linux siguen pendientes. La imagen `full` supera 2 GB y solo está validada en arm64.
 
 ## Inicio rápido
 
@@ -143,7 +145,7 @@ La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tai
 - No se usa `privileged`, `docker.sock` ni `network_mode: host`.
 - El acceso administrativo previsto es por Tailscale/SSH/ttyd privado.
 - No se comparten claves privadas, `.env`, `.ovpn`, `workspace/` ni `tmp/`.
-- La plantilla nftables y la ruta NAT gateway de OCI fueron validadas y aplicadas en el host final; el transporte host-only del proxy sigue pendiente.
+- La plantilla nftables y la ruta NAT gateway de OCI fueron validadas y aplicadas en el host final; el puente host-only del proxy (`scripts/host/pt-proxy-bridge.sh`) está validado en un VPS, pero todavía no habilitado en el host OCI final.
 - Usa únicamente objetivos y perfiles VPN autorizados.
 - Dentro del contenedor **no hay `sudo` ni `su`**: el rootfs es de solo lectura y `tester` no tiene password. Es deliberado, para que la imagen siga siendo auditable. Para añadir herramientas, ver [`docs/agregar-tools.md`](docs/agregar-tools.md).
 
@@ -152,9 +154,11 @@ La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tai
 ```bash
 make verify
 make build-light
+make build-full
 make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 make scan-image SCAN_IMAGE=seclab-sbf:light
+make tf-fmt
 ```
 
 Resultados verificados actualmente:
@@ -165,17 +169,20 @@ Resultados verificados actualmente:
 - `vpntry` real validado con `tryhackme.ovpn`.
 - Rutas por defecto y DNS sin cambios; `vpn-disconnect` limpia el túnel.
 - `pt-forward`/`pt-socks`/`pt-web` bloquean destinos sin VPN, permiten rutas `tun0` y se detienen al desconectar la VPN.
-- `pt-web` rechaza absolute-form y permanece loopback; el consumo externo queda pendiente. La sintaxis, el smoke `prerouting` y la persistencia systemd de nftables fueron validados en el host final.
+- `pt-web` rechaza absolute-form y permanece loopback. El consumo externo se resuelve con el puente host-only más `ssh -L` sobre Tailscale, validado de extremo a extremo en un VPS el 2026-09-25; habilitarlo en el host OCI final queda como paso de despliegue. La sintaxis, el smoke `prerouting` y la persistencia systemd de nftables fueron validados en el host final.
+- `make verify` (Gitleaks, Hadolint, ShellCheck y pines de Actions) pasa; ShellCheck solo informa SC2329 en `scripts/entrypoint/light-entrypoint.sh` por una función `cleanup` invocada de forma indirecta.
+- `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` pasan en OCI, Azure y DigitalOcean sin `apply`.
 
 ## Estructura principal
 
 ```text
-images/                 Dockerfiles base/light
+images/                 Dockerfiles base/light/full
 compose*.yaml           servicios lab y VPN
-scripts/                entrypoints, healthchecks, VPN, proxy y claves locales
+scripts/                entrypoints, healthchecks, VPN, proxy, host, nube y claves locales
 shell/                  Zsh, tmux y pentest-lab
-security/               configuración SSH
+security/               nftables, unidades systemd, Tailscale, Trivy y SSH
 supply-chain/           lockfiles de acciones, shell y herramientas
+terraform/              stacks OCI, Azure y DigitalOcean
 docs/                   decisiones por fase, acceso y como anadir herramientas
 plan.md                 fuente de verdad del producto
 vpn/                    perfiles locales ignorados
@@ -195,7 +202,9 @@ No se modifica `main` directamente. Cada fase debe terminar en un Pull Request c
 ## Siguientes pasos
 
 1. Rotar y revocar el material sensible expuesto en metadata previa.
-2. Diseñar el transporte privado para el consumo externo del proxy sin publicar puertos.
+2. Habilitar el puente host-only del proxy en el host OCI final.
 3. Probar los perfiles `hackthebox` y `client` autorizados.
-4. Ejecutar la matriz nativa Linux.
-5. Retomar `full`, Terraform/cloud y operación en fases posteriores.
+4. Ejecutar la matriz nativa Linux: TUN, `make security-check` y `make tailscale-check`.
+5. Cerrar la Fase 9: ACL, MFA y device approval de Tailscale, fail2ban y pruebas externas controladas.
+6. Cerrar la Fase 10: backups/snapshots, alertas, runbooks y disaster recovery.
+7. Ejecutar `make tf-apply-*` con credenciales reales del operador y verificar la destrucción.

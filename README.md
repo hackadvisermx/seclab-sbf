@@ -160,6 +160,7 @@ make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 make scan-image SCAN_IMAGE=seclab-sbf:light
 make tf-fmt
+make tf-render-check
 make fail2ban-check
 ```
 
@@ -173,7 +174,8 @@ Resultados verificados actualmente:
 - `pt-forward`/`pt-socks`/`pt-web` bloquean destinos sin VPN, permiten rutas `tun0` y se detienen al desconectar la VPN.
 - `pt-web` rechaza absolute-form y permanece loopback. El consumo externo se resuelve con el puente host-only más `ssh -L` sobre Tailscale, validado de extremo a extremo en un VPS el 2026-09-25; habilitarlo en el host OCI final queda como paso de despliegue. La sintaxis, el smoke `prerouting` y la persistencia systemd de nftables fueron validados en el host final.
 - `make verify` (Gitleaks, Hadolint, ShellCheck y pines de Actions) pasa; ShellCheck solo informa SC2329 en `scripts/entrypoint/light-entrypoint.sh` por una función `cleanup` invocada de forma indirecta.
-- `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` pasan en OCI, Azure y DigitalOcean sin `apply`.
+- `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` pasan en OCI, Azure y DigitalOcean sin `apply`, y los tres corren igual en CI.
+- `make tf-render-check` renderiza el cloud-init compartido y comprueba que sigue siendo YAML válido y que la jail de fail2ban llega al host idéntica al repo. Es la única verificación que cubre el render: `validate` pasa aunque la plantilla produzca YAML roto.
 
 ## Estructura principal
 

@@ -941,7 +941,7 @@ pt-forward doctor
 - Configurar cloud-init.
 - Integrar Tailscale.
 - Añadir scripts de bootstrap y destroy.
-- `fmt` y `validate` pasan en los tres stacks con `init -backend=false`, y ambos corren en CI junto con el render del cloud-init (`make tf-render-check`). Falta `apply` real con credenciales del operador, verificación de destrucción y `tflint`/`tfsec`/Checkov, que sigue sin añadirse por ser dependencias externas nuevas.
+- `fmt`, `validate` y `tflint` pasan en los tres stacks, y los tres corren en CI junto con el render del cloud-init (`make tf-render-check`). tflint usa solo el ruleset `terraform` embebido en el binario, sin plugins del registro (`.tflint.hcl`). Falta `apply` real con credenciales del operador, verificación de destrucción, y `tfsec`/Checkov, que siguen sin añadirse por ser dependencias nuevas con su propia cadena de suministro.
 
 ### Fase 9 — Seguridad cloud (parcial)
 

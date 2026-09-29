@@ -231,9 +231,21 @@ sustituirla.
 - No se permite un archivo de ignorancia global sin vencimiento.
 - Escaneo del código fuente, lockfiles, SBOM, imagen final, scripts, Dockerfiles, Terraform y GitHub Actions.
 
-`security.yml` cubre en cada push lo estático (lockfiles, scripts, Dockerfiles
-de `base` y `light`, Terraform y Actions). La imagen ya construida se revisa
-con `make scan-image`, que es el gate de CVEs del perfil elegido.
+`security.yml` cubre en cada push lo estático (secretos, misconfiguración,
+lockfiles, scripts, Dockerfiles de `base`, `light` y `full`, Terraform,
+workflows y el render del cloud-init). La imagen ya construida se revisa
+con `make scan-image`, que es el gate de CVEs del perfil elegido, y con
+`make sbom`, que emite su SBOM en CycloneDX.
+
+El SBOM se guarda en `tmp/sbom/` y lleva en el nombre la etiqueta de la
+imagen y el hash de insumos (`seclab.build-inputs`), de modo que el
+artefacto queda ligado al código del que salió la imagen y no solo a su
+nombre. Sin esa etiqueta `make sbom` no genera nada. El documento declara
+como componente el nombre del tar, no el de la imagen: Trivy no tiene
+forma de renombrarlo y renombrarlo a mano sería tocar el artefacto
+generado. La identidad de la imagen la llevan el nombre del fichero y el
+resumen que imprime el comando (imagen, `image_id`, hash de insumos y
+SHA-256 del SBOM).
 
 Las excepciones de Trivy viven en dos ficheros, ambos acotados por ruta y con
 `expired_at` en la entrada que lo necesita, que Trivy respeta:

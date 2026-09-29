@@ -115,6 +115,11 @@ make compose down
 - `fzf` 0.74.4: commit, Go 1.25.13, `x/sys` 0.44.0 y hashes ARM64/AMD64 coinciden con `supply-chain/tools.lock.yaml`.
 - `ttyd` 1.7.7: hash ARM64/AMD64 validado durante el build.
 - Scout no detecta vulnerabilidades Critical/High en `light` ARM64 ni AMD64.
+- 2026-09-29: `light` reconstruido en `linux/amd64` desde el portátil arm64
+  (`BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`). 219 paquetes, 0
+  Critical/High, y los hashes de `ttyd` y `dalfox` en la imagen coinciden con
+  los de `linux/amd64` de `supply-chain/tools.lock.yaml`. El perfil compila
+  igual en la arquitectura del host OCI.
 - El escaneo completo de ARM64 reporta 39 Medium y 9 Low en paquetes Ubuntu del snapshot; se mantienen pendientes de una actualización con correcciones disponibles.
 - `tester` no pertenece a `sudo` ni a grupos elevados.
 - SSH con clave pública: correcto.
@@ -132,10 +137,7 @@ make compose down
 
 ## Pendiente de fase 3
 
-Nada pendiente: la fase queda cerrada con esta tanda. Futuro (otras
-fases): actualización del snapshot Ubuntu con correcciones Medium/Low y
-pruebas de humo nativas AMD64.
-- wordlists controladas.
-- Pruebas de humo nativas AMD64, no solo build y ejecución básica bajo QEMU.
-- Actualizar el snapshot Ubuntu cuando existan correcciones para los hallazgos Medium/Low.
-- Tailscale y proxy se incorporan en fases posteriores.
+Nada pendiente: la fase queda cerrada con esta tanda. Queda para otras
+fases la actualización del snapshot de Ubuntu cuando existan correcciones
+para los hallazgos Medium/Low, y las pruebas de humo nativas en AMD64, que
+no son solo build y ejecución básica bajo emulación.

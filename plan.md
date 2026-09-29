@@ -743,11 +743,15 @@ Terraform no incluirá el `.env` de ejecución.
 Después:
 
 ```text
-scp .env usuario@<tailnet-host>:/opt/pentest-lab/.env
+make env-copy-oci TF_HOST=<tailnet-host>
 ssh usuario@<tailnet-host>
-cd /opt/pentest-lab
+cd ~/seclab-sbf
 docker compose up -d
 ```
+
+El repo del host vive en `~/seclab-sbf` (`CLOUD_REPO_DIR` en el `.env`) y el
+workspace en `/opt/seclab-sbf/workspace` (`CLOUD_WORKSPACE_DIR`), que es donde
+lo montan las unidades de `security/systemd/`.
 
 La key Tailscale se usará solamente durante el bootstrap. El modo manual por consola será el método preferido para no introducir secretos en user-data o state.
 
@@ -880,7 +884,10 @@ pt-forward doctor
 - Fijar imagen base por digest.
 - Configurar GitHub Actions con Actions fijadas por SHA.
 - Activar secret scanning mediante Gitleaks.
-- Configurar SBOM, provenance y firma Cosign en el release.
+- Emitir el SBOM de cada imagen construida, ligado a su hash de insumos.
+  Provenance y firma Cosign quedan sin hacer: al eliminarse el registry no hay
+  release donde firmar, y la trazabilidad local es la etiqueta
+  `seclab.build-inputs`.
 
 ### Fase 2 — Compose local y workspace (completada)
 
@@ -891,7 +898,7 @@ pt-forward doctor
 - Añadir health checks.
 - Validar el servicio local en Docker Desktop macOS.
 
-### Fase 3 — Imagen `base` y `light` (v1 completada en arm64 y amd64)
+### Fase 3 — Imagen `base` y `light` (v1 completada en arm64 y amd64, verificado 2026-09-29)
 
 - Construir `base` y `light` con snapshot de Ubuntu.
 - Añadir ttyd, SSH y shell de `tester` sin SFTP.
@@ -944,7 +951,7 @@ pt-forward doctor
 - Añadir herramientas pesadas: Metasploit, `nxc`, `john`, `hashcat` con pocl, `bettercap`, `s3scanner`, `wpscan`, `gdb-multiarch`, `zsteg`, `exiftool` y `hexedit`.
 - Crear matriz ARM/AMD.
 - Ejecutar en VM desechable.
-- `full` supera 2 GB y solo se ha validado en arm64; el build amd64 queda para CI o VM. Rizin se difiere por falta de binario arm64. `supply-chain/tools.lock.yaml` cubre el perfil completo.
+- `light` se validó en amd64 construyéndolo desde el portátil arm64 (`BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`): 219 paquetes, 0 Critical/High y hashes de `ttyd` y `dalfox` idénticos a los del lockfile. `full` supera 2 GB y solo se ha validado en arm64; su build amd64 queda para CI o VM. Rizin se difiere por falta de binario arm64. `supply-chain/tools.lock.yaml` cubre el perfil completo.
 
 ### Fase 8 — Terraform cloud (stacks implementados y validados; sin `apply`)
 
@@ -970,7 +977,7 @@ pt-forward doctor
 ### Fase 10 — CI/CD y operación (parcial)
 
 - Activar gates de CVEs.
-- Firmar y publicar imágenes.
+- Publicar y firmar imágenes: no aplica desde que se eliminó el registry. Cada máquina construye en caliente y revisa su imagen con `make scan-image` y `make sbom`.
 - Añadir backups y snapshots.
 - Añadir alertas y runbooks.
 - Ejecutar disaster recovery.

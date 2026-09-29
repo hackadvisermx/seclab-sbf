@@ -84,14 +84,27 @@ jobs:
 
   terraform:
     runs-on: ubuntu-24.04
+    env:
+      # Los stacks exigen >= 1.16.0. Version y SHA-256 fijados, el mismo
+      # criterio que usa cloud-init para el plugin de Docker Compose.
+      TERRAFORM_VERSION: 1.16.0
+      TERRAFORM_SHA256: 41d05b927aa174f15d1228c4eba832a323b716c68b415ef5a00179f46cc602d3
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      # Terraform y Python 3 ya vienen en la imagen del runner: no se
-      # anade ninguna accion de terceros para esto, que es lo que
-      # justificaba que CI no mirara Terraform.
+      # La imagen del runner no trae Terraform. Se instala aqui, con hash
+      # verificado, en vez de meter la accion de setup de HashiCorp: es
+      # una dependencia menos que auditar y fijar por SHA.
+      - name: Instalar Terraform
+        run: |
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+            "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" \
+            --output /tmp/terraform.zip
+          printf '%s  %s\n' "$TERRAFORM_SHA256" /tmp/terraform.zip | sha256sum -c -
+          unzip -o -q /tmp/terraform.zip -d /usr/local/bin
+          terraform version
       - name: Formato
         run: terraform fmt -check -recursive terraform/
       # -backend=false: valida sin state remoto ni credenciales. Los

@@ -193,7 +193,7 @@ shell/                  Zsh, tmux y pentest-lab
 security/               nftables, fail2ban, unidades systemd, Tailscale, Trivy y SSH
 supply-chain/           lockfiles de acciones, shell y herramientas
 terraform/              stacks OCI, Azure y DigitalOcean
-docs/                   decisiones por fase, acceso y como anadir herramientas
+docs/                   decisiones por fase, runbooks, backups, acceso y tools
 plan.md                 fuente de verdad del producto
 vpn/                    perfiles locales ignorados
 workspace/              workspace local ignorado
@@ -208,6 +208,13 @@ phase/<numero>-<slug>
 ```
 
 No se modifica `main` directamente. Cada fase debe terminar en un Pull Request con pruebas, riesgos, CVEs y limitaciones conocidas. El baseline actual está en `bootstrap/baseline`; no se hizo merge directo a `main`.
+
+## Runbooks
+
+Si algo falla, `docs/runbooks.md` tiene el procedimiento por síntoma, no por
+componente: acceso perdido, Tailscale caído, TUN ausente, proxy que no
+conecta, fail2ban que te baneó, y destrucción del nodo. Los backups del
+workspace están en `docs/backups.md`, incluida su restauración.
 
 ## Siguientes pasos
 

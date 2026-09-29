@@ -193,7 +193,7 @@ Los Dockerfiles se mantienen parametrizados con `TARGETOS`/`TARGETARCH` para
 que ambos compilen rápido y de forma nativa. Esto resuelve de paso el bloqueo de
 `bettercap`, cuya release oficial solo trae `linux_amd64`: en `arm64` habrá que
 compilarlo desde source con cgo, siguiendo el mismo patrón que ya usa `naabu`.
-Esa compilación está pendiente de implementar.
+Esa compilación está implementada en `images/full/Dockerfile` desde el commit pinneado, con `gcc`, `libpcap-dev` y `libusb` fijados a versión exacta en el stage de compilación.
 
 Se acepta que `arm64` y `amd64` no produzcan binarios bit a bit idénticos. No
 hay reproducibility entre máquinas, solo dentro de cada una: la etiqueta
@@ -218,6 +218,20 @@ No se utilizará `latest` como versión de producción.
 - Las herramientas sin firma se compilarán desde commit exacto o se documentará la excepción.
 - No se harán actualizaciones automáticas dentro del contenedor.
 - Las actualizaciones llegarán mediante PR de Renovate o Dependabot.
+
+Un paquete del repositorio de la distribución **no** se fija a versión
+exacta en el cloud-init, aunque se fijen las herramientas del contenedor.
+Fijarlo es peor que no fijarlo: en noble-updates, `fail2ban` ya va por
+`1.0.2-3ubuntu0.1`, o sea que la distribución publica revisiones nuevas
+del paquete. Un `fail2ban=1.0.2-1` en la lista de `packages` haría que
+`apt install` dejara de encontrar esa versión en cuanto salga la
+siguiente, y el nodo nuevo se quedaría sin fail2ban sin avisar. La regla
+de "versiones fijadas" aplica a lo que se descarga de un tercero o se
+compila aquí; para lo que viene de Ubuntu, lo que fija la versión es el
+propio `apt` con sus actualizaciones de seguridad y
+`unattended-upgrades`, que ya está instalado. Sí se fija la llave del
+repositorio y la versión cuando el paquete viene de un repositorio
+externo, como `tailscale=1.102.4`.
 
 ### Gates de construcción local
 
@@ -551,7 +565,7 @@ No se usará `--privileged` ni `mknod` como solución al problema de TUN.
 
 ## 13. Proxy Lab
 
-Estado v1: `pt-forward` TCP, `pt-socks` SOCKS5 y `pt-web` HTTP/HTTPS/WebSocket están implementados para `tester`; el consumo externo y nftables siguen pendientes.
+Estado v1: `pt-forward` TCP, `pt-socks` SOCKS5 y `pt-web` HTTP/HTTPS/WebSocket están implementados para `tester`. El consumo externo está resuelto con el puente host-only más `ssh -L` sobre Tailscale, validado de extremo a extremo en un VPS el 2026-09-25, y la política nftables está aplicada y persistente en el host OCI final. Lo que queda pendiente es habilitar el puente en ese host.
 
 El proxy solo permitirá destinos alcanzables a través de la tabla de rutas de la VPN activa. “Cualquier destino” significa cualquier destino de la VPN, no Internet público ni metadata cloud.
 

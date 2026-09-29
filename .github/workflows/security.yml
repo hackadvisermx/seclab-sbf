@@ -123,11 +123,11 @@ jobs:
       # El render del cloud-init es lo que terraform validate no cubre:
       # la plantilla compila igual con el bloque `content: |` roto. El
       # check necesita un parser YAML; PyYAML no viene en la imagen del
-      # runner, asi que se instala aqui. La version va fijada; el hash no
-      # se puede fijar de forma portable entre runners y arquitecturas.
+      # runner, asi que se instala aqui, con version y hash fijos en
+      # .github/requirements-ci.txt.
       - name: Render del cloud-init
         run: |
-          python3 -m pip install --disable-pip-version-check --only-binary :all: pyyaml==6.0.3
+          python3 -m pip install --disable-pip-version-check --only-binary :all: --require-hashes -r .github/requirements-ci.txt
           make tf-render-check
       # tflint con el ruleset terraform embebido en el binario. Los
       # plugins del registro no se activan (.tflint.hcl): cada uno seria

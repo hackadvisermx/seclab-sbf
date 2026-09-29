@@ -60,5 +60,5 @@ NetExec 1.5.1 (commit `c7dc286b`, con `nxc`), John, Hashcat CPU
   desbloqueado; banner con categorías crack/exploit).
 - Scout Critical/High bloqueado: 2 intentos fallan en indexado por
   `trivy-java-db: unexpected EOF` (infra de red, no resultado de CVEs).
-- Lockfile supply-chain para full pendiente (solo existe `tools.lock`
-  de light).
+- El lockfile `supply-chain/tools.lock.yaml` cubre ya `full`, no solo
+  `light` (cierre de la Fase 17).

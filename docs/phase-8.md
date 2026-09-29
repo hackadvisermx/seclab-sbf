@@ -66,5 +66,9 @@ restauración del workspace, [`backups.md`](backups.md).
 ## Pendiente
 
 - `apply` real por proveedor con credenciales del operador.
+- Snapshot del workspace verificado en un apply real. Los tres stacks lo
+  crean en el `apply` y validan, pero no se ha ejecutado ninguno.
+- Backup programado en Azure y DigitalOcean; hoy son manuales. En OCI la
+  retención la fija la política creada a mano. Ver `docs/backups.md`.
 - Destrucción verificada y limpieza del nodo en el tailnet.
 - `tflint`/`tfsec`/Checkov en CI y `terraform plan` en PRs.

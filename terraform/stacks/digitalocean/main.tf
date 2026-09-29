@@ -80,7 +80,25 @@ resource "digitalocean_volume" "workspace" {
   description             = "Workspace de seclab-sbf (${var.env_name})"
 }
 
-resource "digitalocean_volume_attachment" "workspace" {
-  droplet_id = digitalocean_droplet.lab.id
-  volume_id  = digitalocean_volume.workspace.id
+# Snapshot del volumen de workspace. El workspace es el unico dato del
+# laboratorio que no se puede reconstruir: la imagen se vuelve a compilar
+# desde el codigo, pero las notas y resultados de un escaneo no.
+#
+# DigitalOcean no ofrece backup programado para volumenes, asi que esto
+# solo cubre el estado inicial en el momento del apply. Las copias
+# posteriores hay que hacerlas a mano, con el procedimiento de
+# docs/backups.md. Con retention 0 no se crea nada.
+resource "digitalocean_volume_snapshot" "workspace" {
+  count = var.workspace_backup_retention_days > 0 ? 1 : 0
+
+  # Sin region: la hereda del volumen. Pasarla aqui es un error, el
+  # snapshot se crea siempre junto al volumen original.
+  name      = "${local.name_prefix}-workspace-snapshot"
+  volume_id = digitalocean_volume.workspace.id
+
+  tags = [
+    local.name_prefix,
+    "workspace",
+    "backup",
+  ]
 }

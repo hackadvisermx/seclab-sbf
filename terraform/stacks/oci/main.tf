@@ -181,6 +181,53 @@ resource "oci_core_volume" "workspace" {
   freeform_tags       = local.freeform_tags
 }
 
+# Backup del volumen de workspace. El workspace es el unico dato del
+# laboratorio que no se puede reconstruir: la imagen se vuelve a compilar
+# desde el codigo, pero las notas y resultados de un escaneo no.
+#
+# OCI separa la politica (que.region protege el volumen) del backup
+# concreto y del vinculo entre ambos. El schema real de la politica en el
+# provider 9.3.0 solo admite compartment_id, destination_region y las
+# etiquetas: la retencion va en el backup, con expiration_time.
+resource "oci_core_volume_backup_policy" "workspace" {
+  count = var.workspace_backup_retention_days > 0 ? 1 : 0
+
+  compartment_id     = var.compartment_ocid
+  display_name       = "${local.name_prefix}-workspace-backup-policy"
+  destination_region = var.region
+  freeform_tags      = local.freeform_tags
+}
+
+# El backup concreto. OCI separa las tres cosas: la politica dice cuando
+# y cuanto se retiene, la assignment vincula esa politica al volumen, y el
+# backup es el evento. Aqui se dispara el backup inicial del apply; con
+# la assignment puesta, el servicio de backup los siguientes segun la
+# politica sin que Terraform intervenga.
+resource "oci_core_volume_backup" "workspace" {
+  count = var.workspace_backup_retention_days > 0 ? 1 : 0
+
+  compartment_id = var.compartment_ocid
+  volume_id      = oci_core_volume.workspace.id
+  display_name   = "${local.name_prefix}-workspace-backup"
+
+  # Sin expiration_time: es de solo lectura, lo calcula OCI. Y sin type
+  # ni source_type: tambien son calculados. La retencion en dias la
+  # aplica el servicio de backup a partir de la politica, asi que aqui
+  # no hay ningun argumento que la fije. Eso significa que
+  # workspace_backup_retention_days no llega a este recurso: decide si se
+  # crea o no, y quien decide cuanto se guarda es la politica de OCI
+  # creada a mano en la consola. Queda anotado en docs/backups.md.
+}
+
+# Vincula la politica al volumen. Sin esto la politica existe pero no
+# protege nada, y es el paso que mas se olvida.
+resource "oci_core_volume_backup_policy_assignment" "workspace" {
+  count = var.workspace_backup_retention_days > 0 ? 1 : 0
+
+  asset_id  = oci_core_volume.workspace.id
+  policy_id = oci_core_volume_backup_policy.workspace[0].id
+}
+
 resource "oci_core_volume_attachment" "workspace" {
   attachment_type = "paravirtualized"
   instance_id     = oci_core_instance.lab.id

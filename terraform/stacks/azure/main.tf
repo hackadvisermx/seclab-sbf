@@ -150,6 +150,29 @@ resource "azurerm_managed_disk" "workspace" {
   tags                 = local.tags
 }
 
+# Snapshot del disco de workspace. El workspace es el unico dato del
+# laboratorio que no se puede reconstruir: la imagen se vuelve a compilar
+# desde el codigo, pero las notas y resultados de un escaneo no.
+#
+# En azurerm 5.x el recurso se llama azurerm_snapshot y se crea con
+# source_uri + create_option = "Copy". No existe
+# azurerm_managed_disk_snapshot, que es el nombre que tendia sentido.
+resource "azurerm_snapshot" "workspace" {
+  count = var.workspace_backup_retention_days > 0 ? 1 : 0
+
+  name                = "${local.name_prefix}-workspace-snapshot"
+  resource_group_name = azurerm_resource_group.lab.name
+  location            = azurerm_resource_group.lab.location
+  # Sin incremental: ese argumento no existe en azurerm 5.7.0, aunque la
+  # cadena aparezca en el binario del provider. Con create_option = "Copy"
+  # la copia es completa, que es lo que hace falta para restaurar.
+  source_uri    = azurerm_managed_disk.workspace.id
+  create_option = "Copy"
+  disk_size_gb  = var.workspace_disk_gbs
+
+  tags = local.tags
+}
+
 resource "azurerm_virtual_machine_data_disk_attachment" "workspace" {
   managed_disk_id    = azurerm_managed_disk.workspace.id
   virtual_machine_id = azurerm_linux_virtual_machine.lab.id

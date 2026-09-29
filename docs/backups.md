@@ -6,12 +6,29 @@ sistema. `tf-destroy` lo destruye con el nodo. Lo único que sobrevive a un
 
 ## Estado actual
 
-**No hay backups automáticos.** Los tres stacks crean el volumen del
-workspace, y nada más. Esto es un riesgo conocido y está escrito como tal en
-`plan.md`: *"El workspace contiene datos que requiere backup y limpieza"*.
+Los tres stacks crean un **snapshot inicial del workspace en el momento del
+apply**, controlado por `workspace_backup_retention_days` (0 por defecto, o
+sea desactivado). Con un valor mayor que cero:
 
-Lo que sí hay es el **procedimiento manual** de abajo, que no depende de que
-exista la automatización.
+| Stack | Qué crea | Copias posteriores |
+|---|---|---|
+| OCI | `oci_core_volume_backup_policy` + `_assignment` + `oci_core_volume_backup` | el servicio de backup las hace según la política |
+| Azure | `azurerm_snapshot` con `create_option = "Copy"` | manuales |
+| DigitalOcean | `digitalocean_volume_snapshot` | manuales |
+
+**Lo que esto no cubre:** el snapshot se crea una vez, en el `apply`. En
+DigitalOcean y Azure no hay backup programado, así que las copias
+posteriores hay que hacerlas a mano con el procedimiento de abajo.
+
+**En OCI hay una limitación real:** el schema del provider 9.3.0 no deja
+fijar la retención en días desde el stack. `expiration_time` es de solo
+lectura, y `retention_in_days` no existe en la política. Así que
+`workspace_backup_retention_days` en OCI decide **si** se crea el backup,
+pero **cuánto se conserva lo fija la política de OCI**, que hay que crear a
+mano en la consola. Está anotado en el propio `main.tf`.
+
+Además, el comportamiento real de todo esto **no está verificado**: ningún
+stack se ha aplicado con credenciales reales. Solo `validate` y `tflint`.
 
 ## Qué proteger y qué no
 
@@ -95,11 +112,16 @@ tar czf ~/seclab-workspace-$(date +%Y%m%d).tar.gz -C /workspace .
 
 ## Pendiente
 
-- Política de snapshot automática en el volumen del proveedor. Es HCL en los
-  tres stacks y se valida con `make tf-fmt`, `terraform validate` y
-  `make tflint-check` sin credenciales, pero el comportamiento real solo se
-  ve con un `apply`.
-- Verificación de restauración: no se ha restaurado un backup en un nodo
-  real. El procedimiento de arriba está sin ejecutar.
-- Cifrado en reposo del backup: depende del proveedor y del bucket de
+- **Verificar que el snapshot se crea y se restaura.** El HCL valida y
+  tflint pasa, pero ningún `apply` se ha ejecutado. Hasta que no haya un
+  `plan` y un `apply` con credenciales reales, esto es código sin probar.
+- **Backup programado en Azure y DigitalOcean.** Los dos proveedores no lo
+  traen para el recurso que se usa aquí. Habría que decidir entre un
+  cron externo, una función del proveedor, o aceptar el snapshot inicial y
+  documentar el procedimiento manual como la vía real.
+- **Fijar la retención en OCI desde el stack**, si se quiere. Requiere
+  cambiar de recurso en el provider o aceptar la consola.
+- **Cifrado en reposo del backup**: depende del proveedor y del bucket de
   destino, y está sin decidir.
+- **Almacenamiento del backup**: hoy los backups se crean junto al volumen,
+  en la misma cuenta. Si la cuenta se destruye, se van con él.

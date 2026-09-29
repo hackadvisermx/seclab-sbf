@@ -51,6 +51,24 @@ variable "workspace_volume_gbs" {
   default     = 50
 }
 
+variable "workspace_backup_retention_days" {
+  description = <<-EOT
+    Dias que se conservan los snapshots del volumen de workspace.
+
+    El workspace es el unico dato irrecuperable del laboratorio: la imagen
+    se reconstruye desde el codigo, pero las notas y resultados de un
+    escaneo no. Un 0 lo desactiva, para un entorno desechable donde no
+    interese pagar por snapshots.
+
+    OJO: esto solo crea el snapshot inicial. DigitalOcean no tiene
+    backup programado para volumenes, asi que las copias posteriores hay
+    que hacerlas a mano segun docs/backups.md. Ver la nota del snapshot
+    en main.tf.
+  EOT
+  type        = number
+  default     = 0
+}
+
 variable "vpc_cidr" {
   description = "CIDR de la VPC."
   type        = string

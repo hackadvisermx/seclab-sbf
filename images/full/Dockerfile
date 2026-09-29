@@ -231,12 +231,13 @@ RUN /opt/ruby/bin/gem install bundler -v 2.5.22 --no-document \
  && /opt/ruby/bin/ruby -e 'require "rubygems"; min = Gem::Version.new("1.3.7"); Gem::Specification.dirs.each { |d| Dir.glob(File.join(d, "concurrent-ruby-*.gemspec")).each { |f| s = Gem::Specification.load(f); next unless s; next unless Gem::Version.new(s.version.to_s) < min; puts "borrando gemspec obsoleto #{File.basename(f)}"; File.delete(f) } }' \
  && /opt/ruby/bin/ruby -e 'g = Gem::Specification.find_by_name("concurrent-ruby"); v = Gem::Version.new(g.version.to_s); raise "concurrent-ruby #{g.version} por debajo de 1.3.7" if v < Gem::Version.new("1.3.7"); puts "concurrent-ruby=#{g.version}"' \
  && test "$(/opt/ruby/bin/ruby /src/msf/msfconsole --version 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | grep -o '6\.5\.5' | head -n 1)" = "${MSF_VERSION}"
-# wpscan va en un GEM_HOME aparte: comparte nokogiri con Metasploit, pero no
-# toca su bundle bloqueado. Se compila en este stage porque es el unico con
-# make y con el Ruby definitivo; la imagen final solo copia el resultado.
-COPY scripts/install-full-wpscan.sh /usr/local/bin/install-full-wpscan
-RUN chmod 0555 /usr/local/bin/install-full-wpscan \
- && WPSCAN_GEM_HOME=/out/wpscan-gems /usr/local/bin/install-full-wpscan
+# wpscan y zsteg van cada uno en su propio GEM_HOME: comparten gemas con
+# Metasploit, pero no tocan su bundle bloqueado. Se compilan en este stage
+# porque es el unico con make y con el Ruby definitivo; la imagen final solo
+# copia el resultado.
+COPY scripts/install-full-gems.sh /usr/local/bin/install-full-gems
+RUN chmod 0555 /usr/local/bin/install-full-gems \
+ && GEMS_OUT_DIR=/out /usr/local/bin/install-full-gems
 RUN mkdir -p /out \
  && cp -r /opt/ruby /out/ruby \
  && cp -r /src/msf /out/metasploit-framework \
@@ -255,11 +256,13 @@ RUN chmod 0555 /usr/local/bin/install-full-packages \
  && SNAPSHOT_ID="${UBUNTU_SNAPSHOT}" PAT_COMMIT="${PAT_COMMIT}" EXPLOITDB_COMMIT="${EXPLOITDB_COMMIT}" SECLISTS_COMMIT="${SECLISTS_COMMIT}" /usr/local/bin/install-full-packages
 COPY --from=msf-builder /out/ruby /opt/ruby
 COPY --from=msf-builder /out/metasploit-framework /opt/metasploit-framework
-# wpscan se compila en msf-builder (alli estan el Ruby definitivo y make) y se
-# copia ya instalado. Su GEM_HOME va aparte para no tocar el bundle de msf.
+# wpscan y zsteg se compilan en msf-builder (alli estan el Ruby definitivo y
+# make) y se copian ya instalados, cada uno con su GEM_HOME.
 COPY --from=msf-builder /out/wpscan-gems /opt/wpscan-gems
+COPY --from=msf-builder /out/zsteg-gems /opt/zsteg-gems
 COPY scripts/wpscan-wrapper.sh /usr/local/bin/wpscan
-RUN chmod 0555 /usr/local/bin/wpscan
+COPY scripts/zsteg-wrapper.sh /usr/local/bin/zsteg
+RUN chmod 0555 /usr/local/bin/wpscan /usr/local/bin/zsteg
 # wpscan escribe su cache de bases de datos en ~/.cache y aborta con
 # "Read-only file system" si no puede crearlo, porque /home/tester es de solo
 # lectura en runtime. Mismo motivo y mismo patron que .msf4 y .nxc.

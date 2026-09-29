@@ -893,7 +893,7 @@ pt-forward doctor
 - Mantener `VPN_MODE=host` solo como compatibilidad explícita; no forma parte del flujo del tester.
 - El modo inside usa un servicio opcional con `NET_ADMIN`, `CHOWN` para asignar el socket a `tester` y `/dev/net/tun`, nunca `--privileged`; un socket Unix autenticado permite que los aliases de `tester` soliciten solo acciones allowlistadas. `tryhackme.ovpn` fue validado en macOS Docker Desktop; la prueba nativa en Linux queda pendiente.
 
-### Fase 6 — Proxy Lab (v1 en curso)
+### Fase 6 — Proxy Lab (v1 completada)
 
 - `pt-forward` TCP loopback implementado para `tester`.
 - `pt-socks` SOCKS5 loopback implementado para `tester`.
@@ -901,25 +901,26 @@ pt-forward doctor
 - Route guard por conexión contra `tun0` implementado.
 - Stop automático al desconectar VPN implementado.
 - Probar túneles desde macOS y VPS.
-- Pendiente el consumo externo mediante Tailscale y nftables/cloud.
+- El consumo externo mediante Tailscale está resuelto con el puente host-only `scripts/host/pt-proxy-bridge.sh` más `ssh -L`, validado en VPS el 2026-09-25; queda habilitarlo en el host OCI final.
 
-### Fase 6.5 — Seguridad de exposición (v1 en curso)
+### Fase 6.5 — Seguridad de exposición (v1 completada)
 
 - Preparar `security/policies/nftables-lab.nft` sin cargarlo automáticamente.
 - Mantener Tailscale en el host, sin Funnel, Exit Node ni rutas DNS automáticas.
 - Validar `make security-check` en Linux y omitir explícitamente en macOS.
 - Aplicar y verificar en el host OCI final una ruta NAT gateway para Tailscale sin `public_ip`.
-- Dejar el consumo externo del proxy pendiente hasta definir un transporte host-only.
+- La política quedó aplicada y persistente en el host final mediante `security/systemd/`; el puente del proxy se valida en VPS y se habilita en el host final como paso de despliegue.
 
-### Fase 7 — Imagen `full`
+### Fase 7 — Imagen `full` (v1 completada en arm64)
 
 - Añadir Metasploit.
 - Ghidra y reversing quedan diferidos; no forman parte de la iteración actual.
-- Añadir herramientas pesadas.
+- Añadir herramientas pesadas: Metasploit, `nxc`, `john`, `hashcat` con pocl, `bettercap`, `s3scanner`, `wpscan`, `gdb-multiarch`, `zsteg`, `exiftool` y `hexedit`.
 - Crear matriz ARM/AMD.
 - Ejecutar en VM desechable.
+- `full` supera 2 GB y solo se ha validado en arm64; el build amd64 queda para CI o VM. Rizin se difiere por falta de binario arm64. `supply-chain/tools.lock.yaml` cubre el perfil completo.
 
-### Fase 8 — Terraform cloud
+### Fase 8 — Terraform cloud (stacks implementados y validados; sin `apply`)
 
 - Crear stacks OCI, Azure y DigitalOcean.
 - Configurar states remotos.
@@ -928,8 +929,9 @@ pt-forward doctor
 - Configurar cloud-init.
 - Integrar Tailscale.
 - Añadir scripts de bootstrap y destroy.
+- `fmt` y `validate` pasan en los tres stacks con `init -backend=false`; falta `apply` real con credenciales del operador, verificación de destrucción y `tflint`/`tfsec`/Checkov en CI.
 
-### Fase 9 — Seguridad cloud
+### Fase 9 — Seguridad cloud (parcial)
 
 - Aplicar y verificar la plantilla nftables en el host Linux/cloud.
 - Configurar Tailscale ACL, MFA y device approval.
@@ -937,14 +939,16 @@ pt-forward doctor
 - Bloquear metadata.
 - Aplicar una ruta NAT gateway cuando el host no tenga `public_ip`.
 - Ejecutar pruebas externas controladas.
+- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`. Pendiente: ACL, MFA y device approval de Tailscale, fail2ban, habilitar el puente del proxy y pruebas externas controladas.
 
-### Fase 10 — CI/CD y operación
+### Fase 10 — CI/CD y operación (parcial)
 
 - Activar gates de CVEs.
 - Firmar y publicar imágenes.
 - Añadir backups y snapshots.
 - Añadir alertas y runbooks.
 - Ejecutar disaster recovery.
+- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck y Actionlint, y `make scan-image` como gate local de Critical/High. Pendiente: backups/snapshots, alertas, runbooks y disaster recovery. La publicación de imágenes no aplica desde que se eliminó el registry: cada máquina construye en caliente y escanea su imagen.
 
 ## 20. Criterios de aceptación
 
@@ -985,7 +989,7 @@ pt-forward doctor
 - El estado de Terraform contiene datos sensibles aunque use `sensitive`.
 - Un contenedor no es un sandbox seguro frente a exploits de kernel.
 - La route guard de `pt-forward`/`pt-socks`/`pt-web` no es una frontera contra `tester`; el firewall/nftables debe reforzarla.
-- `pt-web` está limitado a loopback y origen fijo; el consumo externo y TLS local siguen pendientes.
+- `pt-web` está limitado a loopback y origen fijo; el consumo externo está validado en un VPS pero no habilitado en el host final, y TLS local sigue pendiente.
 - Los targets deben estar correctamente autorizados.
 - El workspace contiene datos que requieren backup y limpieza.
 

@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - bootstrap/baseline
   schedule:
     - cron: "17 3 * * 1"
   workflow_dispatch:
@@ -81,3 +81,35 @@ jobs:
           scandir: scripts
       - name: Workflow lint
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
+
+  terraform:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      # Terraform y Python 3 ya vienen en la imagen del runner: no se
+      # anade ninguna accion de terceros para esto, que es lo que
+      # justificaba que CI no mirara Terraform.
+      - name: Formato
+        run: terraform fmt -check -recursive terraform/
+      # -backend=false: valida sin state remoto ni credenciales. Los
+      # .terraform.lock.hcl estan versionados, asi que los providers
+      # resueltos son los mismos que en local.
+      - name: Validar stacks
+        run: |
+          for stack in oci azure digitalocean; do
+            echo "== $stack =="
+            terraform -chdir="terraform/stacks/$stack" init -backend=false -input=false
+            terraform -chdir="terraform/stacks/$stack" validate
+          done
+      # El render del cloud-init es lo que terraform validate no cubre:
+      # la plantilla compila igual con el bloque `content: |` roto. El
+      # check necesita un parser YAML; PyYAML no viene en la imagen del
+      # runner, asi que se instala aqui. La version va fijada; el hash no
+      # se puede fijar de forma portable entre runners y arquitecturas.
+      - name: Render del cloud-init
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary :all: pyyaml==6.0.3
+          make tf-render-check

@@ -929,7 +929,7 @@ pt-forward doctor
 - Configurar cloud-init.
 - Integrar Tailscale.
 - Añadir scripts de bootstrap y destroy.
-- `fmt` y `validate` pasan en los tres stacks con `init -backend=false`; falta `apply` real con credenciales del operador, verificación de destrucción y `tflint`/`tfsec`/Checkov en CI.
+- `fmt` y `validate` pasan en los tres stacks con `init -backend=false`, y ambos corren en CI junto con el render del cloud-init (`make tf-render-check`). Falta `apply` real con credenciales del operador, verificación de destrucción y `tflint`/`tfsec`/Checkov, que sigue sin añadirse por ser dependencias externas nuevas.
 
 ### Fase 9 — Seguridad cloud (parcial)
 
@@ -948,7 +948,7 @@ pt-forward doctor
 - Añadir backups y snapshots.
 - Añadir alertas y runbooks.
 - Ejecutar disaster recovery.
-- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck y Actionlint, y `make scan-image` como gate local de Critical/High. Pendiente: backups/snapshots, alertas, runbooks y disaster recovery. La publicación de imágenes no aplica desde que se eliminó el registry: cada máquina construye en caliente y escanea su imagen.
+- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck, Actionlint y un job de Terraform (formato, `validate` de los tres stacks y render del cloud-init), y `make scan-image` como gate local de Critical/High. El workflow dispara en `pull_request`, en el push a `bootstrap/baseline` y semanalmente. Pendiente: backups/snapshots, alertas, runbooks y disaster recovery. La publicación de imágenes no aplica desde que se eliminó el registry: cada máquina construye en caliente y escanea su imagen.
 
 ## 20. Criterios de aceptación
 

@@ -159,6 +159,7 @@ make build-full
 make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 make scan-image SCAN_IMAGE=seclab-sbf:light
+make sbom
 make tf-fmt
 make tf-render-check
 make fail2ban-check
@@ -168,6 +169,7 @@ Resultados verificados actualmente:
 
 - Builds nativos `linux/arm64` y `linux/amd64`, sin registry: cada máquina construye la suya.
 - `make scan-image`: 0 vulnerabilidades Critical/High en las imágenes probadas.
+- `make sbom`: emite el SBOM CycloneDX 1.7 en `tmp/sbom/`, con el nombre ligado a la imagen y a su hash de insumos. Verificado en `light` (1.390 componentes) y en `full` (1.969).
 - TUN, `NET_ADMIN` y `tun0` presentes en Docker Desktop macOS.
 - `vpntry` real validado con `tryhackme.ovpn`.
 - Rutas por defecto y DNS sin cambios; `vpn-disconnect` limpia el túnel.

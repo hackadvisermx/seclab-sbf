@@ -38,7 +38,7 @@
 
 - Implementa por fases según `plan.md:798-894`; no saltes directamente a construir una imagen `full` grande.
 - Comienza con las fuentes ejecutables reales: `Dockerfile`, `compose*.yaml`, `Makefile`, scripts de entrada, lockfiles y CI. Agrega documentación solo para comportamientos verificados.
-- Al agregar una herramienta o un plugin de shell, actualiza su lockfile y escánalo; no instales binarios sin versión fijada de forma silenciosa.
+- Al agregar una herramienta o un plugin de shell, actualiza su lockfile y escánalo; no instales binarios sin versión fijada de forma silenciosa. El procedimiento paso a paso y sus trampas están en `docs/agregar-tools.md`; dentro del contenedor no se puede instalar nada (rootfs de solo lectura, `tester` sin password, sin `sudo`), así que "añadir una tool" significa siempre modificar la imagen y reconstruirla.
 - Mantén equivalentes las rutas local y de nube: local usa el workspace mediante bind mount; la nube usa un volumen del proveedor montado en la misma ruta del contenedor.
 - Para Terraform, usa stacks específicos en `terraform/stacks/{oci,azure,digitalocean}` y state remoto nativo por proveedor. Nunca versiones state local (`plan.md:630-693`). Valida con `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` (init con `-backend=false` no requiere credenciales).
 - El bootstrap de Terraform no debe recibir el `.env` de ejecución; cópialo después de que Tailscale esté disponible. Protege el state de Terraform porque puede conservar valores sensibles aunque estén marcados como `sensitive`.

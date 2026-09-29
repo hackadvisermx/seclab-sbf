@@ -145,6 +145,7 @@ La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tai
 - No se comparten claves privadas, `.env`, `.ovpn`, `workspace/` ni `tmp/`.
 - La plantilla nftables y la ruta NAT gateway de OCI fueron validadas y aplicadas en el host final; el transporte host-only del proxy sigue pendiente.
 - Usa únicamente objetivos y perfiles VPN autorizados.
+- Dentro del contenedor **no hay `sudo` ni `su`**: el rootfs es de solo lectura y `tester` no tiene password. Es deliberado, para que la imagen siga siendo auditable. Para añadir herramientas, ver [`docs/agregar-tools.md`](docs/agregar-tools.md).
 
 ## Verificación
 
@@ -175,7 +176,7 @@ scripts/                entrypoints, healthchecks, VPN, proxy y claves locales
 shell/                  Zsh, tmux y pentest-lab
 security/               configuración SSH
 supply-chain/           lockfiles de acciones, shell y herramientas
-docs/                   estado y decisiones por fase
+docs/                   decisiones por fase, acceso y como anadir herramientas
 plan.md                 fuente de verdad del producto
 vpn/                    perfiles locales ignorados
 workspace/              workspace local ignorado

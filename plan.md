@@ -259,6 +259,21 @@ Herramientas de escaneo:
 - `cargo audit`
 - `pip-audit`
 
+### El runtime no se puede modificar
+
+El servicio `lab` corre con rootfs de solo lectura, `cap_drop: ALL` y un único
+usuario `tester` sin password, sin `sudo` ni `su`. No es una omisión: si el
+usuario pudiera instalar paquetes, el contenido real del contenedor dejaría de
+coincidir con el que se revisó, y ni el lockfile ni el escaneo de CVEs valdrían.
+El modelo es reconstruir, no parchear en caliente.
+
+Lo que sí es escribible: `/workspace`, los `tmpfs`, y las rutas de estado de las
+herramientas, que apuntan por symlink al volumen (`~/.msf4`, `~/.nxc`,
+`~/.cache`) porque `/home/tester` también es de solo lectura.
+
+El procedimiento para añadir una herramienta, con sus trampas, está en
+`docs/agregar-tools.md`.
+
 ### Evidencia de construcción
 
 Sin publicación, la evidencia se genera en local y se conserva en el

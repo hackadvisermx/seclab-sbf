@@ -52,6 +52,22 @@ variable "workspace_disk_gbs" {
   default     = 64
 }
 
+variable "workspace_backup_retention_days" {
+  description = <<-EOT
+    Dias que se conservan los snapshots del disco de workspace.
+
+    El workspace es el unico dato irrecuperable del laboratorio: la imagen
+    se reconstruye desde el codigo, pero las notas y resultados de un
+    escaneo no. Un 0 lo desactiva, para un entorno desechable donde no
+    interese pagar por snapshots.
+
+    OJO: esto solo crea el snapshot inicial. Las copias posteriores hay
+    que hacerlas a mano segun docs/backups.md.
+  EOT
+  type        = number
+  default     = 0
+}
+
 variable "image_version" {
   description = "Versión de la imagen Ubuntu 24.04 (latest = última publicada)."
   type        = string

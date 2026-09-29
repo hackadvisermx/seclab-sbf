@@ -978,10 +978,10 @@ pt-forward doctor
 
 - Activar gates de CVEs.
 - Publicar y firmar imágenes: no aplica desde que se eliminó el registry. Cada máquina construye en caliente y revisa su imagen con `make scan-image` y `make sbom`.
-- Añadir backups y snapshots.
+- Añadir backups y snapshots del volumen del workspace. Implementado el snapshot inicial en los tres stacks; pendiente el backup programado en Azure y DigitalOcean, y verificarlo con un apply real.
 - Añadir alertas y runbooks.
 - Ejecutar disaster recovery.
-- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck, Actionlint, un job de Terraform (formato, `validate` de los tres stacks y render del cloud-init) y otro que valida la jail de fail2ban, mas `make scan-image` como gate local de Critical/High y los runbooks de operacion en `docs/runbooks.md`. El workflow dispara en `pull_request`, en el push a `bootstrap/baseline` y semanalmente. Pendiente: backups y snapshots automaticos del volumen del workspace, que hoy solo tiene procedimiento manual documentado, mas alertas y disaster recovery. La publicacion de imagenes no aplica desde que se elimino el registry: cada maquina construye en caliente y escanea su imagen.
+- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck, Actionlint, un job de Terraform (formato, `validate` de los tres stacks y render del cloud-init) y otro que valida la jail de fail2ban, mas `make scan-image` como gate local de Critical/High y los runbooks de operacion en `docs/runbooks.md`. El workflow dispara en `pull_request`, en el push a `bootstrap/baseline` y semanalmente. Pendiente: backups programados en Azure y DigitalOcean, que hoy son manuales, y alertas y disaster recovery. Los tres stacks crean ya un snapshot inicial del workspace en el apply (`workspace_backup_retention_days`, 0 por defecto); en OCI la retencion la fija la politica creada a mano porque el provider 9.3.0 no la admite desde el stack. La publicacion de imagenes no aplica desde que se elimino el registry: cada maquina construye en caliente y escanea su imagen.
 
 ## 20. Criterios de aceptación
 

@@ -53,7 +53,49 @@ Decisiones que no son obvias en el archivo:
 - No se aplica nada automáticamente desde el repositorio: cloud-init
   instala y habilita el servicio, y la comprobación es de solo lectura.
 
+## Qué está comprobado y qué no
+
+El criterio de aceptación dice que fail2ban *bloquea* ataques de
+autenticación repetidos. Eso son tres cosas y conviene no mezclarlas:
+
+| Comprobación | Cómo | Estado |
+|---|---|---|
+| La jail es válida | `fail2ban-client -t` en contenedor | comprobada en local y en CI |
+| El filtro cuenta los fallos y no los logins correctos | `fail2ban-regex` con dos logs sintéticos | comprobada en local y en CI |
+| La IP acaba bloqueada en nftables | hay que provocarlo en un host | **sin comprobar** |
+
+`make fail2ban-jail-check` cubre las dos primeras sin levantar ninguna
+jail y sin tocar nftables. Usa un contenedor desechable con la imagen base
+por digest, el mismo snapshot de Ubuntu que los Dockerfiles
+(`20260925T000000Z`) y fail2ban fijado a `1.0.2-3ubuntu0.1`.
+
+El log de ataque tiene que producir exactamente los fallos que declara
+`maxretry` en la jail. Si `maxretry` cambia y el log no se actualiza, el
+check falla en vez de dar un OK que ya no significaría nada: el umbral y
+el fixture están atados a propósito.
+
+Lo que sigue sin comprobar es lo que de verdad aplica fail2ban, que es
+su propia acción de baneo. Eso necesita un host Linux: provocar cinco
+fallos de autenticación y ver la regla aparecer en `nft list ruleset`.
+Está pendiente y hay que decirlo así, no dar el criterio por cumplido.
+
+Un límite que salió al probar el gate: `fail2ban-client -t` acepta en
+silencio una clave mal escrita en la jail. Se comprobó con un
+`clave_que_no_existe = 1`, que pasó el test. Ningún check de este
+repositorio detecta un `maxretryy` o un `findtime` mal puesto; lo único
+que se acerca es `make fail2ban-check`, que compara el archivo con el
+desplegado en el host.
+
 ## Verificación
+
+En cualquier máquina con Docker:
+
+```text
+make fail2ban-jail-check
+```
+
+Devuelve 78 si no hay Docker, como el resto de checks con dependencias
+externas. No necesita red más allá del snapshot de Ubuntu.
 
 En el host Linux:
 
@@ -73,6 +115,8 @@ stacks y se comprobó que la jail resultante es idéntica byte a byte a
 
 ## Pendiente
 
+- Provocar cinco fallos de autenticación en un host real y comprobar la
+  regla en `nft list ruleset`. Es lo que cierra el criterio de bloqueo.
 - ACL del tailnet en modo deny por defecto, MFA y device approval.
 - Habilitar el puente host-only del proxy en el host OCI final.
 - Pruebas externas controladas desde fuera del tailnet.

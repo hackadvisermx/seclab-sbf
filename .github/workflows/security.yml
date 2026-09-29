@@ -82,6 +82,22 @@ jobs:
       - name: Workflow lint
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
 
+  # La jail de fail2ban es lo unico de la configuracion de host que se
+  # puede validar sin un nodo. Levanta un contenedor con la imagen base
+  # por digest, el mismo snapshot de Ubuntu que usan los Dockerfiles, y
+  # comprueba que fail2ban acepta la jail y que su filtro cuenta los
+  # fallos de autenticacion. El ban efectivo en nftables no se comprueba
+  # aqui: eso necesita un host Linux de verdad.
+  fail2ban-jail:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Validar la jail
+        run: make fail2ban-jail-check
+
   terraform:
     runs-on: ubuntu-24.04
     env:

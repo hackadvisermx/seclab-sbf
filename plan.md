@@ -974,7 +974,7 @@ pt-forward doctor
 - Añadir backups y snapshots.
 - Añadir alertas y runbooks.
 - Ejecutar disaster recovery.
-- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck, Actionlint y un job de Terraform (formato, `validate` de los tres stacks y render del cloud-init), y `make scan-image` como gate local de Critical/High. El workflow dispara en `pull_request`, en el push a `bootstrap/baseline` y semanalmente. Pendiente: backups/snapshots, alertas, runbooks y disaster recovery. La publicación de imágenes no aplica desde que se eliminó el registry: cada máquina construye en caliente y escanea su imagen.
+- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck, Actionlint, un job de Terraform (formato, `validate` de los tres stacks y render del cloud-init) y otro que valida la jail de fail2ban, mas `make scan-image` como gate local de Critical/High y los runbooks de operacion en `docs/runbooks.md`. El workflow dispara en `pull_request`, en el push a `bootstrap/baseline` y semanalmente. Pendiente: backups y snapshots automaticos del volumen del workspace, que hoy solo tiene procedimiento manual documentado, mas alertas y disaster recovery. La publicacion de imagenes no aplica desde que se elimino el registry: cada maquina construye en caliente y escanea su imagen.
 
 ## 20. Criterios de aceptación
 

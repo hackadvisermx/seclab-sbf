@@ -57,6 +57,12 @@ remoto puede conservar valores sensibles aunque sean `sensitive`.
 - `terraform init -backend=false` + `validate` pasan en los 3 stacks.
 - `make verify` y `make compose config` sin cambios.
 
+## Runbooks
+
+El procedimiento de despliegue está arriba; los de operación y destrucción,
+en [`runbooks.md`](runbooks.md). Para backups y
+restauración del workspace, [`backups.md`](backups.md).
+
 ## Pendiente
 
 - `apply` real por proveedor con credenciales del operador.

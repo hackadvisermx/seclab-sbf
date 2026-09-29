@@ -939,7 +939,7 @@ pt-forward doctor
 - Bloquear metadata.
 - Aplicar una ruta NAT gateway cuando el host no tenga `public_ip`.
 - Ejecutar pruebas externas controladas.
-- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`. Pendiente: ACL, MFA y device approval de Tailscale, fail2ban, habilitar el puente del proxy y pruebas externas controladas.
+- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`; jail de sshd con fail2ban en `security/fail2ban/`, desplegada por cloud-init y verificada con `make fail2ban-check`. Pendiente: ACL, MFA y device approval de Tailscale, habilitar el puente del proxy y pruebas externas controladas.
 
 ### Fase 10 — CI/CD y operación (parcial)
 

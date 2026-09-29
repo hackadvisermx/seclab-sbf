@@ -18,7 +18,7 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | 6.5 | Completada v1 | Política nftables y contrato Tailscale host-only; aplicada y persistente en el host OCI final |
 | 7 | Completada v1 en arm64 | Imagen `full` con Metasploit, `nxc`, `john`, `hashcat`, `bettercap`, `s3scanner`, `wpscan` y forense; Ghidra/reversing quedan diferidos |
 | 8 | Stacks validados | Terraform OCI/Azure/DO con `fmt`/`validate`; falta `apply` con credenciales reales |
-| 9 | Parcial | nftables aplicado en el host OCI; faltan ACL/MFA/approval de Tailscale, fail2ban y pruebas externas |
+| 9 | Parcial | nftables aplicado en el host OCI y jail de sshd con fail2ban; faltan ACL/MFA/approval de Tailscale y pruebas externas |
 | 10 | Parcial | CI de seguridad y gate local de CVEs; faltan backups/snapshots, alertas, runbooks y disaster recovery |
 
 La Fase 5 fue validada en Docker Desktop macOS arm64 con TUN y un perfil oficial de TryHackMe. Las pruebas reales de los otros perfiles y la matriz nativa Linux siguen pendientes. La imagen `full` supera 2 GB y solo está validada en arm64.
@@ -146,6 +146,7 @@ La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tai
 - El acceso administrativo previsto es por Tailscale/SSH/ttyd privado.
 - No se comparten claves privadas, `.env`, `.ovpn`, `workspace/` ni `tmp/`.
 - La plantilla nftables y la ruta NAT gateway de OCI fueron validadas y aplicadas en el host final; el puente host-only del proxy (`scripts/host/pt-proxy-bridge.sh`) está validado en un VPS, pero todavía no habilitado en el host OCI final.
+- El `sshd` del host está cubierto por una jail de fail2ban con `banaction = nftables-multiport` y bans por IP, nunca por subred del tailnet. No cubre el `sshd` del contenedor. Ver [`docs/phase-9.md`](docs/phase-9.md).
 - Usa únicamente objetivos y perfiles VPN autorizados.
 - Dentro del contenedor **no hay `sudo` ni `su`**: el rootfs es de solo lectura y `tester` no tiene password. Es deliberado, para que la imagen siga siendo auditable. Para añadir herramientas, ver [`docs/agregar-tools.md`](docs/agregar-tools.md).
 
@@ -159,6 +160,7 @@ make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 make scan-image SCAN_IMAGE=seclab-sbf:light
 make tf-fmt
+make fail2ban-check
 ```
 
 Resultados verificados actualmente:
@@ -180,7 +182,7 @@ images/                 Dockerfiles base/light/full
 compose*.yaml           servicios lab y VPN
 scripts/                entrypoints, healthchecks, VPN, proxy, host, nube y claves locales
 shell/                  Zsh, tmux y pentest-lab
-security/               nftables, unidades systemd, Tailscale, Trivy y SSH
+security/               nftables, fail2ban, unidades systemd, Tailscale, Trivy y SSH
 supply-chain/           lockfiles de acciones, shell y herramientas
 terraform/              stacks OCI, Azure y DigitalOcean
 docs/                   decisiones por fase, acceso y como anadir herramientas

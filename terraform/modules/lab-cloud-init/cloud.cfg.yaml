@@ -41,13 +41,13 @@ write_files:
   - path: /etc/fail2ban/jail.d/seclab-sshd.conf
     owner: root:root
     permissions: "0644"
-    content: |
-      [sshd]
-      enabled = true
-      backend = systemd
-      maxretry = 5
-      bantime = 1h
-      findtime = 10m
+    # Fuente unica de la jail: security/fail2ban/jail.d/seclab-sshd.conf.
+    # Cada stack la pasa ya indentada como seclab_sshd_jail (el "\n" inicial
+    # lo anade el stack: indent() no indenta la primera linea que recibe, y
+    # sin el la cabecera [sshd] queda en la columna 0 y el YAML no es
+    # valido). Se edita la jail en el repo, nunca aqui, para que la copia
+    # del host se pueda comparar (make fail2ban-check avisa si divergen).
+    content: |${seclab_sshd_jail}
   - path: /usr/share/keyrings/tailscale-archive-keyring.gpg
     owner: root:root
     permissions: "0644"

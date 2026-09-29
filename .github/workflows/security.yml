@@ -81,6 +81,10 @@ jobs:
           scandir: scripts
       - name: Workflow lint
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
+      # Los comandos make citados en la documentación tienen que existir
+      # como target. Se colaron seis que no, en el Inicio rápido del README.
+      - name: Comandos documentados
+        run: make doc-targets-check
 
   # La jail de fail2ban es lo unico de la configuracion de host que se
   # puede validar sin un nodo. Levanta un contenedor con la imagen base

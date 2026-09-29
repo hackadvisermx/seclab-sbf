@@ -83,14 +83,14 @@ El flujo normal usa `VPN_MODE=inside`:
 Comandos adicionales:
 
 ```bash
-make compose-vpn-tun-check VPN_DIR=./vpn VPN_MODE=inside
-make compose-vpn-doctor VPN_DIR=./vpn VPN_MODE=inside
-make compose-vpn-status VPN_DIR=./vpn VPN_MODE=inside
+make vpn-tun-check VPN_DIR=./vpn VPN_MODE=inside
+make vpn-doctor VPN_DIR=./vpn VPN_MODE=inside
+make vpn-status VPN_DIR=./vpn VPN_MODE=inside
 ```
 
 `vpn-up` es idempotente y deja preparado el daemon/TUN; no inicia una VPN por sí solo. `VPN_MODE=host` queda únicamente como compatibilidad explícita y no se usa en el flujo normal.
 
-## SSH, tmux y proxy controlado
+## SSH y tmux
 
 `make keys` genera un par Ed25519 local para `tester`:
 
@@ -101,13 +101,11 @@ make compose-vpn-status VPN_DIR=./vpn VPN_MODE=inside
 
 El archivo privado nunca se monta en el contenedor. La clave se configura mediante `SSH_PUBLIC_KEY`; SFTP está desactivado y no existe una cuenta SFTP separada. El acceso SSH usa únicamente claves y shell con Zsh/tmux.
 
-La capacidad de proxy se expone para `tester` mediante `pt-forward` y un route guard; no existe un usuario `proxy` independiente. Es una interfaz controlada, no una frontera contra el propio `tester`: el firewall/nftables de la fase cloud será la barrera adicional para impedir destinos fuera de la VPN activa.
-
 `.tmux.conf` se copia a `/home/tester/.tmux.conf` durante el build con permisos `0444` y propietario `root`. El estado de plugins de TPM vive en `/tmp/tmux-plugins`, porque el rootfs es read-only.
 
 ## Proxy controlado
 
-`pt-forward`, `pt-socks` y `pt-web` ejecutan como `tester` y escuchan únicamente en `127.0.0.1`. Cada conexión exige una VPN activa y una ruta real mediante `tun0`; se bloquean loopback, metadata, Tailscale, gateways Docker y destinos fuera de la tabla VPN.
+`pt-forward`, `pt-socks` y `pt-web` ejecutan como `tester` y escuchan únicamente en `127.0.0.1`. Cada conexión exige una VPN activa y una ruta real mediante `tun0`; se bloquean loopback, metadata, Tailscale, gateways Docker y destinos fuera de la tabla VPN. No existe un usuario `proxy` independiente: es una interfaz controlada, no una frontera contra el propio `tester`, y el refuerzo de red es nftables en el host.
 
 ```text
 pt-forward start tcp <host> <port> [listen_port]
@@ -123,21 +121,22 @@ Ejemplos: `pt-forward start tcp 192.168.192.1 80 18080`, `pt-socks 1080` y `pt-w
 Desde el host:
 
 ```bash
-make compose-proxy-status
-make compose-proxy-doctor
-make compose-proxy-stop
+make proxy-status
+make proxy-doctor
+make proxy-stop
 ```
 
-La route guard es una interfaz de uso, no una frontera contra `tester`; nftables/cloud queda como refuerzo de seguridad.
-
-En Linux, las comprobaciones de host se ejecutan sin aplicar cambios:
+En Linux, las comprobaciones de host se ejecutan sin aplicar nada:
 
 ```bash
 make security-check
 make tailscale-check
+make fail2ban-check
 ```
 
-La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de Tailscale están en `security/`; Docker Desktop/macOS omite esos checks.
+La plantilla `security/policies/nftables-lab.nft` y el contrato host-only de
+Tailscale están en `security/`; Docker Desktop/macOS omite esos checks y
+devuelve `skipped`.
 
 ## Seguridad y límites
 
@@ -169,7 +168,7 @@ make fail2ban-check
 
 Resultados verificados actualmente:
 
-- Builds nativos `linux/arm64` y `linux/amd64`, sin registry: cada máquina construye la suya.
+- Builds nativos `linux/arm64` y `linux/amd64`, sin registry: cada máquina construye la suya. El de amd64 se comprobó desde el portátil arm64 con `make build-light BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`: 219 paquetes, 0 Critical/High y hashes de `ttyd` y `dalfox` idénticos a los del lockfile.
 - `make scan-image`: 0 vulnerabilidades Critical/High en las imágenes probadas.
 - `make sbom`: emite el SBOM CycloneDX 1.7 en `tmp/sbom/`, con el nombre ligado a la imagen y a su hash de insumos. Verificado en `light` (1.390 componentes) y en `full` (1.969).
 - TUN, `NET_ADMIN` y `tun0` presentes en Docker Desktop macOS.

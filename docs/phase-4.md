@@ -86,6 +86,8 @@ pentest-reset
 ## Pendiente
 
 - Pruebas de interacción nativas en hardware AMD64.
-- Las conexiones VPN reales de otros perfiles y la prueba nativa Linux quedan en el seguimiento de Fase 5.
-- `pentest-reset` solo limpia el historial de tmux y no modifica el workspace.
-- Tailscale, proxy, wordlists y herramientas upstream permanecen en fases posteriores.
+- La VPN, Tailscale, el proxy y las herramientas upstream ya tienen fase
+  propia y su estado está en sus documentos: `phase-5.md`, `phase-6.md`,
+  `phase-7-security.md` y `phase-7.md`. Aquí no se siguen.
+- `pentest-reset` solo limpia el historial de tmux y no modifica el workspace,
+  que es un límite del comando, no un pendiente.

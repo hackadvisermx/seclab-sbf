@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: sync-secrets base-check scan-image sbom profile-info help verify verify-secrets lint-docker lint-shell build-base build-light build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image lab-ssh-full lab-ssh-cloud-full rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
+.PHONY: sync-secrets base-check scan-image sbom profile-info help verify verify-secrets lint-docker lint-shell build-base build-light build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image lab-ssh-full lab-ssh-cloud-full rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -39,7 +39,7 @@ COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECR
 COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" PENTEST_PROFILE="$(LAB_PROFILE)" docker compose $(VPN_COMPOSE)
 
 help:
-	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  profile-info     Imagen y perfil efectivos, y si el perfil es deducible' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_IMAGE=light|full)' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-full      Atajo local para la imagen full' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
+	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base/light/full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  profile-info     Imagen y perfil efectivos, y si el perfil es deducible' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-light       Imagen light' '  build-full        Imagen full (VM desechable)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando (LAB_IMAGE=light|full)' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-full      Atajo local para la imagen full' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  doc-targets-check Comandos make citados que existan' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell verify-pins
 
@@ -67,11 +67,22 @@ lint-shell:
 		if [ -f "$$file" ]; then shellcheck "$$file"; fi; \
 	done
 
+# Por defecto cada maquina compila nativa y vacio significa "no fijar
+# --platform", que es lo que quiere el diseno. BUILD_PLATFORM sirve para
+# validar la otra arquitectura desde una maquina que no la tiene (una
+# portatil arm64 comprobando el build del host OCI amd64, por ejemplo),
+# y BUILD_TAG evita que esa imagen pise la nativa. El target sigue siendo
+# parametrizado con TARGETOS/TARGETARCH: la cross-compilacion la decide
+# el propio Dockerfile.
+BUILD_PLATFORM ?=
+BUILD_TAG ?=
+BUILD_PLATFORM_ARG = $(if $(BUILD_PLATFORM),--platform $(BUILD_PLATFORM),)
+
 build-base:
-	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull --file images/base/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:base --load .
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull $(BUILD_PLATFORM_ARG) --file images/base/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:base$(BUILD_TAG) --load .
 
 build-light: build-base
-	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base --file images/light/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:light --load .
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain $(BUILD_PLATFORM_ARG) --build-arg BASE_IMAGE=seclab-sbf:base$(BUILD_TAG) --file images/light/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:light$(BUILD_TAG) --load .
 
 FULL_BASE ?= seclab-sbf:light
 
@@ -420,6 +431,11 @@ tflint-check:
 	  tflint --chdir="terraform/stacks/$$stack" || exit 1; \
 	done
 	@printf '%s\n' 'tflint_check=ok config=.tflint.hcl'
+
+# Los comandos make citados en la documentación tienen que existir. Se
+# colaron seis que no, todos en el Inicio rapido del README.
+doc-targets-check:
+	/bin/sh scripts/verify/check-doc-targets.sh README.md AGENTS.md docs/runbooks.md docs/backups.md docs/phase-8.md
 
 # Valida la jail de fail2ban con el propio fail2ban, en un contenedor
 # desechable. No levanta ninguna jail ni toca nftables: solo parsea la

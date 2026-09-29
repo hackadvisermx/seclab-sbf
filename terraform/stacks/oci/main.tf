@@ -165,6 +165,10 @@ resource "oci_core_instance" "lab" {
       ssh_public_key   = var.ssh_public_key
       workspace_device = local.workspace_device
       workspace_mount  = local.workspace_mount
+      # La jail de fail2ban vive en el repo, no aqui: se edita en
+      # security/fail2ban/ y `make fail2ban-check` compara la copia
+      # del host contra esa.
+      seclab_sshd_jail = indent(6, join("", ["\n", file("${path.module}/../../../security/fail2ban/jail.d/seclab-sshd.conf")]))
     }))
   }
 }

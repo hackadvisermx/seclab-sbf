@@ -965,7 +965,7 @@ pt-forward doctor
 - Bloquear metadata.
 - Aplicar una ruta NAT gateway cuando el host no tenga `public_ip`.
 - Ejecutar pruebas externas controladas.
-- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`; jail de sshd con fail2ban en `security/fail2ban/`, desplegada por cloud-init y verificada con `make fail2ban-check`. Pendiente: ACL, MFA y device approval de Tailscale, habilitar el puente del proxy y pruebas externas controladas.
+- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`; jail de sshd con fail2ban en `security/fail2ban/`, desplegada por cloud-init, validada contra el propio fail2ban con `make fail2ban-jail-check` en local y en CI. El bloqueo efectivo en nftables sigue sin comprobarse: requiere provocar cinco fallos de autenticación en un host real. Pendiente: ACL, MFA y device approval de Tailscale, habilitar el puente del proxy y pruebas externas controladas.
 
 ### Fase 10 — CI/CD y operación (parcial)
 
@@ -996,7 +996,7 @@ pt-forward doctor
 - `pt-web` rechaza absolute-form y no puede seleccionar un destino distinto al origen configurado.
 - Los proxies no alcanzan Tailscale, metadata o Docker.
 - `security-check` valida la política en Linux; la aplicación host queda bajo revisión del operador.
-- Fail2ban bloquea ataques de autenticación repetidos.
+- Fail2ban bloquea ataques de autenticación repetidos. La jail es válida y su filtro cuenta los fallos (`make fail2ban-jail-check`); el bloqueo en nftables sigue sin comprobarse en un host real.
 - Cada imagen construida tiene SBOM y registro de `make scan-image` con su hash de insumos.
 - Los CVEs críticos bloquean el uso de la imagen.
 - Terraform state está protegido y versionado.

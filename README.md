@@ -162,6 +162,7 @@ make scan-image SCAN_IMAGE=seclab-sbf:light
 make sbom
 make tf-fmt
 make tflint-check
+make fail2ban-jail-check
 make tf-render-check
 make fail2ban-check
 ```
@@ -179,6 +180,7 @@ Resultados verificados actualmente:
 - `make verify` (Gitleaks, Hadolint, ShellCheck y pines de Actions) pasa; ShellCheck solo informa SC2329 en `scripts/entrypoint/light-entrypoint.sh` por una función `cleanup` invocada de forma indirecta.
 - `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` pasan en OCI, Azure y DigitalOcean sin `apply`, y los tres corren igual en CI.
 - `make tflint-check` pasa en los tres stacks con el ruleset `terraform` embebido, sin plugins del registro. Requiere `tflint` instalado; sin él sale `unavailable`.
+- `make fail2ban-jail-check` valida la jail de sshd con el propio fail2ban, en un contenedor desechable, sin necesidad de un nodo. Verificado en local y en CI: la jail es válida y el filtro cuenta los cinco fallos de un ataque sin contar los logins correctos. **El ban efectivo en nftables sigue sin comprobarse** y necesita un host Linux; ver [`docs/phase-9.md`](docs/phase-9.md).
 - `make tf-render-check` renderiza el cloud-init compartido y comprueba que sigue siendo YAML válido y que la jail de fail2ban llega al host idéntica al repo. Es la única verificación que cubre el render: `validate` pasa aunque la plantilla produzca YAML roto.
 
 ## Estructura principal

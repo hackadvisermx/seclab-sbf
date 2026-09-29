@@ -57,10 +57,26 @@ Son tablas distintas y no se pisan:
   metadata, Tailscale o los bridges de Docker.
 - `f2b-table` de fail2ban, que banea en `input`.
 
-`make security-check` y `make fail2ban-check` son independientes y
-ninguno aplica nada: solo validan.
+`make security-check`, `make fail2ban-check` y `make fail2ban-jail-check`
+son independientes y ninguno aplica nada: solo validan.
 
 ## Verificación
+
+En cualquier máquina con Docker, sin nodo:
+
+```text
+make fail2ban-jail-check
+```
+
+Levanta un contenedor desechable con la imagen base por digest, el mismo
+snapshot de Ubuntu que los Dockerfiles (`20260925T000000Z`) y fail2ban
+fijado a `1.0.2-3ubuntu0.1`, y comprueba dos cosas: que `fail2ban-client
+-t` acepta la jail, y que el filtro de sshd cuenta los cinco fallos del
+log de ataque sin contar los logins correctos. No levanta ninguna jail ni
+toca nftables, así que no sustituye a la prueba real en el host.
+
+Cubre el parseo y el conteo, no el bloqueo. El ban en nftables lo aplica
+fail2ban con sus propias acciones y hay que verlo en un nodo.
 
 En el host Linux:
 

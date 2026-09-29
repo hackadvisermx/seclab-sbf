@@ -19,10 +19,12 @@ apt-get install -y --no-install-recommends \
   file \
   gdb \
   git \
+  hexedit \
   iproute2 \
   iputils-ping \
   jq \
   less \
+  libimage-exiftool-perl \
   libpcap0.8t64 \
   nmap \
   openssh-client \

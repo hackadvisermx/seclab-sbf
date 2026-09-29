@@ -14,10 +14,12 @@ apt:
     gdb: 15.1-1ubuntu1~24.04.1
     gdb-multiarch: 15.1-1ubuntu1~24.04.1
     git: 1:2.43.0-1ubuntu7.3
+    hexedit: 1.6-1
     iproute2: 6.1.0-1ubuntu6.4
     iputils-ping: 3:20240117-1ubuntu0.1
     jq: 1.7.1-3ubuntu0.24.04.2
     less: 590-2ubuntu2.1
+    libimage-exiftool-perl: 12.76+dfsg-1
     libpcap0.8t64: 1.10.4-4.1ubuntu3
     libusb-1.0-0: 2:1.0.27-1
     nmap: 7.94+git20230807.3be01efb1+dfsg-3build2
@@ -119,8 +121,23 @@ ruby:
   - name: wpscan
     version: 4.1.0
     source: https://rubygems.org/gems/wpscan/4.1.0/
-    note: escaner de WordPress. Se instala en un GEM_HOME propio (/opt/wpscan-gems)
-         para no tocar el bundle bloqueado de Metasploit con el que comparte nokogiri.
+    gem_home: /opt/wpscan-gems
+    wrapper: scripts/wpscan-wrapper.sh
+    note: escaner de WordPress. Se instala en un GEM_HOME propio para no tocar el
+         bundle bloqueado de Metasploit con el que comparte nokogiri.
+  - name: zsteg
+    version: 0.2.14
+    source: https://rubygems.org/gems/zsteg/0.2.14/
+    gem_home: /opt/zsteg-gems
+    wrapper: scripts/zsteg-wrapper.sh
+    dependencies: [iostruct >= 0.7.0, prime, zpng >= 0.4.6]
+    note: extraccion de datos esteganograficos. Ruby puro, pero se compila en
+         msf-builder junto a wpscan por si alguna dependencia suya trae extension.
+         Bug conocido de 0.2.14 - el atajo `zsteg -e lsb` aborta con
+         NoMethodError porque decode_param_string no rellena channels si no se
+         indica ninguno. Hay que pasar siempre los canales, por ejemplo
+         `zsteg -e b1,lsb,rgba`. El informe sin -e (`zsteg fichero`) si
+         funciona. Es la ultima version publicada, asi que no hay una corregida.
 python:
   - name: pwntools
     version: 4.15.0

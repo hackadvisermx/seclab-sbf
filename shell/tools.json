@@ -11,7 +11,8 @@
     "utilities": "Utilidades",
     "vpn": "VPN",
     "web": "Web",
-    "pentest": "Pentest"
+    "pentest": "Pentest",
+    "forensics": "Forense"
   },
   "tools": {
     "curl": {
@@ -243,6 +244,21 @@
       "category": "development",
       "command": "gdb-multiarch",
       "description": "Depuración de binarios de otras arquitecturas"
+    },
+    "exiftool": {
+      "category": "forensics",
+      "command": "exiftool",
+      "description": "Lee y escribe metadatos EXIF de fotos, vídeos y documentos"
+    },
+    "hexedit": {
+      "category": "forensics",
+      "command": "hexedit",
+      "description": "Editor hexadecimal en la terminal, con búsqueda y edición"
+    },
+    "zsteg": {
+      "category": "forensics",
+      "command": "zsteg",
+      "description": "Extrae datos esteganográficos de imágenes; en -e indica siempre los canales (b1,lsb,rgba)"
     }
   },
   "profiles": {
@@ -253,6 +269,7 @@
       "curl",
       "dalfox",
       "dnsx",
+      "exiftool",
       "fd",
       "feroxbuster",
       "ffuf",
@@ -262,6 +279,7 @@
       "git",
       "gobuster",
       "hashcat",
+      "hexedit",
       "httpx",
       "ip",
       "john",
@@ -292,7 +310,8 @@
       "wireguard",
       "wpscan",
       "zoxide",
-      "zsh"
+      "zsh",
+      "zsteg"
     ],
     "light": [
       "anew",
@@ -300,6 +319,7 @@
       "curl",
       "dalfox",
       "dnsx",
+      "exiftool",
       "fd",
       "feroxbuster",
       "ffuf",
@@ -307,6 +327,7 @@
       "gdb",
       "git",
       "gobuster",
+      "hexedit",
       "httpx",
       "ip",
       "jq",

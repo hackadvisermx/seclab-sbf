@@ -115,7 +115,7 @@ Si introduces una categoría nueva, también va en el mapa `categories` y en el
 ### 3.4 Reconstruir y revisar
 
 ```bash
-make build-light          # o build-full
+make build-full
 make scan-image           # el gate de CVEs
 ```
 

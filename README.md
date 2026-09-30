@@ -156,7 +156,6 @@ make verify
 make build-full
 make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-make scan-image SCAN_IMAGE=seclab-sbf:light
 make sbom
 make tf-fmt
 make tflint-check

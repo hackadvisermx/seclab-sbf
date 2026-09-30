@@ -3,12 +3,11 @@ misconfigurations:
   # como servicio root, ttyd supervisando la sesion y el daemon VPN que
   # necesita NET_ADMIN para crear tun0. Las sesiones de usuario son siempre
   # el usuario `tester`; root no se usa para el trabajo de pentest.
-  # `full` no anade ningun USER nuevo: hereda de `light` y solo instala
-  # herramientas, asi que la misma justificacion le cubre.
+  # `full` no anade ningun USER nuevo: desde la fusion solo instala
+  # herramientas encima de `base`, asi que la misma justificacion le cubre.
   - id: DS-0002
     paths:
       - images/base/Dockerfile
-      - images/light/Dockerfile
       - images/full/Dockerfile
       # tmp/ es scratch local sin versionar, con Dockerfiles de referencia
       # ajenos a este proyecto que este gate no tiene que juzgar.

@@ -7,8 +7,8 @@
 ## Validación
 
 - [ ] `make verify`
-- [ ] `make build-light`
-- [ ] `make compose config ENV_FILE=.env.example`
+- [ ] `make build-full`
+- [ ] `make compose-config ENV_FILE=.env.example`
 - [ ] Actionlint
 - [ ] Gate Scout Critical/High
 - [ ] Smoke tests de la fase:

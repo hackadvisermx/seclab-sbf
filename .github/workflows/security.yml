@@ -88,6 +88,13 @@ jobs:
       - name: Referencias de compose
         run: make compose-refs-check
 
+      # El texto de make help es un bloque enorme de comillas simples en
+      # una sola linea. Partirlo crea una regla espuria que solo se ve con
+      # GNU Make 4.x, asi que este guard tiene que correr en CI y no solo
+      # en el portatil.
+      - name: Estructura del Makefile
+        run: make makefile-check
+
   # La jail de fail2ban es lo unico de la configuracion de host que se
   # puede validar sin un nodo. Levanta un contenedor con la imagen base
   # por digest, el mismo snapshot de Ubuntu que usan los Dockerfiles, y

@@ -95,6 +95,50 @@ jobs:
       - name: Estructura del Makefile
         run: make makefile-check
 
+  # Decide si este PR toca la imagen. El build completo tarda mas de 90
+  # min en un runner de 2 nucleos, y el repo es privado, o sea que cada
+  # minuto se factura. Sin este filtro, un PR que solo toca un README
+  # pagaria el build entero.
+  #
+  # Se calcula con git en vez de con dorny/paths-filter para no anadir una
+  # dependencia externa que mantener pinneada.
+  build-scope:
+    name: detectar cambios en la imagen
+    runs-on: ubuntu-24.04
+    outputs:
+      changes: ${{ steps.scope.outputs.changes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # Hace falta el lado base del PR para poder comparar. Sin esto
+          # el base sha no esta en el clon y el diff no se puede hacer.
+          fetch-depth: 0
+
+      # Las rutas vigiladas las saca el propio script de los COPY de los
+      # Dockerfiles, no una lista escrita a mano: un filtro a mano se
+      # queda viejo y acaba sin detectar lo que queria detectar.
+      #
+      # En push y en el cron semanal siempre se construye: de ahi sale la
+      # garantia de que bootstrap/baseline es construible.
+      - name: ¿Cambio la imagen?
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo 'changes=true' >> "$GITHUB_OUTPUT"
+            echo 'push o cron: se construye siempre'
+            exit 0
+          fi
+          if /bin/sh scripts/verify/image-scope.sh "$BASE_SHA" HEAD; then
+            echo 'changes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changes=false' >> "$GITHUB_OUTPUT"
+            echo 'sin cambios en la imagen: se omite el build'
+          fi
+
   # La imagen nunca se construyo en ningun sitio: los jobs de arriba solo
   # la linteaban. Por eso un ARG declarado fuera de etapa (`PAT_COMMIT is
   # required`) y un compose apuntando a un Dockerfile ya borrado pudieron
@@ -106,14 +150,38 @@ jobs:
   # emulacion, que desde un portatil arm64 son horas.
   image-build:
     name: build imagen (amd64 nativo)
+    needs: build-scope
+    if: needs.build-scope.outputs.changes == 'true'
     runs-on: ubuntu-24.04
-    # El build son 257 paquetes, toolchains de Go, Metasploit y wordlists.
-    # En un runner de 2 nucleos tarda bastante mas que en el portatil, asi
-    # que el limite sube del valor por defecto de 360 min.
-    timeout-minutes: 90
+    # Medido: en un runner de 2 nucleos el build completo NO termina en 90
+    # min (la primera vez que se intento lo cancelo a 1h35m). Se sube a 180
+    # min para que un build en frio llegue a acabar; con la cache de capas,
+    # los siguientes son minutos.
+    timeout-minutes: 180
+    env:
+      BUILDX_CACHE: --cache-from type=gha --cache-to type=gha,mode=max
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # La cache de capas exige un builder con driver docker-container: el
+      # driver por defecto (docker) no la puede exportar. Se crea aqui.
+      - name: Builder con cache
+        run: |
+          docker buildx create --name ci --driver docker-container --use
+          docker buildx inspect --bootstrap
+
+      # Prueba de humo de la cache ANTES del build largo. Si `type=gha`
+      # no funciona en el runner, este paso falla en segundos en lugar de
+      # dejar el build entero corriendo hasta que se agote el timeout.
+      # FROM scratch con un COPY: ni red ni imagen sin pinear.
+      - name: Comprobar la cache de capas
+        run: |
+          mkdir -p /tmp/cacheprobe
+          printf 'probe\n' > /tmp/cacheprobe/probe.txt
+          printf 'FROM scratch\nCOPY probe.txt /probe.txt\n' > /tmp/cacheprobe/Dockerfile
+          docker buildx build --cache-from type=gha --cache-to type=gha,mode=max \
+            -f /tmp/cacheprobe/Dockerfile -t cacheprobe:local /tmp/cacheprobe
 
       # Se invoca el target del Makefile y no un `docker build` aparte:
       # una sola forma de construir la imagen, la misma que corre en local

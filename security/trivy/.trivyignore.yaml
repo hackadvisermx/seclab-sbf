@@ -4,7 +4,7 @@
 # `make scan-image`; este fichero lo consume ese gate.
 #
 # Las excepciones de este fichero son todas de paquetes de `full`. `base` y
-# `light` no tienen ninguna entrada aqui; si aparece una, es un error.
+# la imagen del laboratorio no tienen ninguna entrada aqui; si aparece una, es un error.
 # El gate es el mismo para las tres imagenes: `SCAN_IGNORE_UNFIXED=true` por
 # defecto, asi que los sin parche no bloquean en ninguna. Para cerrarlos:
 #   make scan-image SCAN_IGNORE_UNFIXED=false

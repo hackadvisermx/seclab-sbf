@@ -2,7 +2,7 @@
 set -eu
 
 test -d /workspace
-test -x /usr/local/bin/light-entrypoint
+test -x /usr/local/bin/lab-entrypoint
 test -x /usr/bin/zsh
 test -r /opt/seclab/oh-my-zsh/oh-my-zsh.sh
 test -r /home/tester/.zshrc
@@ -19,4 +19,4 @@ test -s /run/ttyd.pid
 
 kill -0 "$(cat /run/ssh/sshd.pid)"
 kill -0 "$(cat /run/ttyd.pid)"
-printf 'light-health=ok\n'
+printf 'lab-health=ok\n'

@@ -162,7 +162,7 @@ no hay build tag que la excluya, así que no existe build sin cgo.
 
 Por eso el release oficial de `bettercap` solo sirve para `linux_amd64`: en
 `arm64` hay que compilarlo, con el mismo patrón de cross-compile que ya usa
-`naabu` en `light`.
+`naabu` en la imagen del laboratorio.
 
 ### 5.3 Los gems de Ruby se compilan en `msf-builder`, no en la imagen final
 

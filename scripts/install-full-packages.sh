@@ -1,5 +1,6 @@
 #!/bin/sh
-# Paquetes y datos de la imagen full. Se ejecuta sobre light.
+# Paquetes y datos pesados de la imagen del laboratorio: Metasploit, nxc,
+# john, hashcat y las wordlists. Se ejecuta tras install-toolkit-packages.
 # Requiere SNAPSHOT_ID, PAT_COMMIT, EXPLOITDB_COMMIT y SECLISTS_COMMIT.
 set -eu
 

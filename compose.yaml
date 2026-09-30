@@ -74,7 +74,7 @@ services:
     healthcheck:
       test:
         - CMD
-        - /usr/local/bin/light-healthcheck
+        - /usr/local/bin/lab-healthcheck
       interval: 30s
       timeout: 5s
       retries: 3

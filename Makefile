@@ -68,25 +68,15 @@ BUILD_PLATFORM ?=
 BUILD_TAG ?=
 BUILD_PLATFORM_ARG = $(if $(BUILD_PLATFORM),--platform $(BUILD_PLATFORM),)
 
-# Solo la usa CI. En local se deja vacia: `type=gha` necesita un builder
-# con driver docker-container, que en el portatil no esta y no aporta
-# nada (la cache local ya la tiene el daemon).
-#
-# Por que existe: el build completo tarda mas de 90 min en un runner de
-# GitHub de 2 nucleos. Con cache de capas, un PR que NO toca el
-# Dockerfile se resuelve en minutos y solo se paga el build entero
-# cuando el Dockerfile cambia, que es justo cuando hace falta.
-# Esto no es un registry: son capas de build, no una imagen publicada.
-BUILDX_CACHE ?=
 
 build-base:
-	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull $(BUILD_PLATFORM_ARG) $(BUILDX_CACHE) --file images/base/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:base$(BUILD_TAG) --load .
+	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull $(BUILD_PLATFORM_ARG) --file images/base/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:base$(BUILD_TAG) --load .
 
 # Imagen unica del laboratorio. Antes habia light y full, con full haciendo
 # FROM light: la imagen final contenia las dos. Se fusionaron el 2026-09-29 y
 # base es lo unico que se construye antes.
 build-full: build-base
-	BUILDKIT_PROGRESS=plain docker buildx build $(BUILD_PLATFORM_ARG) $(BUILDX_CACHE) --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base$(BUILD_TAG) --file images/full/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:full$(BUILD_TAG) --load .
+	BUILDKIT_PROGRESS=plain docker buildx build $(BUILD_PLATFORM_ARG) --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base$(BUILD_TAG) --file images/full/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:full$(BUILD_TAG) --load .
 
 env-init:
 	@if [ -e "$(ENV_FILE)" ]; then \

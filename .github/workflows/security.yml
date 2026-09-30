@@ -151,37 +151,24 @@ jobs:
   image-build:
     name: build imagen (amd64 nativo)
     needs: build-scope
-    if: needs.build-scope.outputs.changes == 'true'
+    # NO corre en pull_request. El build completo no cabe en un runner de
+    # 2 nucleos por un margen que todavia no se ha medido, y el repo es
+    # privado, asi que cada minuto se factura. Ponerlo en cada PR
+    # significaba pagar mas de hora y media de runner por un cambio de
+    # README. Aqui se ejecuta al llegar a bootstrap/baseline, en el cron
+    # semanal y a mano, que es donde se necesita la garantia: que la rama
+    # por defecto es construible y que la imagen existe en amd64.
+    if: github.event_name != 'pull_request' && needs.build-scope.outputs.changes == 'true'
     runs-on: ubuntu-24.04
     # Medido: en un runner de 2 nucleos el build completo NO termina en 90
-    # min (la primera vez que se intento lo cancelo a 1h35m). Se sube a 180
-    # min para que un build en frio llegue a acabar; con la cache de capas,
-    # los siguientes son minutos.
-    timeout-minutes: 180
-    env:
-      BUILDX_CACHE: --cache-from type=gha --cache-to type=gha,mode=max
+    # min (lo cancelo a 1h35m sin acabar). Como este job ya no corre en cada
+    # PR sino al llegar a la rama por defecto y semanalmente, el limite se
+    # sube a 300 min: son minutos pocos y caros, pero mejor que un build
+    # que se corta a medias y no prueba nada.
+    timeout-minutes: 300
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-      # La cache de capas exige un builder con driver docker-container: el
-      # driver por defecto (docker) no la puede exportar. Se crea aqui.
-      - name: Builder con cache
-        run: |
-          docker buildx create --name ci --driver docker-container --use
-          docker buildx inspect --bootstrap
-
-      # Prueba de humo de la cache ANTES del build largo. Si `type=gha`
-      # no funciona en el runner, este paso falla en segundos en lugar de
-      # dejar el build entero corriendo hasta que se agote el timeout.
-      # FROM scratch con un COPY: ni red ni imagen sin pinear.
-      - name: Comprobar la cache de capas
-        run: |
-          mkdir -p /tmp/cacheprobe
-          printf 'probe\n' > /tmp/cacheprobe/probe.txt
-          printf 'FROM scratch\nCOPY probe.txt /probe.txt\n' > /tmp/cacheprobe/Dockerfile
-          docker buildx build --cache-from type=gha --cache-to type=gha,mode=max \
-            -f /tmp/cacheprobe/Dockerfile -t cacheprobe:local /tmp/cacheprobe
 
       # Se invoca el target del Makefile y no un `docker build` aparte:
       # una sola forma de construir la imagen, la misma que corre en local

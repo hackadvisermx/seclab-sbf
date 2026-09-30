@@ -157,6 +157,19 @@ resource "oci_core_instance" "lab" {
     nsg_ids          = [oci_core_network_security_group.lab.id]
   }
 
+  # OJO: metadata es un map(string) y el provider lo trata como inmutable.
+  # Cualquier cambio en el cloud-init, en la jail de fail2ban o en el
+  # user_data hace que este recurso entre en plan como "must be replaced":
+  # se destruye la instancia y se crea otra. NO es un refresh y NO toca el
+  # volumen del workspace, que es un recurso aparte y sobrevive; lo que se
+  # pierde es la sesion de Tailscale y hay que volver a unirlo.
+  #
+  # Antes de aplicar un plan que diga "must be replaced" en esta instancia:
+  #   1. tf-plan y leer si es solo metadata o hay algo mas.
+  #   2. Si el workspace importa, el snapshot del stack lo cubre; si no,
+  #      el procedimiento manual de docs/backups.md.
+  #   3. Tras el apply, rehacer el join de Tailscale con una key one-off y
+  #      revocarla. Ver security/tailscale/README.md.
   metadata = {
     ssh_authorized_keys = var.ssh_public_key
     user_data = base64encode(templatefile("${path.module}/../../modules/lab-cloud-init/cloud.cfg.yaml", {

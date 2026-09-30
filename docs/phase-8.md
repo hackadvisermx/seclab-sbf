@@ -63,9 +63,33 @@ El procedimiento de despliegue está arriba; los de operación y destrucción,
 en [`runbooks.md`](runbooks.md). Para backups y
 restauración del workspace, [`backups.md`](backups.md).
 
+## Estado real de OCI (verificado 2026-09-29)
+
+Hay un **nodo desplegado**: `seclab-sbf-prod-lab`, en `mx-monterrey-1`, creado
+el 2026-09-25. El state remoto tiene 14 recursos y el provider se
+autentica con `~/.oci`, sin variables `TF_VAR_`.
+
+Su `tf-plan` pide **reemplazar la instancia** (`2 to add, 0 to change, 2 to
+destroy`). La causa está aislada: `metadata.user_data` es un `map(string)` que
+el provider de OCI trata como inmutable, y el nodo se creó con un
+cloud-init anterior al actual (sin la jail de fail2ban, con el `mkdir` del
+workspace fusionado en la línea de `iscsid`).
+
+Lo que NO pasa, pese a lo que sugiere el plan:
+
+- **No se asigna IP pública.** `assign_public_ip = false` está en
+  `create_vnic_details` y no aparece entre los cambios. El `+ public_ip` del
+  plan es un atributo calculado a nivel de instancia, no una petición.
+
+Lo que sí se pierde si se aplica: la sesión de Tailscale, y hay que rehacer
+el join. El volumen del workspace sobrevive, porque es un recurso aparte.
+
+`make tf-destroy-check` existe para que nadie lea esto por primera vez
+justo después de un `terraform apply`.
+
 ## Pendiente
 
-- `apply` real por proveedor con credenciales del operador.
+- Decidir si el nodo de OCI se importa al estado actual o se acepta su reemplazo. El plan está medido y documentado arriba.
 - Snapshot del workspace verificado en un apply real. Los tres stacks lo
   crean en el `apply` y validan, pero no se ha ejecutado ninguno.
 - Backup programado en Azure y DigitalOcean; hoy son manuales. En OCI la

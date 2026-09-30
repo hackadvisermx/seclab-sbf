@@ -9,7 +9,7 @@ output "droplet_urn" {
 }
 
 output "workspace_mount" {
-  description = "Punto de montaje del volumen de workspace en el host."
+  description = "Ruta del workspace en el host (carpeta del disco de arranque)."
   value       = local.workspace_mount
 }
 

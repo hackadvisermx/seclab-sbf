@@ -144,12 +144,11 @@ salida de `ensure-image`; se fuerza con:
 make rebuild-image LAB_IMAGE=light
 ```
 
-**Confirma qué imagen y perfil están efectivos** antes de seguir
-diagnosticando, porque `PENTEST_PROFILE` del `.env` puede decir `light`
-mientras la imagen sea `full`:
+**Confirma qué imagen está en uso** antes de seguir diagnosticando:
 
 ```bash
-make profile-info
+docker compose -f compose.yaml -f compose.local.yaml ps
+docker image inspect -f '{{index .Config.Labels "seclab.build-inputs"}}' seclab-sbf:full
 ```
 
 ## TUN no disponible
@@ -222,8 +221,8 @@ cero.
 
 Qué sobrevive y qué no:
 
-- **El volumen del workspace sobrevive.** Es un recurso aparte. Aun así,
-  ten snapshot o el backup manual de `backups.md`.
+- **El workspace se pierde con la VM.** Es una carpeta del disco de
+  arranque, no un volumen aparte. Si la VM no existe, su contenido tampoco.
 - **La red sobrevive**: VCN, subred, NAT gateway y security groups.
 - **La sesión de Tailscale no está, porque no hay nodo.** Cuando se cree,
   hay que hacer el join con una key one-off nueva y revocarla.
@@ -254,10 +253,9 @@ No aplica nada ni toma decisiones: solo avisa.
 
 Qué se conserva y qué no, según `tf-destroy-check`:
 
-- **El volumen del workspace sobrevive.** Es un recurso aparte, no se toca
-  al reemplazar la instancia. Aun así, ten un snapshot o el backup manual
-  de `backups.md` antes de continuar: "no se toca en el plan" no es lo mismo
-  que "está a salvo".
+- **El workspace se pierde.** Es una carpeta del disco de arranque, así que
+  se va con la VM. **Cópialo antes de aplicar** con el procedimiento de
+  `backups.md`. Esto es lo más importante de este runbook.
 - **Se pierde la sesión de Tailscale.** Tras el apply hay que rehacer el
   `tailscale up` con una key one-off nueva y revocarla. Ver el runbook de
   Tailscale más abajo.
@@ -270,12 +268,12 @@ Si el nodo ya te sirve y solo quieres que el código lo describa, la vía es
 El objetivo del diseño es que el nodo se pueda tirar sin dejar rastro de
 acceso.
 
-1. **Copia lo que quieras conservar del workspace.** Está en el volumen del
-   proveedor, no en el disco del sistema, y `tf-destroy` se lo lleva. El
-   procedimiento está en [`backups.md`](backups.md).
+1. **Copia el workspace.** Es una carpeta del disco de arranque y `tf-destroy`
+   se la lleva. El procedimiento está en [`backups.md`](backups.md).
 
 2. **Destruye por Terraform**, nunca desde la consola del proveedor: así el
-   state remoto y los recursos quedan consistentes entre sí.
+   state remoto y los recursos quedan consistentes entre sí. Recuerda que
+   el workspace es una carpeta del disco: se va con la VM.
 
    ```bash
    make tf-destroy-oci

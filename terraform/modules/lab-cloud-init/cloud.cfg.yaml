@@ -2,7 +2,7 @@
 # Módulo compartido de cloud-init para los stacks de seclab-sbf.
 # No recibe secretos: ni .env, ni claves Tailscale, ni credenciales.
 # Tailscale se instala y une MANUALMENTE por consola (ver docs/phase-8.md).
-# Variables templatefile: admin_user, workspace_device, workspace_mount,
+# Variables templatefile: admin_user, workspace_mount,
 # admin_password (opcional, "" = sin contraseña; solo para login por
 # consola serie; SSH sigue siendo solo con llave).
 hostname: seclab-sbf
@@ -74,16 +74,12 @@ runcmd:
   - chmod 0755 /usr/libexec/docker/cli-plugins/docker-compose
   - systemctl enable --now fail2ban || true
   - systemctl enable --now iscsid || true
+  # El workspace es una carpeta en el disco de arranque, no un volumen
+  # aparte. Antes se adjuntaba un volume con su propio recurso y se
+  # hacia mkfs + fstab + mount en el primer arranque; se quito el 2026-09-29
+  # para no pagar un disco que sobrevive a la VM. Consecuencia: el
+  # workspace muere con el nodo y el backup pasa a ser manual, con scp.
   - mkdir -p ${workspace_mount}
-  - |
-    if [ -b "${workspace_device}" ] && ! findmnt -n "${workspace_mount}" >/dev/null 2>&1; then
-      if ! blkid -o value -s TYPE "${workspace_device}" >/dev/null 2>&1; then
-        mkfs.ext4 -L seclab-workspace "${workspace_device}"
-      fi
-      UUID="$(blkid -o value -s UUID "${workspace_device}")"
-      printf 'UUID=%s %s ext4 defaults,nofail 0 2\n' "$UUID" "${workspace_mount}" >> /etc/fstab
-      mount "${workspace_mount}"
-      chown ${admin_user}:${admin_user} "${workspace_mount}"
-    fi
+  - chown ${admin_user}:${admin_user} ${workspace_mount}
   - systemctl enable --now unattended-upgrades || true
 final_message: "seclab-sbf listo. Une Tailscale manualmente y copia .env por SSH sobre el tailnet."

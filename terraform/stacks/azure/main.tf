@@ -2,7 +2,6 @@ locals {
   name_prefix     = "seclab-sbf-${var.env_name}"
   workspace_mount = "/opt/seclab-sbf/workspace"
   # Ruta estable de Azure para el disco de datos LUN 0.
-  workspace_device = "/dev/disk/azure/scsi1/lun0"
   tags = {
     Project     = "seclab-sbf"
     Environment = var.env_name
@@ -128,11 +127,10 @@ resource "azurerm_linux_virtual_machine" "lab" {
   }
 
   custom_data = base64encode(templatefile("${path.module}/../../modules/lab-cloud-init/cloud.cfg.yaml", {
-    admin_user       = var.admin_user
-    admin_password   = var.admin_password
-    ssh_public_key   = var.ssh_public_key
-    workspace_device = local.workspace_device
-    workspace_mount  = local.workspace_mount
+    admin_user      = var.admin_user
+    admin_password  = var.admin_password
+    ssh_public_key  = var.ssh_public_key
+    workspace_mount = local.workspace_mount
     # La jail de fail2ban vive en el repo, no aqui: se edita en
     # security/fail2ban/ y `make fail2ban-check` compara la copia
     # del host contra esa.
@@ -140,42 +138,3 @@ resource "azurerm_linux_virtual_machine" "lab" {
   }))
 }
 
-resource "azurerm_managed_disk" "workspace" {
-  name                 = "${local.name_prefix}-workspace"
-  resource_group_name  = azurerm_resource_group.lab.name
-  location             = azurerm_resource_group.lab.location
-  storage_account_type = "StandardSSD_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = var.workspace_disk_gbs
-  tags                 = local.tags
-}
-
-# Snapshot del disco de workspace. El workspace es el unico dato del
-# laboratorio que no se puede reconstruir: la imagen se vuelve a compilar
-# desde el codigo, pero las notas y resultados de un escaneo no.
-#
-# En azurerm 5.x el recurso se llama azurerm_snapshot y se crea con
-# source_uri + create_option = "Copy". No existe
-# azurerm_managed_disk_snapshot, que es el nombre que tendia sentido.
-resource "azurerm_snapshot" "workspace" {
-  count = var.workspace_backup_retention_days > 0 ? 1 : 0
-
-  name                = "${local.name_prefix}-workspace-snapshot"
-  resource_group_name = azurerm_resource_group.lab.name
-  location            = azurerm_resource_group.lab.location
-  # Sin incremental: ese argumento no existe en azurerm 5.7.0, aunque la
-  # cadena aparezca en el binario del provider. Con create_option = "Copy"
-  # la copia es completa, que es lo que hace falta para restaurar.
-  source_uri    = azurerm_managed_disk.workspace.id
-  create_option = "Copy"
-  disk_size_gb  = var.workspace_disk_gbs
-
-  tags = local.tags
-}
-
-resource "azurerm_virtual_machine_data_disk_attachment" "workspace" {
-  managed_disk_id    = azurerm_managed_disk.workspace.id
-  virtual_machine_id = azurerm_linux_virtual_machine.lab.id
-  lun                = 0
-  caching            = "None"
-}

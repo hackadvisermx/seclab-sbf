@@ -2,7 +2,7 @@ services:
   lab:
     build:
       context: .
-      dockerfile: images/light/Dockerfile
+      dockerfile: images/full/Dockerfile
       args:
         BASE_IMAGE: seclab-sbf:base
-    image: ${LAB_IMAGE:-seclab-sbf:light}
+    image: ${LAB_IMAGE:-seclab-sbf:full}

@@ -6,9 +6,10 @@ set -eu
 # Existe por un motivo concreto: el stack de OCI tiene la instancia con
 # metadata, y el provider trata ese map(string) como inmutable. Cualquier
 # cambio en el cloud-init hace que la instancia entre en plan como "must
-# be replaced", o sea destruir y recrear. El volumen del workspace
-# sobrevive porque es un recurso aparte, pero se pierde la sesion de
-# Tailscale y hay que volver a unir el nodo.
+# be replaced", o sea destruir y recrear. Se pierde la sesion de
+# Tailscale y hay que volver a unir el nodo. El workspace es una carpeta
+# del disco de arranque, no un volumen aparte, asi que TAMBIEN se pierde:
+# hay que copiarlo antes, segun docs/backups.md.
 #
 # Esto no decide nada: imprime el plan y sale con codigo distinto si ve
 # una destruccion. Que el apply lo lance una persona es decision suya.
@@ -124,7 +125,7 @@ if [ "${to_destroy:-0}" -gt 0 ]; then
   printf '%s\n' "tf_destroy_check=DESTRUYE stack=$stack recursos=$to_destroy" >&2
   printf '%s\n' "tf_destroy_check=lee-el-plan stack=$stack antes de aplicar" >&2
   printf '%s\n' "tf_destroy_check=instancia-o-nodo = se recrea y se pierde la sesion de Tailscale" >&2
-  printf '%s\n' "tf_destroy_check=workspace = volumen aparte, sobrevive; usa el snapshot o docs/backups.md" >&2
+  printf '%s\n' "tf_destroy_check=workspace = carpeta del disco, SE PIERDE; copia antes con docs/backups.md" >&2
   exit 1
 fi
 

@@ -16,7 +16,7 @@ El contenedor no será una distribución basada en Kali ni Parrot. Las herramien
 ## 2. Decisiones confirmadas
 
 - Base: Ubuntu 24.04 minimal.
-- Perfiles: `light` y `full`.
+- Imagen única del laboratorio: `seclab-sbf:full` (antes `light` y `full`).
 - `full` se ejecuta en una VM dedicada desechable.
 - Terminal web: `ttyd`.
 - Acceso remoto: Tailscale.
@@ -104,7 +104,6 @@ Contenedor
 ├── .gitignore
 ├── images/
 │   ├── base/
-│   ├── light/
 │   └── full/
 ├── scripts/
 │   ├── entrypoint/
@@ -152,34 +151,36 @@ Incluye solamente:
 
 No incluye herramientas ofensivas grandes ni exploits.
 
-### `light`
+### `full` (imagen única)
 
-Herramientas de:
+Antes había dos imágenes, `light` y `full`, con `full` haciendo `FROM light`:
+la imagen final contenía las dos. Se fusionaron el 2026-09-29 en un solo
+`images/full/Dockerfile`. `base` es lo único que se construye antes, y
+como etapa interna de compilación.
 
-- Reconocimiento: `nmap`, `naabu`, `subfinder`, `httpx`, `katana`.
-- Web: `ffuf`, `feroxbuster`, `gobuster`, `sqlmap`, `dalfox`.
-- CTF: pwntools, herramientas forenses básicas y utilidades de encoding.
-- Nuclei con plantillas versionadas y controladas.
-- OpenVPN y utilidades de VPN.
-- Wordlists pequeñas o descargadas bajo demanda.
+Incluye, sobre `base`:
 
-No incluye Metasploit, Ghidra, John jumbo, hashcat GPU, wordlists gigantes ni exploit frameworks pesados.
+- **Terminal**: `zsh`, Oh My Zsh, `fzf`, `zoxide`, `tmux`, `ripgrep`, `fd`.
+- **Reconocimiento**: `nmap`, `naabu`, `subfinder`, `httpx`, `katana`, `dnsx`.
+- **Web**: `ffuf`, `feroxbuster`, `gobuster`, `sqlmap`, `dalfox`, `nuclei`.
+- **CTF y forense**: pwntools, `exiftool`, `hexedit`, `zsteg`, utilidades de
+  encoding.
+- **Explotación**: Metasploit Framework, `nxc` (NetExec), `wpscan`, `bettercap`.
+- **Crack**: `john`, `hashcat` (CPU vía pocl), `crunch`, `anew`.
+- **Desarrollo y reversing**: `gdb`, `gdb-multiarch`.
+- **VPN**: OpenVPN y utilidades, con el gestor de perfiles sanitizado.
+- **Datos**: wordlists de SecLists y repositorios de exploit y payloads
+  (PAT, ExploitDB) pinneados por commit.
 
-### `full`
+Ghidra y el reversing con Rizin quedan fuera de la iteración: no hay binario
+arm64 publicado de Rizin y Ghidra no aporta al flujo del laboratorio.
 
-Se construye desde `light` y añade:
+Pesa unos 4,5 GB, así que **no debe ejecutarse en un host compartido**: es
+para una VM dedicada y desechable.
 
-- Metasploit Framework.
-- Ghidra headless.
-- Rizin.
-- John.
-- Hashcat CPU.
-- Wordlists grandes.
-- Nuclei templates completos.
-- Repositorios de exploit y payloads.
-- Herramientas de reversing adicionales.
-
-El perfil `full` no debe ejecutarse en un host compartido. Se ejecutará en una VM dedicada y desechable.
+Antes de fusionar, `light` ocupaba 1,55 GB. Quien necesite una imagen
+pequeña puede restrictir las herramientas del manifiesto (`shell/tools.json`),
+no partir la imagen en dos.
 
 ### Arquitecturas
 
@@ -246,7 +247,7 @@ sustituirla.
 - Escaneo del código fuente, lockfiles, SBOM, imagen final, scripts, Dockerfiles, Terraform y GitHub Actions.
 
 `security.yml` cubre en cada push lo estático (secretos, misconfiguración,
-lockfiles, scripts, Dockerfiles de `base`, `light` y `full`, Terraform,
+lockfiles, scripts, Dockerfiles de `base` y `full`, Terraform,
 workflows y el render del cloud-init). La imagen ya construida se revisa
 con `make scan-image`, que es el gate de CVEs del perfil elegido, y con
 `make sbom`, que emite su SBOM en CycloneDX.
@@ -265,7 +266,7 @@ Las excepciones de Trivy viven en dos ficheros, ambos acotados por ruta y con
 `expired_at` en la entrada que lo necesita, que Trivy respeta:
 
 - `.trivyignore.yaml` (raíz): misconfiguración y secretos del escaneo estático
-  de CI, que cubre `base`, `light` y `full`.
+  de CI, que cubre `base` y `full`.
 - `security/trivy/.trivyignore.yaml`: CVEs de la imagen `full`, que concentra
   las excepciones por sus gems de Ruby.
 
@@ -670,7 +671,6 @@ El plugin local `pentest-lab` proporcionará:
 ### Banner
 
 - Banner ASCII colorido.
-- Perfil `light` o `full`.
 - Número de herramientas.
 - Categorías resumidas.
 - Alias VPN.
@@ -898,7 +898,7 @@ pt-forward doctor
 - Añadir health checks.
 - Validar el servicio local en Docker Desktop macOS.
 
-### Fase 3 — Imagen `base` y `light` (v1 completada en arm64 y amd64, verificado 2026-09-29)
+### Fase 3 — Imágenes `base` y `light` (v1 completada; `light` fusionada en `full` el 2026-09-29)
 
 - Construir `base` y `light` con snapshot de Ubuntu.
 - Añadir ttyd, SSH y shell de `tester` sin SFTP.
@@ -944,14 +944,14 @@ pt-forward doctor
 - Aplicar y verificar en el host OCI final una ruta NAT gateway para Tailscale sin `public_ip`.
 - La política quedó aplicada y persistente en el host final mediante `security/systemd/`; el puente del proxy se valida en VPS y se habilita en el host final como paso de despliegue.
 
-### Fase 7 — Imagen `full` (v1 completada en arm64)
+### Fase 7 — Imagen `full` (v1 completada en arm64; unificada con `light` el 2026-09-29)
 
 - Añadir Metasploit.
 - Ghidra y reversing quedan diferidos; no forman parte de la iteración actual.
 - Añadir herramientas pesadas: Metasploit, `nxc`, `john`, `hashcat` con pocl, `bettercap`, `s3scanner`, `wpscan`, `gdb-multiarch`, `zsteg`, `exiftool` y `hexedit`.
 - Crear matriz ARM/AMD.
 - Ejecutar en VM desechable.
-- `light` se validó en amd64 construyéndolo desde el portátil arm64 (`BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`): 219 paquetes, 0 Critical/High y hashes de `ttyd` y `dalfox` idénticos a los del lockfile. `full` supera 2 GB y solo se ha validado en arm64; su build amd64 queda para CI o VM. Rizin se difiere por falta de binario arm64. `supply-chain/tools.lock.yaml` cubre el perfil completo.
+- `light` se validó en amd64 construyéndolo desde el portátil arm64 (`BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`): 0 Critical/High y hashes de `ttyd` y `dalfox` idénticos a los del lockfile. El 2026-09-29 los dos Dockerfiles se fusionaron en uno solo y desaparece el perfil `light`. `full` supera 2 GB y solo se ha validado en arm64; su build amd64 queda para CI o VM. Rizin se difiere por falta de binario arm64. `supply-chain/tools.lock.yaml` cubre el perfil completo.
 
 ### Fase 8 — Terraform cloud (stacks implementados y validados; sin `apply`)
 
@@ -978,10 +978,10 @@ pt-forward doctor
 
 - Activar gates de CVEs.
 - Publicar y firmar imágenes: no aplica desde que se eliminó el registry. Cada máquina construye en caliente y revisa su imagen con `make scan-image` y `make sbom`.
-- Añadir backups y snapshots del volumen del workspace. Implementado el snapshot inicial en los tres stacks; pendiente el backup programado en Azure y DigitalOcean, y verificarlo con un apply real.
+- Añadir backups del workspace. El 2026-09-29 los stacks dejaron de crear un volumen para el workspace: ahora es una carpeta del disco de arranque de la VM, y el backup es manual con scp (docs/backups.md). No hay backup automático.
 - Añadir alertas y runbooks.
 - Ejecutar disaster recovery.
-- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck, Actionlint, un job de Terraform (formato, `validate` de los tres stacks y render del cloud-init) y otro que valida la jail de fail2ban, mas `make scan-image` como gate local de Critical/High y los runbooks de operacion en `docs/runbooks.md`. El workflow dispara en `pull_request`, en el push a `bootstrap/baseline` y semanalmente. Pendiente: backups programados en Azure y DigitalOcean, que hoy son manuales, y alertas y disaster recovery. Los tres stacks crean ya un snapshot inicial del workspace en el apply (`workspace_backup_retention_days`, 0 por defecto); en OCI la retencion la fija la politica creada a mano porque el provider 9.3.0 no la admite desde el stack. La publicacion de imagenes no aplica desde que se elimino el registry: cada maquina construye en caliente y escanea su imagen.
+- Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck, Actionlint, un job de Terraform (formato, `validate` de los tres stacks y render del cloud-init) y otro que valida la jail de fail2ban, mas `make scan-image` como gate local de Critical/High y los runbooks de operacion en `docs/runbooks.md`. El workflow dispara en `pull_request`, en el push a `bootstrap/baseline` y semanalmente. Pendiente: alertas y disaster recovery. El backup programado se retiró el 2026-09-29: un volumen del proveedor se factura con la VM apagada, asi que el workspace paso a ser una carpeta del disco de arranque y el backup es manual con scp (docs/backups.md). No hay snapshots ni retencion en ningun stack. La publicacion de imagenes no aplica desde que se elimino el registry: cada maquina construye en caliente y escanea su imagen.
 
 ## 20. Criterios de aceptación
 
@@ -1024,7 +1024,7 @@ pt-forward doctor
 - La route guard de `pt-forward`/`pt-socks`/`pt-web` no es una frontera contra `tester`; el firewall/nftables debe reforzarla.
 - `pt-web` está limitado a loopback y origen fijo; el consumo externo está validado en un VPS pero no habilitado en el host final, y TLS local sigue pendiente.
 - Los targets deben estar correctamente autorizados.
-- El workspace contiene datos que requieren backup y limpieza.
+- El workspace es una carpeta del disco de la VM: se pierde si la VM se destruye o reemplaza, y el backup depende de que el operador haga la copia a tiempo.
 
 ## 22. Resultado esperado
 

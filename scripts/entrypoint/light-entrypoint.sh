@@ -37,27 +37,14 @@ TTYD_INTERFACE="$(read_value TTYD_INTERFACE)"
 TTYD_PORT="$(read_value TTYD_PORT)"
 SSH_USER="$(read_value SSH_USER)"
 SSH_PUBLIC_KEY="$(read_value SSH_PUBLIC_KEY)"
-PENTEST_PROFILE="$(read_value PENTEST_PROFILE)"
 
 TTYD_INTERFACE="${TTYD_INTERFACE:-0.0.0.0}"
 TTYD_PORT="${TTYD_PORT:-7681}"
-PENTEST_PROFILE="${PENTEST_PROFILE:-light}"
 
 require_value TTYD_USER "$TTYD_USER"
 require_value TTYD_PASSWORD "$TTYD_PASSWORD"
 require_value SSH_USER "$SSH_USER"
 require_value SSH_PUBLIC_KEY "$SSH_PUBLIC_KEY"
-
-if [[ "$PENTEST_PROFILE" != "light" && "$PENTEST_PROFILE" != "full" ]]; then
-  printf 'PENTEST_PROFILE must be light or full\n' >&2
-  exit 64
-fi
-
-# sshd no propaga su entorno a la sesion (solo una lista blanca), asi que
-# el perfil se publica en un archivo que el shell de login lee.
-install -d -m 0755 -o root -g root /run/seclab
-printf '%s\n' "$PENTEST_PROFILE" > /run/seclab/pentest-profile
-chmod 0644 /run/seclab/pentest-profile
 
 if [[ "$SSH_USER" != "tester" || "$TTYD_USER" != "tester" ]]; then
   printf 'SSH_USER and TTYD_USER must both be tester\n' >&2

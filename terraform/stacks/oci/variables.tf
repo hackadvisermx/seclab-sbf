@@ -104,29 +104,7 @@ variable "boot_volume_gbs" {
   default     = 50
 }
 
-variable "workspace_backup_retention_days" {
-  description = <<-EOT
-    Dias que se conservan los backups del volumen de workspace.
 
-    El workspace es el unico dato irrecuperable del laboratorio: la imagen
-    se reconstruye desde el codigo, pero las notas y resultados de un
-    escaneo no. Un 0 lo desactiva, para un entorno desechable donde no
-    interese pagar por backups.
-
-    OJO: la politica que se crea aqui cubre solo el backup inicial que
-    dispara el apply. Las copias posteriores hay que hacerlas a mano segun
-    docs/backups.md, o configurar una politica de backup recurrent fuera
-    de este stack.
-  EOT
-  type        = number
-  default     = 0
-}
-
-variable "workspace_volume_gbs" {
-  description = "Tamaño del volumen de workspace en GB."
-  type        = number
-  default     = 50
-}
 
 variable "vcn_cidr" {
   description = "CIDR de la VCN."

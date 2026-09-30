@@ -1,6 +1,6 @@
 services:
   vpn:
-    image: ${VPN_IMAGE:-seclab-sbf:light}
+    image: ${VPN_IMAGE:-seclab-sbf:full}
     user: "0:0"
     network_mode: service:lab
     depends_on:

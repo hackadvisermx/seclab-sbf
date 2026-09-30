@@ -49,7 +49,6 @@ output "cloud_init" {
       admin_user       = "ubuntu"
       admin_password   = ""
       ssh_public_key   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIFPLACEHOLDER"
-      workspace_device = "/dev/sda"
       workspace_mount  = "/opt/seclab-sbf/workspace"
       seclab_sshd_jail = indent(6, join("", ["\\n", file("$root/$jail")]))
     }

@@ -1,130 +1,110 @@
 # Backups y restauración
 
-El workspace vive en un **volumen del proveedor**, separado del disco del
-sistema. `tf-destroy` lo destruye con el nodo. Lo único que sobrevive a un
-`destroy` es un backup explícito.
+El workspace es una **carpeta del disco de arranque de la VM**
+(`CLOUD_WORKSPACE_DIR`). Hasta el 2026-09-29 era un volumen aparte del
+proveedor; se quitó porque un disco de 50 GB se factura aunque la VM esté
+apagada. Ver `docs/phase-8.md` para el antes y el después.
 
-## Estado actual
-
-Los tres stacks crean un **snapshot inicial del workspace en el momento del
-apply**, controlado por `workspace_backup_retention_days` (0 por defecto, o
-sea desactivado). Con un valor mayor que cero:
-
-| Stack | Qué crea | Copias posteriores |
-|---|---|---|
-| OCI | `oci_core_volume_backup_policy` + `_assignment` + `oci_core_volume_backup` | el servicio de backup las hace según la política |
-| Azure | `azurerm_snapshot` con `create_option = "Copy"` | manuales |
-| DigitalOcean | `digitalocean_volume_snapshot` | manuales |
-
-**Lo que esto no cubre:** el snapshot se crea una vez, en el `apply`. En
-DigitalOcean y Azure no hay backup programado, así que las copias
-posteriores hay que hacerlas a mano con el procedimiento de abajo.
-
-**En OCI hay una limitación real:** el schema del provider 9.3.0 no deja
-fijar la retención en días desde el stack. `expiration_time` es de solo
-lectura, y `retention_in_days` no existe en la política. Así que
-`workspace_backup_retention_days` en OCI decide **si** se crea el backup,
-pero **cuánto se conserva lo fija la política de OCI**, que hay que crear a
-mano en la consola. Está anotado en el propio `main.tf`.
-
-Además, el comportamiento real de todo esto **no está verificado**: ningún
-stack se ha aplicado con credenciales reales. Solo `validate` y `tflint`.
+La consecuencia es directa y hay que tenerla presente: **el workspace
+depende de la vida de la VM**. Si la VM se destruye o se reemplaza, el
+workspace se va con ella. El backup es, por tanto, manual y disciplina del
+operador, no algo que el proveedor haga por su cuenta.
 
 ## Qué proteger y qué no
 
 | Dato | Dónde | ¿Se protege? |
 |---|---|---|
-| Workspace del laboratorio | volumen del proveedor, montado en la misma ruta del contenedor | sí, es el único dato irremplazable |
+| Workspace del laboratorio | carpeta en el disco de la VM | **solo con copia manual** |
 | Imagen del laboratorio | se reconstruye en caliente en cada máquina | no hace falta, `seclab.build-inputs` registra de qué código salió |
-| `.env` y perfiles `.ovpn` | fuera del repo, sin seguimiento | **no se suben a ningún backup en la nube**; se regeneran |
-| Llaves SSH de Tailscale | fuera del repo | nunca en un backup en la nube |
-| Claves de API del proveedor | configuración local | nunca en un backup en la nube |
+| `.env` y perfiles `.ovpn` | fuera del repo, sin seguimiento | fuera del alcance de este documento |
+| Llaves SSH de Tailscale | fuera del repo | fuera del alcance |
 
-El criterio es que **el backup vive junto al volumen en el mismo proveedor**.
-Los secretos no viajan ahí: un backup en la nube que contenga el `.env` o
-una auth key sería un archivo de secretos en un tercero, que es justo lo que
-el diseño evita.
+El criterio de siempre: **los secretos no viajan a ningún backup en la
+nube**. Un backup que contenga el `.env` o una auth key sería un fichero de
+secretos en un tercero, que es justo lo que el diseño evita. La copia sale
+de la VM hacia la máquina del operador, no al revés.
 
-## Procedimiento manual
+## Copia
 
-### Antes de cualquier `tf-destroy`, o como respaldo periódico
+El workspace se copia desde dentro del contenedor, que es donde vive el
+contenido. Se hace con `scp` desde tu máquina, no desde el host:
 
-1. Monta el workspace en local y comprueba su tamaño:
+```bash
+# 1. Empaquetar dentro del contenedor
+make compose-shell
+#   tar czf /tmp/workspace-$(date +%Y%m%d).tar.gz -C /workspace .
 
-   ```bash
-   make compose-up
-   make compose-shell
-   ls -lh /workspace
-   ```
+# 2. Sacarlo por scp
+make lab-ssh   # en otra terminal, para tener el puerto abierto
+scp tester@127.0.0.1:/tmp/workspace-20260929.tar.gz ~/
+```
 
-2. Copia fuera del volumen, al equipo del operador:
+O todo desde el host, con `docker cp`:
 
-   ```bash
-   tar czf ~/seclab-workspace-$(date +%Y%m%d).tar.gz -C /workspace .
-   shasum -a 256 ~/seclab-workspace-$(date +%Y%m%d).tar.gz
-   ```
+```bash
+cid="$(docker compose -f compose.yaml -f compose.local.yaml ps -q lab)"
+docker cp "$cid:/workspace" ~/workspace-$(date +%Y%m%d)
+```
 
-   El checksum se anota junto al archivo. Un backup sin verificar no sabe si
-   se puede restaurar.
+El archivo queda en tu máquina, junto a lo que ya tienes. Sin checksum
+obligatorio, pero conviene uno si lo vas a guardar mucho tiempo:
 
-3. Verifica que el tar no está vacío ni corrupto:
+```bash
+shasum -a 256 ~/workspace-20260929.tar.gz
+```
 
-   ```bash
-   tar tzf ~/seclab-workspace-$(date +%Y%m%d).tar.gz | head
-   ```
+## Restaurar
 
-### Restaurar
+```bash
+# 1. VM levantada y repo clonado
+# 2. Entrar al contenedor
+make compose-shell
 
-1. Levanta el nodo y monta el volumen (los pasos de `docs/phase-8.md`).
-2. Copia el tar de vuelta:
+# 3. Restaurar dentro
+tar xzf /ruta/al/tar.gz -C /workspace
+ls -lh /workspace
+```
 
-   ```bash
-   make compose-up
-   make compose-shell
-   tar xzf ~/seclab-workspace-20260929.tar.gz -C /workspace
-   ls -lh /workspace
-   ```
+El workspace arranca vacío en cada VM nueva: `plan.md` dice que no se crean
+subdirectorios automáticamente. Si el directorio no existe, el `mkdir` del
+cloud-init lo deja listo en el host y el bind mount lo expone al contenedor.
 
-3. Si el volumen se creó vacío y hay que formatearlo, el cloud-init lo hace
-   solo en el primer arranque. Comprueba que `/workspace` existe antes de
-   copiar dentro.
+## Antes de tirar la VM
 
-4. Copia también el `.env` y los perfiles `.ovpn`, que **no** vienen del
-   backup:
+Este es el momento crítico. Si vas a destruir o reemplazar el nodo:
 
-   ```bash
-   make env-copy-oci TF_HOST=<tailnet-host>
-   make vpn-copy TF_HOST=<tailnet-host>
-   ```
+1. **Copia el workspace** con el procedimiento de arriba.
+2. **Verifica la copia**: `tar tzf <archivo> | head` para confirmar que
+   no está vacío ni corrupto.
+3. Solo entonces destruye.
+
+Para ver si el plan va a destruir algo antes de aplicar:
+
+```bash
+STACK=oci make tf-destroy-check
+```
+
+Ese comando no aplica nada. Sale con código 1 si el plan destruye algo o si
+el nodo ya no existe.
 
 ## Limpieza
 
 El workspace acumula resultados de escaneos, notas y wordlists extraídas.
-Antes de un `destroy` conviene decidir si se conserva algo:
+Antes de tirar la VM decide qué te llevas y borra el resto:
 
 ```bash
 make compose-shell
-# revisar qué hay y qué se quiere quedar
-tar czf ~/seclab-workspace-$(date +%Y%m%d).tar.gz -C /workspace .
+# revisar qué hay
 ```
 
 `pentest-reset` solo limpia el historial de tmux; **no toca el workspace**.
 
-## Pendiente
+## Pendiente y límites
 
-- **Verificar que el snapshot se crea y se restaura.** El HCL valida y
-  tflint pasa, pero ningún `apply` se ha ejecutado. Hasta que no haya un
-  `plan` y un `apply` con credenciales reales, esto es código sin probar.
-- **Backup programado en Azure y DigitalOcean.** Los dos proveedores no lo
-  traen para el recurso que se usa aquí. Habría que decidir entre un
-  cron externo, una función del proveedor, o aceptar el snapshot inicial y
-  documentar el procedimiento manual como la vía real.
-- **Fijar la retención en OCI desde el stack**, si se quiere. Requiere
-  cambiar de recurso en el provider o aceptar la consola.
-- **Cifrado en reposo del backup**: depende del proveedor y del bucket de
-  destino, y está sin decidir.
-- **Almacenamiento del backup**: hoy los backups se crean junto al volumen,
-  en la misma cuenta. Si la cuenta se destruye, se van con él.
-- **El nodo de OCI está caído desde 2026-09-29** por falta de cuota de shape,
-  así que hoy no hay nada que respaldar en el cloud. El volumen de 50 GB
-  sigue ahí. Ver `phase-8.md`.
+- **No hay backup automático.** Es una decisión consciente: el backup
+  automático del proveedor implicaba un disco que sobrevive a la VM, y eso
+  es lo que se quitó por coste.
+- **No se ha probado una restauración en una VM real.** El procedimiento
+  está escrito pero no ejecutado de punta a punta.
+- **La copia es manual**, así que el riesgo real es humano:olvidar
+  hacerlo antes de un `tf-destroy`. Por eso `tf-destroy-check` avisa.

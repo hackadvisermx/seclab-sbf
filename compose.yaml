@@ -2,10 +2,10 @@ services:
   lab:
     build:
       context: .
-      dockerfile: images/light/Dockerfile
+      dockerfile: images/full/Dockerfile
       args:
         BASE_IMAGE: seclab-sbf:base
-    image: ${LAB_IMAGE:-seclab-sbf:light}
+    image: ${LAB_IMAGE:-seclab-sbf:full}
     working_dir: /workspace
     command:
       - /bin/bash
@@ -36,7 +36,6 @@ services:
     mem_limit: ${LAB_MEMORY_LIMIT:-1g}
     cpus: ${LAB_CPUS:-2.0}
     environment:
-      PENTEST_PROFILE: ${PENTEST_PROFILE:-light}
       VPN_MODE: ${VPN_MODE:-inside}
       VPNTRY_CONFIG: ${VPNTRY_CONFIG:-/vpn/tryhackme.ovpn}
       VPNHTB_CONFIG: ${VPNHTB_CONFIG:-/vpn/hackthebox.ovpn}

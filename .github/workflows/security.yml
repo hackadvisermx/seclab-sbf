@@ -63,11 +63,6 @@ jobs:
         with:
           dockerfile: images/base/Dockerfile
           failure-threshold: warning
-      - name: Dockerfile lint light
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387
-        with:
-          dockerfile: images/light/Dockerfile
-          failure-threshold: warning
       - name: Dockerfile lint full
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387
         with:
@@ -85,6 +80,20 @@ jobs:
       # como target. Se colaron seis que no, en el Inicio rápido del README.
       - name: Comandos documentados
         run: make doc-targets-check
+
+      # Al fusionar light en full, compose.yaml y compose.vpn-inside.yaml
+      # se quedaron apuntando a una imagen y un Dockerfile que ya no
+      # existian. `docker compose config` no lo detecta porque solo
+      # renderiza, asi que el fallo salia en el primer compose build.
+      - name: Referencias de compose
+        run: make compose-refs-check
+
+      # El texto de make help es un bloque enorme de comillas simples en
+      # una sola linea. Partirlo crea una regla espuria que solo se ve con
+      # GNU Make 4.x, asi que este guard tiene que correr en CI y no solo
+      # en el portatil.
+      - name: Estructura del Makefile
+        run: make makefile-check
 
   # La jail de fail2ban es lo unico de la configuracion de host que se
   # puede validar sin un nodo. Levanta un contenedor con la imagen base

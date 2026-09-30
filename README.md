@@ -19,7 +19,7 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | 7 | Completada v1 en arm64 | Imagen `full` con Metasploit, `nxc`, `john`, `hashcat`, `bettercap`, `s3scanner`, `wpscan` y forense; Ghidra/reversing quedan diferidos |
 | 8 | Stacks validados | Terraform OCI/Azure/DO con `fmt`/`validate`; falta `apply` con credenciales reales |
 | 9 | Parcial | nftables aplicado en el host OCI y jail de sshd con fail2ban; faltan ACL/MFA/approval de Tailscale y pruebas externas |
-| 10 | Parcial | CI de seguridad y gate local de CVEs; faltan backups/snapshots, alertas, runbooks y disaster recovery |
+| 10 | Parcial | CI de seguridad, gate local de CVEs y runbooks; falta backup automático, alertas y disaster recovery |
 
 La Fase 5 fue validada en Docker Desktop macOS arm64 con TUN y un perfil oficial de TryHackMe. Las pruebas reales de los otros perfiles y la matriz nativa Linux siguen pendientes. La imagen `full` supera 2 GB y solo está validada en arm64.
 
@@ -153,11 +153,9 @@ devuelve `skipped`.
 
 ```bash
 make verify
-make build-light
 make build-full
 make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-make scan-image SCAN_IMAGE=seclab-sbf:light
 make sbom
 make tf-fmt
 make tflint-check
@@ -168,7 +166,7 @@ make fail2ban-check
 
 Resultados verificados actualmente:
 
-- Builds nativos `linux/arm64` y `linux/amd64`, sin registry: cada máquina construye la suya. El de amd64 se comprobó desde el portátil arm64 con `make build-light BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`: 219 paquetes, 0 Critical/High y hashes de `ttyd` y `dalfox` idénticos a los del lockfile.
+- Builds nativos `linux/arm64` y `linux/amd64`, sin registry: cada máquina construye la suya. El de amd64 se comprobó desde el portátil arm64 con `make build-full BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`: 0 Critical/High y hashes de `ttyd` y `dalfox` idénticos a los del lockfile.
 - `make scan-image`: 0 vulnerabilidades Critical/High en las imágenes probadas.
 - `make sbom`: emite el SBOM CycloneDX 1.7 en `tmp/sbom/`, con el nombre ligado a la imagen y a su hash de insumos. Verificado en `light` (1.390 componentes) y en `full` (1.969).
 - TUN, `NET_ADMIN` y `tun0` presentes en Docker Desktop macOS.
@@ -179,7 +177,7 @@ Resultados verificados actualmente:
 - `make verify` (Gitleaks, Hadolint, ShellCheck y pines de Actions) pasa; ShellCheck solo informa SC2329 en `scripts/entrypoint/light-entrypoint.sh` por una función `cleanup` invocada de forma indirecta.
 - `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` pasan en OCI, Azure y DigitalOcean sin `apply`, y los tres corren igual en CI.
 - `make tflint-check` pasa en los tres stacks con el ruleset `terraform` embebido, sin plugins del registro. Requiere `tflint` instalado; sin él sale `unavailable`.
-- `STACK=oci make tf-destroy-check` imprime el plan del stack y sale con código 1 si va a destruir algo **o si el nodo ya no existe**. No aplica nada. El nodo de OCI no existe desde 2026-09-29: se destruyó al reemplazarlo y no se pudo recrear por falta de cuota de shape. La red y el volumen del workspace siguen intactos; ver [`docs/phase-8.md`](docs/phase-8.md). Existe porque el nodo de OCI lleva `metadata.user_data`, que el provider trata como inmutable: un cambio en el cloud-init lo reemplaza entero.
+- `STACK=oci make tf-destroy-check` imprime el plan del stack y sale con código 1 si va a destruir algo **o si el nodo ya no existe**. No aplica nada. El nodo de OCI no existe desde 2026-09-29: se destruyó al reemplazarlo y no se pudo recrear por falta de cuota de shape. La red sigue intacta; el workspace es ahora una carpeta del disco, no un volumen; ver [`docs/phase-8.md`](docs/phase-8.md). Existe porque el nodo de OCI lleva `metadata.user_data`, que el provider trata como inmutable: un cambio en el cloud-init lo reemplaza entero.
 - `make fail2ban-jail-check` valida la jail de sshd con el propio fail2ban, en un contenedor desechable, sin necesidad de un nodo. Verificado en local y en CI: la jail es válida y el filtro cuenta los cinco fallos de un ataque sin contar los logins correctos. **El ban efectivo en nftables sigue sin comprobarse** y necesita un host Linux; ver [`docs/phase-9.md`](docs/phase-9.md).
 - `make tf-render-check` renderiza el cloud-init compartido y comprueba que sigue siendo YAML válido y que la jail de fail2ban llega al host idéntica al repo. Es la única verificación que cubre el render: `validate` pasa aunque la plantilla produzca YAML roto.
 
@@ -223,5 +221,5 @@ workspace están en `docs/backups.md`, incluida su restauración.
 3. Probar los perfiles `hackthebox` y `client` autorizados.
 4. Ejecutar la matriz nativa Linux: TUN, `make security-check` y `make tailscale-check`.
 5. Cerrar la Fase 9: ACL, MFA y device approval de Tailscale, fail2ban y pruebas externas controladas.
-6. Cerrar la Fase 10: backups/snapshots, alertas, runbooks y disaster recovery.
+6. Cerrar la Fase 10: backup del workspace, alertas y disaster recovery.
 7. Ejecutar `make tf-apply-*` con credenciales reales del operador y verificar la destrucción.

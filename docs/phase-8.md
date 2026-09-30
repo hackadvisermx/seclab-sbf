@@ -14,9 +14,9 @@ operador con credenciales propias.
 terraform/
 ├── modules/lab-cloud-init/cloud.cfg.yaml   # cloud-init compartido, sin secretos
 └── stacks/
-    ├── oci/           # VCN + NAT + NSG + VM Flex + volumen PV
+    ├── oci/           # VCN + NAT + NSG + VM Flex
     ├── azure/         # VNet + NAT + NSG deny + VM + disco
-    └── digitalocean/  # VPC + firewall deny + droplet + volumen
+    └── digitalocean/  # VPC + firewall deny + droplet
 ```
 
 Cada stack fija Terraform `>= 1.16.0`, su provider por versión exacta y
@@ -82,7 +82,7 @@ Lo que NO pasa, pese a lo que sugiere el plan:
   plan es un atributo calculado a nivel de instancia, no una petición.
 
 Lo que sí se pierde si se aplica: la sesión de Tailscale, y hay que rehacer
-el join. El volumen del workspace sobrevive, porque es un recurso aparte.
+el join. El volumen del workspace sobrevivia entonces porque era un recurso aparte; desde el 2026-09-29 ya no lo es.
 
 `make tf-destroy-check` existe para que nadie lea esto por primera vez
 justo después de un `terraform apply`.
@@ -94,7 +94,7 @@ state ni en OCI. Lo que sobrevive:
 
 | Recurso | Estado |
 |---|---|
-| `oci_core_volume.workspace` (50 GB) | `AVAILABLE`, intacto |
+| `oci_core_volume.workspace` (50 GB) | `AVAILABLE`. **Obsoleto**: ya no lo crea este stack, ver más abajo |
 | VCN, subred, NAT gateway, NSG y sus reglas | intactos |
 | `oci_core_instance.lab` | **no existe** |
 
@@ -161,3 +161,28 @@ código 1 si falta.
   retención la fija la política creada a mano. Ver `docs/backups.md`.
 - Destrucción verificada y limpieza del nodo en el tailnet.
 - `tflint`/`tfsec`/Checkov en CI y `terraform plan` en PRs.
+
+## Cambio del 2026-09-29: el workspace es una carpeta
+
+Los tres stacks dejaron de crear un volumen para el workspace. Ahora
+`CLOUD_WORKSPACE_DIR` es una **carpeta del disco de arranque** de la VM, y
+cloud-init solo hace `mkdir` más `chown`.
+
+Qué cambia, sin rodeos:
+
+| | Antes | Ahora |
+|---|---|---|
+| Recurso | `oci_core_volume` / `azurerm_managed_disk` / `digitalocean_volume` + su attach | ninguno |
+| Snapshot en el apply | política + backup (OCI), snapshot (Azure, DO) | ninguno |
+| Coste | disco de 50 GB facturado aunque la VM esté apagada | nada extra |
+| Si se recrea la VM | el workspace sobrevive | **el workspace se pierde** |
+| Backup | automático en OCI, manual en los demás | manual en todos, con `scp` |
+
+El motivo de quitarlo: un disco de 50 GB se factura aunque apagues la VM, y
+"apagar para no pagar" no era una opción. El precio es que **el workspace
+depende de la vida de la VM**, así que el backup pasa a ser disciplina, no
+infraestructura. El procedimiento está en `docs/backups.md`.
+
+El `oci_core_volume.workspace` que queda en el state de OCI (50 GB,
+`AVAILABLE`) es un resto del diseño anterior: este stack ya no lo gestiona.
+Se puede borrar desde la consola cuando se limpie la cuenta.

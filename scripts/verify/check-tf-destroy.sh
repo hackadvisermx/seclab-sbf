@@ -62,7 +62,7 @@ if ! terraform -chdir="terraform/stacks/$stack" init \
   exit 78
 fi
 
-# timeout_cmd se compone con un prefijo opcional,tambien con splitting
+# timeout_cmd se compone con un prefijo opcional, tambien con splitting
 # deliberado. En macOS el binario es gtimeout.
 timeout_cmd=""
 if command -v gtimeout >/dev/null 2>&1; then
@@ -91,6 +91,28 @@ if [ -z "$summary" ]; then
 fi
 
 printf '%s\n' "tf_destroy_check=ok stack=$stack $summary"
+
+# Un plan sin destrucciones no significa que todo este bien. Si la
+# instancia no esta en el state, el plan va a decir "2 to add, 0 to
+# destroy" y este check salia con 0, diciendo "me he quedado
+# sin nodo" con "no vas a romper nada". El 2026-09-29 se perdio asi el
+# nodo de OCI: el apply anterior lo habia destruido y este check no dijo
+# nada. Un guard que da falsa tranquilidad es peor que no tenerlo, asi
+# que se comprueba explicitamente que el recurso principal existe.
+case "$stack" in
+  oci) recurso="oci_core_instance.lab" ;;
+  azure) recurso="azurerm_linux_virtual_machine.lab" ;;
+  digitalocean) recurso="digitalocean_droplet.lab" ;;
+  *) recurso="" ;;
+esac
+
+if [ -n "$recurso" ] && ! terraform -chdir="terraform/stacks/$stack" state list 2>/dev/null | grep -qx "$recurso"; then
+  printf '%s\n' "tf_destroy_check=SIN-NODO stack=$stack falta=$recurso" >&2
+  printf '%s\n' "tf_destroy_check=el plan va a CREAR el nodo de cero, no a actualizar uno" >&2
+  printf '%s\n' "tf_destroy_check=tras el apply habra que rehacer el join de Tailscale" >&2
+  printf '%s\n' "tf_destroy_check=si no querias perderlo, el apply anterior ya lo destruyo" >&2
+  exit 1
+fi
 
 case "$summary" in
   *" 0 to destroy"*)

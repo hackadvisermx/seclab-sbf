@@ -19,9 +19,12 @@ data "oci_core_images" "ubuntu" {
   compartment_id           = var.compartment_ocid
   operating_system         = "Canonical Ubuntu"
   operating_system_version = "24.04"
-  shape                    = "VM.Standard.E5.Flex"
-  sort_by                  = "TIMECREATED"
-  sort_order               = "DESC"
+  # El shape va en la variable, no fijo: hardcodearlo fue lo que rompio
+  # el nodo el 2026-09-29, cuando el limite del compartment dejo de dar
+  # E5 y el apply fallo con "Invalid ratio of memory in GB to OCPUs".
+  shape      = var.shape
+  sort_by    = "TIMECREATED"
+  sort_order = "DESC"
 }
 
 resource "oci_core_vcn" "lab" {
@@ -136,7 +139,7 @@ resource "oci_core_subnet" "private" {
 resource "oci_core_instance" "lab" {
   compartment_id      = var.compartment_ocid
   availability_domain = data.oci_identity_availability_domain.ad.name
-  shape               = "VM.Standard.E5.Flex"
+  shape               = var.shape
   display_name        = "${local.name_prefix}-lab"
   freeform_tags       = local.freeform_tags
 

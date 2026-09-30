@@ -15,6 +15,7 @@ procedimiento no se ha ejecutado nunca, se dice.
 - [El laboratorio no arranca](#el-laboratorio-no-arranca)
 - [TUN no disponible](#tun-no-disponible)
 - [El proxy no conecta](#el-proxy-no-conecta)
+- [El nodo de OCI no existe](#el-nodo-de-oci-no-existe)
 - [El plan de Terraform quiere destruir algo](#el-plan-de-terraform-quiere-destruir-algo)
 - [Destruir el nodo y limpiar el tailnet](#destruir-el-nodo-y-limpiar-el-tailnet)
 - [Rotar la llave one-off de Tailscale](#rotar-la-llave-one-off-de-tailscale)
@@ -209,6 +210,28 @@ ssh -L 1080:127.0.0.1:1080 usuario@<tailnet-host>
 Esto se validó de extremo a extremo en un VPS el 2026-09-25. En el host OCI
 final el puente **todavía no está habilitado**: es un paso de despliegue
 pendiente, no algo que funcione por sí solo.
+
+## El nodo de OCI no existe
+
+**Síntoma:** `STACK=oci make tf-destroy-check` dice `SIN-NODO`, o
+`terraform state list` no muestra `oci_core_instance.lab`.
+
+Significa que **no hay instancia**, y el plan va a **crear una de cero**, no
+a actualizar la que había. No es una actualización: es un arranque desde
+cero.
+
+Qué sobrevive y qué no:
+
+- **El volumen del workspace sobrevive.** Es un recurso aparte. Aun así,
+  ten snapshot o el backup manual de `backups.md`.
+- **La red sobrevive**: VCN, subred, NAT gateway y security groups.
+- **La sesión de Tailscale no está, porque no hay nodo.** Cuando se cree,
+  hay que hacer el join con una key one-off nueva y revocarla.
+
+Si la creación falla con `Invalid ratio of memory in GB to OCPUs` y un
+`Valid ratio range: 0 - 0`, **no es un problema de memoria**: ese rango
+vacío significa que OCI no encuentra hosts libres. Baja la RAM si quieres,
+pero no arregla nada. El detalle está en `docs/phase-8.md`.
 
 ## El plan de Terraform quiere destruir algo
 

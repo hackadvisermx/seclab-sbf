@@ -87,9 +87,74 @@ el join. El volumen del workspace sobrevive, porque es un recurso aparte.
 `make tf-destroy-check` existe para que nadie lea esto por primera vez
 justo después de un `terraform apply`.
 
+## Estado del nodo OCI: CAIDO (2026-09-29)
+
+**No hay instancia.** El recurso `oci_core_instance.lab` no existe, ni en el
+state ni en OCI. Lo que sobrevive:
+
+| Recurso | Estado |
+|---|---|
+| `oci_core_volume.workspace` (50 GB) | `AVAILABLE`, intacto |
+| VCN, subred, NAT gateway, NSG y sus reglas | intactos |
+| `oci_core_instance.lab` | **no existe** |
+
+### Qué pasó
+
+Al reemplazar el nodo, cuyo `user_data` era anterior al cloud-init actual, la
+creación falló cuatro veces seguidas, siempre por cuota de shape:
+
+```text
+Error: 400-InvalidParameter, Invalid ratio of memory in GB to OCPUs.
+Current ratio: 4.0. Valid ratio range: 0 - 0
+```
+
+Bajar la memoria de 8 a 4 GB cambió la ratio a 2.0 y el error siguió siendo
+`0 - 0`. Ese rango vacío no es un problema de ratio: significa que OCI no
+encuentra ningún host donde calcularla.
+
+Medido en el compartment durante los intentos:
+
+```text
+standard-e5-core-count     = 0     (0 OCPU disponibles)
+standard-e5-memory-count   = 0
+hermes-oci                 RUNNING  VM.Standard.E5.Flex, 2 OCPU / 4 GB
+```
+
+`hermes-oci` ocupa la cuota E5 del compartment. **El error no lo causa este
+stack ni el `memory_gbs`**: es que no queda E5 disponible.
+
+Con `VM.Standard.A1.Flex`, que sí tiene 2 OCPU y 12 GB libres, el error fue
+otro y de otro tipo:
+
+```text
+Error: 500-InternalError, Out of host capacity.
+```
+
+Cuota sobrante pero sin hosts ARM libres en la región en ese momento. Es un
+error transitorio, a diferencia del de E5.
+
+### Vías para recuperarlo
+
+1. **A1 Flex**: reintentar cuando haya hosts ARM libres. Obliga a construir la
+   imagen del contenedor para arm64 en el host, no amd64.
+2. **Subir el límite E5** desde Limits → *Request a service limit increase*.
+   Necesita en total lo que ya consume `hermes-oci` más lo nuevo. Puede
+   requerir cuenta de pago.
+3. **`VM.Standard.E2.1.Micro`**: 1 GB de RAM, insuficiente para el laboratorio
+   (`light` pesa 1,55 GB en disco y `full` 4,5 GB, y encima corre Docker).
+   Descartado por rendimiento, no por cuota.
+
+### El bug que casi lo evita
+
+`make tf-destroy-check` avisaba de las destrucciones, pero cuando el nodo ya
+no existe el plan sale `2 to add, 0 to destroy` y el check **no decía nada**.
+Así que avisó de laInstance pero no del nodo perdido. Corregido en la misma
+fase: ahora comprueba que el recurso principal exista en el state y sale con
+código 1 si falta.
+
 ## Pendiente
 
-- Decidir si el nodo de OCI se importa al estado actual o se acepta su reemplazo. El plan está medido y documentado arriba.
+- **Recuperar el nodo de OCI**, que ahora no existe. Requiere cuota de shape que hoy no hay; ver el apartado de arriba.
 - Snapshot del workspace verificado en un apply real. Los tres stacks lo
   crean en el `apply` y validan, pero no se ha ejecutado ninguno.
 - Backup programado en Azure y DigitalOcean; hoy son manuales. En OCI la

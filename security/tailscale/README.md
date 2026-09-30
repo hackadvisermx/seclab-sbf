@@ -1,6 +1,6 @@
 # Tailscale host-only
 
-Tailscale se instala y ejecuta únicamente en el host. No se instala en `light`, no se monta en el contenedor y no se usa `network_mode: host`.
+Tailscale se instala y ejecuta únicamente en el host. No se instala en la imagen del laboratorio, no se monta en el contenedor y no se usa `network_mode: host`.
 
 ## Requisitos
 

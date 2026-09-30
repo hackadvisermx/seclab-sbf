@@ -286,7 +286,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # que verificar el snapshot. A partir de la linea siguiente todo se instala
 # desde el snapshot, que es el pin real del proyecto; la version que resuelve
 # queda registrada en supply-chain/tools.lock.yaml. El paquete no llega a la
-# imagen final: light ya aporta el suyo, tambien desde el snapshot.
+# imagen final: el toolkit ya aporta el suyo, tambien desde el snapshot.
 # hadolint ignore=DL3008
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
@@ -336,7 +336,7 @@ RUN python3 -m venv /opt/nxc \
 # no de Ubuntu: gcc 4:14.2.0-1, libpcap-dev 1.10.5-2 y libusb 2:1.0.28-1. El
 # runtime de la imagen final si es Ubuntu y usa sus propias versiones.
 # bettercap necesita las dos cabeceras: libusb por gousb y libpcap por
-# gopacket/pcap. En runtime el pcap ya lo aporta light (libpcap0.8t64).
+# gopacket/pcap. En runtime el pcap ya lo aporta el toolkit (libpcap0.8t64).
 
 FROM --platform=$BUILDPLATFORM ${GO_UPSTREAM} AS go-builder
 ARG TARGETOS
@@ -395,7 +395,7 @@ RUN git init /src/s3scanner \
  && test "$(git -C /src/s3scanner rev-parse HEAD)" = "${S3SCANNER_COMMIT}"
 WORKDIR /src/s3scanner
 # pgx 5.5.5 trae CVE-2026-33815 y CVE-2026-33816 (CRITICAL, memory safety),
-# corregidos en 5.9.0. Se sube igual que hace naabu en light.
+# corregidos en 5.9.0. Se sube igual que hace naabu.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
  && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
  && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
@@ -421,7 +421,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # que verificar el snapshot. A partir de la linea siguiente todo se instala
 # desde el snapshot, que es el pin real del proyecto; la version que resuelve
 # queda registrada en supply-chain/tools.lock.yaml. El paquete no llega a la
-# imagen final: light ya aporta el suyo, tambien desde el snapshot.
+# imagen final: el toolkit ya aporta el suyo, tambien desde el snapshot.
 # hadolint ignore=DL3008
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
@@ -513,10 +513,10 @@ ARG EXPLOITDB_COMMIT=150aef0e7c4757c9dff33016c8352671cdc9b454
 ARG SECLISTS_COMMIT=eccfbd405af82194e125a450a0076dbe4252d6f9
 # El LABEL lo deja el bloque de full, mas abajo: una sola imagen.
 #
-COPY scripts/install-light-packages.sh /usr/local/bin/install-light-packages
+COPY scripts/install-toolkit-packages.sh /usr/local/bin/install-toolkit-packages
 COPY scripts/pwntools-requirements-aarch64.txt scripts/pwntools-requirements-x86_64.txt /tmp/
-RUN chmod 0555 /usr/local/bin/install-light-packages \
- && SNAPSHOT_ID="${UBUNTU_SNAPSHOT}" /usr/local/bin/install-light-packages
+RUN chmod 0555 /usr/local/bin/install-toolkit-packages \
+ && SNAPSHOT_ID="${UBUNTU_SNAPSHOT}" /usr/local/bin/install-toolkit-packages
 COPY --from=fzf-builder /out/fzf /usr/bin/fzf
 COPY --from=naabu-builder /out/naabu /usr/bin/naabu
 COPY --from=upstream-builder /out/subfinder /usr/bin/subfinder
@@ -553,15 +553,15 @@ RUN chmod 0555 /usr/local/bin/install-shell \
   && install -m 0644 -o tester -g tester /usr/local/share/seclab/zshrc /home/tester/.zshrc
 COPY security/ssh/sshd_config /etc/ssh/sshd_config.seclab
 
-COPY scripts/entrypoint/light-entrypoint.sh /usr/local/bin/light-entrypoint
+COPY scripts/entrypoint/lab-entrypoint.sh /usr/local/bin/lab-entrypoint
 COPY scripts/entrypoint/ttyd-as-tester.sh /usr/local/bin/ttyd-as-tester
 COPY scripts/entrypoint/ttyd-as-tester-shell.sh /usr/local/bin/ttyd-as-tester-shell
 COPY scripts/vpn-manager.sh /usr/local/bin/vpn-manager
 COPY scripts/vpn-control.py /usr/local/bin/vpn-control
 COPY scripts/pt-vpn-ip.sh /usr/local/bin/pt-vpn-ip
 COPY scripts/proxy-control.py /usr/local/bin/pt-forward
-COPY scripts/health/light-healthcheck.sh /usr/local/bin/light-healthcheck
-RUN chmod 0555 /usr/local/bin/light-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/light-healthcheck
+COPY scripts/health/lab-healthcheck.sh /usr/local/bin/lab-healthcheck
+RUN chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck
 
 LABEL org.opencontainers.image.source="https://github.com/hackadvisermx/seclab-sbf" \
       org.opencontainers.image.title="seclab-sbf full" \
@@ -604,6 +604,6 @@ RUN ln -sf /opt/nxc/bin/nxc /usr/local/bin/nxc \
   && chown -h tester:tester /home/tester/.nxc
 ENV PATH="/opt/ruby/bin:/opt/nxc/bin:${PATH}"
 WORKDIR /workspace
-ENTRYPOINT ["/usr/local/bin/light-entrypoint"]
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/usr/local/bin/light-healthcheck"]
+ENTRYPOINT ["/usr/local/bin/lab-entrypoint"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/usr/local/bin/lab-healthcheck"]
 CMD ["/bin/bash"]

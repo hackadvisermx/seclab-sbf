@@ -11,7 +11,7 @@ El objetivo es que el usuario `tester` trabaje dentro del contenedor y solicite 
 | 0 | Completada | Decisiones, threat model y matriz de compatibilidad |
 | 1 | Completada | Supply chain, lockfiles, Gitleaks, escaneo de imagen y workflows |
 | 2 | Completada | Compose, workspace, secretos y healthchecks |
-| 3 | Completada v1 | Imagen Ubuntu `base`/`light`, build nativo arm64 y amd64 |
+| 3 | Completada v1 | Imagen Ubuntu `base` y la del laboratorio, build nativo arm64 y amd64 |
 | 4 | Completada v1 | Zsh, Oh My Zsh, fzf, zoxide, banner, herramientas y tmux |
 | 5 | Completada v1 | VPN inside, TUN, socket autenticado, aliases y sanitización |
 | 6 | Completada v1 | `pt-forward` TCP, `pt-socks` SOCKS5, `pt-web` HTTP/WebSocket y route guard; puente host-only validado en VPS |
@@ -174,7 +174,7 @@ Resultados verificados actualmente:
 - Rutas por defecto y DNS sin cambios; `vpn-disconnect` limpia el túnel.
 - `pt-forward`/`pt-socks`/`pt-web` bloquean destinos sin VPN, permiten rutas `tun0` y se detienen al desconectar la VPN.
 - `pt-web` rechaza absolute-form y permanece loopback. El consumo externo se resuelve con el puente host-only más `ssh -L` sobre Tailscale, validado de extremo a extremo en un VPS el 2026-09-25; habilitarlo en el host OCI final queda como paso de despliegue. La sintaxis, el smoke `prerouting` y la persistencia systemd de nftables fueron validados en el host final.
-- `make verify` (Gitleaks, Hadolint, ShellCheck y pines de Actions) pasa; ShellCheck solo informa SC2329 en `scripts/entrypoint/light-entrypoint.sh` por una función `cleanup` invocada de forma indirecta.
+- `make verify` (Gitleaks, Hadolint, ShellCheck y pines de Actions) pasa; ShellCheck solo informa SC2329 en `scripts/entrypoint/lab-entrypoint.sh` por una función `cleanup` invocada de forma indirecta.
 - `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` pasan en OCI, Azure y DigitalOcean sin `apply`, y los tres corren igual en CI.
 - `make tflint-check` pasa en los tres stacks con el ruleset `terraform` embebido, sin plugins del registro. Requiere `tflint` instalado; sin él sale `unavailable`.
 - `STACK=oci make tf-destroy-check` imprime el plan del stack y sale con código 1 si va a destruir algo **o si el nodo ya no existe**. No aplica nada. El nodo de OCI no existe desde 2026-09-29: se destruyó al reemplazarlo y no se pudo recrear por falta de cuota de shape. La red sigue intacta; el workspace es ahora una carpeta del disco, no un volumen; ver [`docs/phase-8.md`](docs/phase-8.md). Existe porque el nodo de OCI lleva `metadata.user_data`, que el provider trata como inmutable: un cambio en el cloud-init lo reemplaza entero.
@@ -184,7 +184,7 @@ Resultados verificados actualmente:
 ## Estructura principal
 
 ```text
-images/                 Dockerfiles base/light/full
+images/                 Dockerfiles base y full
 compose*.yaml           servicios lab y VPN
 scripts/                entrypoints, healthchecks, VPN, proxy, host, nube y claves locales
 shell/                  Zsh, tmux y pentest-lab

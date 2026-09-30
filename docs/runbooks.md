@@ -141,7 +141,7 @@ build, la imagen está obsoleta y hay que reconstruir. Lo dice el propio
 salida de `ensure-image`; se fuerza con:
 
 ```bash
-make rebuild-image LAB_IMAGE=light
+make rebuild-image LAB_IMAGE=full
 ```
 
 **Confirma qué imagen está en uso** antes de seguir diagnosticando:

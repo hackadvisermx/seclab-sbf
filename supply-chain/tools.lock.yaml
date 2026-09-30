@@ -358,7 +358,7 @@ built_binaries:
     cgo_reason: github.com/google/gousb v1.1.3 es dependencia directa y no tiene
                 build tag que la excluya, asi que no hay build sin cgo posible.
                 Ademas gopacket/pcap pide pcap.h, de ahi libpcap-dev en el
-                builder; en runtime el pcap ya lo aporta light (libpcap0.8t64).
+                builder; en runtime el pcap ya lo aporta el toolkit (libpcap0.8t64).
     bumps:
       # Llega por antchfx/jsonquery. CVE-2026-32287 es DoS por bucle infinito
       # al evaluar un boolean XPath.
@@ -382,7 +382,7 @@ built_binaries:
     package: .
     note: suite MITM/spoofing. Solo entra en la imagen full. Su release oficial
           solo trae linux_amd64, asi que en arm64 se compila desde este commit
-          con el mismo patron de cross-compile que usa naabu en light.
+          con el mismo patron de cross-compile que usa naabu.
   - name: s3scanner
     version: 3.1.1
     source: https://github.com/sa7mon/s3scanner

@@ -71,7 +71,7 @@ docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml 
     <h3>Im&aacute;genes: se construyen donde se usan</h3>
     <table>
       <tr><th>Imagen</th><th>D&oacute;nde se construye</th><th>Notas</th></tr>
-      <tr><td><code>base</code>, <code>light</code></td><td><strong>En la m&aacute;quina que las usa</strong></td><td>Construcci&oacute;n nativa: el port&aacute;til en <code>arm64</code>, el host en <code>amd64</code>.</td></tr>
+      <tr><td><code>base</code>, <code>full</code></td><td><strong>En la m&aacute;quina que las usa</strong></td><td>Construcci&oacute;n nativa: el port&aacute;til en <code>arm64</code>, el host en <code>amd64</code>.</td></tr>
       <tr><td><code>full</code></td><td><strong>En el host donde va a correr</strong></td><td>VM desechable. Sus CVEs se comprueban con <code>make scan-image</code>.</td></tr>
     </table>
     <div class="warn">

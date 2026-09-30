@@ -19,9 +19,12 @@ data "oci_core_images" "ubuntu" {
   compartment_id           = var.compartment_ocid
   operating_system         = "Canonical Ubuntu"
   operating_system_version = "24.04"
-  shape                    = "VM.Standard.E5.Flex"
-  sort_by                  = "TIMECREATED"
-  sort_order               = "DESC"
+  # El shape va en la variable, no fijo: hardcodearlo fue lo que rompio
+  # el nodo el 2026-09-29, cuando el limite del compartment dejo de dar
+  # E5 y el apply fallo con "Invalid ratio of memory in GB to OCPUs".
+  shape      = var.shape
+  sort_by    = "TIMECREATED"
+  sort_order = "DESC"
 }
 
 resource "oci_core_vcn" "lab" {
@@ -136,7 +139,7 @@ resource "oci_core_subnet" "private" {
 resource "oci_core_instance" "lab" {
   compartment_id      = var.compartment_ocid
   availability_domain = data.oci_identity_availability_domain.ad.name
-  shape               = "VM.Standard.E5.Flex"
+  shape               = var.shape
   display_name        = "${local.name_prefix}-lab"
   freeform_tags       = local.freeform_tags
 
@@ -157,6 +160,19 @@ resource "oci_core_instance" "lab" {
     nsg_ids          = [oci_core_network_security_group.lab.id]
   }
 
+  # OJO: metadata es un map(string) y el provider lo trata como inmutable.
+  # Cualquier cambio en el cloud-init, en la jail de fail2ban o en el
+  # user_data hace que este recurso entre en plan como "must be replaced":
+  # se destruye la instancia y se crea otra. NO es un refresh y NO toca el
+  # volumen del workspace, que es un recurso aparte y sobrevive; lo que se
+  # pierde es la sesion de Tailscale y hay que volver a unirlo.
+  #
+  # Antes de aplicar un plan que diga "must be replaced" en esta instancia:
+  #   1. tf-plan y leer si es solo metadata o hay algo mas.
+  #   2. Si el workspace importa, el snapshot del stack lo cubre; si no,
+  #      el procedimiento manual de docs/backups.md.
+  #   3. Tras el apply, rehacer el join de Tailscale con una key one-off y
+  #      revocarla. Ver security/tailscale/README.md.
   metadata = {
     ssh_authorized_keys = var.ssh_public_key
     user_data = base64encode(templatefile("${path.module}/../../modules/lab-cloud-init/cloud.cfg.yaml", {

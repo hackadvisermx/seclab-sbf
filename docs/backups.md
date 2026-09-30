@@ -125,3 +125,6 @@ tar czf ~/seclab-workspace-$(date +%Y%m%d).tar.gz -C /workspace .
   destino, y está sin decidir.
 - **Almacenamiento del backup**: hoy los backups se crean junto al volumen,
   en la misma cuenta. Si la cuenta se destruye, se van con él.
+- **El nodo de OCI está caído desde 2026-09-29** por falta de cuota de shape,
+  así que hoy no hay nada que respaldar en el cloud. El volumen de 50 GB
+  sigue ahí. Ver `phase-8.md`.

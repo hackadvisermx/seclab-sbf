@@ -962,7 +962,7 @@ pt-forward doctor
 - Configurar cloud-init.
 - Integrar Tailscale.
 - Añadir scripts de bootstrap y destroy.
-- `fmt`, `validate` y `tflint` pasan en los tres stacks, y los tres corren en CI junto con el render del cloud-init (`make tf-render-check`). tflint usa solo el ruleset `terraform` embebido en el binario, sin plugins del registro (`.tflint.hcl`). Falta `apply` real con credenciales del operador, verificación de destrucción, y `tfsec`/Checkov, que siguen sin añadirse por ser dependencias nuevas con su propia cadena de suministro.
+- `fmt`, `validate` y `tflint` pasan en los tres stacks, y los tres corren en CI junto con el render del cloud-init (`make tf-render-check`). tflint usa solo el ruleset `terraform` embebido en el binario, sin plugins del registro (`.tflint.hcl`). El stack oci tenía un nodo desplegado desde 2026-09-25, pero ya no existe: se destruyó al reemplazarlo y la creación falló cuatro veces por falta de cuota de shape (`standard-e5-core-count = 0`, con `hermes-oci` ocupando la del compartment; A1 Flex da `Out of host capacity`). La red y el volumen del workspace sobreviven. Recuperarlo requiere cuota de shape que hoy no hay; ver `docs/phase-8.md`. Verificación de destrucción y `tfsec`/Checkov siguen pendientes, lo segundo por ser dependencias nuevas con su propia cadena de suministro.
 
 ### Fase 9 — Seguridad cloud (parcial)
 
@@ -972,7 +972,7 @@ pt-forward doctor
 - Bloquear metadata.
 - Aplicar una ruta NAT gateway cuando el host no tenga `public_ip`.
 - Ejecutar pruebas externas controladas.
-- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`; jail de sshd con fail2ban en `security/fail2ban/`, desplegada por cloud-init, validada contra el propio fail2ban con `make fail2ban-jail-check` en local y en CI. El bloqueo efectivo en nftables sigue sin comprobarse: requiere provocar cinco fallos de autenticación en un host real. Pendiente: ACL, MFA y device approval de Tailscale, habilitar el puente del proxy y pruebas externas controladas.
+- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`; jail de sshd con fail2ban en `security/fail2ban/`, desplegada por cloud-init, validada contra el propio fail2ban con `make fail2ban-jail-check` en local y en CI. Verificado el 2026-09-29 que el nodo de OCI ya no existe: se destruyó al reemplazarlo y no se ha podido recrear por falta de cuota de shape. El volumen del workspace y la red siguen en pie. `make tf-destroy-check` avisa de planes destructivos y de nodo ausente. El bloqueo efectivo en nftables sigue sin comprobarse: requiere provocar cinco fallos de autenticación en un host real. Pendiente: ACL, MFA y device approval de Tailscale, habilitar el puente del proxy y pruebas externas controladas.
 
 ### Fase 10 — CI/CD y operación (parcial)
 

@@ -53,6 +53,27 @@ variable "admin_password" {
   default     = ""
 }
 
+variable "shape" {
+  description = <<-EOT
+    Shape de la VM del laboratorio.
+
+    Was variable porque hardcodearla fue lo que rompio el nodo: el
+    2026-09-29 el apply de reemplazo fallo con "Invalid ratio of
+    memory in GB to OCPUs" porque el HCL pedia VM.Standard.E5.Flex y
+    ese tenancy no lo tiene. El limite del compartment es
+    standard-e5-core-count = 0 y standard-a1-core-count = 2, asi que
+    aqui solo hay ARM.
+
+    VM.Standard.A1.Flex es ARM y obliga a construir la imagen del
+    contenedor para arm64 en el host. Se probó el 2026-09-29 y el
+    apply falló con "Out of host capacity": el limite del compartment
+    es standard-a1-core-count = 2 pero no habia hosts ARM libres en
+    mx-monterrey-1. E5.Flex (x86) es la que usa el resto del stack.
+  EOT
+  type        = string
+  default     = "VM.Standard.E5.Flex"
+}
+
 variable "ocpus" {
   description = "OCPUs de la VM Flex."
   type        = number
@@ -60,9 +81,21 @@ variable "ocpus" {
 }
 
 variable "memory_gbs" {
-  description = "RAM en GB de la VM Flex."
+  description = <<-EOT
+    RAM en GB de la VM Flex.
+
+    Bajada a 8 -> 4 el 2026-09-29. Motivo: al reemplazar el nodo, el
+    apply fallo con "Invalid ratio of memory in GB to OCPUs" y los
+    limites del compartment dan standard-e5-core-count = 0. En el mismo
+    compartment corre hermes-oci con 2 OCPU / 4 GB, asi que 4 GB es lo
+    que cabe junto a ella.
+
+    Consecuencia: la imagen `full` del laboratorio (4.5 GB de imagen,
+    Metasploit y SecLists) NO entra con 4 GB. Para `full` hace falta mas
+    RAM y mas capacidad, o un tenancy con credito.
+  EOT
   type        = number
-  default     = 8
+  default     = 4
 }
 
 variable "boot_volume_gbs" {

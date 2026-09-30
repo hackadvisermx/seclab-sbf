@@ -15,14 +15,6 @@ export HISTFILE="$SECLAB_STATE_DIR/.zsh_history"
 export HISTSIZE=50000
 export SAVEHIST=50000
 export _ZO_DATA_DIR="$SECLAB_STATE_DIR/zoxide"
-export PENTEST_PROFILE="${PENTEST_PROFILE:-light}"
-# sshd no pasa su entorno a la sesion; el entrypoint publica el perfil
-# resuelto en /run/seclab/pentest-profile y esa fuente manda.
-if [ -r /run/seclab/pentest-profile ]; then
-  PENTEST_PROFILE="$(head -n 1 /run/seclab/pentest-profile)"
-fi
-export PENTEST_PROFILE
-
 plugins=(
   git
   tmux

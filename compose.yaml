@@ -36,7 +36,6 @@ services:
     mem_limit: ${LAB_MEMORY_LIMIT:-1g}
     cpus: ${LAB_CPUS:-2.0}
     environment:
-      PENTEST_PROFILE: ${PENTEST_PROFILE:-light}
       VPN_MODE: ${VPN_MODE:-inside}
       VPNTRY_CONFIG: ${VPNTRY_CONFIG:-/vpn/tryhackme.ovpn}
       VPNHTB_CONFIG: ${VPNHTB_CONFIG:-/vpn/hackthebox.ovpn}

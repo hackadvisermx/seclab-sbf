@@ -63,11 +63,6 @@ jobs:
         with:
           dockerfile: images/base/Dockerfile
           failure-threshold: warning
-      - name: Dockerfile lint light
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387
-        with:
-          dockerfile: images/light/Dockerfile
-          failure-threshold: warning
       - name: Dockerfile lint full
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387
         with:

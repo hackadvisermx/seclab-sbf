@@ -37,7 +37,14 @@
   recordar la ruta existe `scripts/lab`, un ejecutable que delega en `make -C` y se instala con
   `ln -s scripts/lab ~/bin/lab`; `labsh`, `labtmux` y `labws` son el mismo fichero con otro nombre
   y eligen target por `basename "$0"`. Es opcional y no toca el `.zshrc`: resuelve el repo siguiendo
-  el propio symlink, y `SECLAB_DIR` gana si esta definido. La estructura inicial (`README.md`, `engagements/_plantilla.md`,
+  el propio symlink, y `SECLAB_DIR` gana si esta definido. Con `lab`, el workspace es la CARPETA
+  DESDE LA QUE SE LANZA, no la del repo: `scripts/lab` la absolutiza y la pasa en `WORKSPACE_DIR`
+  porque las recetas hacen `cd` a la raiz y un valor relativo acabaria siempre en el repo. Si la
+  carpeta existe se monta y no se toca; si no, la crea `make workspace-dir` y la siembra. Lanzar
+  `lab` desde dos carpetas distintas da DOS workspaces, no uno. `SECLAB_WORKSPACE_DIR` lo fija a
+  mano. `scripts/lab` no crea la carpeta: `make workspace-dir` es el unico que lo hace, para que
+  `lab` sin argumentos no deje directorios. Con `make` directo el comportamiento no cambia:
+  `WORKSPACE_DIR ?= ./workspace` sigue siendo el del repo. La estructura inicial (`README.md`, `engagements/_plantilla.md`,
   `retos/_plantilla.md`) viene de `workspace-seed/`, que se copia en la imagen en `/workspace`.
   El `chown tester:tester /workspace` del Dockerfile no es cosmetico: si quedara de root, el bind mount
   taparia el directorio con esos permisos y `tester` no podria escribir nada.

@@ -95,8 +95,47 @@ lab                     # sin argumentos, muestra la ayuda
 ```
 
 El repo se resuelve siguiendo el enlace simbólico en sí mismo, así que el
-atajo sobrevive a que muevas el repo; si lo mueves, rehaz el `ln -s`.
+atajo sobreviva a que muevas el repo; si lo mueves, rehaz el `ln -s`.
 `SECLAB_DIR` tiene prioridad si necesitas fijarlo a mano.
+
+### El workspace sigue a la carpeta desde la que lanzas `lab`
+
+El workspace es la carpeta en la que trabajas, y con `lab` es la desde la que
+lo invoques, no la del repo:
+
+```bash
+cd ~/proyectos/mi-engagement
+lab up            # crea ~/proyectos/mi-engagement si no existe y lo monta
+lab               # más tarde, desde esa misma carpeta
+```
+
+- Si la carpeta ya existe, se monta tal cual y no se toca su contenido.
+- Si no existe, se crea y se siembra con la estructura inicial
+  (`README.md`, `engagements/_plantilla.md`, `retos/_plantilla.md`).
+
+Esto se decide en `scripts/lab`, que pasa el workspace ya como ruta absoluta.
+Hace falta porque cada receta del Makefile hace `cd` a la raíz del repo antes
+de correr: sin absolutizar, un workspace relativo acabaría siempre dentro del
+repo y `lab up` desde otra carpeta montaría el workspace equivocado sin
+avisar.
+
+Dos consecuencias prácticas:
+
+- Si lanzas `lab` desde dos carpetas distintas tienes **dos workspaces**, no
+  uno. Es lo que hace que el material se quede donde trabajas, pero conviene
+  saberlo antes de extrañar algo.
+- `lab` no crea la carpeta por su cuenta. Lo hace `make workspace-dir`, que
+  además es quien la siembra. Por eso `lab` sin argumentos, que solo muestra la
+  ayuda, no deja directorios sueltos.
+
+Para fijar el workspace a mano, en vez de seguir la carpeta de invocación:
+
+```bash
+SECLAB_WORKSPACE_DIR=~/material lab up
+```
+
+Con `make` directamente el comportamiento no cambia: `WORKSPACE_DIR` sigue
+siendo `./workspace` dentro del repo.
 
 ## VPN
 

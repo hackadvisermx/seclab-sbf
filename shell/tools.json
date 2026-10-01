@@ -244,11 +244,52 @@
       "category": "forensics",
       "command": "zsteg",
       "description": "Extrae datos esteganográficos de imágenes; en -e indica siempre los canales (b1,lsb,rgba)"
+    },
+    "bloodhound-ce-python": {
+      "category": "exploit",
+      "command": "bloodhound-ce-python",
+      "description": "Mapea relaciones de Active Directory para BloodHound CE"
+    },
+    "kinit": {
+      "category": "exploit",
+      "command": "kinit",
+      "description": "Obtiene ticket Kerberos (TGT) con una credencial"
+    },
+    "ldapdomaindump": {
+      "category": "exploit",
+      "command": "ldapdomaindump",
+      "description": "Vuelca el dominio AD completo a JSON y Kerberos"
+    },
+    "ldapsearch": {
+      "category": "exploit",
+      "command": "ldapsearch",
+      "description": "Consultas LDAP directas contra Active Directory"
+    },
+    "ldd2bloodhound": {
+      "category": "exploit",
+      "command": "ldd2bloodhound",
+      "description": "Convierte volcados LDAP de ldapdomaindump a formato BloodHound"
+    },
+    "msldap": {
+      "category": "exploit",
+      "command": "msldap",
+      "description": "Cliente LDAP de Windows sobre LDAP, con msDS-KeyCredentialLink"
+    },
+    "pypykatz": {
+      "category": "exploit",
+      "command": "pypykatz",
+      "description": "Extrae credenciales de tickets Kerberos, SAM y NTDS"
+    },
+    "rpcclient": {
+      "category": "exploit",
+      "command": "rpcclient",
+      "description": "Cliente RPC de Windows (shares, enum de usuarios, grupo)"
     }
   },
   "installed": [
     "anew",
     "bettercap",
+    "bloodhound-ce-python",
     "crunch",
     "curl",
     "dalfox",
@@ -269,8 +310,13 @@
     "john",
     "jq",
     "katana",
+    "kinit",
+    "ldapdomaindump",
+    "ldapsearch",
+    "ldd2bloodhound",
     "msfconsole",
     "msfvenom",
+    "msldap",
     "naabu",
     "nmap",
     "nuclei",
@@ -278,8 +324,10 @@
     "openvpn",
     "pt-forward",
     "pwn",
+    "pypykatz",
     "python3",
     "rg",
+    "rpcclient",
     "s3scanner",
     "searchsploit",
     "socat",

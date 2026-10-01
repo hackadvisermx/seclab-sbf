@@ -203,6 +203,60 @@ Una tool puede estar en la imagen y no en `tools.json` (o al revés). Si el
 inventario y la imagen discrepan, manda la imagen para lo que se puede
 ejecutar, y hay que corregir `tools.json`.
 
+### 5.6 impacket 0.14 ya no trae los ejecutables
+
+El venv de NetExec trae `impacket 0.14`, y parece la respuesta obvia a
+"necesito secretsdump": los ficheros están, en
+`.../site-packages/impacket/examples/`. **No son ejecutables**, y no por falta
+de permiso: es que ese paquete ya no distribuye la CLI.
+
+Comprobado en la imagen:
+
+```sh
+/opt/nxc/bin/python -c "
+from importlib.metadata import distribution
+d = distribution('impacket')
+print(d.metadata['Summary'])
+print([e.name for e in d.entry_points if e.group == 'console_scripts'])"
+# Network protocols Constructors and Dissectors
+# []
+```
+
+Es la librería pura. Sus ficheros de `examples/` son módulos que el propio
+código de NetExec importa (`from impacket.examples.secretsdump import ...` en
+`nxc/protocols/smb.py`), y **no tienen** `if __name__ == "__main__"`, ni
+`main()`, ni `parse_args()`, ni entry point.
+
+Esto se intentó y falló dos veces antes de entenderlo:
+
+1. `chmod +x` sobre el fichero: lo deja ejecutable, pero al correrlo no imprime
+   nada y sale con **0**. Importado, sin nada que ejecutar.
+2. Ponerle shebang a mano: no llevan ninguno, así que sin tocar el upstream los
+   ejecutaba `/bin/sh` y fallaba con `import: not found` en cada línea de
+   `import`. Con el shebang correcto ya no da error, pero sigue sin hacer nada.
+
+Un wrapper propio tampoco arregla nada: no hay `main()` que llamar.
+
+**Para el volcado de hashes, `nxc` cubre lo mismo** sobre SMB, LDAP y WinRM, y
+ya está instalado y auditado. Si aun asi se quieren los scripts sueltos de
+impacket, hace falta el paquete de scripts aparte, que es una tool más que
+fijar, actualizar y auditar.
+
+### 5.7 `tools.json` declara el `command`, no el nombre de la clave
+
+`fd` declara `command: fdfind` y `wireguard` declara `command: wg`, porque esos
+son los binarios reales en Ubuntu. Al verificar el manifiesto hay que comparar
+contra `tools[k]["command"]`, no contra las claves de `installed`:
+
+```sh
+python3 -c 'import json
+d = json.load(open("shell/tools.json"))["tools"]
+for k in sorted(d): print(d[k]["command"])' > /tmp/cmds.txt
+```
+
+Con las claves da dos falsos `AUSENTE: fd` y `AUSENTE: wireguard` que no son
+reales: los binarios se llaman `fdfind` y `wg`.
+
 ## Referencias
 
 - `plan.md` §3 y §6: arquitectura, cadena de suministro y gates.

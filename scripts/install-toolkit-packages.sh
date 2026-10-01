@@ -23,6 +23,8 @@ apt-get install -y --no-install-recommends \
   iproute2 \
   iputils-ping \
   jq \
+  krb5-user \
+  ldap-utils \
   less \
   libimage-exiftool-perl \
   libpcap0.8t64 \
@@ -33,8 +35,11 @@ apt-get install -y --no-install-recommends \
   p7zip-full \
   procps \
   python3 \
+  python3-ldap3 \
   python3-pip \
   ripgrep \
+  samba-common-bin \
+  smbclient \
   socat \
   sqlmap \
   tmux \

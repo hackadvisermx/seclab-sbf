@@ -290,7 +290,7 @@ Una tool puede estar en la imagen y no en `tools.json` (o al revés). Si el
 inventario y la imagen discrepan, manda la imagen para lo que se puede
 ejecutar, y hay que corregir `tools.json`.
 
-### 5.10 impacket 0.14 ya no trae los ejecutables
+### 5.10 impacket 0.14 no trae los ejecutables, pero NetExec sí
 
 El venv de NetExec trae `impacket 0.14`, y parece la respuesta obvia a
 "necesito secretsdump": los ficheros están, en
@@ -325,9 +325,25 @@ Esto se intentó y falló dos veces antes de entenderlo:
 Un wrapper propio tampoco arregla nada: no hay `main()` que llamar.
 
 **Para el volcado de hashes, `nxc` cubre lo mismo** sobre SMB, LDAP y WinRM, y
-ya está instalado y auditado. Si aun asi se quieren los scripts sueltos de
-impacket, hace falta el paquete de scripts aparte, que es una tool más que
-fijar, actualizar y auditar.
+ya está instalado y auditado.
+
+**Ojo, esto NO significa que no haya CLIs de impacket en la imagen.** Hay dos
+conjuntos distintos y confundirlos cuesta un rato:
+
+| Dónde | Qué son | Ejecutables |
+|---|---|---|
+| `.../site-packages/impacket/examples/` | Módulos de la librería | **No.** Sin `main()`, no hacen nada al ejecutarlos |
+| `/opt/nxc/bin/*.py` | Scripts CLI que trae **NetExec** | **Sí.** Con `main()`, `argparse` y shebang `#!/opt/nxc/bin/python3` |
+
+Los segundos son los que se usan contra un objetivo: `netview.py`, `psexec.py`,
+`smbexec.py`, `wmiexec.py`, `smbclient.py`, `GetUserSPNs.py`, `getTGT.py`,
+`getST.py`, `getPac.py`, `dacledit.py`, `rbcd.py`, `owneredit.py`, `dpapi.py`,
+`mimikatz.py`, `secretsdump.py` y compañía. Más `certipy`, que es la vía a
+abuso de certificados y viene de la misma venv.
+
+El criterio para exponerlos fue comprobarlos uno a uno, no fiarse del nombre
+del fichero: `netview.py -h` imprime su `usage` con sus flags, lo que delata
+que tiene `argparse` de verdad. Un módulo de `examples/` no imprime nada.
 
 ### 5.11 `tools.json` declara el `command`, no el nombre de la clave
 

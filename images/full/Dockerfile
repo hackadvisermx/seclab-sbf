@@ -611,8 +611,8 @@ RUN ln -sf /opt/nxc/bin/nxc /usr/local/bin/nxc \
   && ln -sfn /var/lib/seclab/tester/.nxc /home/tester/.nxc \
   && chown -h tester:tester /home/tester/.nxc
 #
-# NO se exponen los ejemplos de impacket como ejecutables, y el motivo esta
-# medido para que no se vuelva a intentar:
+# NO se exponen los ficheros de impacket/examples/ como ejecutables, y el
+# motivo esta medido para que no se vuelva a intentar:
 #
 # impacket 0.14 (la dependencia de NetExec) es la libreria pura, "Network
 # protocols Constructors and Dissectors". Ya no distribuye los CLI. Sus ficheros
@@ -627,11 +627,35 @@ RUN ln -sf /opt/nxc/bin/nxc /usr/local/bin/nxc \
 # con "import: not found". Un wrapper propio tampoco sirve: no hay main que
 # llamar.
 #
-# Para el volcado de hashes esta imagen usa `nxc`, que ya habla SMB, LDAP y
-# WinRM y expone lo mismo sobre el venv de NetExec. Los scripts sueltos de
-# impacket (secretsdump como CLI) necesitan el paquete de scripts aparte, y no se
-# anade aqui: es una tool mas que fijar, actualizar y auditar, para algo que
-# nxc ya cubre en los tres protocolos.
+# ESTO NO CONTRADICE lo de arriba, porque son scripts distintos. NetExec trae
+# sus PROPIOS ejecutables en /opt/nxc/bin/, y esos si son CLIs de verdad: tienen
+# su bloque main y su argparse, se ejecutan con el python del venv y responden
+# con su usage. Comprobado uno a uno antes de exponerlos, no por el nombre del
+# fichero.
+#
+# Se expone un subconjunto, no los 139 binarios del venv. El criterio es el uso
+# diario contra un objetivo de AD desde linea de comandos, y lo que se deja
+# dentro sigue accesible por su ruta completa. Los .py llevan ALGO de codigo
+# nuestro, asi que el shebang se antepone con `install` en vez de tocar los
+# ficheros de upstream.
+RUN for tool in netview.py wmiexec.py psexec.py smbexec.py smbclient.py \
+               GetUserSPNs.py Get-GPPPassword.py GetADUsers.py GetADComputers.py \
+               getPac.py getST.py getTGT.py describeTicket.py findDelegation.py \
+               owneredit.py rbcd.py dacledit.py dpapi.py mimikatz.py mssqlclient.py \
+               reg.py ticketer.py atexec.py net.py ntfs-read.py dpapidump.py \
+               secretsdump.py GetLAPSPassword.py GetUserSPNs.py; do \
+      if [ -f "/opt/nxc/bin/${tool}" ]; then \
+        install -m 0755 "/opt/nxc/bin/${tool}" "/usr/local/bin/${tool}"; \
+      fi; \
+    done \
+ && ln -sf /opt/nxc/bin/certipy /usr/local/bin/certipy \
+ && chmod 0555 /usr/local/bin/certipy \
+ && for tool in netview.py psexec.py GetUserSPNs.py dacledit.py dpapi.py; do \
+      "/usr/local/bin/${tool}" -h >/dev/null 2>&1 || { \
+        printf 'AD tool rota: %s\n' "$tool" >&2; exit 1; }; \
+    done \
+ && certipy find -h >/dev/null 2>&1 || { printf 'certipy roto\n' >&2; exit 1; } \
+ && printf '%s\n' 'AD tools de impacket y certipy ok'
 COPY --from=go-builder /out/s3scanner /usr/bin/s3scanner
 ENV PATH="/opt/ruby/bin:/opt/nxc/bin:${PATH}"
 WORKDIR /workspace

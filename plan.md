@@ -36,8 +36,10 @@ El contenedor no será una distribución basada en Kali ni Parrot. Las herramien
 - Estado Terraform: backend nativo por proveedor.
 - Política de CVEs: basada en riesgo.
 - Repositorio: `hackadvisermx/seclab-sbf` en GitHub.
-- Sin registry: no se publican imágenes. Cada máquina construye en caliente la
-  imagen que usa, de forma nativa, y la revisa con `make scan-image`.
+- Imagen publicada en Docker Hub: `hackadvisermx/seclab-sbf`, PÚBLICA. El host
+  de OCI no compila, hace pull de un digest y la escanea antes de usarla. El
+  `docker login` está solo en la máquina del owner, así que el host nunca tiene
+  credenciales de escritura. Ver la sección 2.
 - Full: VM desechable, sin otros servicios ni credenciales.
 
 ### Decisiones revocadas
@@ -51,7 +53,15 @@ Estas decisiones se tomaron al principio del proyecto y quedaron sin efecto el
   emulación y su gate de CVEs paraba releases. Con build nativo en cada
   máquina no hay artefacto que justifique el almacenamiento. Consecuencia
   aceptada: si una máquina pierde su imagen, hay que reconstruirla; no hay
-  copia que descargar. Reversión: reconstruir el workflow de publicación.
+  copia que descargar. **Revocada de nuevo el 2026-10-10**, cuando se publicó
+  en Docker Hub en vez de GHCR: el problema de la emulación ya no existía
+  porque cada máquina compila nativa, y el host de OCI llevaba tiempo compilando 4.9
+  GB en un VPS de 4 GB, que es el problema que el pull por digest elimina.
+- **Registro de imágenes en el host, sin digest (descartada).** Se consideró
+  que el host hiciera pull de un tag (`latest`) y se descartó: un tag se puede
+  republicar con otro contenido, así que es confianza ciega en el registro. Con
+  digest, el host sigue viendo exactamente la imagen que se publicó aunque el
+  tag se mueva.
 
 ## 3. Arquitectura
 

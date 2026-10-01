@@ -17,7 +17,7 @@ SHELL := /bin/sh
 # caso de `make` sin argumentos y no los `make compose-up`. Comprobado.
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: workspace-dir workspace-list workspace-export compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
+.PHONY: workspace-dir workspace-list workspace-export compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -50,7 +50,7 @@ COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECR
 COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" docker compose $(VPN_COMPOSE)
 
 help:
-	@cd "$(ROOT)" && printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base y full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-full        Imagen del laboratorio (la unica)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  workspace-dir    Crea la carpeta de trabajo y la siembra si esta vacia' '  workspace-list   Ver que hay en el workspace' '  workspace-export Saca material del workspace (RUTA= | ENG= | ALL=1)' '  lab-ssh           SSH a tester en un comando' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  makefile-check       Recetas del Makefile con comillas balanceadas' '  image-tools-check   Herramientas del manifiesto presentes en la imagen' '  compose-refs-check  Referencias de compose que existan (Dockerfile, imagen)' '  doc-targets-check Comandos make citados que existan' '  tf-destroy-check  Avisa si el plan destruye algo (STACK=oci|azure|do)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR DEST LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
+	@cd "$(ROOT)" && printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base y full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-full        Imagen del laboratorio (la unica)' '  image-publish    Publica la imagen en Docker Hub (no escanea)' '  image-publish-checked Publica despues de pasar el gate de CVEs' '  image-pull       Baja la imagen por digest (DOCKER_DIGEST) y la deja lista' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  workspace-dir    Crea la carpeta de trabajo y la siembra si esta vacia' '  workspace-list   Ver que hay en el workspace' '  workspace-export Saca material del workspace (RUTA= | ENG= | ALL=1)' '  lab-ssh           SSH a tester en un comando' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  makefile-check       Recetas del Makefile con comillas balanceadas' '  image-tools-check   Herramientas del manifiesto presentes en la imagen' '  compose-refs-check  Referencias de compose que existan (Dockerfile, imagen)' '  doc-targets-check Comandos make citados que existan' '  tf-destroy-check  Avisa si el plan destruye algo (STACK=oci|azure|do)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE IMAGE_SOURCE WORKSPACE_DIR DEST LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell verify-pins makefile-check compose-refs-check
 
@@ -88,6 +88,27 @@ lint-shell:
 BUILD_PLATFORM ?=
 BUILD_TAG ?=
 BUILD_PLATFORM_ARG = $(if $(BUILD_PLATFORM),--platform $(BUILD_PLATFORM),)
+
+# Publicacion de la imagen. El host de OCI NO compila: hace pull de un tag
+# publicado y lo escanea antes de usarlo. Se publico el 2026-10-10, con la
+# misma logica que ya usaba hackadvisermx/pentestdocker: construir en caliente
+# y publicar, en vez de que cada host tenga su toolchain de build.
+#
+# DOCKER_REPO y DOCKER_TAG identifican que imagen es. El tag lleva la etiqueta
+# de insumos, asi que el propio nombre dice de que codigo salio:
+#   DOCKER_TAG=26.04-<hash de insumos>
+#
+# DOCKER_DIGEST es lo que hace que esto sea seguro de usar. El VPS NO hace pull
+# de latest ni de un tag flotante, sino de un digest: sha256:... Si alguien
+# republica el tag con otra imagen, el digest sigue siendo el mismo y el VPS
+# sigue viendo exactamente lo que se publico. Sin esto, un tag mutable es solo
+# confianza ciega en el registry.
+DOCKER_REPO ?= hackadvisermx/seclab-sbf
+DOCKER_TAG ?= 26.04-$(BUILD_INPUTS)
+# Repo para las imagenes intermedias: la imagen final publica un unico tag, sin
+# base. Ver imagen-publish.
+DOCKER_BASE_REPO ?= hackadvisermx/seclab-sbf-base
+DOCKER_IMAGE ?= $(DOCKER_REPO):$(DOCKER_TAG)
 
 
 build-base:
@@ -316,7 +337,7 @@ sbom:
 # Si no coinciden, el codigo cambio desde la ultima build y hay que
 # reconstruir. Sin esto, sincronizar el repo e invocar un target reutilizaba
 # en silencio la imagen anterior: con full son 4 GB de diferencia.
-# Se pasan a proposito todos los directorios que可以在 el contexto, para
+# Se pasan a proposito todos los directorios que van en el contexto, para
 # errar hacia reconstruir de mas antes que hacia dejar una imagen vieja.
 BUILD_INPUT_DIRS = images scripts shell security supply-chain
 BUILD_INPUT_FILES = .tmux.conf
@@ -331,9 +352,92 @@ rebuild-image:
 		*) printf 'LAB_IMAGE desconocida: %s (usa base|full)\n' "$(LAB_IMAGE_RESOLVED)" >&2; exit 2 ;; \
 	esac
 
+# --- publicacion de la imagen -------------------------------------------
+#
+# El host de OCI no compila. Hace pull de lo que se publico aqui y lo escanea
+# antes de usarlo, que es la misma garantia que antes pero sin 25 GB de disco
+# ni hora y media de compilacion en un VPS de 4 GB.
+#
+# Lo que se publica son DOS tags: la imagen final y la base. El Dockerfile de
+# full hace `FROM seclab-sbf:base`, asi que la base tiene que existir en el
+# registry con el mismo nombre, o el build en otro host no encontraria el FROM.
+#
+# Se publica por tag y NO se sobreescribe nada: el tag lleva la etiqueta de
+# insumos, y un tag distinto es una imagen distinta. Eso no es un gasto, es
+# trazabilidad: dentro de seis meses se puede saber que codigo produce esa
+# imagen con solo leer el nombre del tag.
+#
+# El digest es lo que se le pasa al host. Un tag se puede republicar con otro
+# contenido; un digest no cambia nunca. Por eso el host no hace pull de un tag.
+#
+# El login se hace en la maquina del owner y NO se propaga. El host nunca tiene
+# credenciales de escritura: aunque lo compromise, no puede publicar una imagen
+# manipulada. Solo puede leer, y solo el digest exacto que le digamos.
+
+# Publica la imagen local de LAB_IMAGE, con su base si es la final.
+# No escanea: eso lo hace scan-image, y el gate se corre aparte a proposito,
+# para poder publicar y escanear en orden explicito y no por accidente.
+image-publish:
+	@cd "$(ROOT)" && printf 'publicando %s como %s\n' "$(LAB_IMAGE_RESOLVED)" "$(DOCKER_IMAGE)"
+	@cd "$(ROOT)" && case "$(LAB_IMAGE_RESOLVED)" in \
+		seclab-sbf:base) docker tag seclab-sbf:base "$(DOCKER_BASE_REPO):$(DOCKER_TAG)" \
+			&& docker push "$(DOCKER_BASE_REPO):$(DOCKER_TAG)" ;; \
+		seclab-sbf:full) docker tag seclab-sbf:base "$(DOCKER_BASE_REPO):$(DOCKER_TAG)" \
+			&& docker push "$(DOCKER_BASE_REPO):$(DOCKER_TAG)" \
+			&& docker tag seclab-sbf:full "$(DOCKER_IMAGE)" \
+			&& docker push "$(DOCKER_IMAGE)" ;; \
+		*) printf 'LAB_IMAGE desconocida: %s (usa base|full)\n' "$(LAB_IMAGE_RESOLVED)" >&2; exit 2 ;; \
+	esac
+	@cd "$(ROOT)" && printf '%s\n' '--- digest publicado ---'
+	@cd "$(ROOT)" && docker buildx imagetools inspect "$(DOCKER_IMAGE)" --format '{{.Manifest.Digest}}' 2>/dev/null \
+		|| printf '%s\n' 'no se pudo leer el digest con imagetools; usa: docker buildx imagetools inspect IMAGE'
+
+# Lo mismo, pero escaneando ANTES de publicar. Es el orden que se quiere
+# siempre: primero el gate, despues la push. Se deja como target aparte para
+# que el orden sea explicito y no dependa de acordarse.
+image-publish-checked: scan-image image-publish
+
+# Trae la imagen publicada al host, por digest, y la deja lista para compose-up.
+# Se ejecuta en la maquina del host, no en la del owner: por eso es un shell
+# aparte y no un target normal del Makefile del host cloud.
+#
+# El digest llega por parametro y NUNCA se deduce. Si no viene, sale con error:
+# un pull de "lo que haya ahora" es justo lo que este diseno evita.
+image-pull:
+	@cd "$(ROOT)" && test -n "$(DOCKER_DIGEST)" || { printf 'DOCKER_DIGEST requerido: el pull es por digest, no por tag\n' >&2; exit 2; }
+	@cd "$(ROOT)" && printf 'bajando %s@%s (puede tardar: son 4.9 GB)\n' "$(DOCKER_REPO)" "$(DOCKER_DIGEST)"
+	@cd "$(ROOT)" && docker pull "$(DOCKER_REPO)@$(DOCKER_DIGEST)"
+	@cd "$(ROOT)" && docker tag "$(DOCKER_REPO)@$(DOCKER_DIGEST)" seclab-sbf:full
+	@cd "$(ROOT)" && printf '%s\n' 'imagen lista como seclab-sbf:full; ahora ejecuta scan-image antes de usarla'
+
+# IMAGE_SOURCE decide de donde sale la imagen: local (se construye aqui) o
+# remote (se baja de un digest ya publicado). Por defecto local, que es lo que
+# quiere el portatil. En el host cloud se pone remote en su .env, y entonces
+# ensure-image NUNCA compila: si falta la imagen dice que falta y como
+# conseguirla, en vez de ponerse a compilar 4.9 GB en un VPS de 4 GB.
+#
+# Sin esto, el host seguiria reconstruyendo por su cuenta cada vez que el
+# codigo no coincidiera con la etiqueta de insumos, que es justo el problema
+# que el pull por digest viene a quitar.
+IMAGE_SOURCE ?= local
+
 ensure-image:
+	@cd "$(ROOT)" && case "$(IMAGE_SOURCE)" in \
+		local) : ;; \
+		remote) : ;; \
+		*) printf 'IMAGE_SOURCE desconocida: %s (usa local|remote)\n' "$(IMAGE_SOURCE)" >&2; exit 2 ;; \
+	esac
 	@cd "$(ROOT)" && IMG="$(LAB_IMAGE_RESOLVED)"; \
-	if docker image inspect "$$IMG" >/dev/null 2>&1; then \
+	if [ "$(IMAGE_SOURCE)" = "remote" ]; then \
+		if docker image inspect "$$IMG" >/dev/null 2>&1; then \
+			printf 'imagen remota ya presente: %s\n' "$$IMG"; \
+		else \
+			printf '%s\n' "imagen ausente y IMAGE_SOURCE=remote: NO se compila aqui." >&2; \
+			printf '%s\n' "En la maquina que publica: make image-publish, y luego pasa el digest con" >&2; \
+			printf '%s\n' "  DOCKER_DIGEST=sha256:... make image-pull" >&2; \
+			exit 1; \
+		fi; \
+	elif docker image inspect "$$IMG" >/dev/null 2>&1; then \
 		built_inputs=$$(docker image inspect -f '{{index .Config.Labels "seclab.build-inputs"}}' "$$IMG" 2>/dev/null || true); \
 		if [ -z "$$built_inputs" ] || [ "$$built_inputs" = "<no value>" ]; then \
 			printf 'imagen sin etiqueta de insumos, se reconstruye: %s\n' "$$IMG"; \
@@ -380,9 +484,12 @@ lab-ssh-cloud:
 # alla con la imagen pedida y despues entra.
 lab-ssh-cloud-image:
 	@cd "$(ROOT)" && test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host\n' >&2; exit 2)
-	@cd "$(ROOT)" && printf 'recreando el lab en el host con %s (puede tardar si hay que construir)\n' "$(LAB_IMAGE_RESOLVED)"
-	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(TF_ADMIN)@$(CLOUD_HOST)" \
-		'cd '"$(CLOUD_REPO_DIR)"' && WORKSPACE_DIR='"$(CLOUD_WORKSPACE_DIR)"' make compose-up LAB_IMAGE='"$(LAB_IMAGE_RESOLVED)"
+	@cd "$(ROOT)" && test -n "$(DOCKER_DIGEST)" || { printf 'DOCKER_DIGEST requerido: el host no compila, baja un digest\n' >&2; exit 2; }
+	@cd "$(ROOT)" && printf 'bajando en el host %s@%s (son 4.9 GB, tarda)\n' "$(DOCKER_REPO)" "$(DOCKER_DIGEST)"
+	@cd "$(ROOT)" && printf 'recreando el lab en el host con esa imagen y escaneandola antes de usarla\n'
+	cd "$(ROOT)" && printf 'cd %s\nmake image-pull DOCKER_REPO=%s DOCKER_DIGEST=%s\nmake scan-image IMAGE_SOURCE=remote\nWORKSPACE_DIR=%s make compose-up IMAGE_SOURCE=remote\n' \
+		"$(CLOUD_REPO_DIR)" "$(DOCKER_REPO)" "$(DOCKER_DIGEST)" "$(CLOUD_WORKSPACE_DIR)" \
+		| ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(TF_ADMIN)@$(CLOUD_HOST)" sh -s -e
 	cd "$(ROOT)" && $(MAKE) lab-ssh-cloud
 
 vpn-require-dir:

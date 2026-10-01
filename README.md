@@ -137,6 +137,39 @@ SECLAB_WORKSPACE_DIR=~/material lab up
 Con `make` directamente el comportamiento no cambia: `WORKSPACE_DIR` sigue
 siendo `./workspace` dentro del repo.
 
+## Imagen publicada en Docker Hub
+
+La imagen del laboratorio se publica en `hackadvisermx/seclab-sbf`, **pública**,
+para que el host de la nube no tenga que compilar 4.9 GB en un VPS de 4 GB.
+
+```bash
+# En tu máquina, después de build-full:
+make scan-image              # el gate de CVEs, siempre antes de publicar
+make image-publish           # publica la base y la final, y muestra el digest
+```
+
+El `docker login` se hace **solo en tu máquina**. El host de la nube nunca tiene
+credenciales de escritura: si lo compromisingen, no pueden publicar una imagen
+manipulada.
+
+En el host, la imagen se baja **por digest**, nunca por tag:
+
+```bash
+make image-pull DOCKER_DIGEST=sha256:...
+make scan-image              # el gate se corre AQUÍ, en el host
+```
+
+Un tag se puede republicar con otro contenido; un digest no cambia nunca. Por eso
+el host no hace pull de `latest`: así sigue viendo exactamente la imagen que
+publicaste aunque alguien mueva el tag.
+
+En el host, además, `IMAGE_SOURCE=remote` en su `.env` hace que `ensure-image`
+**falle con instrucciones** en vez de compilar. Es la garantía de que el host no
+vuelve a compilar por su cuenta.
+
+Para el día a día en el portátil no cambia nada: `make build-full` compila local y
+`make scan-image` revisa lo que vas a usar.
+
 ## VPN
 
 El flujo normal usa `VPN_MODE=inside`:

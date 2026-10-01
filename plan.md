@@ -22,8 +22,8 @@ El contenedor no será una distribución basada en Kali ni Parrot. Las herramien
 - Acceso remoto: Tailscale.
 - SSH dentro del contenedor mediante OpenSSH, con un único usuario Unix `tester`.
 - SFTP desactivado; no existe una cuenta separada de transferencia.
-- Workspace local: `./workspace` montado en `/workspace`.
-- El workspace comienza vacío y no se crean subcarpetas automáticamente.
+- Workspace local: carpeta del proyecto montada en `/workspace`; la crea `make` y la siembra desde `workspace-seed/`.
+- El workspace es una carpeta que crea `make`, sembrada desde `workspace-seed/`, y es escribible por `tester`.
 - Credenciales de ejecución: `.env` local no versionado.
 - Credenciales de bootstrap/cloud: `deploy/.env` separado.
 - Oh My Zsh con plugins seleccionados y pinneados.
@@ -397,29 +397,52 @@ La contraseña de ttyd no sustituye Tailscale ACL/MFA.
 
 ## 9. Workspace
 
-El workspace local será:
+El workspace es el directorio de trabajo de `tester`, y es donde se documentan
+los engagements y las soluciones de retos. Es una carpeta del proyecto montada por
+bind mount:
 
 ```text
 ./workspace:/workspace
 ```
 
+Se evaluó un volumen Docker con nombre el 2026-10-01 y se descartó: `make` desde
+cualquier carpeta tenía que resolver dos mecanismos distintos, y el workspace no
+ganaba nada por ser volumen. Lo que se chose fue que `make` cree la carpeta.
+
 Reglas:
 
 - `WORKDIR /workspace`.
-- El directorio debe existir antes del despliegue.
-- No se crea automáticamente una estructura de subcarpetas.
+- La carpeta la crea `make workspace-dir`, no compose: el compose declara
+  `create_host_path: false` para que un typo en `WORKSPACE_DIR` no cree un árbol
+  vacío en cualquier sitio.
+- La estructura inicial (`README.md`, `engagements/_plantilla.md`,
+  `retos/_plantilla.md`) viene de `workspace-seed/` y se siembra **solo si la
+  carpeta está vacía**. Con un bind mount lo que hay en la imagen en `/workspace`
+  queda tapado, así que sin la siembra las plantillas no se verían nunca.
+- **El bind mount tapa la imagen**: `/workspace` se deja como `tester` en el
+  Dockerfile. Si quedara de root, el montaje traería esos permisos y `tester` no
+  podría escribir.
 - No se monta el directorio actual completo.
 - El workspace es el único lugar de trabajo del usuario.
-- Las herramientas pueden escribir aquí, por lo que se recomienda no usarlo como repositorio de producción.
-- Las flags, reports, wordlists y evidencias deben tratarse como datos sensibles.
+- Está en `.gitignore`: ahí hay notas de clientes.
+- Las flags, reports, wordlists y evidencias se tratan como datos sensibles.
+- Sale al host con `make workspace-list` y `make workspace-export`.
 
-En cloud se montará un volumen cifrado del proveedor:
+En cloud **no hay volumen del proveedor**. También cambió el 2026-09-29: un
+volumen de 50 GB se factura con la VM apagada, y apagar la VM no era opción con
+almacenamiento separado. Es una carpeta del disco de arranque:
 
 ```text
-/srv/pentest/workspace:/workspace
+/opt/seclab-sbf/workspace:/workspace
 ```
 
-El volumen será independiente del disco del sistema y tendrá snapshots o backups.
+Consecuencias aceptadas:
+
+- El workspace **se pierde si la VM se destruye o reemplaza**, en local y en
+  la nube por el mismo motivo de coste.
+- El backup es manual: `make workspace-export ALL=1` en local, y `scp` o
+  `docker cp` en la nube. Procedimiento en `docs/backups.md`.
+- No hay snapshots ni retención en ningún stack.
 
 ## 10. Tailscale
 
@@ -711,7 +734,6 @@ Cada stack gestionará:
 - VM.
 - Red privada.
 - Firewall.
-- Volumen de workspace.
 - Cloud-init.
 - Docker.
 - Tailscale.

@@ -143,7 +143,7 @@ devuelve `skipped`.
 - No se publican puertos Docker.
 - No se usa `privileged`, `docker.sock` ni `network_mode: host`.
 - El acceso administrativo previsto es por Tailscale/SSH/ttyd privado.
-- No se comparten claves privadas, `.env`, `.ovpn`, `workspace/` ni `tmp/`.
+- No se comparten claves privadas, `.env`, `.ovpn`, `salida/` ni `tmp/`.
 - La plantilla nftables y la ruta NAT gateway de OCI fueron validadas y aplicadas en el host final; el puente host-only del proxy (`scripts/host/pt-proxy-bridge.sh`) está validado en un VPS, pero todavía no habilitado en el host OCI final.
 - El `sshd` del host está cubierto por una jail de fail2ban con `banaction = nftables-multiport` y bans por IP, nunca por subred del tailnet. No cubre el `sshd` del contenedor. Ver [`docs/phase-9.md`](docs/phase-9.md).
 - Usa únicamente objetivos y perfiles VPN autorizados.
@@ -194,7 +194,8 @@ terraform/              stacks OCI, Azure y DigitalOcean
 docs/                   decisiones por fase, runbooks, backups, acceso y tools
 plan.md                 fuente de verdad del producto
 vpn/                    perfiles locales ignorados
-workspace/              workspace local ignorado
+workspace-seed/         estructura inicial del workspace (la siembra make)
+salida/                 material exportado con make workspace-export (ignorado)
 ```
 
 ## Flujo Git

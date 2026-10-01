@@ -563,6 +563,15 @@ COPY scripts/proxy-control.py /usr/local/bin/pt-forward
 COPY scripts/health/lab-healthcheck.sh /usr/local/bin/lab-healthcheck
 RUN chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck
 
+# Workspace de tester. En local esto se monta como volumen con nombre, y un
+# volumen nuevo toma como dueño el directorio de la imagen: si /workspace
+# aqui fuera de root, el volumen naceria sin permiso de escritura para
+# tester y no se podria documentar nada. De ahi el chown, que no es cosmetico.
+# En el host cloud esto se sustituye por un bind mount de la carpeta del
+# disco, que ya viene con el dueño correcto.
+COPY workspace-seed/ /workspace/
+RUN chown -R tester:tester /workspace && chmod 0755 /workspace
+
 LABEL org.opencontainers.image.source="https://github.com/hackadvisermx/seclab-sbf" \
       org.opencontainers.image.title="seclab-sbf full" \
       org.opencontainers.image.version="0.1.0-phase7"

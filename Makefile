@@ -1,10 +1,31 @@
 SHELL := /bin/sh
 
-.PHONY: makefile-check image-tools-check compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
+# --- arranque desde cualquier carpeta -------------------------------
+#
+# Make no puede cambiar su propio directorio: cada receta corre en una shell
+# nueva y make sigue en el directorio desde el que se lanzo. Como todo el
+# repo tiene rutas relativas (compose, scripts, Dockerfiles), `make` solo
+# funcionaba desde la raiz.
+#
+# Cada receta empieza con `cd "$(ROOT)" &&`, y con eso da igual desde donde se
+# llame: `make -f /ruta/al/Makefile compose-up` funciona igual que `make
+# compose-up` en la raiz. Solo se prefijan los INICIOS de linea logica; las
+# continuaciones con backslash son la misma orden de shell y no se tocan.
+#
+# Se descarto re-invocarse con `$(MAKE) -C` porque Make no deja reescribir
+# la lista de objetivos: `MAKECMDGOALS :=` se ignora, asi que solounia el
+# caso de `make` sin argumentos y no los `make compose-up`. Comprobado.
+ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+
+.PHONY: workspace-dir workspace-list workspace-export compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
 WORKSPACE_DIR ?= ./workspace
+# Destino de `make workspace-export`. Fuera del repo a proposito: el
+# workspace contiene notas de engagement y material de clientes, y no
+# debe acabar en un directorio que alguien верa a versionar sin querer.
+DEST ?= ./salida
 VPN_DIR ?= ./vpn
 VPN_MODE ?= inside
 VPN_PROFILE ?= tryhackme
@@ -29,12 +50,12 @@ COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECR
 COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" docker compose $(VPN_COMPOSE)
 
 help:
-	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base y full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-full        Imagen del laboratorio (la unica)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  makefile-check       Recetas del Makefile con comillas balanceadas' '  image-tools-check   Herramientas del manifiesto presentes en la imagen' '  compose-refs-check  Referencias de compose que existan (Dockerfile, imagen)' '  doc-targets-check Comandos make citados que existan' '  tf-destroy-check  Avisa si el plan destruye algo (STACK=oci|azure|do)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
+	@cd "$(ROOT)" && printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base y full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-full        Imagen del laboratorio (la unica)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  workspace-dir    Crea la carpeta de trabajo y la siembra si esta vacia' '  workspace-list   Ver que hay en el workspace' '  workspace-export Saca material del workspace (RUTA= | ENG= | ALL=1)' '  lab-ssh           SSH a tester en un comando' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  makefile-check       Recetas del Makefile con comillas balanceadas' '  image-tools-check   Herramientas del manifiesto presentes en la imagen' '  compose-refs-check  Referencias de compose que existan (Dockerfile, imagen)' '  doc-targets-check Comandos make citados que existan' '  tf-destroy-check  Avisa si el plan destruye algo (STACK=oci|azure|do)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR DEST LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell verify-pins makefile-check compose-refs-check
 
 verify-secrets:
-	gitleaks dir . --redact --no-banner --config .gitleaks.toml
+	cd "$(ROOT)" && gitleaks dir . --redact --no-banner --config .gitleaks.toml
 
 # Trivy 0.74.0, la misma version que usaba el gate de release.
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
@@ -47,13 +68,13 @@ SCAN_IGNORE_UNFIXED ?= true
 SCAN_TIMEOUT ?= 45m
 
 verify-pins:
-	@GH_TOKEN="$$(gh auth token 2>/dev/null || true)" ./scripts/verify/check-action-pins.sh
+	@cd "$(ROOT)" && GH_TOKEN="$$(gh auth token 2>/dev/null || true)" ./scripts/verify/check-action-pins.sh
 
 lint-docker:
-	hadolint images/base/Dockerfile images/full/Dockerfile
+	cd "$(ROOT)" && hadolint images/base/Dockerfile images/full/Dockerfile
 
 lint-shell:
-	@for file in scripts/*.sh scripts/entrypoint/*.sh scripts/health/*.sh scripts/security/*.sh scripts/host/*.sh scripts/cloud/*.sh scripts/verify/*.sh; do \
+	@cd "$(ROOT)" && for file in scripts/*.sh scripts/entrypoint/*.sh scripts/health/*.sh scripts/security/*.sh scripts/host/*.sh scripts/cloud/*.sh scripts/verify/*.sh; do \
 		if [ -f "$$file" ]; then shellcheck "$$file"; fi; \
 	done
 
@@ -70,32 +91,32 @@ BUILD_PLATFORM_ARG = $(if $(BUILD_PLATFORM),--platform $(BUILD_PLATFORM),)
 
 
 build-base:
-	BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull $(BUILD_PLATFORM_ARG) --file images/base/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:base$(BUILD_TAG) --load .
+	cd "$(ROOT)" && BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull $(BUILD_PLATFORM_ARG) --file images/base/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:base$(BUILD_TAG) --load .
 
 # Imagen unica del laboratorio. Antes habia light y full, con full haciendo
 # FROM light: la imagen final contenia las dos. Se fusionaron el 2026-09-29 y
 # base es lo unico que se construye antes.
 build-full: build-base
-	BUILDKIT_PROGRESS=plain docker buildx build $(BUILD_PLATFORM_ARG) --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base$(BUILD_TAG) --file images/full/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:full$(BUILD_TAG) --load .
+	cd "$(ROOT)" && BUILDKIT_PROGRESS=plain docker buildx build $(BUILD_PLATFORM_ARG) --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base$(BUILD_TAG) --file images/full/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:full$(BUILD_TAG) --load .
 
 env-init:
-	@if [ -e "$(ENV_FILE)" ]; then \
+	@cd "$(ROOT)" && if [ -e "$(ENV_FILE)" ]; then \
 		printf '%s ya existe; no se sobrescribió\n' "$(ENV_FILE)" >&2; \
 		exit 1; \
 	fi
-	@cp .env.example "$(ENV_FILE)"
-	@chmod 600 "$(ENV_FILE)"
-	@case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-keys.sh ;; esac
-	@printf 'creado %s desde .env.example\n' "$(ENV_FILE)"
+	@cd "$(ROOT)" && cp .env.example "$(ENV_FILE)"
+	@cd "$(ROOT)" && chmod 600 "$(ENV_FILE)"
+	@cd "$(ROOT)" && case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-keys.sh ;; esac
+	@cd "$(ROOT)" && printf 'creado %s desde .env.example\n' "$(ENV_FILE)"
 
 ensure-env:
-	@if [ ! -e "$(ENV_FILE)" ]; then \
+	@cd "$(ROOT)" && if [ ! -e "$(ENV_FILE)" ]; then \
 		cp .env.example "$(ENV_FILE)"; \
 		chmod 600 "$(ENV_FILE)"; \
 		printf 'creado %s desde .env.example\n' "$(ENV_FILE)"; \
 	fi
-	@if [ "$(ENV_FILE)" = ".env" ]; then chmod 600 "$(ENV_FILE)"; fi
-	@case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-keys.sh ;; esac
+	@cd "$(ROOT)" && if [ "$(ENV_FILE)" = ".env" ]; then chmod 600 "$(ENV_FILE)"; fi
+	@cd "$(ROOT)" && case "$(ENV_FILE)" in *.example) ;; *) SECLAB_ENV_FILE="$(ENV_FILE)" /bin/sh scripts/generate-keys.sh ;; esac
 
 keys: ensure-env
 
@@ -104,50 +125,105 @@ keys: ensure-env
 # forma atomica (escribe temporal y renombra) cambia el inode del
 # archivo y deja colgando cualquier bind mount de un archivo suelto.
 sync-secrets:
-	@case "$(ENV_FILE)" in \
+	@cd "$(ROOT)" && case "$(ENV_FILE)" in \
 		*.example) exit 0 ;; \
 	esac
-	@mkdir -p "$(SECRETS_DIR)"
-	@chmod 700 "$(SECRETS_DIR)"
-	@cp "$(ENV_FILE)" "$(SECRETS_DIR)/lab.env"
-	@chmod 600 "$(SECRETS_DIR)/lab.env"
+	@cd "$(ROOT)" && mkdir -p "$(SECRETS_DIR)"
+	@cd "$(ROOT)" && chmod 700 "$(SECRETS_DIR)"
+	@cd "$(ROOT)" && cp "$(ENV_FILE)" "$(SECRETS_DIR)/lab.env"
+	@cd "$(ROOT)" && chmod 600 "$(SECRETS_DIR)/lab.env"
 
 compose:
-	@:
+	@cd "$(ROOT)" && :
 
 # Forma canonica con guiones; 'up', 'down', 'shell', 'zsh', 'tmux' y
 # 'config' se conservan como alias para compatibilidad.
 config: compose-config
 
-compose-config: ensure-env vpn-require-dir
-	$(COMPOSE_BASE) config --quiet
-	$(COMPOSE_VPN) config --quiet
+# El compose declara `create_host_path: false` a proposito, para que un typo
+# en WORKSPACE_DIR no cree un arbol de directorios vacio en cualquier sitio.
+# Por eso el workspace lo crea make, no compose.
+#
+# La siembra desde workspace-seed/ solo ocurre si la carpeta esta vacia: en
+# cuanto tester tiene notas dentro, make no vuelve a tocar nada. Con un bind
+# mount lo que hay en la imagen en /workspace queda tapado por la carpeta del
+# host, asi que sin esto las plantillas no se verian nunca.
+workspace-dir:
+	@cd "$(ROOT)" && mkdir -p "$(WORKSPACE_DIR)"
+	@cd "$(ROOT)" && if [ -z "$$(ls -A "$(WORKSPACE_DIR)" 2>/dev/null)" ]; then \
+		cp -R workspace-seed/. "$(WORKSPACE_DIR)/"; \
+		chmod 755 "$(WORKSPACE_DIR)"; \
+		printf '%s\n' "workspace creado y sembrado desde workspace-seed/ en $(WORKSPACE_DIR)"; \
+	else \
+		printf '%s\n' "workspace ya existe con contenido: no se toca ($(WORKSPACE_DIR))"; \
+	fi
+
+compose-config: ensure-env vpn-require-dir workspace-dir
+	cd "$(ROOT)" && $(COMPOSE_BASE) config --quiet
+	cd "$(ROOT)" && $(COMPOSE_VPN) config --quiet
 
 up: compose-up
 
-compose-up: ensure-env vpn-require-dir ensure-image sync-secrets
-	$(COMPOSE_VPN) up -d
+compose-up: ensure-env vpn-require-dir ensure-image sync-secrets workspace-dir
+	cd "$(ROOT)" && $(COMPOSE_VPN) up -d
 
 down: compose-down
 
 compose-down: ensure-env
-	$(COMPOSE_VPN) down --remove-orphans
+	cd "$(ROOT)" && $(COMPOSE_VPN) down --remove-orphans
 
 
 shell: compose-shell
 
 compose-shell: ensure-env ensure-image sync-secrets
-	$(COMPOSE_BASE) run --rm --user 1000:1000 --entrypoint /bin/bash lab
+	cd "$(ROOT)" && $(COMPOSE_BASE) run --rm --user 1000:1000 --entrypoint /bin/bash lab
 
 zsh: compose-zsh
 
 compose-zsh: ensure-env ensure-image sync-secrets
-	$(COMPOSE_BASE) run --rm -it --user 1000:1000 --entrypoint /usr/bin/zsh lab -il
+	cd "$(ROOT)" && $(COMPOSE_BASE) run --rm -it --user 1000:1000 --entrypoint /usr/bin/zsh lab -il
 
 tmux: compose-tmux
 
 compose-tmux: ensure-env sync-secrets
-	$(COMPOSE_BASE) exec -it --user 1000:1000 lab env SECLAB_TMUX=1 TERM=xterm-256color /usr/bin/tmux new-session -A -s pentest-lab /usr/bin/zsh -il
+	cd "$(ROOT)" && $(COMPOSE_BASE) exec -it --user 1000:1000 lab env SECLAB_TMUX=1 TERM=xterm-256color /usr/bin/tmux new-session -A -s pentest-lab /usr/bin/zsh -il
+
+# El workspace local es un volumen con nombre, no una carpeta del host, asi
+# que no se ve desde Finder ni se copia con scp. Estos tres targets son la
+# via para mirar lo que hay y para sacar material.
+#
+# WORKSPACE_VOLUME debe coincidir con el nombre que crea compose: se compone
+# como <proyecto>_workspace.
+workspace-list:
+	@cd "$(ROOT)" && if [ ! -d "$(WORKSPACE_DIR)" ]; then \
+		printf '%s\n' "no existe $(WORKSPACE_DIR): make compose-up lo crea"; exit 1; \
+	else find "$(WORKSPACE_DIR)" -maxdepth 2 | sed "s|^$(WORKSPACE_DIR)|.|"; fi
+
+# Copia material del workspace al host. Es un bind mount, asi que esto es un
+# cp normal; el target existe para no tener que recordar la ruta ni el
+# convenio de ENG=/RUTA=/ALL=1.
+#   make workspace-export ENG=mi-engagement
+#   make workspace-export RUTA=retos/mi-reto DEST=./salida
+#   make workspace-export ALL=1
+workspace-export:
+	@cd "$(ROOT)" && if [ ! -d "$(WORKSPACE_DIR)" ]; then \
+		printf '%s\n' "no existe $(WORKSPACE_DIR): make compose-up lo crea" >&2; exit 1; \
+	fi; \
+	if [ -z "$(ENG)" ] && [ -z "$(RUTA)" ] && [ -z "$(ALL)" ]; then \
+		printf '%s\n' 'uso: make workspace-export RUTA=<ruta> | ENG=<engagement> DEST=<dir> | ALL=1' >&2; \
+		exit 2; \
+	fi; \
+	mkdir -p "$(DEST)"; \
+	if [ -n "$(ENG)" ]; then set -- "engagements/$(ENG)"; elif [ -n "$(ALL)" ]; then set -- .; else set -- "$(RUTA)"; fi; \
+	for src in "$$@"; do \
+		if [ ! -e "$(WORKSPACE_DIR)/$$src" ]; then \
+			printf '%s\n' "no existe '$$src' en el workspace" >&2; \
+			exit 1; \
+		fi; \
+		printf '%s\n' "exportando $$src -> $(DEST)"; \
+		cp -R "$(WORKSPACE_DIR)/$$src" "$(DEST)/"; \
+	done; \
+	printf '%s\n' "listo en $(DEST)"
 
 # SSH al contenedor en un comando: publica 127.0.0.1:LAB_SSH_PORT
 # via override temporal en tmp/ (ignorado, sin tocar compose.yaml)
@@ -169,9 +245,9 @@ SCAN_KEEP_TAR ?= 0
 SCAN_FORMAT ?= table
 
 scan-image:
-	@mkdir -p "$(dir $(SCAN_TAR))"
-	docker save -o "$(SCAN_TAR)" "$(SCAN_IMAGE)"
-	docker run --rm \
+	@cd "$(ROOT)" && mkdir -p "$(dir $(SCAN_TAR))"
+	cd "$(ROOT)" && docker save -o "$(SCAN_TAR)" "$(SCAN_IMAGE)"
+	cd "$(ROOT)" && docker run --rm \
 	  -v "$(dir $(SCAN_TAR))":/scan:ro \
 	  -v "$(CURDIR)/security/trivy/.trivyignore.yaml:/ignore.yaml:ro" \
 	  -v seclab-trivy-cache:/root/.cache/trivy \
@@ -184,7 +260,7 @@ scan-image:
 	  --timeout "$(SCAN_TIMEOUT)" \
 	  --format "$(SCAN_FORMAT)" \
 	  --exit-code 1
-	@if [ "$(SCAN_KEEP_TAR)" != "1" ]; then rm -f "$(SCAN_TAR)"; fi
+	@cd "$(ROOT)" && if [ "$(SCAN_KEEP_TAR)" != "1" ]; then rm -f "$(SCAN_TAR)"; fi
 
 
 # SBOM de la imagen local en CycloneDX, con Trivy y el mismo digest
@@ -200,7 +276,7 @@ SBOM_DIR ?= $(CURDIR)/tmp/sbom
 SBOM_FORMAT ?= cyclonedx
 
 sbom:
-	@inputs="$$(docker image inspect -f '{{ index .Config.Labels "seclab.build-inputs" }}' "$(SCAN_IMAGE)" 2>/dev/null)"; \
+	@cd "$(ROOT)" && inputs="$$(docker image inspect -f '{{ index .Config.Labels "seclab.build-inputs" }}' "$(SCAN_IMAGE)" 2>/dev/null)"; \
 	if [ -z "$$inputs" ]; then \
 		printf 'sbom: la imagen %s no tiene la etiqueta seclab.build-inputs; reconstruir con make build-*\n' "$(SCAN_IMAGE)" >&2; \
 		exit 1; \
@@ -249,14 +325,14 @@ BUILD_INPUTS = $(shell { find $(BUILD_INPUT_DIRS) -type f 2>/dev/null; echo $(BU
 # Reconstruye la imagen local indicada. Lo usan ensure-image cuando falta o
 # cuando el codigo ha cambiado, para no repetir el case en dos sitios.
 rebuild-image:
-	@case "$(LAB_IMAGE_RESOLVED)" in \
+	@cd "$(ROOT)" && case "$(LAB_IMAGE_RESOLVED)" in \
 		seclab-sbf:base) $(MAKE) build-base ;; \
 		seclab-sbf:full) $(MAKE) build-full ;; \
 		*) printf 'LAB_IMAGE desconocida: %s (usa base|full)\n' "$(LAB_IMAGE_RESOLVED)" >&2; exit 2 ;; \
 	esac
 
 ensure-image:
-	@IMG="$(LAB_IMAGE_RESOLVED)"; \
+	@cd "$(ROOT)" && IMG="$(LAB_IMAGE_RESOLVED)"; \
 	if docker image inspect "$$IMG" >/dev/null 2>&1; then \
 		built_inputs=$$(docker image inspect -f '{{index .Config.Labels "seclab.build-inputs"}}' "$$IMG" 2>/dev/null || true); \
 		if [ -z "$$built_inputs" ] || [ "$$built_inputs" = "<no value>" ]; then \
@@ -284,33 +360,33 @@ ensure-image:
 # La imagen base no trae sshd, ttyd ni usuario tester, asi que no admite
 # sesion interactiva: se valida de forma efimera con su healthcheck.
 base-check: ensure-image
-	WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE=seclab-sbf:base$(BUILD_TAG) docker compose -f compose.yaml -f compose.local.yaml run --rm --entrypoint /usr/local/bin/base-healthcheck lab
+	cd "$(ROOT)" && WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE=seclab-sbf:base$(BUILD_TAG) docker compose -f compose.yaml -f compose.local.yaml run --rm --entrypoint /usr/local/bin/base-healthcheck lab
 
 lab-ssh: ensure-env vpn-require-dir ensure-image sync-secrets
-	@mkdir -p tmp
-	@printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n' "$(LAB_SSH_PORT)" > tmp/compose.ssh.yaml
-	WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" docker compose -f compose.yaml -f compose.local.yaml -f tmp/compose.ssh.yaml up -d lab
-	ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(LAB_SSH_PORT)" tester@$(LAB_SSH_HOST)
+	@cd "$(ROOT)" && mkdir -p tmp
+	@cd "$(ROOT)" && printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n' "$(LAB_SSH_PORT)" > tmp/compose.ssh.yaml
+	cd "$(ROOT)" && WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" docker compose -f compose.yaml -f compose.local.yaml -f tmp/compose.ssh.yaml up -d lab
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(LAB_SSH_PORT)" tester@$(LAB_SSH_HOST)
 
 # Entrada directa al contenedor del host cloud. Ahi el puente lo publica
 # el servicio systemd seclab-ssh-tailnet en la IP Tailscale, asi que no
 # hace falta aplicar ningun override de puertos.
 lab-ssh-cloud:
-	@test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host (ej. make lab-ssh-cloud TF_HOST=100.x.y.z)\n' >&2; exit 2)
-	ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(CLOUD_SSH_PORT)" tester@"$(CLOUD_HOST)"
+	@cd "$(ROOT)" && test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host (ej. make lab-ssh-cloud TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(CLOUD_SSH_PORT)" tester@"$(CLOUD_HOST)"
 
 # En el cloud la imagen no se elige al conectar: hay que recrear el
 # contenedor en el host. Por eso el atajo remoto primero levanta el lab
 # alla con la imagen pedida y despues entra.
 lab-ssh-cloud-image:
-	@test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host\n' >&2; exit 2)
-	@printf 'recreando el lab en el host con %s (puede tardar si hay que construir)\n' "$(LAB_IMAGE_RESOLVED)"
-	ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(TF_ADMIN)@$(CLOUD_HOST)" \
+	@cd "$(ROOT)" && test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host\n' >&2; exit 2)
+	@cd "$(ROOT)" && printf 'recreando el lab en el host con %s (puede tardar si hay que construir)\n' "$(LAB_IMAGE_RESOLVED)"
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(TF_ADMIN)@$(CLOUD_HOST)" \
 		'cd '"$(CLOUD_REPO_DIR)"' && WORKSPACE_DIR='"$(CLOUD_WORKSPACE_DIR)"' make compose-up LAB_IMAGE='"$(LAB_IMAGE_RESOLVED)"
-	$(MAKE) lab-ssh-cloud
+	cd "$(ROOT)" && $(MAKE) lab-ssh-cloud
 
 vpn-require-dir:
-	@if [ ! -d "$(VPN_DIR)" ]; then \
+	@cd "$(ROOT)" && if [ ! -d "$(VPN_DIR)" ]; then \
 		printf '%s\n' 'No existe $(VPN_DIR); crea el directorio y coloca perfiles .ovpn sanitizados.' >&2; \
 		exit 1; \
 	fi
@@ -322,77 +398,77 @@ vpn-require-dir:
 VPN_CLIENT := $(COMPOSE_VPN) exec -T --user 1000:1000 lab /usr/local/bin/vpn-control client
 
 vpn-up: ensure-env vpn-require-dir ensure-image sync-secrets
-	$(COMPOSE_VPN) up -d lab
-	$(COMPOSE_VPN) exec -T lab /bin/sh -c 'test -S /var/lib/seclab/vpn-control/control.sock && test -e /sys/class/net/tun0 && printf "%s\n" "vpn=ready tun0=present"'
+	cd "$(ROOT)" && $(COMPOSE_VPN) up -d lab
+	cd "$(ROOT)" && $(COMPOSE_VPN) exec -T lab /bin/sh -c 'test -S /var/lib/seclab/vpn-control/control.sock && test -e /sys/class/net/tun0 && printf "%s\n" "vpn=ready tun0=present"'
 
 vpn-tun-check: vpn-up
-	$(COMPOSE_VPN) exec -T lab /bin/sh -c 'test -c /dev/net/tun && test -e /sys/class/net/tun0 && /usr/local/bin/vpn-manager status'
+	cd "$(ROOT)" && $(COMPOSE_VPN) exec -T lab /bin/sh -c 'test -c /dev/net/tun && test -e /sys/class/net/tun0 && /usr/local/bin/vpn-manager status'
 
 vpn-down: ensure-env
-	$(VPN_CLIENT) disconnect
+	cd "$(ROOT)" && $(VPN_CLIENT) disconnect
 
 vpn-list: vpn-up
-	$(VPN_CLIENT) list
+	cd "$(ROOT)" && $(VPN_CLIENT) list
 
 vpn-status: vpn-up
-	$(VPN_CLIENT) status
+	cd "$(ROOT)" && $(VPN_CLIENT) status
 
 vpn-connect: vpn-up
-	$(VPN_CLIENT) connect "$(VPN_PROFILE)"
+	cd "$(ROOT)" && $(VPN_CLIENT) connect "$(VPN_PROFILE)"
 
 vpn-disconnect: vpn-up
-	$(VPN_CLIENT) disconnect
+	cd "$(ROOT)" && $(VPN_CLIENT) disconnect
 
 vpn-switch: vpn-up
-	$(VPN_CLIENT) switch "$(VPN_PROFILE)"
+	cd "$(ROOT)" && $(VPN_CLIENT) switch "$(VPN_PROFILE)"
 
 vpn-doctor: vpn-up
-	$(COMPOSE_VPN) exec -T lab /usr/local/bin/vpn-manager doctor
+	cd "$(ROOT)" && $(COMPOSE_VPN) exec -T lab /usr/local/bin/vpn-manager doctor
 
 proxy-status: ensure-env
-	$(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward status
+	cd "$(ROOT)" && $(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward status
 
 proxy-doctor: ensure-env
-	$(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward doctor
+	cd "$(ROOT)" && $(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward doctor
 
 proxy-stop: ensure-env
-	$(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward stop
+	cd "$(ROOT)" && $(COMPOSE_BASE) exec -T --user 1000:1000 lab /usr/local/bin/pt-forward stop
 
 proxy-bridge:
-	/bin/sh scripts/host/pt-proxy-bridge.sh "$(SERVICE)" "$(HOST_PORT)" "$(CONTAINER_PORT)"
+	cd "$(ROOT)" && /bin/sh scripts/host/pt-proxy-bridge.sh "$(SERVICE)" "$(HOST_PORT)" "$(CONTAINER_PORT)"
 
 security-check:
-	/bin/sh scripts/security/check-isolation.sh
+	cd "$(ROOT)" && /bin/sh scripts/security/check-isolation.sh
 
 tailscale-check:
-	/bin/sh scripts/security/check-tailscale.sh
+	cd "$(ROOT)" && /bin/sh scripts/security/check-tailscale.sh
 
 fail2ban-check:
-	/bin/sh scripts/security/check-fail2ban.sh
+	cd "$(ROOT)" && /bin/sh scripts/security/check-fail2ban.sh
 
 TF_STACK ?= oci
 TF_HOST ?=
 TF_ADMIN ?= ubuntu
 
 tf-fmt:
-	terraform fmt -check -recursive terraform/
+	cd "$(ROOT)" && terraform fmt -check -recursive terraform/
 
 tf-render-check:
-	/bin/sh scripts/verify/check-tf-render.sh
+	cd "$(ROOT)" && /bin/sh scripts/verify/check-tf-render.sh
 
 # Solo el ruleset terraform que va embebido en el binario, sin plugins
 # del registro. Sin tflint instalado se sale con 78 y el comando para
 # obtenerlo, como el resto de checks.
 tflint-check:
-	@command -v tflint >/dev/null 2>&1 || { \
+	@cd "$(ROOT)" && command -v tflint >/dev/null 2>&1 || { \
 	  printf '%s\n' 'tflint_check=unavailable command=tflint (brew install tflint)'; \
 	  exit 78; \
 	}
-	@for stack in oci azure digitalocean; do \
+	@cd "$(ROOT)" && for stack in oci azure digitalocean; do \
 	  printf '== %s ==\n' "$$stack"; \
 	  tflint --chdir="terraform/stacks/$$stack" || exit 1; \
 	done
-	@printf '%s\n' 'tflint_check=ok config=.tflint.hcl'
+	@cd "$(ROOT)" && printf '%s\n' 'tflint_check=ok config=.tflint.hcl'
 
 # Avisa antes de un apply cuando el plan va a DESTRUIR algo. No decide ni
 # aplica nada: imprime el plan y sale con codigo 1 si ve una destruccion.
@@ -400,78 +476,78 @@ tflint-check:
 # provider trata como inmutable: cualquier cambio en el cloud-init la
 # reemplaza. STACK=oci|azure|digitalocean.
 tf-destroy-check:
-	/bin/sh scripts/verify/check-tf-destroy.sh "$(STACK)"
+	cd "$(ROOT)" && /bin/sh scripts/verify/check-tf-destroy.sh "$(STACK)"
 
 # Los comandos make citados en la documentación tienen que existir. Se
 # colaron seis que no, todos en el Inicio rapido del README.
 # Recetas de un solo tabulador y comillas simples balanceadas. El fallo
 # que vigila solo se ve con GNU Make 4.x: en macOS el 3.81 lo tolera.
 makefile-check:
-	/bin/sh scripts/verify/check-makefile.sh Makefile
+	cd "$(ROOT)" && /bin/sh scripts/verify/check-makefile.sh Makefile
 
 # La imagen puede construir bien y aun asi faltar un binario. IMAGE_TOOLS
 # permite comprobar una imagen distinta de la que produce el Makefile.
 image-tools-check:
-	/bin/sh scripts/verify/check-image-tools.sh "$(SCAN_IMAGE)"
+	cd "$(ROOT)" && /bin/sh scripts/verify/check-image-tools.sh "$(SCAN_IMAGE)"
 
 compose-refs-check:
-	/bin/sh scripts/verify/check-compose-refs.sh compose.yaml compose.local.yaml compose.vpn-inside.yaml
+	cd "$(ROOT)" && /bin/sh scripts/verify/check-compose-refs.sh compose.yaml compose.local.yaml compose.vpn-inside.yaml
 
 doc-targets-check:
-	/bin/sh scripts/verify/check-doc-targets.sh README.md AGENTS.md docs/runbooks.md docs/backups.md docs/phase-8.md
+	cd "$(ROOT)" && /bin/sh scripts/verify/check-doc-targets.sh README.md AGENTS.md docs/runbooks.md docs/backups.md docs/phase-8.md
 
 # Valida la jail de fail2ban con el propio fail2ban, en un contenedor
 # desechable. No levanta ninguna jail ni toca nftables: solo parsea la
 # configuracion y pasa dos logs por el filtro de sshd. El ban efectivo
 # sigue siendo cosa del host, con make fail2ban-check.
 fail2ban-jail-check:
-	/bin/sh scripts/verify/check-fail2ban-jail.sh
+	cd "$(ROOT)" && /bin/sh scripts/verify/check-fail2ban-jail.sh
 
 tf-plan-oci:
-	/bin/sh scripts/cloud/tf.sh oci plan
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh oci plan
 
 tf-apply-oci:
-	/bin/sh scripts/cloud/tf.sh oci apply
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh oci apply
 
 tf-destroy-oci:
-	/bin/sh scripts/cloud/tf.sh oci destroy
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh oci destroy
 
 tf-plan-azure:
-	/bin/sh scripts/cloud/tf.sh azure plan
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh azure plan
 
 tf-apply-azure:
-	/bin/sh scripts/cloud/tf.sh azure apply
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh azure apply
 
 tf-destroy-azure:
-	/bin/sh scripts/cloud/tf.sh azure destroy
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh azure destroy
 
 tf-plan-do:
-	/bin/sh scripts/cloud/tf.sh digitalocean plan
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh digitalocean plan
 
 tf-apply-do:
-	/bin/sh scripts/cloud/tf.sh digitalocean apply
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh digitalocean apply
 
 tf-destroy-do:
-	/bin/sh scripts/cloud/tf.sh digitalocean destroy
+	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh digitalocean destroy
 
 env-copy-oci:
-	@test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
-	scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(ENV_FILE)" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/.env"
+	@cd "$(ROOT)" && test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
+	cd "$(ROOT)" && scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(ENV_FILE)" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/.env"
 
 env-copy-azure:
-	@test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
-	scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(ENV_FILE)" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/.env"
+	@cd "$(ROOT)" && test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
+	cd "$(ROOT)" && scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(ENV_FILE)" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/.env"
 
 env-copy-do:
-	@test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
-	scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(ENV_FILE)" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/.env"
+	@cd "$(ROOT)" && test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
+	cd "$(ROOT)" && scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(ENV_FILE)" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/.env"
 
 # Los .ovpn pueden traer usuario y contrasena en linea, asi que viajan
 # por el tailnet igual que el .env y nunca se hornean en la imagen: cada
 # maquina construye la suya y el perfil se monta en /vpn.
 vpn-copy:
-	@test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
-	@set -e; \
+	@cd "$(ROOT)" && test -n "$(TF_HOST)" || (printf 'TF_HOST requerido: tailnet del host\n' >&2; exit 2)
+	@cd "$(ROOT)" && set -e; \
 	profiles=$$(ls "$(VPN_DIR)"/*.ovpn 2>/dev/null || true); \
 	if [ -z "$$profiles" ]; then \
 		printf 'no hay perfiles .ovpn en %s\n' "$(VPN_DIR)" >&2; \

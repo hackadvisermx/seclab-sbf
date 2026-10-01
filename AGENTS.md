@@ -29,7 +29,15 @@
 - `make compose-up` inicia automáticamente el servicio del laboratorio, el daemon VPN y `tun0` sin conectar un perfil; el usuario `tester` elige la VPN con `vpntry`, `vpnhtb` o `vpncli`.
 - El servicio VPN conserva `cap_drop: ALL` y añade solo `NET_ADMIN` y `CHOWN`: `CHOWN` asigna el socket a `tester`; nunca se resuelve TUN con `--privileged`.
 - Tailscale se ejecuta en el host, no dentro del contenedor del laboratorio. `ttyd`, SSH y el tráfico de la capacidad de proxy usan túneles privados del host.
-- El montaje tipo bind `./workspace:/workspace` es el área de trabajo del usuario. Inicia vacío; no crees subdirectorios automáticamente sin cambiar el diseño documentado (plan.md seccion 7).
+- `/workspace` es el área de trabajo de `tester`, y ahí se documentan los engagements y las soluciones de retos.
+  En local y en la nube es un **bind mount de una carpeta** del proyecto (`WORKSPACE_DIR`, `./workspace` por defecto).
+  `make` la crea y la siembra si esta vacia, porque compose declara `create_host_path: false` a proposito.
+  **`make` funciona desde cualquier carpeta**: cada receta hace `cd` a la raiz del repo, asi que
+  `make -f /ruta/al/Makefile compose-up` funciona igual que `make compose-up` en la raiz. La estructura inicial (`README.md`, `engagements/_plantilla.md`,
+  `retos/_plantilla.md`) viene de `workspace-seed/`, que se copia en la imagen en `/workspace`.
+  El `chown tester:tester /workspace` del Dockerfile no es cosmetico: si quedara de root, el bind mount
+  taparia el directorio con esos permisos y `tester` no podria escribir nada.
+  Para sacar material: `make workspace-list` y `make workspace-export RUTA=<ruta>` (plan.md seccion 7).
 - Compose local no debe publicar puertos en esta fase; el secret file se monta en `/run/secrets/lab.env` y el contenedor usa rootfs read-only, `cap_drop: ALL` y `no-new-privileges`.
 - `full` ejecuta `sshd` como servicio root con capabilities mínimas y las sesiones como `tester`; no existen usuarios `transfer` ni `proxy`.
 - El acceso SSH es únicamente con claves. El único usuario planeado es `tester` (shell con tmux); SFTP está desactivado y la capacidad de proxy será un comando controlado con frontera de red, no otra cuenta Unix (plan.md seccion 7).
@@ -43,7 +51,10 @@
 - Implementa por fases según plan.md seccion 19; no saltes directamente a construir una imagen `full` grande.
 - Comienza con las fuentes ejecutables reales: `Dockerfile`, `compose*.yaml`, `Makefile`, scripts de entrada, lockfiles y CI. Agrega documentación solo para comportamientos verificados.
 - Al agregar una herramienta o un plugin de shell, actualiza su lockfile y escánalo; no instales binarios sin versión fijada de forma silenciosa. El procedimiento paso a paso y sus trampas están en `docs/agregar-tools.md`; dentro del contenedor no se puede instalar nada (rootfs de solo lectura, `tester` sin password, sin `sudo`), así que "añadir una tool" significa siempre modificar la imagen y reconstruirla.
-- Mantén equivalentes las rutas local y de nube: local usa el workspace mediante bind mount; la nube usa un volumen del proveedor montado en la misma ruta del contenedor.
+- Local y nube montan el workspace en la misma ruta del contenedor (`/workspace`) y con el mismo mecanismo: bind mount
+  de una carpeta del proyecto. Lo unico que cambia es quien crea la carpeta: en local `make`, en la nube cloud-init.
+  `compose.yaml` declara el montaje y `compose.local.yaml` lo replica; si añades un montaje, comprueba las dos
+  configuraciones con `docker compose config`: son ficheros distintos, no el mismo.
 - Para Terraform, usa stacks específicos en `terraform/stacks/{oci,azure,digitalocean}` y state remoto nativo por proveedor. Nunca versiones state local (plan.md seccion 15). Valida con `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` (init con `-backend=false` no requiere credenciales).
 - El bootstrap de Terraform no debe recibir el `.env` de ejecución; cópialo después de que Tailscale esté disponible. Protege el state de Terraform porque puede conservar valores sensibles aunque estén marcados como `sensitive`.
 

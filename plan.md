@@ -36,10 +36,10 @@ El contenedor no será una distribución basada en Kali ni Parrot. Las herramien
 - Estado Terraform: backend nativo por proveedor.
 - Política de CVEs: basada en riesgo.
 - Repositorio: `hackadvisermx/seclab-sbf` en GitHub.
-- Imagen publicada en Docker Hub: `hackadvisermx/seclab-sbf`, PÚBLICA. El host
+- Imagen publicada en Docker Hub: `hackadvisermx/sec-lab`, PÚBLICA. El host
   de OCI no compila, hace pull de un digest y la escanea antes de usarla. El
   `docker login` está solo en la máquina del owner, así que el host nunca tiene
-  credenciales de escritura. Ver la sección 2.
+  credenciales de escritura. Ver la sección 2. No hay tags multiarquitectura: cada máquina construye en una sola arquitectura, la suya, y el tag la lleva en el nombre. El host de OCI corre VM.Standard.A1.Flex, que es ARM, asi que hoy un solo tag sirve para los dos sitios.
 - Full: VM desechable, sin otros servicios ni credenciales.
 
 ### Decisiones revocadas

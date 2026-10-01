@@ -183,6 +183,21 @@ El motivo de quitarlo: un disco de 50 GB se factura aunque apagues la VM, y
 depende de la vida de la VM**, así que el backup pasa a ser disciplina, no
 infraestructura. El procedimiento está en `docs/backups.md`.
 
-El `oci_core_volume.workspace` que queda en el state de OCI (50 GB,
-`AVAILABLE`) es un resto del diseño anterior: este stack ya no lo gestiona.
-Se puede borrar desde la consola cuando se limpie la cuenta.
+El `oci_core_volume.workspace` (50 GB, `AVAILABLE`) era un resto del diseño
+anterior. Se borró desde la consola de OCI el 2026-09-30, así que ya no se
+paga ese disco.
+
+Queda una cosa pendiente y **no se puede hacer desde este repositorio**:
+la entrada `oci_core_volume.workspace` sigue en el state remoto de Terraform,
+porque el recurso se quitó de la configuración pero nadie hizo
+`terraform state rm`. No es peligroso (no hay apply que destruya nada que
+exista), pero mientras siga ahí un `terraform plan` propondrá destruir un
+volumen que ya está borrado, y `STACK=oci make tf-destroy-check` seguirá
+saliendo con 1 por eso. La limpieza es:
+
+```bash
+terraform -chdir=terraform/stacks/oci state rm oci_core_volume.workspace
+```
+
+Requiere credenciales de OCI con permiso de escritura sobre el state. `state rm` no toca la nube: solo quita la
+entrada del state.

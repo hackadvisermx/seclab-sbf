@@ -1,13 +1,38 @@
 # Backups y restauración
 
-El workspace es una **carpeta del proyecto** montada en `/workspace`. En local
-es `./workspace`, en tu máquina; en la nube es
+El workspace es una **carpeta del host** montada en `/workspace`. Con `make`
+directo es `./workspace` dentro del repo; con `scripts/lab` es la carpeta
+**desde la que se lanzó `lab`** (ver abajo). En la nube es
 `CLOUD_WORKSPACE_DIR`, la carpeta del disco de arranque de la VM.
 
 Dos antecedentes que explican por qué no hay automatismo: hasta el 2026-09-29
 en la nube era un volumen aparte del proveedor, y se quitó porque un disco de
 50 GB se factura aunque la VM esté apagada; y el 2026-10-01 se evaluó un volumen
 Docker con nombre en local y se descartó. Ver `docs/phase-8.md`.
+
+## El workspace se mueve contigo (con `lab`)
+
+Si usas el atajo `lab`, el workspace no es el del repo sino la carpeta desde la
+que lo invocas. Eso vale tanto para el backup como para la restauración: lo
+que hay que copiar es **la carpeta desde la que lanzas `lab`**, que no tiene por
+qué ser el repo.
+
+```bash
+cd ~/proyectos/mi-engagement   # el workspace vive aquí
+lab up
+lab                           # más tarde, desde esta misma carpeta
+```
+
+Si lanzas `lab` desde sitios distintos tienes workspaces distintos, y cada uno
+es una carpeta normal que se copia como se quiera. `lab workspace-list` y
+`lab workspace-export` ya operan sobre el correcto, porque el atajo les pasa la
+ruta absoluta.
+
+La consecuencia a tener presente al hacer backup: copiar `./workspace` del repo
+puede no ser lo que quieres si llevas tiempo trabajando con `lab` desde otra
+carpeta. `lab` sin argumentos imprime la ayuda, no la ruta; para ver cuál es,
+`lab workspace-list` la revela en la primera línea, o `SECLAB_WORKSPACE_DIR=...`
+si lo fijaste a mano.
 
 La consecuencia es directa y hay que tenerla presente: **el workspace
 depende de la vida de la VM**. Si la VM se destruye o se reemplaza, el

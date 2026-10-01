@@ -74,4 +74,47 @@ if [ ! -f "$dir/Makefile" ]; then
   exit 1
 fi
 
+# El workspace vive en la carpeta desde la que se lanza lab, no en el repo.
+#
+# Cada receta del Makefile hace `cd` a la raiz del repo antes de correr, asi
+# que un WORKSPACE_DIR relativo acabaria SIEMPRE en el repo, y `lab up` desde
+# otra carpeta montaria el workspace equivocado sin avisar. Por eso aqui se
+# pasa ya absoluto.
+#
+# SECLAB_WORKSPACE_DIR manda si esta definido, que es la forma de fijar el
+# workspace a mano. WORKSPACE_DIR tambien se respeta, por si alguien ya lo
+# exporta.
+#
+# En el repo, este valor coincide con el ./workspace de siempre: no cambia el
+# caso normal, solo hace que el workspace siga al sitio desde el que se lanza.
+#
+# Aqui NO se crea la carpeta: eso lo hace `make workspace-dir`, que ademas la
+# siembra desde workspace-seed/. Si lab creara la carpeta vacia, se llevaria
+# por delante la comprobacion de "si esta vacia" y el workspace quedaria sin
+# plantillas, y ademas `lab` sin argumentos (que solo muestra la ayuda)
+# dejaria directorios SSL.
+if [ -n "${SECLAB_WORKSPACE_DIR:-}" ]; then
+  workspace=$SECLAB_WORKSPACE_DIR
+elif [ -n "${WORKSPACE_DIR:-}" ]; then
+  workspace=$WORKSPACE_DIR
+else
+  workspace=$PWD
+fi
+
+# Absolutizar sin crear nada. cd fallaria si la carpeta no existe todavia, y
+# es justo el caso normal de un workspace nuevo.
+if resolved=$(cd -- "$workspace" 2>/dev/null && pwd); then
+  workspace=$resolved
+else
+  # No existe: se absolutiza a mano con el padre, que si existe. Solo se usa
+  # el ultimo componente, y no hace falta que el resto exista.
+  parent=$(cd -- "$(dirname -- "$workspace")" 2>/dev/null && pwd) || {
+    printf '%s\n' "lab: no puedo resolver el workspace '$workspace': el directorio padre no existe" >&2
+    exit 1
+  }
+  workspace=$parent/$(basename -- "$workspace")
+fi
+
+export WORKSPACE_DIR="$workspace"
+
 exec make -C "$dir" "$@"

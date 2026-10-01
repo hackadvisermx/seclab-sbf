@@ -1,10 +1,14 @@
 SHELL := /bin/sh
 
-.PHONY: makefile-check image-tools-check compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
+.PHONY: workspace-list workspace-export compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
 WORKSPACE_DIR ?= ./workspace
+# Destino de `make workspace-export`. Fuera del repo a proposito: el
+# workspace contiene notas de engagement y material de clientes, y no
+# debe acabar en un directorio que alguien верa a versionar sin querer.
+DEST ?= ./salida
 VPN_DIR ?= ./vpn
 VPN_MODE ?= inside
 VPN_PROFILE ?= tryhackme
@@ -29,7 +33,7 @@ COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECR
 COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" docker compose $(VPN_COMPOSE)
 
 help:
-	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base y full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-full        Imagen del laboratorio (la unica)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  lab-ssh           SSH a tester en un comando' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  makefile-check       Recetas del Makefile con comillas balanceadas' '  image-tools-check   Herramientas del manifiesto presentes en la imagen' '  compose-refs-check  Referencias de compose que existan (Dockerfile, imagen)' '  doc-targets-check Comandos make citados que existan' '  tf-destroy-check  Avisa si el plan destruye algo (STACK=oci|azure|do)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
+	@printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base y full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-full        Imagen del laboratorio (la unica)' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  workspace-list   Ver que hay en el workspace (funciona parado)' '  workspace-export Saca material del workspace (RUTA= | ENG= | ALL=1)' '  lab-ssh           SSH a tester en un comando' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  makefile-check       Recetas del Makefile con comillas balanceadas' '  image-tools-check   Herramientas del manifiesto presentes en la imagen' '  compose-refs-check  Referencias de compose que existan (Dockerfile, imagen)' '  doc-targets-check Comandos make citados que existan' '  tf-destroy-check  Avisa si el plan destruye algo (STACK=oci|azure|do)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE WORKSPACE_DIR DEST LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell verify-pins makefile-check compose-refs-check
 
@@ -148,6 +152,46 @@ tmux: compose-tmux
 
 compose-tmux: ensure-env sync-secrets
 	$(COMPOSE_BASE) exec -it --user 1000:1000 lab env SECLAB_TMUX=1 TERM=xterm-256color /usr/bin/tmux new-session -A -s pentest-lab /usr/bin/zsh -il
+
+# El workspace local es un volumen con nombre, no una carpeta del host, asi
+# que no se ve desde Finder ni se copia con scp. Estos tres targets son la
+# via para mirar lo que hay y para sacar material.
+#
+# WORKSPACE_VOLUME debe coincidir con el nombre que crea compose: se compone
+# como <proyecto>_workspace.
+workspace-list:
+	@printf '%s\n' 'Contenido del workspace:'
+	@$(COMPOSE_BASE) run --rm --entrypoint /usr/bin/find lab /workspace -maxdepth 2 -printf '%M %8s %p\n' 2>/dev/null || \
+		printf '%s\n' "  (el contenedor no esta levantado: make compose-up)"
+
+# Copia una ruta del workspace al host. Sin argumentos copia todo.
+#   make workspace-export RUTA=retos/mi-reto
+#   make workspace-export ENG=mi-engagement DEST=./salida
+workspace-export:
+	@if [ -z "$(ENG)" ] && [ -z "$(RUTA)" ] && [ -z "$(ALL)" ]; then \
+		printf '%s\n' 'uso: make workspace-export RUTA=<ruta> | ENG=<engagement> DEST=<dir> | ALL=1' >&2; \
+		exit 2; \
+	fi; \
+	mkdir -p "$(DEST)"; \
+	if [ -n "$(ENG)" ]; then set -- "engagements/$(ENG)"; else set -- "$(RUTA)"; fi; \
+	if [ -n "$(ALL)" ]; then set -- .; fi; \
+	for src in "$$@"; do \
+		printf '%s\n' "exportando $$src -> $(DEST)"; \
+		tmp="$$(mktemp)"; \
+		if ! $(COMPOSE_BASE) run --rm -T --entrypoint /bin/tar lab -C /workspace -cf - "$$src" > "$$tmp" 2>/dev/null; then \
+			printf '%s\n' "fallo al leer '$$src' del workspace (existe? es 'engagements/...' o 'retos/...')" >&2; \
+			rm -f "$$tmp"; \
+			exit 1; \
+		fi; \
+		if [ ! -s "$$tmp" ]; then \
+			printf '%s\n' "el workspace no devolvio nada para '$$src'" >&2; \
+			rm -f "$$tmp"; \
+			exit 1; \
+		fi; \
+		tar -xf "$$tmp" -C "$(DEST)" || { rm -f "$$tmp"; exit 1; }; \
+		rm -f "$$tmp"; \
+	done; \
+	printf '%s\n' "listo en $(DEST)"
 
 # SSH al contenedor en un comando: publica 127.0.0.1:LAB_SSH_PORT
 # via override temporal en tmp/ (ignorado, sin tocar compose.yaml)

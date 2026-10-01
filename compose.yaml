@@ -47,6 +47,9 @@ services:
       TMUX_PLUGIN_MANAGER_PATH: /tmp/tmux-plugins
     volumes:
       - lab-state:/var/lib/seclab
+      # El host cloud monta su carpeta del disco (WORKSPACE_DIR lo pone el
+      # Makefile). En local lo sustituye compose.local.yaml por un volumen
+      # con nombre, para no depender de los permisos de una carpeta del host.
       - type: bind
         source: ${WORKSPACE_DIR:-./workspace}
         target: /workspace
@@ -84,6 +87,7 @@ services:
 
 volumes:
   lab-state:
+  workspace:
 
 networks:
   seclab:

@@ -3,6 +3,9 @@
 !.env.example
 deploy/.env
 workspace/
+# Material exportado del workspace: notas de engagement y datos de
+# clientes. Nunca debe acabar en un commit por accidente.
+salida/
 tmp/
 .secrets/
 __pycache__/

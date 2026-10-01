@@ -50,5 +50,28 @@ if [ "$bad" -ne 0 ]; then
   exit 78
 fi
 
+# El equilibrio de comillas NO cubre todo. Cubre el caso que se vio al anadir
+# una entrada al texto de `make help`: un parentesis quedo fuera de las
+# comillas y `make help` reventaba. Ese caso si lo pillo el recuento (121
+# comillas, impar).
+#
+# Lo que el recuento NO ve son los fallos de dependencia: `verify: foo-bar`
+# con `foo-bar` inexistente da comillas perfectamente balanceadas y make
+# falla en seco. `make -n` no ejecuta nada, solo imprime la receta, asi que
+# expande el Makefile entero y detecta eso tambien. Es una segunda red, no un
+# sustituto: hace falta el recuento para el texto y `make -n` para el grafo.
+for target in help verify build-full workspace-export; do
+  if ! make -n "$target" >/dev/null 2>&1; then
+    printf '%s\n' "makefile_check=broken-target target=$target" >&2
+    make -n "$target" 2>&1 | tail -3 >&2 || true
+    bad=1
+  fi
+done
+
+if [ "$bad" -ne 0 ]; then
+  printf '%s\n' "makefile_check=fail fichero=$file" >&2
+  exit 78
+fi
+
 recipes="$(grep -c '^\t' "$file" 2>/dev/null || printf '%s' 0)"
 printf '%s\n' "makefile_check=ok fichero=$file recetas=$recipes"

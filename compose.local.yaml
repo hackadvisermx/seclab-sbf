@@ -6,3 +6,5 @@ services:
       args:
         BASE_IMAGE: seclab-sbf:base
     image: ${LAB_IMAGE:-seclab-sbf:full}
+    volumes:
+      - workspace:/workspace

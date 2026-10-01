@@ -26,8 +26,21 @@ de la VM hacia la máquina del operador, no al revés.
 
 ## Copia
 
-El workspace se copia desde dentro del contenedor, que es donde vive el
-contenido. Se hace con `scp` desde tu máquina, no desde el host:
+**Local, que es lo normal:** el workspace es un volumen Docker con nombre, no
+una carpeta del host, asi que no se copia con `scp` desde la maquina. Lo mas
+comodo es usar los targets que ya hacen el trabajo:
+
+```bash
+# copiar todo el workspace a ./salida
+make workspace-export ALL=1
+
+# o solo una parte
+make workspace-export RUTA=retos/mi-reto
+make workspace-export ENG=mi-engagement DEST=./salida-2026-10-01
+```
+
+En la nube el workspace si es una carpeta del disco, y ahi se copia desde
+dentro del contenedor. Se hace con `scp` desde tu máquina, no desde el host:
 
 ```bash
 # 1. Empaquetar dentro del contenedor

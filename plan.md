@@ -15,7 +15,10 @@ El contenedor no será una distribución basada en Kali ni Parrot. Las herramien
 
 ## 2. Decisiones confirmadas
 
-- Base: Ubuntu 24.04 minimal.
+- Base: Ubuntu 26.04 minimal. Subida el 2026-10-01; estaba en 24.04 desde el
+  principio. El codename es `resolute` y el snapshot es `20261005T000000Z`,
+  que tiene que ser POSTERIOR a la publicación de la imagen: el pin más viejo
+  que la imagen rompe la resolución de `libssl3t64`.
 - Imagen única del laboratorio: `seclab-sbf:full` (antes `light` y `full`).
 - `full` se ejecuta en una VM dedicada desechable.
 - Terminal web: `ttyd`.
@@ -140,7 +143,7 @@ Contenedor
 
 Incluye solamente:
 
-- Ubuntu 24.04.
+- Ubuntu 26.04.
 - `zsh`, `git`, `curl`, `jq`, `ca-certificates`.
 - `tmux`, `tini`, `less`, `vim`/`nvim` si está disponible.
 - `ripgrep`, `fd`, `fzf`.

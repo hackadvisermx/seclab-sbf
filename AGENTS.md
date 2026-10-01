@@ -25,7 +25,7 @@
 
 ## Arquitectura y límites
 
-- La arquitectura es una sola imagen Ubuntu 24.04 multiplataforma: `base` como etapa previa y `seclab-sbf:full` como unica imagen ejecutable. Antes hubo objetivos `light` y `full`, fusionados el 2026-09-29. `full` esta pensada para una VM dedicada y desechable (plan.md seccion 5).
+- La arquitectura es una sola imagen Ubuntu 26.04 multiplataforma: `base` como etapa previa y `seclab-sbf:full` como unica imagen ejecutable. Antes hubo objetivos `light` y `full`, fusionados el 2026-09-29. `full` esta pensada para una VM dedicada y desechable (plan.md seccion 5). La subida a 26.04 (`resolute`) fue el 2026-10-01 y subio Python a 3.14, Ruby se quedo en 3.3.8 compilada desde fuente. Cuatro paquetes cambiaron de nombre (`p7zip-full` a `7zip`, `dnsutils` a `bind9-dnsutils`, `libxml2` a `libxml2-16`, y `python3-setuptools` que ya no viene y por eso sale del purge). El snapshot `20261005T000000Z` tiene que ser POSTERIOR a la imagen: con el de 24.04 la resolucion de `libssl3t64` falla. Las trampas estan en docs/agregar-tools.md 5.6 a 5.11.
 - `make compose-up` inicia automáticamente el servicio del laboratorio, el daemon VPN y `tun0` sin conectar un perfil; el usuario `tester` elige la VPN con `vpntry`, `vpnhtb` o `vpncli`.
 - El servicio VPN conserva `cap_drop: ALL` y añade solo `NET_ADMIN` y `CHOWN`: `CHOWN` asigna el socket a `tester`; nunca se resuelve TUN con `--privileged`.
 - Tailscale se ejecuta en el host, no dentro del contenedor del laboratorio. `ttyd`, SSH y el tráfico de la capacidad de proxy usan túneles privados del host.

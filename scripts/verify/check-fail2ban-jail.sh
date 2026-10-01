@@ -27,7 +27,7 @@ set -eu
 # los Dockerfiles del laboratorio (images/{base,full}/Dockerfile). El
 # paquete sale del snapshot, así que resolverlo un día y otro da lo mismo.
 base_image="docker.io/library/ubuntu@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
-snapshot="20260925T000000Z"
+snapshot="20261005T000000Z"
 fail2ban_version="1.0.2-3ubuntu0.1"
 
 jail="security/fail2ban/jail.d/seclab-sshd.conf"

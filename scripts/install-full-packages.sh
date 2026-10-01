@@ -20,7 +20,7 @@ apt-get update
 # Cuando el snapshot avance hay que subir estos dos pines; el resto lo resuelve
 # el snapshot solo.
 apt-get install -y --no-install-recommends \
-  gdb-multiarch=15.1-1ubuntu1~24.04.1 \
+  gdb-multiarch=17.1-2ubuntu1 \
   hashcat \
   john \
   libffi8 \
@@ -28,8 +28,8 @@ apt-get install -y --no-install-recommends \
   libpq5 \
   libreadline8t64 \
   libsqlite3-0 \
-  libusb-1.0-0=2:1.0.27-1 \
-  libxml2 \
+  libusb-1.0-0=2:1.0.29-2build1 \
+  libxml2-16 \
   libxslt1.1 \
   libyaml-0-2 \
   pocl-opencl-icd \

@@ -14,7 +14,7 @@ apt-get install -y --no-install-recommends \
   ca-certificates \
   crunch \
   curl \
-  dnsutils \
+  bind9-dnsutils \
   fd-find \
   file \
   gdb \
@@ -32,10 +32,11 @@ apt-get install -y --no-install-recommends \
   openssh-client \
   openssh-server \
   openvpn \
-  p7zip-full \
+  7zip \
   procps \
   python3 \
   python3-ldap3 \
+  python3-packaging \
   python3-pip \
   ripgrep \
   samba-common-bin \
@@ -152,7 +153,27 @@ python3 -m pip install --no-cache-dir --break-system-packages --require-hashes \
   -r "$pwntools_requirements"
 rm -f /tmp/pwntools-requirements-aarch64.txt /tmp/pwntools-requirements-x86_64.txt
 python3 -c "from pwn import p32; assert p32(1) == b'\x01\x00\x00\x00'"
-apt-get purge -y python3-pip python3-setuptools python3-wheel
+# Con el python DEL SISTEMA, no el que sale en el PATH. El PATH de la imagen
+# antepone el venv de NetExec, y ahi no esta pwntools: vive en
+# /usr/lib/python3/dist-packages. El import de arriba lo hacia el python del
+# venv y por eso hay que repetirlo aqui con /usr/bin/python3.
+#
+# Se comprueba `p32`, que es lo minimo, pero tambien que unicorn carga, que es
+# donde se rompe si el pin del wheel no casa con la version de Python.
+/usr/bin/python3 -c "from pwn import p32, ELF; assert p32(1) == b'\x01\x00\x00\x00'"
+/usr/bin/python3 -c "import unicorn, packaging; print('pwntools+unicorn+packaging ok en', unicorn.__version__)"
+
+# El objetivo de esto es que el pip y el setuptools de la imagen no sirvan
+# para instalar nada en runtime: sin pip, `tester` no puede meter paquetes ni
+# aunque tuviera permiso de escritura.
+#
+# python3-setuptools se quita de la lista a proposito. En Ubuntu 24.04 venia
+# preinstalado en la imagen y dpkg lo tenia registrado, asi que se podia purgar.
+# En 26.04 ya no viene, y lo que se desinstala al final es el que instalo pip en
+# /usr/local, que dpkg nunca registro: al pedir el purge de python3-setuptools
+# apt falla con "uninstall-no-record-file" y el build entero muere en este paso.
+# Por eso se purgan solo los paquetes que SI registro dpkg.
+apt-get purge -y python3-pip python3-wheel
 apt-get autoremove -y --purge
 
 rm -f /etc/ssh/ssh_host_*

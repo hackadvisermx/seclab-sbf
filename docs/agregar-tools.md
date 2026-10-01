@@ -190,6 +190,93 @@ ya puesto, y es el mismo en `amd64` y `arm64` porque el resto de paquetes se
 resuelven sin versión explícita: **el snapshot es el mecanismo de pin**, y el
 lockfile documenta lo que resuelve.
 
+### 5.6 Los hashes de pip son por versión de Python, no por paquete
+
+Al subir a Ubuntu 26.04, Python pasa de 3.12 a **3.14**, y los ficheros
+`pwntools-requirements-*.txt` dejaron de cuadrar. El build lo detectó solo:
+
+```
+ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE
+  cffi==2.1.1 from .../cffi-2.1.1-cp314-cp314-manylinux2014_aarch64.whl:
+    Expected sha256 68e62fe1...     ← el hash del wheel cp312
+      Got        58acb8ab...     ← el hash del wheel cp314
+```
+
+Es el **mismo paquete y la misma versión**, con otro binario. Cada
+combinación de versión de Python tiene su propio wheel, así que cambiar de
+Python obliga a rehacer los dos ficheros:
+
+```sh
+pip download --python-version 3.14 --implementation cp --abi cp314 \
+             --platform manylinux2014_aarch64 -r requisitos.txt
+# y el sha256 de cada .whl descargado
+```
+
+Que el build pare por esto es buena noticia: el pin hizo su trabajo.
+
+**Y `--break-system-packages` no salva del `uninstall-no-record-file`.** Si un
+pin pide una versión distinta de la que instaló dpkg, pip intenta desinstalar
+la del sistema y aborta con *The package's contents are unknown: no RECORD
+file was found*. La salida es alinear el pin con la del sistema, que es lo que
+se hizo con `packaging`.
+
+### 5.7 En 26.04 cambiaron de nombre cuatro paquetes
+
+| 24.04 | 26.04 | Por qué |
+|---|---|---|
+| `p7zip-full` | `7zip` | El paquete se renombró; el binario sigue siendo `7z` |
+| `dnsutils` | `bind9-dnsutils` | Reempaquetado por BIND 9 |
+| `libxml2` | `libxml2-16` | El runtime por la transición a 64-bit `time_t` |
+| `python3-setuptools` | (ya no viene) | Ver abajo |
+
+`libxml2` en concreto es un nombre de metapaquete: instalarlo en 26.04 falla
+con *"Package 'libxml2' has no installation candidate"*. El runtime es
+`libxml2-16`, y `libxml2-16t64` tampoco existe.
+
+**`python3-setuptools` desaparece de la imagen y con ella el `purge`.** En
+24.04 venía preinstalada y dpkg la tenía registrada, así que el `apt-get purge`
+final funcionaba. En 26.04 no viene, y lo que se desinstala al final es el
+`setuptools` que instaló pip en `/usr/local`, que dpkg **nunca registró**:
+pedir su purge mata el build con `uninstall-no-record-file`. Por eso la lista
+de purgado se reduce a los paquetes que sí registró dpkg.
+
+Y con eso `packaging` desaparece de la imagen, porque `apt-get autoremove` se
+lo lleva al ser dependencia de pip. pwntools lo necesita, así que hay que
+instalar `python3-packaging` de forma explícita o el `import` falla en
+runtime aunque el build pase.
+
+### 5.8 El snapshot tiene que ser POSTERIOR a la imagen base
+
+Este es el que más rato costó y no se ve en los ficheros.
+
+La imagen `ubuntu:26.04` trae `libssl3t64 3.5.5-1ubuntu3.7` ya instalado. Con
+el snapshot `20260925T000000Z` (el que tenía el repo en 24.04), ese paquete
+**no existe**: el archivo solo tenía `3.5.5-1ubuntu3.5`. Apt no puede ni
+bajarlo ni subirlo, así que cualquier etapa que instale `libssl-dev` falla:
+
+```
+E: Unable to satisfy dependencies. Reached two conflicting assignments:
+   1. libssl-dev=3.5.5-1ubuntu3.5 is selected for install
+   2. libssl-dev Depends libssl3t64 (= 3.5.5-1ubuntu3.5)
+      but none of the choices are installable
+```
+
+El mensaje habla de `3.5.5-1ubuntu3.5`, que es lo que ve el snapshot, y no
+dice nada de la `3.7` que ya está en la imagen. Por eso parece una
+inconsistencia del archivo cuando en realidad es que **el pin es más viejo que
+la imagen**.
+
+La regla: al cambiar la imagen base, el snapshot tiene que ser **posterior** a
+la fecha de publicación de esa imagen. Se comprobó `libssl3t64` en varios
+snapshots hasta dar con uno coherente:
+
+| Snapshot | `libssl3t64` |
+|---|---|
+| `20260925T000000Z` | `3.5.5-1ubuntu3.5` (no sirve, la imagen trae 3.7) |
+| `20260928T000000Z` | `3.5.5-1ubuntu3.5` |
+| `20261001T000000Z` | `3.5.5-1ubuntu3.6` |
+| `20261005T000000Z` | `3.5.5-1ubuntu3.7` ✓ |
+
 ## 6. Cómo descubrir qué hay ya instalado
 
 `pt-tools` lista lo declarado; para comprobar el estado real de un comando:
@@ -203,7 +290,7 @@ Una tool puede estar en la imagen y no en `tools.json` (o al revés). Si el
 inventario y la imagen discrepan, manda la imagen para lo que se puede
 ejecutar, y hay que corregir `tools.json`.
 
-### 5.6 impacket 0.14 ya no trae los ejecutables
+### 5.10 impacket 0.14 ya no trae los ejecutables
 
 El venv de NetExec trae `impacket 0.14`, y parece la respuesta obvia a
 "necesito secretsdump": los ficheros están, en
@@ -242,7 +329,7 @@ ya está instalado y auditado. Si aun asi se quieren los scripts sueltos de
 impacket, hace falta el paquete de scripts aparte, que es una tool más que
 fijar, actualizar y auditar.
 
-### 5.7 `tools.json` declara el `command`, no el nombre de la clave
+### 5.11 `tools.json` declara el `command`, no el nombre de la clave
 
 `fd` declara `command: fdfind` y `wireguard` declara `command: wg`, porque esos
 son los binarios reales en Ubuntu. Al verificar el manifiesto hay que comparar
@@ -256,6 +343,29 @@ for k in sorted(d): print(d[k]["command"])' > /tmp/cmds.txt
 
 Con las claves da dos falsos `AUSENTE: fd` y `AUSENTE: wireguard` que no son
 reales: los binarios se llaman `fdfind` y `wg`.
+
+### 5.9 `apt-cache policy` engaña si no pones el snapshot bien
+
+Las imágenes `arm64` de Ubuntu usan `ports.ubuntu.com`, no
+`archive.ubuntu.com`. Un `sed` que solo reescriba `archive` deja el `apt-get
+update` del snapshot a medias, y entonces **todos** los paquetes aparecen como
+inexistentes:
+
+```
+jq            AUSENTE
+socat         AUSENTE
+openvpn       AUSENTE
+...           (y 8 más)
+```
+
+No es que falten: es que las listas no se descargaron. Para que `apt-cache
+policy` diga la verdad hacen falta **los dos pasos del bootstrap**: instalar
+`ca-certificates` primero (si no, falla la verificación TLS del snapshot) y
+después el `sed`. Sin el primero el error es
+`certificate verify failed`, que también se traga los listados.
+
+Comprueba siempre con `grep '^URIs' /etc/apt/sources.list.d/ubuntu.sources` que
+los URIs apuntan al snapshot antes de fiarte de un `Candidate:` vacío.
 
 ## Referencias
 

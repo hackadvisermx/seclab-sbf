@@ -5,8 +5,8 @@
 # Orden: los builders que corren en BUILDPLATFORM (que compilan Go para la
 # arquitectura destino) y los que corren en TARGETPLATFORM (necesitan correr
 # alli porque compilan con cgo o esn su toolchain), y al final la imagen.
-ARG UBUNTU_IMAGE=docker.io/library/ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
-ARG UBUNTU_SNAPSHOT=20260925T000000Z
+ARG UBUNTU_IMAGE=docker.io/library/ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
+ARG UBUNTU_SNAPSHOT=20261005T000000Z
 ARG RUBY_VERSION=3.3.8
 ARG RUBY_SHA256=5ae28a87a59a3e4ad66bc2931d232dbab953d0aa8f6baf3bc4f8f80977c89cab
 ARG MSF_VERSION=6.5.5
@@ -507,7 +507,7 @@ FROM ${BASE_IMAGE}
 # FROM vive fuera de toda etapa y no se puede usar en un RUN posterior.
 # La etapa final los re-declara con su valor por defecto, que es la que
 # construye si no se pasa --build-arg.
-ARG UBUNTU_SNAPSHOT=20260925T000000Z
+ARG UBUNTU_SNAPSHOT=20261005T000000Z
 ARG PAT_COMMIT=3ac27901c711bdf3f5b65a7b1d1820a1f65bd09a
 ARG EXPLOITDB_COMMIT=150aef0e7c4757c9dff33016c8352671cdc9b454
 ARG SECLISTS_COMMIT=eccfbd405af82194e125a450a0076dbe4252d6f9

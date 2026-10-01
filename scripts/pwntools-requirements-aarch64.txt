@@ -1,4 +1,19 @@
-# pwntools 4.15.0 - aarch64 (cp312, manylinux)
+# pwntools 4.15.0 - aarch64 (cp314, manylinux)
+# Hashes recalculados para Python 3.14 en la migracion a Ubuntu 26.04.
+# Se generan con `pip download --python-version 3.14 --abi cp314` y sha256
+# sobre el wheel exacto. NO a mano, y no son los mismos hashes que en cp312:
+# cada version de Python tiene su binario con su propio hash, asi que cambiar
+# de Python obliga a rehacer este fichero entero.
+#
+# Tres pins bajan respecto a cp312, por motivos medidos y no por conveniencia:
+# - unicorn 2.1.2 -> 2.1.1: la 2.1.2 no publica wheel para cp314. La 2.1.4 si
+#   publica, pero pwntools 4.15.0 la excluye (exige >=2.0.1,!=2.1.3,!=2.1.4).
+# - psutil 7.2.2 -> 7.1.1: el 7.2.2 no tiene wheel x86_64 para cp314.
+# - packaging 26.3 -> 26.0: el snapshot de Ubuntu 26.04 solo tiene 26.0, y es
+#   la que instala dpkg. Con 26.3 pip intenta desinstalar el 26.0 del sistema y
+#   falla con "no RECORD file" porque lo instalo dpkg, no pip. pwntools pide
+#   `packaging` sin fijar version, asi que 26.0 cumple.
+
 PySocks==1.7.1 \
     --hash=sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5
 bcrypt==5.0.0 \
@@ -8,9 +23,9 @@ capstone==6.0.0a11 \
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
 cffi==2.1.1 \
-    --hash=sha256:68e62fe11f30d5ca8289242866f0a5291402d8529ca2178ab8afc5c9694ae890
+    --hash=sha256:58acb8ab8e295e6c5ea12f888cbb13cf21511ef2a3303a23f4325c29d17fe5c1
 charset_normalizer==3.5.1 \
-    --hash=sha256:4582c27e8c889d64811987b5967fbd3ae0c823fe1fd933b543d55ac20bb475fa
+    --hash=sha256:2f06b7eae9dbe77fe1d644ca244dad508de8d302870a43f3c559b521270938a0
 colored_traceback==0.4.2 \
     --hash=sha256:8ad752a5b3c4e50bccd99d4a2d01e16d80926b519e07a85437ecbf8b4f8ce884
 cryptography==50.0.1 \
@@ -24,15 +39,15 @@ invoke==3.0.3 \
 mako==1.4.3 \
     --hash=sha256:723296007c870bfd6b3f0c3230dba7198096e5269297ebf5e4eff9e7ffa39d4f
 markupsafe==3.0.3 \
-    --hash=sha256:3a7e8ae81ae39e62a41ec302f972ba6ae23a5c5396c8e60113e9066ef893da0d
-packaging==26.3 \
-    --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+    --hash=sha256:f34c41761022dd093b4b6896d4810782ffbabe30f2d443ff5f083e0cbbb8c737
+packaging==26.0 \
+    --hash=sha256:b36f1fef9334a5588b4166f8bcd26a14e521f2b55e6b9de3aaa80d3ff7a37529
 paramiko==5.0.0 \
     --hash=sha256:b7044611c30140d9a75261653210e2002977b71a0497ff3ba0d98d7edbf62f7c
 plumbum==2.0.2 \
     --hash=sha256:a865771826c1d2cce0ca8b2a2c48aa0447ed7a518859e389a95f158e9c369547
-psutil==7.2.2 \
-    --hash=sha256:b0726cecd84f9474419d67252add4ac0cd9811b04d61123054b9fb6f57df6e9e
+psutil==7.1.1 \
+    --hash=sha256:146a704f224fb2ded2be3da5ac67fc32b9ea90c45b51676f9114a6ac45616967
 pwntools==4.15.0 \
     --hash=sha256:f5508729b310ef1e959ad324306a0964cb6f2b04a34247484e446f0343eefc5c
 pycparser==3.0 \
@@ -57,13 +72,13 @@ six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
 sortedcontainers==2.4.0 \
     --hash=sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0
-unicorn==2.1.2 \
-    --hash=sha256:8aab7f7cc2570585ee37335af51dddf0992629c36983e205a924e459cccb993d
+unicorn==2.1.1 \
+    --hash=sha256:06df71752e147107680df7f841360a70cc1ae1f69438dbdc3a87e642fd21eb49
 unix_ar==0.2.1 \
     --hash=sha256:2acb718bc1308bf80e5b9da2614d8242cc2fe3be4cd8b2fd4719bce189aafcf1
 urllib3==2.8.0 \
     --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
 zstandard==0.25.0 \
-    --hash=sha256:6dffecc361d079bb48d7caef5d673c88c8988d3d33fb74ab95b7ee6da42652ea
+    --hash=sha256:223415140608d0f0da010499eaa8ccdb9af210a543fac54bce15babbcfc78439
 typing-extensions==4.16.0 \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

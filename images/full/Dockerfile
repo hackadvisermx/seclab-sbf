@@ -601,7 +601,6 @@ RUN ln -sf /opt/metasploit-framework/msfconsole /usr/local/bin/msfconsole \
 RUN ln -sfn /var/lib/seclab/tester/.msf4 /home/tester/.msf4 \
   && chown -h tester:tester /home/tester/.msf4
 COPY --from=go-builder /out/bettercap /usr/bin/bettercap
-COPY --from=go-builder /out/s3scanner /usr/bin/s3scanner
 COPY --from=nxc-builder /out/nxc /opt/nxc
 COPY --from=nxc-builder /out/version /usr/local/share/seclab/netexec-version
 # NetExec escribe ~/.nxc; mismo motivo que .msf4, symlink al volumen.
@@ -611,6 +610,29 @@ RUN ln -sf /opt/nxc/bin/nxc /usr/local/bin/nxc \
   && chmod 0555 /usr/local/bin/nxc /usr/local/bin/netexec /usr/local/bin/nxcdb \
   && ln -sfn /var/lib/seclab/tester/.nxc /home/tester/.nxc \
   && chown -h tester:tester /home/tester/.nxc
+#
+# NO se exponen los ejemplos de impacket como ejecutables, y el motivo esta
+# medido para que no se vuelva a intentar:
+#
+# impacket 0.14 (la dependencia de NetExec) es la libreria pura, "Network
+# protocols Constructors and Dissectors". Ya no distribuye los CLI. Sus ficheros
+# en examples/ son modulos: se importan desde el codigo de nxc, como
+# `from impacket.examples.secretsdump import ...` en nxc/protocols/smb.py, y
+# no tienen bloque `if __name__ == "__main__"`, ni funcion main(), ni
+# parse_args(), ni entry point console_scripts.
+#
+# Se intento chmod +x y sonaba a que funcionaba, pero ejecutar secretsdump no
+# imprimia nada y salia con 0: importado y sin main que ejecutar. Ademas no
+# llevan shebang, asi que sin tocar upstream los ejecutaba /bin/sh y fallaba
+# con "import: not found". Un wrapper propio tampoco sirve: no hay main que
+# llamar.
+#
+# Para el volcado de hashes esta imagen usa `nxc`, que ya habla SMB, LDAP y
+# WinRM y expone lo mismo sobre el venv de NetExec. Los scripts sueltos de
+# impacket (secretsdump como CLI) necesitan el paquete de scripts aparte, y no se
+# anade aqui: es una tool mas que fijar, actualizar y auditar, para algo que
+# nxc ya cubre en los tres protocolos.
+COPY --from=go-builder /out/s3scanner /usr/bin/s3scanner
 ENV PATH="/opt/ruby/bin:/opt/nxc/bin:${PATH}"
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/lab-entrypoint"]

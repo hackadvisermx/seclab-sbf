@@ -87,7 +87,6 @@ services:
 
 volumes:
   lab-state:
-  workspace:
 
 networks:
   seclab:

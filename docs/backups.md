@@ -1,9 +1,13 @@
 # Backups y restauración
 
-El workspace es una **carpeta del disco de arranque de la VM**
-(`CLOUD_WORKSPACE_DIR`). Hasta el 2026-09-29 era un volumen aparte del
-proveedor; se quitó porque un disco de 50 GB se factura aunque la VM esté
-apagada. Ver `docs/phase-8.md` para el antes y el después.
+El workspace es una **carpeta del proyecto** montada en `/workspace`. En local
+es `./workspace`, en tu máquina; en la nube es
+`CLOUD_WORKSPACE_DIR`, la carpeta del disco de arranque de la VM.
+
+Dos antecedentes que explican por qué no hay automatismo: hasta el 2026-09-29
+en la nube era un volumen aparte del proveedor, y se quitó porque un disco de
+50 GB se factura aunque la VM esté apagada; y el 2026-10-01 se evaluó un volumen
+Docker con nombre en local y se descartó. Ver `docs/phase-8.md`.
 
 La consecuencia es directa y hay que tenerla presente: **el workspace
 depende de la vida de la VM**. Si la VM se destruye o se reemplaza, el
@@ -26,9 +30,9 @@ de la VM hacia la máquina del operador, no al revés.
 
 ## Copia
 
-**Local, que es lo normal:** el workspace es un volumen Docker con nombre, no
-una carpeta del host, asi que no se copia con `scp` desde la maquina. Lo mas
-comodo es usar los targets que ya hacen el trabajo:
+**Local, que es lo normal:** el workspace es una carpeta del proyecto
+(`./workspace`), o sea que sacarla es un `cp` normal. Los targets estan para no
+tener que recordar la convencion:
 
 ```bash
 # copiar todo el workspace a ./salida
@@ -39,8 +43,9 @@ make workspace-export RUTA=retos/mi-reto
 make workspace-export ENG=mi-engagement DEST=./salida-2026-10-01
 ```
 
-En la nube el workspace si es una carpeta del disco, y ahi se copia desde
-dentro del contenedor. Se hace con `scp` desde tu máquina, no desde el host:
+En la nube el workspace tambien es una carpeta, pero en el disco de la VM, y ahi
+no la ves desde tu maquina. Se copia desde dentro del contenedor, con `scp` o
+`docker cp`:
 
 ```bash
 # 1. Empaquetar dentro del contenedor

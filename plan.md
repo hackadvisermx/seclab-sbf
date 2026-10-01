@@ -22,8 +22,8 @@ El contenedor no será una distribución basada en Kali ni Parrot. Las herramien
 - Acceso remoto: Tailscale.
 - SSH dentro del contenedor mediante OpenSSH, con un único usuario Unix `tester`.
 - SFTP desactivado; no existe una cuenta separada de transferencia.
-- Workspace local: volumen Docker con nombre montado en `/workspace`, con la estructura de `workspace-seed/`.
-- El workspace arranca con la estructura de `workspace-seed/` y es propiedad de `tester`; el volumen lo crea Docker.
+- Workspace local: carpeta del proyecto montada en `/workspace`; la crea `make` y la siembra desde `workspace-seed/`.
+- El workspace es una carpeta que crea `make`, sembrada desde `workspace-seed/`, y es escribible por `tester`.
 - Credenciales de ejecución: `.env` local no versionado.
 - Credenciales de bootstrap/cloud: `deploy/.env` separado.
 - Oh My Zsh con plugins seleccionados y pinneados.
@@ -61,8 +61,8 @@ Host local o VPS
 │   ├── SSH host keys
 │   ├── Estado de Tailscale
 │   └── Logs/estado internos
-├── Volumen con nombre
-│   └── workspace -> /workspace (bind mount solo en la nube)
+├── Bind mount
+│   └── ./workspace -> /workspace
 ├── .env de ejecución
 │   └── Montado en modo lectura, fuera del workspace
 └── /vpn
@@ -397,34 +397,36 @@ La contraseña de ttyd no sustituye Tailscale ACL/MFA.
 
 ## 9. Workspace
 
-El workspace local es el directorio de trabajo de `tester`, y es donde se
-documentan los engagements y las soluciones de retos. Es un volumen Docker con
-nombre, no una carpeta del host:
+El workspace es el directorio de trabajo de `tester`, y es donde se documentan
+los engagements y las soluciones de retos. Es una carpeta del proyecto montada por
+bind mount:
 
 ```text
-workspace:/workspace
+./workspace:/workspace
 ```
 
-Se cambió desde bind mount el 2026-10-01. El motivo fue doble: depender de los
-permisos de una carpeta del host para que `tester` escriba es frágil con Docker
-Desktop en macOS, y con el contenido en el host, las notas de engagement quedan
-a un `git add -A` de un commit, con datos de clientes dentro.
+Se evaluó un volumen Docker con nombre el 2026-10-01 y se descartó: `make` desde
+cualquier carpeta tenía que resolver dos mecanismos distintos, y el workspace no
+ganaba nada por ser volumen. Lo que se chose fue que `make` cree la carpeta.
 
 Reglas:
 
 - `WORKDIR /workspace`.
-- El volumen lo crea Docker; no hay ruta en el host que preparar.
+- La carpeta la crea `make workspace-dir`, no compose: el compose declara
+  `create_host_path: false` para que un typo en `WORKSPACE_DIR` no cree un árbol
+  vacío en cualquier sitio.
 - La estructura inicial (`README.md`, `engagements/_plantilla.md`,
-  `retos/_plantilla.md`) viene de `workspace-seed/` y se copia a la imagen.
-  **El volumen hereda el dueño del directorio de la imagen**, así que
-  `/workspace` se deja como `tester` en el Dockerfile; si fuera de root, el
-  volumen nacería sin permiso de escritura.
+  `retos/_plantilla.md`) viene de `workspace-seed/` y se siembra **solo si la
+  carpeta está vacía**. Con un bind mount lo que hay en la imagen en `/workspace`
+  queda tapado, así que sin la siembra las plantillas no se verían nunca.
+- **El bind mount tapa la imagen**: `/workspace` se deja como `tester` en el
+  Dockerfile. Si quedara de root, el montaje traería esos permisos y `tester` no
+  podría escribir.
 - No se monta el directorio actual completo.
 - El workspace es el único lugar de trabajo del usuario.
-- No se usa como repositorio de producción: ahí hay notas de clientes.
+- Está en `.gitignore`: ahí hay notas de clientes.
 - Las flags, reports, wordlists y evidencias se tratan como datos sensibles.
-- Sale al host con `make workspace-list` y `make workspace-export`, porque un
-  volumen no se ve desde el host ni se copia con `scp`.
+- Sale al host con `make workspace-list` y `make workspace-export`.
 
 En cloud **no hay volumen del proveedor**. También cambió el 2026-09-29: un
 volumen de 50 GB se factura con la VM apagada, y apagar la VM no era opción con

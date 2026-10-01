@@ -221,7 +221,7 @@ cero.
 
 Qué sobrevive y qué no:
 
-- **El workspace se pierde con la VM.** En local es un volumen Docker; en la nube, una carpeta del disco de
+- **El workspace se pierde con la VM.** En la nube es una carpeta del disco de
   arranque, no un volumen aparte. Si la VM no existe, su contenido tampoco.
 - **La red sobrevive**: VCN, subred, NAT gateway y security groups.
 - **La sesión de Tailscale no está, porque no hay nodo.** Cuando se cree,

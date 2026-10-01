@@ -1,7 +1,7 @@
 # Workspace del laboratorio
 
-Directorio de trabajo de `tester`. En local es un volumen Docker con
-nombre, no una carpeta del host. Sobrevive a `make compose-down`.
+Directorio de trabajo de `tester`. Es una carpeta del proyecto montada en
+`/workspace`, y aqui se documentan los engagements y las soluciones de retos.
 
 ## Como se organiza
 
@@ -12,8 +12,8 @@ nombre, no una carpeta del host. Sobrevive a `make compose-down`.
 ```
 
 Cada trabajo empieza en su propio directorio dentro de `engagements/` o de
-`retos/`, copiando la plantilla que corresponda. La estructura viene en la
-imagen, asi que un volumen nuevo ya la tiene.
+`retos/`, copiando la plantilla que corresponda. Las plantillas estan aqui y se
+copiaron desde `workspace-seed/` cuando `make` creo la carpeta.
 
 ## Que se anota aqui
 
@@ -24,26 +24,22 @@ imagen, asi que un volumen nuevo ya la tiene.
 - **Salidas de herramientas**: XML de nmap, capturas, scripts, ficheros
   obtenidos.
 
-## Como se saca algo al host
+## Notas
 
-El volumen no es una carpeta del host, asi que no se ve en Finder. Dos
-formas, sin salir de make:
+Estas notas son tuyas mientras trabajas dentro del contenedor. No hace falta
+copiar nada a mano para conservarlas: la carpeta del proyecto es la misma que
+ves en el host.
+
+Para llevarte una parte a otra sitio:
 
 ```bash
-make workspace-list                          # ver que hay dentro
-make workspace-export RUTA=retos/mi-reto/solucion.md
-make workspace-export ENG=mi-engagement DEST=./salida/
+make workspace-list                          # ver que hay
+make workspace-export RUTA=retos/mi-reto     # copiar al host
+make workspace-export ENG=mi-engagement      # un engagement entero
 ```
-
-La segunda copia el directorio entero del engagement a `./salida/`.
-
-## Copias de seguridad
-
-Un volumen no se copia con `scp`. El procedimiento esta en
-`docs/backups.md`.
 
 ## Aviso
 
-Aqui se escriben notas de engagements reales, con datos de clientes. No
-subas nada de esto a un repositorio ni hornees el workspace en una
-imagen: por eso vive en un volumen y no en la imagen.
+Aqui se escriben notas de engagements reales, con datos de clientes. La carpeta
+esta en `.gitignore` a proposito: no la subas a ningun repositorio ni la
+hornees en una imagen.

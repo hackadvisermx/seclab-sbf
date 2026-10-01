@@ -194,7 +194,7 @@ terraform/              stacks OCI, Azure y DigitalOcean
 docs/                   decisiones por fase, runbooks, backups, acceso y tools
 plan.md                 fuente de verdad del producto
 vpn/                    perfiles locales ignorados
-workspace-seed/         estructura inicial del workspace (siembra el volumen)
+workspace-seed/         estructura inicial del workspace (la siembra make)
 salida/                 material exportado con make workspace-export (ignorado)
 ```
 

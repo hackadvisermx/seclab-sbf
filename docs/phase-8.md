@@ -183,21 +183,62 @@ El motivo de quitarlo: un disco de 50 GB se factura aunque apagues la VM, y
 depende de la vida de la VM**, así que el backup pasa a ser disciplina, no
 infraestructura. El procedimiento está en `docs/backups.md`.
 
-El `oci_core_volume.workspace` (50 GB, `AVAILABLE`) era un resto del diseño
-anterior. Se borró desde la consola de OCI el 2026-09-30, así que ya no se
-paga ese disco.
+El `oci_core_volume.workspace` (50 GB) era un resto del diseño anterior. Se
+borró desde la consola de OCI el 2026-09-30, así que ya no se paga ese disco.
 
-Queda una cosa pendiente y **no se puede hacer desde este repositorio**:
-la entrada `oci_core_volume.workspace` sigue en el state remoto de Terraform,
-porque el recurso se quitó de la configuración pero nadie hizo
-`terraform state rm`. No es peligroso (no hay apply que destruya nada que
-exista), pero mientras siga ahí un `terraform plan` propondrá destruir un
-volumen que ya está borrado, y `STACK=oci make tf-destroy-check` seguirá
-saliendo con 1 por eso. La limpieza es:
+## Limpieza total del stack de OCI (2026-10-01)
 
-```bash
-terraform -chdir=terraform/stacks/oci state rm oci_core_volume.workspace
-```
+Con el volumen ya borrado a mano, se quitó del state la entrada huérfana y se
+destruyó todo lo nuestro. El stack de OCI quedó **vacío**, sin recursos.
 
-Requiere credenciales de OCI con permiso de escritura sobre el state. `state rm` no toca la nube: solo quita la
-entrada del state.
+Lo que se hizo, en este orden:
+
+1. `terraform state rm oci_core_volume.workspace oci_core_instance.lab`.
+   El volumen ya no existía en la nube (verificado con `oci bv volume list`,
+   cero resultados) y el nodo tampoco. `state rm` no toca la nube: solo
+   quita las entradas del state. **Estas dos entradas eran la causa de que
+   `tf-destroy-check` saliera con 1**: el recurso del volumen ya no está en
+   `main.tf`, así que el plan no lo contaba como destrucción, pero tampoco
+   desaparecía solo.
+2. `terraform plan -destroy` en seco: `0 to add, 0 to change, 9 to destroy`.
+   Los 9 eran VCN, subnet, NAT, route table, NSG y sus 4 reglas de egress,
+   todos con prefijo `seclab-sbf-prod`.
+3. `terraform apply` del plan guardado: `Resources: 0 added, 0 changed, 9
+   destroyed`.
+
+Verificado en la nube después, no solo en el state:
+
+| Recurso | Antes | Ahora |
+|---|---|---|
+| VCN `seclab-sbf-prod-vcn` | `AVAILABLE` | **no existe** |
+| NAT `seclab-sbf-prod-nat` | `AVAILABLE` | **no existe** |
+| Volúmenes del compartment | 0 | 0 |
+| `terraform state list` | 12 entradas | **vacío** |
+
+### Lo que NO se tocó, y por qué
+
+El compartment de la tenancy **no es solo nuestro**. Hay recursos de otros
+trabajos, y este repositorio no los gestiona:
+
+| Recurso | Estado | Por qué no se toca |
+|---|---|---|
+| `hermes-oci` (instancia) | `RUNNING` | Consume la cuota `standard-e5-core-count` del compartment. Es la razón de que el nodo del laboratorio no se pudiera recrear |
+| `hermes-clone-vcn` | `AVAILABLE` | Otro proyecto |
+| `seclab-cloud-20260924154553` + su `-nat` | `AVAILABLE` | Nombre parecido al nuestro, pero no es de este repo: no está en el state y no usa el prefijo `seclab-sbf-prod` |
+
+Que `hermes-oci` siga viva es la razón de que el despliegue siga bloqueado:
+sin OCPU libre en el compartment, `oci_core_instance.lab` da `Out of host
+capacity` aunque el stack esté entero y correcto.
+
+### Estado del guard tras la limpieza
+
+`STACK=oci make tf-destroy-check` **sigue saliendo con 1**, y es lo correcto:
+el plan es `10 to add, 0 to change, 0 to destroy`, o sea que solo crearía, y
+el aviso `SIN-NODO` aparece porque `oci_core_instance.lab` no está en el
+state. Ese aviso nació para el 2026-09-29, cuando el nodo se perdió sin
+avisar; ahora describe el estado que se ha pedido a propósito. **Que salga con
+1 no significa que haya un problema**: significa que aún no se ha
+desplegado.
+
+El siguiente despliegue es un apply desde cero, y habrá que rehacer el join
+de Tailscale del nodo nuevo.

@@ -129,6 +129,38 @@ vulnerabilities:
     expired_at: 2026-12-31
 
   # ---------------------------------------------------------------------------
+  # Paquetes vendorizados de pip, en el venv de NetExec.
+  #
+  # pip 26.2.1 trae su propia copia de urllib3 en pip/_vendor/, y esa copia va
+  # por detras de la que usa el codigo. El Dockerfile hace `pip install
+  # --upgrade pip` sin fijar version, asi que el lockfile declara pip==26.2.1
+  # como lo que se instalo, no como lo que se pidio. Por eso la nota dice
+  # "verificar al subir PIP_VERSION": cuando se fije, habra que comprobar si
+  # la copia vendorizada cambia.
+  # ---------------------------------------------------------------------------
+
+  - id: CVE-2026-97687
+    statement: >-
+      urllib3 2.7.0, copia VENDORIZADA dentro de pip 26.2.1 en el venv de
+      NetExec (/opt/nxc/lib/python3.12/site-packages/pip/_vendor/urllib3).
+      El urllib3 que usa el codigo del laboratorio es el 2.8.0 instalado en
+      el venv y en el python del sistema, sin CVE. Comprobado dentro de la
+      imagen: `import urllib3` da 2.8.0 y `import pip._vendor.urllib3` da
+      2.7.0, y el codigo de nxc no importa pip._vendor. Lo unico que ejecuta
+      esa copia es el propio pip cuando descarga paquetes, y dentro del
+      contenedor no puede: el rootfs es de solo lectura y no hay sudo.
+      Corregido en 2.8.0, pero subir pip no lo arregla: 26.2.1 es la ultima
+      version publicada y es la que vendoriza 2.7.0. Verificar al subir
+      PIP_VERSION en el Dockerfile.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-97689
+    statement: >-
+      urllib3 2.7.0, misma copia vendorizada de pip 26.2.1 y mismo motivo que
+      CVE-2026-97687. Corregido en 2.8.0; el urllib3 en uso es el 2.8.0.
+    expired_at: 2026-12-31
+
+  # ---------------------------------------------------------------------------
   # Nota sobre lo que NO esta aqui.
   #
   # Las 167 de linux-libc-dev (cabeceras del kernel, sin codigo ejecutable) no
@@ -141,5 +173,6 @@ vulnerabilities:
   #
   # Si anadeis aqui un CVE que si tiene parche disponible, escondais un
   # hallazgo corregible. La intencion es que esta lista solo contenga lo que de
-  # verdad no se puede arreglar sin reconstruir Ruby o tocar un pin de upstream.
+  # verdad no se puede arreglar sin reconstruir Ruby, tocar un pin de upstream
+  # o esperar a que pip vendorice una version corregida de urllib3.
   # ---------------------------------------------------------------------------

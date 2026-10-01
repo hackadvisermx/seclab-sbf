@@ -89,25 +89,46 @@ BUILD_PLATFORM ?=
 BUILD_TAG ?=
 BUILD_PLATFORM_ARG = $(if $(BUILD_PLATFORM),--platform $(BUILD_PLATFORM),)
 
-# Publicacion de la imagen. El host de OCI NO compila: hace pull de un tag
-# publicado y lo escanea antes de usarlo. Se publico el 2026-10-10, con la
-# misma logica que ya usaba hackadvisermx/pentestdocker: construir en caliente
-# y publicar, en vez de que cada host tenga su toolchain de build.
+# Publicacion de la imagen. El host de OCI NO compila: hace pull de lo
+# publicado y lo escanea antes de usarlo. Misma logica que ya usa
+# hackadvisermx/pentestdocker: construir aqui, publicar, y que el otro host
+# baje el artefacto en vez de compilarlo.
 #
-# DOCKER_REPO y DOCKER_TAG identifican que imagen es. El tag lleva la etiqueta
-# de insumos, asi que el propio nombre dice de que codigo salio:
-#   DOCKER_TAG=26.04-<hash de insumos>
+# DOCKER_REPO es hackadvisermx/sec-lab, publico. El nombre es sec-lab, no
+# seclab-sbf: es el repositorio que creo el owner en Docker Hub.
 #
-# DOCKER_DIGEST es lo que hace que esto sea seguro de usar. El VPS NO hace pull
-# de latest ni de un tag flotante, sino de un digest: sha256:... Si alguien
-# republica el tag con otra imagen, el digest sigue siendo el mismo y el VPS
-# sigue viendo exactamente lo que se publico. Sin esto, un tag mutable es solo
-# confianza ciega en el registry.
-DOCKER_REPO ?= hackadvisermx/seclab-sbf
-DOCKER_TAG ?= 26.04-$(BUILD_INPUTS)
-# Repo para las imagenes intermedias: la imagen final publica un unico tag, sin
-# base. Ver imagen-publish.
-DOCKER_BASE_REPO ?= hackadvisermx/seclab-sbf-base
+# DOCKER_TAG lleva la etiqueta de insumos, asi que el propio nombre dice de
+# que codigo salio: 26.04-<hash>. Un tag distinto es una imagen distinta, y
+# no se borran: saber que codigo produce cual imagen es el objetivo.
+#
+# DOCKER_ARCH va en el tag porque aqui NO hay tags multiarquitectura. Se
+# construye en una sola arquitectura, la de la maquina que construye, y se publica
+# con su nombre. El motivo esta medido, no es Preferences: en la Mac, un
+# build --platform linux/amd64 falla al descomprimir el tarball de Ruby con
+# "Function not implemented" en cientos de ficheros, y no es un problema de
+# permisos ni del contexto: falla tambien en /tmp. Es la emulacion de
+# Docker Desktop en Apple Silicon, que responde a un binario suelto pero no a
+# un arbol de miles de ficheros. Consecuencia: un manifest multi-arch
+# (buildx --platform arm64,amd64) no se puede generar aqui.
+#
+# Que el nombre lleve la arquitectura NO es solo informativo. El host de OCI
+# corre VM.Standard.A1.Flex, que es ARM, asi que hoy un solo tag sirve para
+# los dos. Si algun dia el host fuera x86, haria falta el tag amd64 y este
+# repo no lo tiene, porque no se puede construir aqui.
+#
+# DOCKER_DIGEST es lo que hace que esto sea seguro de usar. El host NO hace
+# pull de latest ni de un tag flotante, sino de un digest: sha256:... Si
+# alguien republica el tag con otra imagen, el digest sigue siendo el mismo
+# y el host sigue viendo exactamente lo que se publico. Sin esto, un tag
+# mutable es solo confianza ciega en el registry.
+DOCKER_REPO ?= hackadvisermx/sec-lab
+DOCKER_ARCH ?= $(shell docker version --format '{{.Server.Arch}}')
+DOCKER_TAG ?= 26.04-$(DOCKER_ARCH)-$(BUILD_INPUTS)
+# La imagen base va al mismo repositorio, con sufijo aparte, porque el
+# Dockerfile de full hace FROM seclab-sbf:base y al reconstruir en otro host
+# tiene que encontrarla con ese nombre.
+DOCKER_BASE_TAG ?= base-$(DOCKER_ARCH)-$(BUILD_INPUTS)
+DOCKER_BASE_IMAGE ?= $(DOCKER_REPO):$(DOCKER_BASE_TAG)
 DOCKER_IMAGE ?= $(DOCKER_REPO):$(DOCKER_TAG)
 
 
@@ -380,10 +401,10 @@ rebuild-image:
 image-publish:
 	@cd "$(ROOT)" && printf 'publicando %s como %s\n' "$(LAB_IMAGE_RESOLVED)" "$(DOCKER_IMAGE)"
 	@cd "$(ROOT)" && case "$(LAB_IMAGE_RESOLVED)" in \
-		seclab-sbf:base) docker tag seclab-sbf:base "$(DOCKER_BASE_REPO):$(DOCKER_TAG)" \
-			&& docker push "$(DOCKER_BASE_REPO):$(DOCKER_TAG)" ;; \
-		seclab-sbf:full) docker tag seclab-sbf:base "$(DOCKER_BASE_REPO):$(DOCKER_TAG)" \
-			&& docker push "$(DOCKER_BASE_REPO):$(DOCKER_TAG)" \
+		seclab-sbf:base) docker tag seclab-sbf:base "$(DOCKER_BASE_IMAGE)" \
+			&& docker push "$(DOCKER_BASE_IMAGE)" ;; \
+		seclab-sbf:full) docker tag seclab-sbf:base "$(DOCKER_BASE_IMAGE)" \
+			&& docker push "$(DOCKER_BASE_IMAGE)" \
 			&& docker tag seclab-sbf:full "$(DOCKER_IMAGE)" \
 			&& docker push "$(DOCKER_IMAGE)" ;; \
 		*) printf 'LAB_IMAGE desconocida: %s (usa base|full)\n' "$(LAB_IMAGE_RESOLVED)" >&2; exit 2 ;; \

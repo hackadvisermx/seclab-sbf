@@ -383,6 +383,49 @@ después el `sed`. Sin el primero el error es
 Comprueba siempre con `grep '^URIs' /etc/apt/sources.list.d/ubuntu.sources` que
 los URIs apuntan al snapshot antes de fiarte de un `Candidate:` vacío.
 
+### 5.12 En la Mac, el build amd64 por emulación no completa
+
+La imagen se publica en Docker Hub para que el host no compile, y el host de
+OCI corre `VM.Standard.A1.Flex`, que es ARM, así que un tag arm64 sirve para los
+dos. **No hace falta tag multiarquitectura, y además no se puede generar aquí.**
+
+Se probó `docker buildx build --platform linux/amd64` en un Mac arm64 y falla al
+descomprimir el tarball de Ruby, que es lo que hace `msf-builder`:
+
+```text
+tar: ruby-3.3.8/.bundle: Cannot mkdir: Function not implemented
+tar: ruby-3.3.8/tool: Cannot open: Function not implemented
+... (cientos de ficheros)
+```
+
+No es un problema de permisos ni del contexto de build, y se comprobó:
+
+| Prueba | Resultado |
+|---|---|
+| `docker run --platform linux/amd64` | Responde, `uname -m` da `x86_64` |
+| `mkdir`, `cp`, `chown` emulados | Funcionan |
+| `tar` con **un** fichero propio | Funciona |
+| `tar` con los miles de ficheros de Ruby | **Falla** con `Function not implemented` |
+| Lo mismo en `/tmp`, sin volumen de contexto | **Falla igual** |
+
+Es la emulación de Docker Desktop en Apple Silicon, que no sostiene un árbol de
+miles de ficheros. Por eso:
+
+- **La imagen se construye en una sola arquitectura**, la de la máquina que
+  construye, y el tag lo dice: `26.04-arm64-<hash de insumos>`.
+- **`make build-full BUILD_PLATFORM=linux/amd64` no es una vía de validación**
+  desde el portátil. Costó un job de CI entero descubrirlo.
+- **No hay manifest multi-arch.** Si algún día el host fuera x86, este repo no
+  tendría su imagen, y habría que construirla en otra parte.
+
+### 5.13 El registro de Docker Desktop puede romper un `push`
+
+La Mac tiene un registry mirror (`hubproxy.docker.internal:5555`) y un proxy
+HTTP (`http.docker.internal:3128`) configurados en Docker Desktop. Eso no
+afecta al build local, pero puede hacer que `docker push` a Docker Hub falle o
+vaya al mirror equivocado. No está comprobado que no sea el caso: el primer
+`make image-publish` real es el que lo dirá.
+
 ## Referencias
 
 - `plan.md` §3 y §6: arquitectura, cadena de suministro y gates.

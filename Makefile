@@ -74,7 +74,7 @@ lint-docker:
 	cd "$(ROOT)" && hadolint images/base/Dockerfile images/full/Dockerfile
 
 lint-shell:
-	@cd "$(ROOT)" && for file in scripts/*.sh scripts/entrypoint/*.sh scripts/health/*.sh scripts/security/*.sh scripts/host/*.sh scripts/cloud/*.sh scripts/verify/*.sh; do \
+	@cd "$(ROOT)" && for file in scripts/lab scripts/*.sh scripts/entrypoint/*.sh scripts/health/*.sh scripts/security/*.sh scripts/host/*.sh scripts/cloud/*.sh scripts/verify/*.sh; do \
 		if [ -f "$$file" ]; then shellcheck "$$file"; fi; \
 	done
 

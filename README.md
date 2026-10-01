@@ -69,6 +69,35 @@ Desde el host:
 make compose-down
 ```
 
+### Atajo `lab` (opcional)
+
+`scripts/lab` es un ejecutable que delega en `make -C`, así que sirve para no
+recordar la ruta del repo. Se instala con enlaces simbólicos en un directorio
+del `PATH` y no necesita tocar el `.zshrc`:
+
+```bash
+mkdir -p ~/bin
+ln -s "$PWD/scripts/lab" ~/bin/lab
+ln -s "$PWD/scripts/lab" ~/bin/labsh      # atajos opcionales
+ln -s "$PWD/scripts/lab" ~/bin/labtmux
+ln -s "$PWD/scripts/lab" ~/bin/labws
+```
+
+A partir de ahí, y desde cualquier carpeta:
+
+```bash
+lab compose-up          # equivalente a make compose-up
+lab workspace-list
+labsh                   # equivalente a lab compose-shell
+labtmux
+labws
+lab                     # sin argumentos, muestra la ayuda
+```
+
+El repo se resuelve siguiendo el enlace simbólico en sí mismo, así que el
+atajo sobrevive a que muevas el repo; si lo mueves, rehaz el `ln -s`.
+`SECLAB_DIR` tiene prioridad si necesitas fijarlo a mano.
+
 ## VPN
 
 El flujo normal usa `VPN_MODE=inside`:

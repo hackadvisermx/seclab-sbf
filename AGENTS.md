@@ -33,7 +33,11 @@
   En local y en la nube es un **bind mount de una carpeta** del proyecto (`WORKSPACE_DIR`, `./workspace` por defecto).
   `make` la crea y la siembra si esta vacia, porque compose declara `create_host_path: false` a proposito.
   **`make` funciona desde cualquier carpeta**: cada receta hace `cd` a la raiz del repo, asi que
-  `make -f /ruta/al/Makefile compose-up` funciona igual que `make compose-up` en la raiz. La estructura inicial (`README.md`, `engagements/_plantilla.md`,
+  `make -f /ruta/al/Makefile compose-up` funciona igual que `make compose-up` en la raiz. Para no
+  recordar la ruta existe `scripts/lab`, un ejecutable que delega en `make -C` y se instala con
+  `ln -s scripts/lab ~/bin/lab`; `labsh`, `labtmux` y `labws` son el mismo fichero con otro nombre
+  y eligen target por `basename "$0"`. Es opcional y no toca el `.zshrc`: resuelve el repo siguiendo
+  el propio symlink, y `SECLAB_DIR` gana si esta definido. La estructura inicial (`README.md`, `engagements/_plantilla.md`,
   `retos/_plantilla.md`) viene de `workspace-seed/`, que se copia en la imagen en `/workspace`.
   El `chown tester:tester /workspace` del Dockerfile no es cosmetico: si quedara de root, el bind mount
   taparia el directorio con esos permisos y `tester` no podria escribir nada.

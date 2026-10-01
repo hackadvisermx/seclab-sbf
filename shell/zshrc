@@ -7,6 +7,23 @@ export SECLAB_TOOLS_FILE="${SECLAB_TOOLS_FILE:-/usr/local/share/seclab/tools.jso
 if [ -d /opt/ruby/bin ]; then
   export PATH="/opt/ruby/bin:$PATH"
 fi
+
+# Aterriza en el workspace, que es donde se trabaja y donde vive el material.
+#
+# Sin esto, entrar por SSH o por ttyd deja la sesion en $HOME
+# (/home/tester), que es un home normal y no el sitio donde esta el
+# trabajo. `working_dir: /workspace` del compose y el WORKDIR de la imagen
+# solo cubren `docker exec` y los comandos que se lanzan con un workdir, NO
+# un login de shell: ahi manda el directorio de inicio del usuario.
+#
+# Va aqui, al principio y no al final, a proposito. Todo lo que viene
+# despues lo hereda: el `exec tmux new-session` de mas abajo crea la
+# sesion con este cwd, asi que las ventanas nuevas y `new-session` sin -c
+# abren en el workspace. Ponerlo al final dejaria la sesion de tmux en
+# /home/tester aunque este login acabase bien.
+if [[ -d /workspace && -w /workspace ]]; then
+  cd /workspace
+fi
 export ZSH="/opt/seclab/oh-my-zsh"
 export ZSH_CUSTOM="$ZSH/custom"
 export ZSH_CACHE_DIR="$SECLAB_STATE_DIR/oh-my-zsh-cache"

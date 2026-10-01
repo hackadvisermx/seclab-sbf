@@ -1,0 +1,77 @@
+#!/bin/sh
+# Atajo al laboratorio para el host (no para el contenedor).
+#
+# `make` ya funciona desde cualquier carpeta con `make -f /ruta/Makefile ...`,
+# pero esa ruta hay que recordarla y es facil escribirla mal. Esto lo resuelve:
+#
+#   lab workspace-list
+#   lab up
+#   lab shell
+#   lab down
+#   lab scan
+#
+# Se instala con enlaces simbolicos en un directorio del PATH, asi que no hay
+# que tocar el .zshrc ni repetir nada en cada sesion:
+#
+#   mkdir -p ~/bin
+#   ln -s ~/seclab-sbf/scripts/lab ~/bin/lab      # VPS
+#   ln -s ~/tmp/t01/scripts/lab ~/bin/lab          # portatil
+#   ln -s ~/tmp/t01/scripts/lab ~/bin/labsh        # atajos, opcional
+#   ln -s ~/tmp/t01/scripts/lab ~/bin/labtmux
+#   ln -s ~/tmp/t01/scripts/lab ~/bin/labws
+#
+# Por que un script y no una funcion de zsh como antes: una funcion necesita
+# sourcearse en CADA sesion, y `eval` sobre el propio fichero para
+# auto-instalarse desde el PATH depende de distinguir "ejecutado" de
+# "sourceado" con ZSH_EVAL_CONTEXT, que resulto ser fragile (vale "toplevel"
+# al ejecutarse y "cmdarg:file" al sourcearse, no lo contrario que se
+# suponia). Un ejecutable no tiene ese problema: el shell lo busca en el PATH
+# y por eso ya funciona sin configurar nada.
+#
+# El repo se resuelve desde el enlace simbolico en si mismo (`$0` siguiendo
+# enlaces), y no desde una lista de rutas de ejemplo: asi el symlink en ~/bin
+# sigue funcionando aunque el repo se mueva, y no hay nada que mantener al
+# dia. SECLAB_DIR gana si esta definido, que es la forma de fijar el repo de
+# forma explicita.
+
+set -eu
+
+# El nombre invocado decide el target por defecto: `labsh` es a `lab` lo que
+# `lab compose-shell`, sin importar como se llame al enlace.
+name=$(basename -- "$0")
+
+case "$name" in
+  labsh)   set -- compose-shell "$@" ;;
+  labtmux) set -- compose-tmux "$@" ;;
+  labws)   set -- workspace-list "$@" ;;
+esac
+
+# Sin argumentos, `lab` muestra la ayuda en vez de correr el primer target.
+if [ "$#" -eq 0 ]; then
+  set -- help
+fi
+
+# La raiz del repo es el directorio dos niveles arriba de este script: esta en
+# scripts/, dentro del repo. `readlink -f` no es POSIX, asi que se resuelve a
+# mano y se deja la ultima resolucion pendiente para el Makefile: basta con
+# un Makefile en el directorio actual o en el padre del ultimo enlace.
+self=$0
+while [ -L "$self" ]; do
+  link=$(readlink -- "$self")
+  case "$link" in
+    /*) self=$link ;;
+    *)  self=$(dirname -- "$self")/$link ;;
+  esac
+done
+dir=$(cd -- "$(dirname -- "$self")/.." && pwd)
+
+if [ -n "${SECLAB_DIR:-}" ]; then
+  dir=$SECLAB_DIR
+fi
+
+if [ ! -f "$dir/Makefile" ]; then
+  printf '%s\n' "lab: no encuentro el repo en $dir. Define SECLAB_DIR=/ruta/al/seclab-sbf" >&2
+  exit 1
+fi
+
+exec make -C "$dir" "$@"

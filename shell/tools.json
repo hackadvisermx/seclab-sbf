@@ -284,23 +284,173 @@
       "category": "exploit",
       "command": "rpcclient",
       "description": "Cliente RPC de Windows (shares, enum de usuarios, grupo)"
+    },
+    "certipy": {
+      "category": "exploit",
+      "command": "certipy",
+      "description": "Abuso de AD con certificados: find, req, forge, shadow, relay"
+    },
+    "netview.py": {
+      "category": "exploit",
+      "command": "netview.py",
+      "description": "Enumeracion de shares, sesiones y usuarios en un Windows (impacket)"
+    },
+    "psexec.py": {
+      "category": "exploit",
+      "command": "psexec.py",
+      "description": "Ejecucion remota de comandos sobre SMB, con hash o clave (impacket)"
+    },
+    "smbexec.py": {
+      "category": "exploit",
+      "command": "smbexec.py",
+      "description": "Ejecucion remota sobre named pipes de SMB (impacket)"
+    },
+    "wmiexec.py": {
+      "category": "exploit",
+      "command": "wmiexec.py",
+      "description": "Ejecucion remota por WMI (impacket)"
+    },
+    "GetUserSPNs.py": {
+      "category": "exploit",
+      "command": "GetUserSPNs.py",
+      "description": "Usuarios con SPN: roastear con Kerberos (impacket)"
+    },
+    "Get-GPPPassword.py": {
+      "category": "exploit",
+      "command": "Get-GPPPassword.py",
+      "description": "Extrae credenciales de Group Policy Preferences (impacket)"
+    },
+    "GetADUsers.py": {
+      "category": "exploit",
+      "command": "GetADUsers.py",
+      "description": "Lista usuarios del dominio por LDAP con atributos (impacket)"
+    },
+    "GetADComputers.py": {
+      "category": "exploit",
+      "command": "GetADComputers.py",
+      "description": "Lista maquinas del dominio por LDAP (impacket)"
+    },
+    "getTGT.py": {
+      "category": "exploit",
+      "command": "getTGT.py",
+      "description": "Pide un TGT con password o hash (impacket)"
+    },
+    "getST.py": {
+      "category": "exploit",
+      "command": "getST.py",
+      "description": "Pide un ticket de servicio para un SPN (impacket)"
+    },
+    "getPac.py": {
+      "category": "exploit",
+      "command": "getPac.py",
+      "description": "Pide un PAC de Kerberos: es el camino aPrivilegio de dominio (impacket)"
+    },
+    "describeTicket.py": {
+      "category": "exploit",
+      "command": "describeTicket.py",
+      "description": "Decodifica un ticket .kirbi (impacket)"
+    },
+    "findDelegation.py": {
+      "category": "exploit",
+      "command": "findDelegation.py",
+      "description": "Cuentas y maquinas con delegacion configurada (impacket)"
+    },
+    "owneredit.py": {
+      "category": "exploit",
+      "command": "owneredit.py",
+      "description": "Cambia el propietario de un objeto de AD para TakesOwnership (impacket)"
+    },
+    "rbcd.py": {
+      "category": "exploit",
+      "command": "rbcd.py",
+      "description": "Lee, escribe y borra delegaciones RBCD (impacket)"
+    },
+    "dacledit.py": {
+      "category": "exploit",
+      "command": "dacledit.py",
+      "description": "Escribe ACEs de MS-DAC en un objeto (impacket)"
+    },
+    "dpapi.py": {
+      "category": "exploit",
+      "command": "dpapi.py",
+      "description": "Descifra credenciales DPAPI de un usuario de Windows"
+    },
+    "mimikatz.py": {
+      "category": "exploit",
+      "command": "mimikatz.py",
+      "description": "Credenciales en memoria y tickets: lsadump, sekurlsa, kerberos (impacket)"
+    },
+    "reg.py": {
+      "category": "exploit",
+      "command": "reg.py",
+      "description": "Registro de Windows remoto por SMB, para hive y claves (impacket)"
+    },
+    "ticketer.py": {
+      "category": "exploit",
+      "command": "ticketer.py",
+      "description": "Crea y manipula tickets .kirbi golden y silver (impacket)"
+    },
+    "atexec.py": {
+      "category": "exploit",
+      "command": "atexec.py",
+      "description": "Ejecucion remota por una tarea programada (impacket)"
+    },
+    "dpapidump.py": {
+      "category": "exploit",
+      "command": "dpapidump.py",
+      "description": "Vuelca el numero de secuencia DPAPI master (impacket)"
+    },
+    "secretsdump.py": {
+      "category": "exploit",
+      "command": "secretsdump.py",
+      "description": "Volcado de SAM, NTDS, LSA y hives de un controlador (impacket)"
+    },
+    "GetLAPSPassword.py": {
+      "category": "exploit",
+      "command": "GetLAPSPassword.py",
+      "description": "Passwords locales de LSA desde NTDS o hives (impacket)"
+    },
+    "ntfs-read.py": {
+      "category": "exploit",
+      "command": "ntfs-read.py",
+      "description": "Lee el sistema de ficheros NTFS de forma remota (impacket)"
+    },
+    "net.py": {
+      "category": "exploit",
+      "command": "net.py",
+      "description": "Ejecuta comandos net de Windows de forma remota (impacket)"
     }
   },
   "installed": [
+    "Get-GPPPassword.py",
+    "GetADComputers.py",
+    "GetADUsers.py",
+    "GetLAPSPassword.py",
+    "GetUserSPNs.py",
     "anew",
+    "atexec.py",
     "bettercap",
     "bloodhound-ce-python",
+    "certipy",
     "crunch",
     "curl",
+    "dacledit.py",
     "dalfox",
+    "describeTicket.py",
     "dnsx",
+    "dpapi.py",
+    "dpapidump.py",
     "exiftool",
     "fd",
     "feroxbuster",
     "ffuf",
+    "findDelegation.py",
     "fzf",
     "gdb",
     "gdb-multiarch",
+    "getPac.py",
+    "getST.py",
+    "getTGT.py",
     "git",
     "gobuster",
     "hashcat",
@@ -314,32 +464,44 @@
     "ldapdomaindump",
     "ldapsearch",
     "ldd2bloodhound",
+    "mimikatz.py",
     "msfconsole",
     "msfvenom",
     "msldap",
     "naabu",
+    "net.py",
+    "netview.py",
     "nmap",
+    "ntfs-read.py",
     "nuclei",
     "nxc",
     "openvpn",
+    "owneredit.py",
+    "psexec.py",
     "pt-forward",
     "pwn",
     "pypykatz",
     "python3",
+    "rbcd.py",
+    "reg.py",
     "rg",
     "rpcclient",
     "s3scanner",
     "searchsploit",
+    "secretsdump.py",
+    "smbexec.py",
     "socat",
     "sqlmap",
     "ssh",
     "subfinder",
+    "ticketer.py",
     "tmux",
     "ttyd",
     "vpn-control",
     "vpn-manager",
     "waybackurls",
     "wireguard",
+    "wmiexec.py",
     "wpscan",
     "zoxide",
     "zsh",

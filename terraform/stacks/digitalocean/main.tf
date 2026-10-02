@@ -65,11 +65,11 @@ resource "digitalocean_droplet" "lab" {
     # security/fail2ban/ y `make fail2ban-check` compara la copia
     # del host contra esa.
     seclab_sshd_jail = indent(6, join("", ["\n", file("${path.module}/../../../security/fail2ban/jail.d/seclab-sshd.conf")]))
-      # El firewall del host tambien vive en el repo, por el mismo motivo.
-      # Se pasa indentado y con un "\n" inicial porque indent() no indenta la
-      # primera linea: sin el, la linea "define" de la politica queda en la
-      # columna 0 y el YAML no seria valido.
-      seclab_nftables_policy = indent(6, join("", ["\n", file("${path.module}/../../../security/policies/nftables-lab.nft")]))
-      seclab_nftables_unit   = indent(6, join("", ["\n", file("${path.module}/../../../security/systemd/seclab-nftables.service")]))
+    # El firewall del host tambien vive en el repo, por el mismo motivo.
+    # Se pasa indentado y con un "\n" inicial porque indent() no indenta la
+    # primera linea: sin el, la linea "define" de la politica queda en la
+    # columna 0 y el YAML no seria valido.
+    seclab_nftables_policy = indent(6, join("", ["\n", file("${path.module}/../../../security/policies/nftables-lab.nft")]))
+    seclab_nftables_unit   = indent(6, join("", ["\n", file("${path.module}/../../../security/systemd/seclab-nftables.service")]))
   })
 }

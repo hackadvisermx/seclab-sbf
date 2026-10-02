@@ -32,7 +32,8 @@ La auth key se revoca manualmente después de verificar la unión. No se guarda 
 - No habilitar Funnel, Exit Node, subnet routes ni rutas DNS automáticas.
 - No abrir puertos Docker para consumir `ttyd`, SSH o el proxy.
 - `pt-forward`, `pt-socks` y `pt-web` escuchan en loopback dentro del contenedor; su consumo externo se hace solo con el puente host-only `scripts/host/pt-proxy-bridge.sh` más `ssh -L` sobre el tailnet, sin `ports:`.
-- En OCI se validó una ruta por NAT gateway con el nodo sin `public_ip`; la topología final debe conservar esa dependencia y las rutas por NAT.
+- En OCI, desde el 2026-10-10 el nodo lleva **IP pública efímera** y **cero ingress**, en lugar de `sin public_ip` + NAT. La razón son los límites del compartment: `nat-gateway-count = 0` e `internet-gateway-count = 1` ya ocupado, así que sin IP pública no había forma de salir a internet. Tener IP no significa accesible: el NSG y la security list de la subnet solo tienen reglas de **egress**, y `security/policies/nftables-lab.nft` cierra el `input` del host con `policy drop`. El acceso sigue siendo **solo por Tailscale**; entrar por la IP pública no funciona y no debe intentararse.
+- La salida a internet usa el **internet gateway compartido** (`hermes-clone-igw`), en la VCN compartida `hermes-clone-vcn`. Este stack no crea ni gestiona esa VCN ni ese IGW: los lee con data sources. Si se borran desde el otro proyecto, el laboratorio pierde salida a internet (y con ella Tailscale).
 
 ## Verificación de firewall
 

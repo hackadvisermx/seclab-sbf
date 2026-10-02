@@ -11,6 +11,8 @@ set -eu
 
 template="terraform/modules/lab-cloud-init/cloud.cfg.yaml"
 jail="security/fail2ban/jail.d/seclab-sshd.conf"
+policy="security/policies/nftables-lab.nft"
+unit="security/systemd/seclab-nftables.service"
 root="$(pwd)"
 
 if ! command -v terraform >/dev/null 2>&1; then
@@ -28,7 +30,7 @@ if ! python3 -c 'import yaml' >/dev/null 2>&1; then
   exit 78
 fi
 
-if [ ! -r "$template" ] || [ ! -r "$jail" ]; then
+if [ ! -r "$template" ] || [ ! -r "$jail" ] || [ ! -r "$policy" ] || [ ! -r "$unit" ]; then
   printf '%s\n' "tf_render_check=invalid-repo path=$template"
   exit 78
 fi
@@ -51,6 +53,13 @@ output "cloud_init" {
       ssh_public_key   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIFPLACEHOLDER"
       workspace_mount  = "/opt/seclab-sbf/workspace"
       seclab_sshd_jail = indent(6, join("", ["\\n", file("$root/$jail")]))
+      # El firewall del host y su unidad se renderizan igual que la jail, y
+      # con el mismo fallo posible: indent() no toca la primera linea, asi que
+      # sin el "\n" inicial la linea "define" de la politica se queda en la
+      # columna 0 y el YAML se rompe al aplicar, no antes. Por eso tambien
+      # entran en esta comprobacion, y no solo en terraform validate.
+      seclab_nftables_policy = indent(6, join("", ["\\n", file("$root/$policy")]))
+      seclab_nftables_unit   = indent(6, join("", ["\\n", file("$root/$unit")]))
     }
   )
 }
@@ -69,11 +78,11 @@ terraform -chdir="$tmp" output -raw cloud_init > "$tmp/cloud-init.yaml"
 # El parseo y la comparacion los hace python, que ya esta verificado que
 # existe. Compara byte a byte: la copia del host se valida con cmp en
 # scripts/security/check-fail2ban.sh, y ahi importa que sea exacta.
-if ! python3 - "$tmp/cloud-init.yaml" "$root/$jail" "$template" <<'PY'
+if ! python3 - "$tmp/cloud-init.yaml" "$root/$jail" "$template" "$root/$policy" "$root/$unit" <<'PY'
 import sys
 import yaml
 
-rendered, jail, template = sys.argv[1], sys.argv[2], sys.argv[3]
+rendered, jail, template, policy, unit = sys.argv[1:6]
 try:
     doc = yaml.safe_load(open(rendered))
 except yaml.YAMLError as err:
@@ -105,6 +114,31 @@ if actual != expected:
         (got[line] if line < len(got) else None),
     ))
     sys.exit(1)
+
+# El firewall del host se compara con la MISMA logica que la jail, y por el
+# mismo motivo: la politica que llega al host tiene que ser byte a byte la del
+# repo. Si divergiera, se estaria auditando una cosa y aplicando otra, que es
+# justo el fallo que el gate de CVEs evita en otro sitio.
+for src, dst in ((policy, "/etc/nftables/seclab-lab.nft"),
+                 (unit, "/etc/systemd/system/seclab-nftables.service")):
+    if dst not in files:
+        print("tf_render_check=missing-file path=%s" % dst)
+        sys.exit(1)
+    want_bytes = open(src).read()
+    got_bytes = files[dst]["content"]
+    if got_bytes != want_bytes:
+        want, got = want_bytes.splitlines(), got_bytes.splitlines()
+        line = next(
+            (n for n in range(max(len(want), len(got)))
+             if (want[n:n + 1] or [None]) != (got[n:n + 1] or [None])),
+            0,
+        )
+        print("tf_render_check=file-drift path=%s linea=%d esperado=%r obtenido=%r" % (
+            dst, line + 1,
+            (want[line] if line < len(want) else None),
+            (got[line] if line < len(got) else None),
+        ))
+        sys.exit(1)
 PY
 then
   exit 78

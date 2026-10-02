@@ -39,3 +39,62 @@ table inet seclab_security {
     ip6 saddr $SECLAB_DOCKER_CIDR6 ip6 daddr $SECLAB_METADATA6 drop
   }
 }
+
+# ---------------------------------------------------------------------------
+# INPUT del HOST. Aqui esta la garantia de "sin IP publica = sin acceso".
+#
+# El 2026-10-10 la instancia paso a llevar IP publica efimera en la VNIC,
+# porque los limites del compartment no permiten ni NAT gateway
+# (nat-gateway-count = 0) ni un internet gateway propio
+# (internet-gateway-count = 1, ya usado). OCI filtra el ingress en el NSG y
+# en la security list, y los dos los pone este stack solo con reglas de
+# egress. Esta tabla es la tercera capa y la que no depende de nadie: aunque
+# alguien anadiera una regla de ingress en el NSG por error, aqui sigue sin
+# entrar nada.
+#
+# NO hay reglas por puerto. Ni 22, ni 2222, ni 7681. Todo lo que no sea
+# loopback, Tailscale o respuesta de una conexion ya establecida, se tira.
+# El acceso al laboratorio es por el tailnet y por nada mas.
+#
+# La cadena forward NO se toca: la gestiona Docker para sus bridges, y
+# mezclarse con ella rompe el DNS interno del contenedor.
+
+table inet seclab_host {
+  chain input {
+    type filter hook input priority -10; policy drop;
+
+    # Respuestas de conexiones que ya salimos. Sin esto, Tailscale no
+    # completaria el handshake con DERP ni el NAT traversal, y se caeria al
+    # DROP de abajo. Es la unica excepcion de la tabla.
+    ct state established,related accept
+
+    # Loopback.
+    iif "lo" accept
+
+    # Tailscale. La interfaz no existe todavia cuando se carga la politica,
+    # y eso es correcto: nftables solo compara el nombre cuando llega un
+    # paquete, y para entonces tailscaled ya la ha creado. Si el host no
+    # tiene Tailscale, esta regla simplemente nunca casa y no hace falta.
+    iifname "tailscale0" accept
+
+    # DHCP de la VNIC. Sin esto la interfaz pierde su direccion y el host
+    # se queda sin salida. No es un puerto de servicio: es el lease.
+    udp sport 67 udp dport 68 accept
+
+    # PMTU y unreachable de ICMP. Sin esto, un paquete con MTU mayor que el
+    # camino genera ICMP que se descarta, el emisor reintenta para siempre y
+    # las descargas grandes se quedan colgadas.
+    icmp type destination-unreachable accept
+    icmp type time-exceeded accept
+    icmp type parameter-problem accept
+    icmpv6 type destination-unreachable accept
+    icmpv6 type packet-too-big accept
+    icmpv6 type time-exceeded accept
+    icmpv6 type parameter-problem accept
+    icmpv6 type { echo-request, echo-reply } accept
+  }
+
+  # El output no se filtra: el host tiene que poder instalar, actualizar y
+  # hablar con el registro de imagen. La politica defensiva de este proyecto
+  # esta en el NSG y en el isolation del contenedor, no en cortar la salida.
+}

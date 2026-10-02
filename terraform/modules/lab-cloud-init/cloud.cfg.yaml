@@ -48,6 +48,20 @@ write_files:
     # valido). Se edita la jail en el repo, nunca aqui, para que la copia
     # del host se pueda comparar (make fail2ban-check avisa si divergen).
     content: |${seclab_sshd_jail}
+  # La politica nftables del host. Fuente unica: security/policies/
+  # nftables-lab.nft, que pasa el stack como seclab_nftables_policy con el
+  # mismo criterio que la jail. Antes esto era un paso manual que nadie
+  # ejecutaba (documentado como pendiente en docs/phase-9.md), y con la
+  # instancia ya llevando IP publica eso deja de ser un extra: es la capa que
+  # hace que esa IP no sea una puerta de entrada.
+  - path: /etc/nftables/seclab-lab.nft
+    owner: root:root
+    permissions: "0644"
+    content: |${seclab_nftables_policy}
+  - path: /etc/systemd/system/seclab-nftables.service
+    owner: root:root
+    permissions: "0644"
+    content: |${seclab_nftables_unit}
   - path: /usr/share/keyrings/tailscale-archive-keyring.gpg
     owner: root:root
     permissions: "0644"
@@ -82,4 +96,11 @@ runcmd:
   - mkdir -p ${workspace_mount}
   - chown ${admin_user}:${admin_user} ${workspace_mount}
   - systemctl enable --now unattended-upgrades || true
-final_message: "seclab-sbf listo. Une Tailscale manualmente y copia .env por SSH sobre el tailnet."
+  # Firewall del host, antes que nada: se aplica al final del arranque para
+  # que, desde ese momento, lo unico que entre sea loopback y Tailscale. La
+  # comprobacion es que nft acepte la politica; si no la acepta, el host se
+  # queda igual que estaba (fail-open) y por eso se avisa en el motd y en el
+  # log, en vez de dar por hecho que quedo aplicada.
+  - systemctl daemon-reload
+  - nft -c -f /etc/nftables/seclab-lab.nft && systemctl enable --now seclab-nftables || echo 'ATENCION: no se pudo aplicar el firewall del host; revisar /etc/nftables/seclab-lab.nft'
+final_message: "seclab-sbf listo. Une Tailscale manualmente y copia .env por SSH sobre el tailnet. El acceso por IP publica no funciona a proposito."

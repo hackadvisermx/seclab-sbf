@@ -57,21 +57,32 @@ variable "shape" {
   description = <<-EOT
     Shape de la VM del laboratorio.
 
-    Was variable porque hardcodearla fue lo que rompio el nodo: el
-    2026-09-29 el apply de reemplazo fallo con "Invalid ratio of
-    memory in GB to OCPUs" porque el HCL pedia VM.Standard.E5.Flex y
-    ese tenancy no lo tiene. El limite del compartment es
-    standard-e5-core-count = 0 y standard-a1-core-count = 2, asi que
-    aqui solo hay ARM.
+    Es VM.Standard.A1.Flex (ARM) desde el 2026-10-10, no VM.Standard.E5.Flex.
+    El motivo no es preferencia: el limite del compartment es
+    standard-e5-core-count = 0 y standard-a1-core-count = 2. La cuota E5 la
+    consume la instancia hermes-oci, que es de otro proyecto y sigue
+    RUNNING, asi que un E5 no se puede ni pedir. Con A1 sale.
 
-    VM.Standard.A1.Flex es ARM y obliga a construir la imagen del
-    contenedor para arm64 en el host. Se probó el 2026-09-29 y el
-    apply falló con "Out of host capacity": el limite del compartment
-    es standard-a1-core-count = 2 pero no habia hosts ARM libres en
-    mx-monterrey-1. E5.Flex (x86) es la que usa el resto del stack.
+    ARM ademas es lo que hace funcionar la imagen. La del laboratorio se
+    construye en arm64 y con A1 el host la usa nativa. Con un shape x86
+    habria que construir en amd64, y eso no se puede desde el portatil
+    (ver docs/agregar-tools.md 5.12).
+
+    La ratio de memoria: A1.Flex exige entre 1 y 64 GB por OCPU. Con los
+    valores de abajo, 2 OCPU y 4 GB, la ratio es 2 GB por OCPU y cumple. El
+    apply de reemplazo del 2026-09-29 fallo con "Invalid ratio of memory in
+    GB to OCPUs" porque el HCL pedia E5.Flex con esos numeros, que en E5 no
+    son validos. Con A1 si lo son.
+
+    Lo que NO se pudo comprobar antes de fijar esto: si hay hosts ARM
+    libres en mx-monterrey-1. El apply del 2026-09-29 fallo con "Out of
+    host capacity" con la cuota A1 ya en 2, lo que apunta a falta de
+    capacidad en la REGION y no a la cuota del compartment. Son dos cosas
+    distintas y la API de baremetals no expone los hosts, asi que solo un
+    apply lo diria.
   EOT
   type        = string
-  default     = "VM.Standard.E5.Flex"
+  default     = "VM.Standard.A1.Flex"
 }
 
 variable "ocpus" {
@@ -106,16 +117,35 @@ variable "boot_volume_gbs" {
 
 
 
-variable "vcn_cidr" {
-  description = "CIDR de la VCN."
+variable "shared_vcn_id" {
+  description = <<-EOT
+    OCID de la VCN compartida donde vive el laboratorio.
+
+    Es una VCN AJENA, la de hermes-oci, y este stack no la gestiona: solo la
+    lee con un data source. No hay recurso oci_core_vcn en el stack a
+    proposito, para que un destroy nuestro no pueda tocar su red y para que
+    el estado de Terraform nosea el dueno de infra de otro proyecto.
+
+    Se referencia por OCID y no por nombre: un rename en la consola no
+    rompe el plan ni puede hacer que apunte a otra VCN por error.
+
+    El 10.31.0.0/24 de nuestra subnet lo anadio el owner a mano en la
+    consola el 2026-10-10, porque el 10.30.0.0/24 que ya tenia hermes estaba
+    ocupado entero por su subnet y no quedaba ni una IP libre.
+  EOT
   type        = string
-  default     = "10.0.0.0/16"
 }
 
 variable "subnet_cidr" {
-  description = "CIDR de la subnet privada."
+  description = <<-EOT
+    CIDR de nuestra subnet dentro de la VCN compartida.
+
+    10.31.0.0/24 es el bloque secundario que el owner anadio a mano a
+    hermes-clone-vcn. El 10.30.0.0/24 principal lo ocupa entero la subnet de
+    hermes-oci (10.30.0.89), asi que no cabia otra subnet ahi.
+  EOT
   type        = string
-  default     = "10.0.1.0/24"
+  default     = "10.31.0.0/24"
 }
 
 provider "oci" {

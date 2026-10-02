@@ -242,3 +242,57 @@ desplegado.
 
 El siguiente despliegue es un apply desde cero, y habrá que rehacer el join
 de Tailscale del nodo nuevo.
+
+## Topologia final: VCN compartida, IP publica efimera, cero ingress (2026-10-10)
+
+La red cambio porque los limites del compartment no dejaron otra via. Los tres
+que bloqueaban, medidos con la API de limits:
+
+| Limite | Valor | Consecuencia |
+|---|---|---|
+| `nat-gateway-count` | **0** | No se puede crear NAT gateway |
+| `internet-gateway-count` | **1** | Ya lo usa `hermes-clone-igw`; no hay para uno nuestro |
+| `standard-e5-core-count` | **0** | La consume `hermes-oci`, que sigue `RUNNING`; solo hay ARM (A1 = 2 OCPU libres) |
+
+La solucion tiene tres partes:
+
+1. **VCN compartida.** El stack ya no crea `oci_core_vcn`, ni NAT, ni internet
+   gateway. Usa `hermes-clone-vcn` por data source (`var.shared_vcn_id`,
+   requerido y sin default: si falta, el plan para con un error claro en vez
+   de adivinar). De esa VCN solo existe su bloque `10.30.0.0/24`, ocupado
+   entero por la subnet de hermes, asi que el owner anadio a mano
+   **`10.31.0.0/24`** y ahi va nuestra subnet.
+2. **Salida por el IGW compartido.** Route table propia (no se reusa la de
+   hermes, para que un destroy nuestro no toque su red) con `0.0.0.0/0`
+   apuntando a `hermes-clone-igw`, que se busca por data source en vez de
+   hardcodear el OCID.
+3. **IP publica efimera con cero ingress.** `assign_public_ip = true` en la
+   VNIC, que es lo unico que permite salir con `nat-gateway-count = 0`. No
+   consume `reserved-public-ip-count` porque es efimera. En compensacion hay
+   TRES capas sin ingress:
+   - el NSG del stack solo tiene 4 reglas de **egress** (443, UDP 41641, DNS, NTP),
+   - la security list de la subnet se creo nueva y solo con egress: la default
+     de la VCN compartida permite ingress desde su propia subnet, que es la de
+     hermes, no la nuestra, asi que no sirve,
+   - y `security/policies/nftables-lab.nft` anade `table inet seclab_host` con
+     `chain input` en **`policy drop`**, que el cloud-init despliega y
+     `seclab-nftables.service` mantiene persistente.
+
+Ninguna depende de las otras dos: aunque alguien anadiera una regla de ingress
+por error en el NSG, el `input` del host sigue sin dejar entrar nada. La IP
+publica es scaneable, pero no responde a nada. El acceso real es **solo por
+Tailscale**, como antes.
+
+### Lo que este stack NO gestiona
+
+`hermes-clone-vcn`, su IGW y su route table son de otro proyecto. Se leen, no
+se tocan: no hay recurso de Terraform que los gestione. Si se borran desde el
+otro proyecto, el laboratorio pierde salida a internet, y con ella Tailscale.
+Es una dependencia externa aceptada, documentada y sin aislar.
+
+### DNS
+
+Con dos bloques CIDR en la VCN hay dos resolvers, asi que la regla
+`egress_dns` se genera con `for_each` sobre `cidr_blocks` en lugar de apuntar a
+uno fijo. Apunta al `.2` de cada bloque, no a `0.0.0.0/0`: abrir DNS a todo
+permitiria exfiltrar datos por consultas.

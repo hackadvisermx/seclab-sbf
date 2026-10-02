@@ -973,10 +973,17 @@ pt-forward doctor
 
 ### Fase 6.5 — Seguridad de exposición (v1 completada)
 
-- Preparar `security/policies/nftables-lab.nft` sin cargarlo automáticamente.
+- ~~Preparar `security/policies/nftables-lab.nft` sin cargarlo automáticamente.~~  Desde el
+  2026-10-10 el cloud-init la escribe en `/etc/nftables/seclab-lab.nft` y habilita
+  `seclab-nftables`, que antes era un paso manual que no aplicaba nadie.
 - Mantener Tailscale en el host, sin Funnel, Exit Node ni rutas DNS automáticas.
 - Validar `make security-check` en Linux y omitir explícitamente en macOS.
-- Aplicar y verificar en el host OCI final una ruta NAT gateway para Tailscale sin `public_ip`.
+- ~~Aplicar y verificar en el host OCI final una ruta NAT gateway para Tailscale sin `public_ip`.~~
+  Revocado el 2026-10-10 por los limites del compartment: `nat-gateway-count = 0` e
+  `internet-gateway-count = 1` ya ocupado, asi que no habia forma de tener salida a internet
+  sin IP publica. La topologia final es IP publica EFIMERA con cero ingress (NSG y security
+  list solo-egress, mas `policy drop` en el input del host) dentro de una VCN compartida,
+  con el acceso real solo por Tailscale.
 - La política quedó aplicada y persistente en el host final mediante `security/systemd/`; el puente del proxy se valida en VPS y se habilita en el host final como paso de despliegue.
 
 ### Fase 7 — Imagen `full` (v1 completada en arm64; unificada con `light` el 2026-09-29)
@@ -1005,9 +1012,11 @@ pt-forward doctor
 - Configurar Tailscale ACL, MFA y device approval.
 - Añadir fail2ban.
 - Bloquear metadata.
-- Aplicar una ruta NAT gateway cuando el host no tenga `public_ip`.
+- ~~Aplicar una ruta NAT gateway cuando el host no tenga `public_ip`.~~  Imposible desde el
+  2026-10-10: `nat-gateway-count = 0` en el compartment. La salida a internet va por el IGW
+  compartido de la VCN de hermes, con IP publica efimera y cero ingress.
 - Ejecutar pruebas externas controladas.
-- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`; jail de sshd con fail2ban en `security/fail2ban/`, desplegada por cloud-init, validada contra el propio fail2ban con `make fail2ban-jail-check` en local y en CI. Verificado el 2026-09-29 que el nodo de OCI ya no existe: se destruyó al reemplazarlo y no se ha podido recrear por falta de cuota de shape. El volumen del workspace y la red siguen en pie. `make tf-destroy-check` avisa de planes destructivos y de nodo ausente. El bloqueo efectivo en nftables sigue sin comprobarse: requiere provocar cinco fallos de autenticación en un host real. Pendiente: ACL, MFA y device approval de Tailscale, habilitar el puente del proxy y pruebas externas controladas.
+- Hecho: plantilla nftables aplicada y persistente en el host OCI final, con bloqueo de metadata y ruta NAT gateway sin `public_ip`; jail de sshd con fail2ban en `security/fail2ban/`, desplegada por cloud-init, validada contra el propio fail2ban con `make fail2ban-jail-check` en local y en CI. Verificado el 2026-09-29 que el nodo de OCI ya no existe: se destruyó al reemplazarlo y no se ha podido recrear por falta de cuota de shape. El volumen del workspace y la red siguen en pie. `make tf-destroy-check` avisa de planes destructivos y de nodo ausente. El bloqueo efectivo en nftables sigue sin comprobarse: requiere provocar cinco fallos de autenticación en un host real. Pendiente: ACL, MFA y device approval de Tailscale, habilitar el puente del proxy y pruebas externas controladas. Actualizado el 2026-10-10: la plantilla nftables ahora se despliega sola por cloud-init (antes era paso manual) y anade una tabla `seclab_host` con `input` en `policy drop`, que es la capa que hace inutil la IP publica; el nodo va en una VCN compartida de la que este stack solo lee el internet gateway. El bloqueo efectivo en nftables sigue sin comprobarse.
 
 ### Fase 10 — CI/CD y operación (parcial)
 

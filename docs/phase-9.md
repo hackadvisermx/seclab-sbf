@@ -50,8 +50,13 @@ Decisiones que no son obvias en el archivo:
 - Tampoco cubre `ttyd` del contenedor, que va por el puente host-only.
 - fail2ban no sustituye a las ACL, al MFA ni al device approval de
   Tailscale. Es la tercera línea, no la primera.
-- No se aplica nada automáticamente desde el repositorio: cloud-init
-  instala y habilita el servicio, y la comprobación es de solo lectura.
+- **Actualizado el 2026-10-10:** la política nftables **sí** se aplica
+  automáticamente. El cloud-init la escribe en `/etc/nftables/seclab-lab.nft`
+  desde `security/policies/nftables-lab.nft` y habilita
+  `seclab-nftables.service`; antes era un paso manual que nadie ejecutaba, y
+  con la instancia ya llevando IP pública eso era un agujero. El contenido se
+  revisa en el pull request antes de mergear, que es donde está el criterio
+  de revisión, no en una aplicación ciega.
 
 ## Qué está comprobado y qué no
 

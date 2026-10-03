@@ -419,6 +419,21 @@
       "category": "exploit",
       "command": "net.py",
       "description": "Ejecuta comandos net de Windows de forma remota (impacket)"
+    },
+    "pspy": {
+      "category": "pentest",
+      "command": "pspy",
+      "description": "Vigila procesos del sistema: revealea binarios y argumentos"
+    },
+    "nikto": {
+      "category": "web",
+      "command": "nikto",
+      "description": "Escaner web clasico: comprueba headers, TLS y configs"
+    },
+    "enum4linux-ng": {
+      "category": "exploit",
+      "command": "enum4linux-ng",
+      "description": "Enumeracion SMB/LDAP/NBNS de Windows, mas simple que smbclient a mano"
     }
   },
   "installed": [
@@ -440,6 +455,7 @@
     "dnsx",
     "dpapi.py",
     "dpapidump.py",
+    "enum4linux-ng",
     "exiftool",
     "fd",
     "feroxbuster",
@@ -471,6 +487,7 @@
     "naabu",
     "net.py",
     "netview.py",
+    "nikto",
     "nmap",
     "ntfs-read.py",
     "nuclei",
@@ -478,6 +495,7 @@
     "openvpn",
     "owneredit.py",
     "psexec.py",
+    "pspy",
     "pt-forward",
     "pwn",
     "pypykatz",

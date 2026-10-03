@@ -9,6 +9,9 @@ apt-get install -y --no-install-recommends ca-certificates
 sed -i "s|http://ports.ubuntu.com/ubuntu-ports/|https://snapshot.ubuntu.com/ubuntu/${snapshot}/|g" /etc/apt/sources.list.d/ubuntu.sources
 sed -i '/^Snapshot:/d' /etc/apt/sources.list.d/ubuntu.sources
 apt-get update
+# nikto va aqui (2.1.5-3.1build1, de Ubuntu noble/resolute): es el escaner web
+# clasico, menos preciso que nuclei pero cubre comprobaciones que ahi no estan.
+# Trae sus propias dependencias de Perl, asi que no hace falta 'perl' a mano.
 apt-get install -y --no-install-recommends \
   binutils \
   ca-certificates \
@@ -29,6 +32,7 @@ apt-get install -y --no-install-recommends \
   libimage-exiftool-perl \
   libpcap0.8t64 \
   nmap \
+  nikto \
   openssh-client \
   openssh-server \
   openvpn \
@@ -116,6 +120,25 @@ esac
 install -m 0555 /tmp/ferox/feroxbuster /usr/bin/feroxbuster
 rm -rf /tmp/ferox "/tmp/ferox.${ferox_asset##*.}"
 
+# pspy 1.2.1 NO esta aqui: no hay release con binario arm64, asi que se
+# compila en su propio stage (pspy-builder) del Dockerfile de full, igual que
+# naabu o bettercap. Aqui solo se instala el resultado.
+
+# enum4linux-ng 1.3.10 NO se instala aqui. Necesita impacket, y en esta imagen
+# impacket solo existe dentro del venv de NetExec en /opt/nxc, que el Dockerfile
+# copia DESPUES de este script. ldap3 tambien esta solo ahi. Por eso el script se
+# descarga aqui (verificandose por SHA256) pero se instala mas abajo, junto al
+# bloque que ya valida las AD tools, con el shebang apuntando al venv.
+E4LNG_COMMIT=f34e7bb3bc2bcd10267a7257fb3658154434ccf4
+E4LNG_SHA256=a948a9d105594931b083ce864c4019ffe137f3b30cba6ddf0bec331da748147d
+# Se descarga por COMMIT, no por tag: el tag podria moverse y el SHA256 lo
+# delata, pero atar tambien la URL al commit hace que un tag reescrito no
+# sirva ni para descargar el fichero equivocado en silencio.
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "https://raw.githubusercontent.com/cddmp/enum4linux-ng/${E4LNG_COMMIT}/enum4linux-ng.py" \
+  --output /opt/enum4linux-ng.py
+printf '%s  %s\n' "$E4LNG_SHA256" /opt/enum4linux-ng.py | sha256sum -c -
+
 git clone --depth 1 --branch v10.4.9 https://github.com/projectdiscovery/nuclei-templates.git /tmp/nuclei-templates
 test "$(git -C /tmp/nuclei-templates rev-parse HEAD)" = "893122ffce8ebf8e264f15d2cd3960cb1dd36d6c"
 rm -rf /tmp/nuclei-templates/.git
@@ -175,6 +198,17 @@ python3 -c "from pwn import p32; assert p32(1) == b'\x01\x00\x00\x00'"
 # Por eso se purgan solo los paquetes que SI registro dpkg.
 apt-get purge -y python3-pip python3-wheel
 apt-get autoremove -y --purge
+
+# Comprobacion de que ARRANCAN, no solo de que existen. Sin esto el build da
+# verde con una tool rota, que ya paso una vez con las de impacket: el binario
+# estaba y no hacia nada.
+#
+# pspy y enum4linux-ng NO se comprueban aqui: los dos los instala el Dockerfile
+# DESPUES de este script (el binario de pspy con un COPY, y enum4linux-ng con
+# el venv de NetExec, que no existe todavia). Se validan mas abajo, donde ya
+# estan los dos en su sitio.
+nikto -Version >/dev/null 2>&1 || { printf 'nikto no arranca\n' >&2; exit 1; }
+printf '%s\n' 'nikto ok'
 
 rm -f /etc/ssh/ssh_host_*
 apt-get clean

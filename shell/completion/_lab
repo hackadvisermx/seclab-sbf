@@ -17,6 +17,8 @@ _lab() {
     'build-full:Construir la imagen completa del laboratorio'
     'workspace-list:Listar archivos en el workspace'
     'workspace-export:Exportar contenido del workspace a la carpeta destino'
+    'workspace-backup:Empaquetar workspace con timestamp y checksum SHA-256'
+    'workspace-restore:Restaurar respaldo empaquetado verificando checksum'
     'vpn-up:Asegurar daemon VPN y dispositivo tun0'
     'vpn-down:Detener la VPN'
     'vpn-status:Mostrar estado del daemon VPN'

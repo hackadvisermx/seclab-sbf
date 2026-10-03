@@ -66,6 +66,20 @@ make workspace-export ALL=1
 # o solo una parte
 make workspace-export RUTA=retos/mi-reto
 make workspace-export ENG=mi-engagement DEST=./salida-2026-10-01
+
+# empaquetado automatizado con timestamp y checksum SHA-256 (.tar.gz + .sha256)
+make workspace-backup
+make workspace-backup BACKUP_DEST=~/mis-backups
+```
+
+Para restaurar comprobando integridad:
+
+```bash
+# restaura y valida el checksum .sha256 si existe
+make workspace-restore BACKUP=./backups/workspace-20261003-151920.tar.gz
+
+# si el workspace contiene archivos, exige FORCE=1 para sobreescribir
+make workspace-restore BACKUP=./backups/workspace-20261003-151920.tar.gz FORCE=1
 ```
 
 En la nube el workspace tambien es una carpeta, pero en el disco de la VM, y ahi

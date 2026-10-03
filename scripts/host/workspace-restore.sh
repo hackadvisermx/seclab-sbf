@@ -55,3 +55,8 @@ printf '%s\n' "==> Restaurando $backup_file en $ws_dir..."
 tar -xzf "$backup_file" -C "$ws_dir"
 
 printf '%s\n' "workspace_restore=ok destino=$ws_dir"
+
+notify_script="$(dirname -- "$0")/notify.sh"
+if [ -f "$notify_script" ]; then
+  /bin/sh "$notify_script" "Restore Workspace" "Restauración completada en $ws_dir desde $backup_name" "warning" >/dev/null 2>&1 || true
+fi

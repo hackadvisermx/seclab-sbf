@@ -36,3 +36,8 @@ printf '%s\n' "workspace_backup=ok archivo=$backup_path"
 if [ -f "$checksum_path" ]; then
   printf '%s\n' "checksum: $(cat "$checksum_path")"
 fi
+
+notify_script="$(dirname -- "$0")/notify.sh"
+if [ -f "$notify_script" ]; then
+  /bin/sh "$notify_script" "Backup Workspace" "Respaldo generado exitosamente: $backup_name" "info" >/dev/null 2>&1 || true
+fi

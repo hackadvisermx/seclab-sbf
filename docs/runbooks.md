@@ -19,6 +19,8 @@ procedimiento no se ha ejecutado nunca, se dice.
 - [El plan de Terraform quiere destruir algo](#el-plan-de-terraform-quiere-destruir-algo)
 - [Destruir el nodo y limpiar el tailnet](#destruir-el-nodo-y-limpiar-el-tailnet)
 - [Rotar la llave one-off de Tailscale](#rotar-la-llave-one-off-de-tailscale)
+- [Recuperación ante desastres (Disaster Recovery)](#recuperación-ante-desastres-disaster-recovery)
+- [Alertas y Notificaciones (Webhook)](#alertas-y-notificaciones-webhook)
 - [Verificaciones de rutina](#verificaciones-de-rutina)
 
 ---
@@ -304,6 +306,58 @@ Terraform. Si crees que ha quedado expuesta, el procedimiento es:
    preaprobada y con expiración corta.
 3. Única en el nodo afectado, con `tailscale up --authkey=...`.
 4. Revócala otra vez.
+
+## Recuperación ante desastres (Disaster Recovery)
+
+**Escenario:** pérdida total de la máquina virtual, reemplazo forzado del nodo o corrupción irrecuperable del entorno.
+
+Dado que el workspace es una carpeta del disco de arranque y muere con la VM, la recuperación se basa en la disciplina de respaldos (`make workspace-backup`).
+
+### Procedimiento de recuperación:
+
+1. **Despliegue del nuevo host:**
+   - En la nube: aplicar el stack correspondiente (`make tf-apply-oci`, `make tf-apply-azure` o `make tf-apply-do`).
+   - En local: comprobar Docker Desktop con `make smoke-test`.
+
+2. **Copia de secretos de ejecución (.env):**
+   - El `.env` nunca reside en Terraform. Copiar el archivo protegido desde la máquina del operador:
+     ```bash
+     make env-copy-oci TF_HOST=<nuevo-nodo>
+     ```
+
+3. **Restauración del Workspace:**
+   - Local: restaurar directamente el último respaldo con verificación de hash:
+     ```bash
+     make workspace-restore BACKUP=./backups/workspace-YYYYMMDD-HHMMSS.tar.gz
+     ```
+   - Nube: transferir el archivo `.tar.gz` mediante `scp` o montarlo en el directorio del host:
+     ```bash
+     scp ./backups/workspace-YYYYMMDD-HHMMSS.tar.gz usuario@<nodo>:~/
+     # En el host:
+     tar -xzf ~/workspace-YYYYMMDD-HHMMSS.tar.gz -C /opt/seclab-sbf/workspace
+     ```
+
+4. **Validación post-recuperación:**
+   - Levantar los servicios y comprobar salud:
+     ```bash
+     make compose-up
+     make smoke-test
+     make proxy-doctor
+     ```
+
+## Alertas y Notificaciones (Webhook)
+
+El host y los scripts de respaldo pueden emitir notificaciones ligeras mediante HTTP Webhook configurando la variable `ALERT_WEBHOOK_URL` (en `.env` o variables de entorno):
+
+```bash
+# Envío manual de prueba
+./scripts/host/notify.sh "Alerta de prueba" "Mensaje de comprobación operativa" info
+
+# Uso en eventos de fail2ban o scripts automatizados
+ALERT_WEBHOOK_URL="https://discord.com/api/webhooks/..." ./scripts/host/notify.sh "fail2ban" "IP 100.x.y.z bloqueada" warning
+```
+
+Si la variable `ALERT_WEBHOOK_URL` está vacía, el script registra el evento en la salida estándar sin provocar errores.
 
 ## Verificaciones de rutina
 

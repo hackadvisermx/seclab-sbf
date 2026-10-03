@@ -23,6 +23,8 @@ ARG PAT_COMMIT=3ac27901c711bdf3f5b65a7b1d1820a1f65bd09a
 ARG EXPLOITDB_COMMIT=150aef0e7c4757c9dff33016c8352671cdc9b454
 ARG NXC_VERSION=1.5.1
 ARG NXC_COMMIT=c7dc286ba65daf10402cdc470e531b84e6d3d911
+ARG PSPY_VERSION=1.2.1
+ARG PSPY_COMMIT=f9e6a1590a4312b9faa093d8dc84e19567977a6d
 ARG SECLISTS_COMMIT=eccfbd405af82194e125a450a0076dbe4252d6f9
 ARG BASE_IMAGE=seclab-sbf:base
 ARG GO_UPSTREAM=docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
@@ -66,6 +68,30 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w -X main.version=${FZF_VERSION} -X main.revision=${FZF_COMMIT}" \
       -o /out/fzf .
+
+FROM --platform=$BUILDPLATFORM ${GO_UPSTREAM} AS pspy-builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG PSPY_VERSION
+ARG PSPY_COMMIT
+# pspy NO tiene release para arm64: la v1.2.1 publica pspy32, pspy32s, pspy64
+# y pspy64s, y `file` sobre pspy64 da "ELF 64-bit x86-64". No hay release con
+# aarch64 en ninguna version, asi que la unica via en arm64 es compilarlo, que
+# es lo que hace este stage. El resto del repo hace lo mismo con naabu,
+# bettercap y s3scanner.
+#
+# CGO_ENABLED=0 porque es Go puro y el binario tiene que ser estatico: no
+# quiero enlazar contra nada de la imagen golang (que es Debian trixie) en un
+# binario que luego corre en Ubuntu. Es el mismo motivo que fzf.
+RUN git init /src/pspy \
+ && git -C /src/pspy remote add origin https://github.com/DominicBreuker/pspy.git \
+ && git -C /src/pspy fetch --depth 1 origin "${PSPY_COMMIT}" \
+ && git -C /src/pspy checkout --detach FETCH_HEAD \
+ && test "$(git -C /src/pspy rev-parse HEAD)" = "${PSPY_COMMIT}" \
+ && test "$(git -C /src/pspy describe --tags --exact-match 2>/dev/null || printf 'v%s' "${PSPY_VERSION}")" = "v${PSPY_VERSION}"
+WORKDIR /src/pspy
+RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false -ldflags "-s -w" -o /out/pspy .
 
 FROM --platform=$BUILDPLATFORM ${GO_UPSTREAM} AS naabu-builder
 ARG TARGETOS
@@ -314,7 +340,8 @@ RUN python3 -m venv /opt/nxc \
  && /opt/nxc/bin/pip install --no-cache-dir --upgrade pip \
  && /opt/nxc/bin/pip install --no-cache-dir "git+https://github.com/Pennyw0rth/NetExec.git@${NXC_COMMIT}" \
  && /opt/nxc/bin/pip install --no-cache-dir --upgrade "cryptography>=46.0.5" "pyOpenSSL>=26.0.0" "setuptools>=78.1.1" \
- && /opt/nxc/bin/python -c 'import nxc.netexec, nxc.nxcdb, cryptography, OpenSSL' \
+ && /opt/nxc/bin/pip install --no-cache-dir "PyYAML==6.0.3" \
+ && /opt/nxc/bin/python -c 'import nxc.netexec, nxc.nxcdb, cryptography, OpenSSL, yaml' \
  && /opt/nxc/bin/python -c 'import cryptography, OpenSSL, setuptools; from importlib.metadata import version; m={"cryptography": "46.0.5", "pyOpenSSL": "26.0.0", "setuptools": "78.1.1"}; [(_ for _ in ()).throw(SystemExit("%s=%s por debajo de %s" % (k, version(k), v))) if tuple(int(x) for x in version(k).split(".")[:3]) < tuple(int(x) for x in v.split(".")) else None for k, v in m.items()]; print("nxc deps ok")' \
  && mkdir -p /out \
  && cp -r /opt/nxc /out/nxc \
@@ -519,6 +546,7 @@ RUN chmod 0555 /usr/local/bin/install-toolkit-packages \
  && SNAPSHOT_ID="${UBUNTU_SNAPSHOT}" /usr/local/bin/install-toolkit-packages
 COPY --from=fzf-builder /out/fzf /usr/bin/fzf
 COPY --from=naabu-builder /out/naabu /usr/bin/naabu
+COPY --from=pspy-builder /out/pspy /usr/bin/pspy
 COPY --from=upstream-builder /out/subfinder /usr/bin/subfinder
 COPY --from=upstream-builder /out/httpx /usr/bin/httpx
 COPY --from=upstream-builder /out/katana /usr/bin/katana
@@ -655,7 +683,12 @@ RUN for tool in netview.py wmiexec.py psexec.py smbexec.py smbclient.py \
         printf 'AD tool rota: %s\n' "$tool" >&2; exit 1; }; \
     done \
  && certipy find -h >/dev/null 2>&1 || { printf 'certipy roto\n' >&2; exit 1; } \
- && printf '%s\n' 'AD tools de impacket y certipy ok'
+ && /usr/bin/pspy -h >/dev/null 2>&1 || { printf 'pspy no arranca\n' >&2; exit 1; } \
+ && sed -i "1s|.*|#!/opt/nxc/bin/python3|" /opt/enum4linux-ng.py \
+ && install -m 0755 /opt/enum4linux-ng.py /usr/bin/enum4linux-ng \
+ && rm -f /opt/enum4linux-ng.py \
+ && enum4linux-ng --help >/dev/null 2>&1 || { printf 'enum4linux-ng no arranca\n' >&2; exit 1; } \
+ && printf '%s\n' 'AD tools de impacket, certipy, pspy y enum4linux-ng ok'
 COPY --from=go-builder /out/s3scanner /usr/bin/s3scanner
 ENV PATH="/opt/ruby/bin:/opt/nxc/bin:${PATH}"
 WORKDIR /workspace

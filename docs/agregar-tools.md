@@ -426,6 +426,69 @@ afecta al build local, pero puede hacer que `docker push` a Docker Hub falle o
 vaya al mirror equivocado. No está comprobado que no sea el caso: el primer
 `make image-publish` real es el que lo dirá.
 
+### 5.14 pspy no tiene release arm64: hay que compilarlo
+
+`pspy` v1.2.1 publica cuatro assets: `pspy32`, `pspy32s`, `pspy64` y `pspy64s`.
+No hay ninguno para aarch64, ni en v1.2.0 ni en v1.1.0. Peor: `pspy64` no es un
+binario multi-arch, es un ELF **x86-64** a pesar del nombre.
+
+```console
+$ curl -sL https://github.com/DominicBreuker/pspy/releases/download/v1.2.1/pspy64 -o pspy64
+$ file pspy64
+pspy64: ELF 64-bit LSB executable, x86-64, ... statically linked, Go BuildID=...
+```
+
+Un proyecto que compila en x86 no ve el problema; en Apple Silicon la imagen
+directa no arranca. La única salida es un stage propio, como los de `naabu`,
+`bettercap` y `s3scanner`, y compilarlo nativo en cada máquina.
+
+El SHA256 del release published (`c93f29a5...`) **no sirve** para arm64. Los
+hashes que sí valen son los del binario compilado por el stage, y son distintos
+por arquitectura: `0cad8b62...` en amd64 y `7434a572...` en arm64. Están
+fijados en `supply-chain/tools.lock.yaml` bajo `built_binaries`.
+
+### 5.15 Un script Python puede depender del venv de otra tool
+
+`enum4linux-ng` importa `impacket`, `ldap3` y `yaml`. En esta imagen el
+Python del sistema y el venv de NetExec están **separados**:
+
+| Módulo | Python del sistema | `/opt/nxc/bin/python3` |
+|---|---|---|
+| `impacket` | no | sí |
+| `ldap3` | no | sí |
+| `yaml` | sí (`python3-yaml`) | sí (tras añadirlo con pip) |
+
+Por eso el script lleva el shebang `#!/opt/nxc/bin/python3`, y por eso
+`PyYAML==6.0.3` se instala también en el venv. Con el Python del sistema la
+tool no arranca: `ModuleNotFoundError: No module named 'impacket'`.
+
+Y el orden importa: `/opt/nxc` se copia en el `Dockerfile` **después** de
+ejecutarse `install-toolkit-packages.sh`, así que el script se descarga ahí
+(comprobando SHA256) pero se instala más abajo, junto al bloque que ya valida
+las AD tools.
+
+### 5.16 Comprobar que una tool arranca, no solo que existe
+
+El error clásico es validar con `command -v` y dar el build por bueno. Con
+`enum4linux-ng` el build daba verde con la tool rota: `py_compile` pasaba
+porque el error era un `import` fallido en tiempo de ejecución, no de sintaxis.
+
+Ahora cada tool nueva se **ejecuta** en el build (`pspy -h`, `nikto -Version`,
+`enum4linux-ng --help`). Si el smoke test falla, el build falla. Cuando
+investigues un fallo de arranque, imprime la ruta y el `sys.path` del
+intérprete antes de suponer: durante este trabajo el síntoma era `ModuleNotFound`
+y la causa era el venv equivocado, no el paquete que faltaba.
+
+### 5.17 El tag puede llevar una `v` que no esperas
+
+`enum4linux-ng` se etiqueta `v1.3.10`. Descargar de
+`raw.githubusercontent.com/cddmp/enum4linux-ng/1.3.10/...` (sin la `v`) da
+**404**, y el `curl --fail` mata el build entero con `exit 22` sin decir qué
+URL falló. Se descarga por **commit** en vez de por tag, que además de evitar
+el 404 ata la descarga a un commit inamovible. Cuando un `curl --fail` te
+devuelve 22 sin contexto, comprueba primero la URL exacta con
+`curl -s -o /dev/null -w "%{http_code}"` desde la misma imagen.
+
 ## Referencias
 
 - `plan.md` §3 y §6: arquitectura, cadena de suministro y gates.

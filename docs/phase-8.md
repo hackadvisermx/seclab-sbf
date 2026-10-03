@@ -191,6 +191,12 @@ borró desde la consola de OCI el 2026-09-30, así que ya no se paga ese disco.
 Con el volumen ya borrado a mano, se quitó del state la entrada huérfana y se
 destruyó todo lo nuestro. El stack de OCI quedó **vacío**, sin recursos.
 
+> Esto describe el stack **anterior**. El stack nuevo (VCN compartida, PR #66)
+> creó 9 recursos de red el 2026-10-02 que también se destruyeron, el
+> 2026-10-03. El estado que importa hoy está en *Estado final: sin recursos*,
+> más abajo. Que una sección diga "vacío" no significa que el stack actual lo
+> esté: por eso conviene leer esa antes de concluir nada.
+
 Lo que se hizo, en este orden:
 
 1. `terraform state rm oci_core_volume.workspace oci_core_instance.lab`.
@@ -282,6 +288,56 @@ Ninguna depende de las otras dos: aunque alguien anadiera una regla de ingress
 por error en el NSG, el `input` del host sigue sin dejar entrar nada. La IP
 publica es scaneable, pero no responde a nada. El acceso real es **solo por
 Tailscale**, como antes.
+
+### Estado final: sin recursos, por decision del owner
+
+El `apply` del 2026-10-02 creo 9 recursos en `hermes-clone-vcn` (subnet,
+route table, security list, NSG y 5 reglas de seguridad: 2 DNS por
+`for_each`, HTTPS, NTP y Tailscale) pero **no** creo instancia, porque A1.Flex
+devuelve `Out of host capacity` en `mx-monterrey-1`. Esos 9 se destruyeron el
+**2026-10-03** con `terraform destroy`, por decision del owner: el proyecto se
+usa **solo en local** y no habra despliegue en nube.
+
+`terraform state list` devuelve **0 entradas**.
+
+Verificado en la nube despues del destroy, no solo en el state:
+
+| Recurso | Estado tras el destroy |
+|---|---|
+| subnet `10.31.0.0/24` nuestra | no existe |
+| route table `egress` nuestra | no existe (quedan las de hermes) |
+| security list `egress` nuestra | no existe (quedan las de hermes) |
+| network security group `lab` | no existe (no queda ningun NSG) |
+| NSG security rules | no existen |
+| `oci_core_instance.lab` | nunca existio |
+
+Lo que **no** se toco, verificado en el mismo compartment:
+
+| Recurso | Estado | Por que sigue |
+|---|---|---|
+| `hermes-oci` (instancia) | `RUNNING` | otro proyecto, consume la cuota del compartment |
+| `hermes-clone-vcn` | `AVAILABLE` | otro proyecto; es data source, no recurso gestionado |
+| `hermes-clone-rt`, `hermes-clone-egress-only` | `AVAILABLE` | de hermes: se leen, no se gestionan |
+| `seclab-cloud-20260924154553` + su NAT | `AVAILABLE` | nombre parecido al nuestro, no es de este repo |
+
+### Dos avisos para quien intente desplegar despues
+
+1. **El compartment no tiene `standard-e5-core-count`**: 0 OCPU, consumidos
+   por la instancia `hermes-oci`, que es de otro proyecto y sigue `RUNNING`.
+   A1 Flex tampoco hosts: da `Out of host capacity`. El despliegue esta
+   bloqueado por cuota, no por el stack.
+2. **El CIDR `10.31.0.0/24` ya no esta en la VCN compartida.** El owner lo
+   habia anadido a mano y hoy `oci network vcn get` responde `ip-v4-cidr-blocks`
+   vacio. Nuestro stack nunca lo gestiona (no hay recurso de CIDR secundario en
+   el codigo y el plan de destruccion solo listaba los 9 recursos nuestros),
+   asi que lo quito quien administra esa VCN. Habria que volver a anadirlo
+   antes de un apply.
+
+Consecuencia asumida: la politica nftables y el cloud-init **nunca llegaron a
+desplegarse en ningun nodo**. `security/policies/nftables-lab.nft` esta escrito
+y validado en local, pero que su `chain input` en `policy drop` bloquee de
+verdad el trafico sigue **sin comprobarse**: hace falta una instancia, y no la
+hay.
 
 ### Lo que este stack NO gestiona
 

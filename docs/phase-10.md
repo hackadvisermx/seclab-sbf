@@ -19,6 +19,11 @@ desastres (Disaster Recovery).
   ejecución limpia de Zsh interactivo con `pt-help`, disponibilidad de runtimes
   (Python, Ruby, Perl), respuesta de herramientas clave y helper de proxy
   `pt-forward`.
+- `scripts/verify/check-python-units.py` y `make python-units-check` (alias `make py-test`):
+  pruebas unitarias de seguridad para los controladores `scripts/proxy-control.py` y
+  `scripts/vpn-control.py`. Verifica el bloqueo estricto de rangos sensibles (RFC1918,
+  CGNAT, metadata cloud, loopback, Tailscale ULA), la normalización de direcciones IP,
+  la sanitización HTTP y la lista blanca de acciones y perfiles VPN.
 - `scripts/host/workspace-backup.sh` y `make workspace-backup`: empaquetado del
   workspace con timestamp y checksum SHA-256 (`.tar.gz` + `.sha256`) hacia
   `./backups/` (ignorado en `.gitignore`).
@@ -62,6 +67,9 @@ desastres (Disaster Recovery).
 ```bash
 # Validaciones estáticas de CI
 make verify
+
+# Pruebas unitarias de controladores Python
+make python-units-check
 
 # Smoke test funcional del contenedor
 make smoke-test

@@ -15,8 +15,12 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 gh_ok=0
-if gh auth status >/dev/null 2>&1; then
-	gh_ok=1
+if GH_PROMPT_DISABLED=1 gh auth status >/dev/null 2>&1; then
+	if curl -sS -I --connect-timeout 2 --max-time 3 https://api.github.com >/dev/null 2>&1; then
+		gh_ok=1
+	else
+		printf '%s\n' 'api.github.com no accesible: se omite la verificacion online de pines' >&2
+	fi
 else
 	printf '%s\n' 'gh sin sesion: se omite la verificacion de pines (no se puede consultar la API)' >&2
 fi

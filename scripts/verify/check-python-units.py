@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+"""Pruebas unitarias de seguridad para controladores Python de SecLab (proxy y VPN).
+
+Verifica invariantes criticas:
+- Bloqueo de rangos IP sensibles (RFC1918, CGNAT, metadata cloud, loopback, Tailscale).
+- Normalizacion de direcciones IPv4, IPv6 e IPv4-mapped IPv6.
+- Validacion estricta de URLs de destino en pt-web.
+- Validacion del request-line HTTP (metodos permitidos, rechazo de absolute-form).
+- Codificacion y respuestas binarias de SOCKS5.
+- Control de perfiles y acciones autorizadas en vpn-control.
+- Formato y limites de respuesta JSON en sockets Unix de control.
+"""
+
+import importlib.util
+import io
+import ipaddress
+import json
+import os
+import pathlib
+import sys
+import unittest
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+
+
+def load_module(name: str, path: pathlib.Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"No se pudo cargar el modulo {name} desde {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+proxy_ctrl = load_module("proxy_control", REPO_ROOT / "scripts" / "proxy-control.py")
+vpn_ctrl = load_module("vpn_control", REPO_ROOT / "scripts" / "vpn-control.py")
+
+
+class MockSocket:
+    """Socket simulado en memoria para capturar envios y proveer recepciones."""
+
+    def __init__(self, incoming: bytes = b""):
+        self.incoming = io.BytesIO(incoming)
+        self.outgoing = io.BytesIO()
+        self._timeout = None
+
+    def recv(self, size: int) -> bytes:
+        return self.incoming.read(size)
+
+    def sendall(self, data: bytes) -> None:
+        self.outgoing.write(data)
+
+    def settimeout(self, timeout: float) -> None:
+        self._timeout = timeout
+
+    def close(self) -> None:
+        pass
+
+
+class TestProxyControlIPValidation(unittest.TestCase):
+    """Verifica reglas de validacion y filtrado de direcciones IP."""
+
+    def test_normalize_ip_ipv4(self):
+        addr = proxy_ctrl.normalize_ip("192.0.2.1")
+        self.assertIsInstance(addr, ipaddress.IPv4Address)
+        self.assertEqual(str(addr), "192.0.2.1")
+
+    def test_normalize_ip_ipv6(self):
+        addr = proxy_ctrl.normalize_ip("2001:db8::1")
+        self.assertIsInstance(addr, ipaddress.IPv6Address)
+        self.assertEqual(str(addr), "2001:db8::1")
+
+    def test_normalize_ip_ipv4_mapped_ipv6(self):
+        addr = proxy_ctrl.normalize_ip("::ffff:192.0.2.1")
+        self.assertIsInstance(addr, ipaddress.IPv4Address)
+        self.assertEqual(str(addr), "192.0.2.1")
+
+    def test_blocked_ip_loopback(self):
+        self.assertTrue(proxy_ctrl.blocked_ip("127.0.0.1"))
+        self.assertTrue(proxy_ctrl.blocked_ip("127.0.1.1"))
+        self.assertTrue(proxy_ctrl.blocked_ip("::1"))
+
+    def test_blocked_ip_unspecified(self):
+        self.assertTrue(proxy_ctrl.blocked_ip("0.0.0.0"))
+        self.assertTrue(proxy_ctrl.blocked_ip("::"))
+
+    def test_blocked_ip_link_local(self):
+        self.assertTrue(proxy_ctrl.blocked_ip("169.254.1.1"))
+        self.assertTrue(proxy_ctrl.blocked_ip("fe80::1"))
+
+    def test_blocked_ip_multicast(self):
+        self.assertTrue(proxy_ctrl.blocked_ip("224.0.0.1"))
+        self.assertTrue(proxy_ctrl.blocked_ip("ff02::1"))
+
+    def test_blocked_ip_cloud_metadata(self):
+        # Metadata endpoint comun a AWS, GCP, Azure, OCI, DO
+        self.assertTrue(proxy_ctrl.blocked_ip("169.254.169.254"))
+
+    def test_blocked_ip_azure_wire_server(self):
+        self.assertTrue(proxy_ctrl.blocked_ip("168.63.129.16"))
+
+    def test_blocked_ip_cgnat(self):
+        # 100.64.0.0/10 (usado por Tailscale y proveedores CGNAT)
+        self.assertTrue(proxy_ctrl.blocked_ip("100.64.0.1"))
+        self.assertTrue(proxy_ctrl.blocked_ip("100.100.100.100"))
+        self.assertTrue(proxy_ctrl.blocked_ip("100.127.255.254"))
+
+    def test_blocked_ip_docker_bridges(self):
+        # Subredes Docker 172.17.0.0/16 a 172.31.0.0/16
+        self.assertTrue(proxy_ctrl.blocked_ip("172.17.0.1"))
+        self.assertTrue(proxy_ctrl.blocked_ip("172.20.0.1"))
+        self.assertTrue(proxy_ctrl.blocked_ip("172.31.255.254"))
+
+    def test_blocked_ip_tailscale_ipv6(self):
+        # Rango ULA IPv6 de Tailscale fd7a:115c:a1e0::/48
+        self.assertTrue(proxy_ctrl.blocked_ip("fd7a:115c:a1e0::1"))
+        self.assertTrue(proxy_ctrl.blocked_ip("fd7a:115c:a1e0:0001::5"))
+
+    def test_blocked_ip_benchmark_dummy(self):
+        self.assertTrue(proxy_ctrl.blocked_ip("192.0.0.192"))
+        self.assertTrue(proxy_ctrl.blocked_ip("198.18.0.1"))
+
+    def test_allowed_target_ips(self):
+        # Destinos legitimos tipicos de laboratorios y VPN
+        self.assertFalse(proxy_ctrl.blocked_ip("10.10.10.10"))  # HTB
+        self.assertFalse(proxy_ctrl.blocked_ip("10.11.1.1"))  # THM
+        self.assertFalse(proxy_ctrl.blocked_ip("93.184.216.34"))  # example.com
+        self.assertFalse(proxy_ctrl.blocked_ip("1.1.1.1"))  # Cloudflare
+
+
+class TestProxyControlWebTarget(unittest.TestCase):
+    """Verifica el analisis de destinos web en pt-web."""
+
+    def test_parse_valid_http(self):
+        host, port, tls = proxy_ctrl.parse_web_target("http://10.10.10.10")
+        self.assertEqual(host, "10.10.10.10")
+        self.assertEqual(port, 80)
+        self.assertFalse(tls)
+
+    def test_parse_valid_https(self):
+        host, port, tls = proxy_ctrl.parse_web_target("https://10.10.10.10")
+        self.assertEqual(host, "10.10.10.10")
+        self.assertEqual(port, 443)
+        self.assertTrue(tls)
+
+    def test_parse_valid_custom_port(self):
+        host, port, tls = proxy_ctrl.parse_web_target("http://target.htb:8080/")
+        self.assertEqual(host, "target.htb")
+        self.assertEqual(port, 8080)
+        self.assertFalse(tls)
+
+    def test_reject_unsupported_scheme(self):
+        with self.assertRaises(proxy_ctrl.ProxyError):
+            proxy_ctrl.parse_web_target("ftp://target.htb")
+        with self.assertRaises(proxy_ctrl.ProxyError):
+            proxy_ctrl.parse_web_target("ws://target.htb")
+
+    def test_reject_path_in_target(self):
+        with self.assertRaises(proxy_ctrl.ProxyError):
+            proxy_ctrl.parse_web_target("http://target.htb/admin")
+
+    def test_reject_query_in_target(self):
+        with self.assertRaises(proxy_ctrl.ProxyError):
+            proxy_ctrl.parse_web_target("http://target.htb?id=1")
+
+    def test_reject_credentials_in_target(self):
+        with self.assertRaises(proxy_ctrl.ProxyError):
+            proxy_ctrl.parse_web_target("http://admin:secret@target.htb")
+
+
+class TestProxyControlHttpRequest(unittest.TestCase):
+    """Verifica la validacion de peticiones HTTP en pt-web."""
+
+    def test_valid_get_request(self):
+        sock = MockSocket(b"GET /index.html HTTP/1.1\r\nHost: target\r\n\r\n")
+        data = proxy_ctrl.read_http_request(sock)
+        self.assertTrue(data.startswith(b"GET /index.html HTTP/1.1\r\n"))
+
+    def test_valid_post_request(self):
+        sock = MockSocket(b"POST /api/login HTTP/1.1\r\nHost: target\r\nContent-Length: 0\r\n\r\n")
+        data = proxy_ctrl.read_http_request(sock)
+        self.assertTrue(data.startswith(b"POST /api/login HTTP/1.1\r\n"))
+
+    def test_valid_options_star_request(self):
+        sock = MockSocket(b"OPTIONS * HTTP/1.1\r\nHost: target\r\n\r\n")
+        data = proxy_ctrl.read_http_request(sock)
+        self.assertTrue(data.startswith(b"OPTIONS * HTTP/1.1\r\n"))
+
+    def test_reject_invalid_method(self):
+        sock = MockSocket(b"FOOBAR / HTTP/1.1\r\nHost: target\r\n\r\n")
+        with self.assertRaises(proxy_ctrl.ProxyError):
+            proxy_ctrl.read_http_request(sock)
+
+    def test_reject_http2_request(self):
+        sock = MockSocket(b"GET / HTTP/2.0\r\nHost: target\r\n\r\n")
+        with self.assertRaises(proxy_ctrl.ProxyError):
+            proxy_ctrl.read_http_request(sock)
+
+    def test_reject_absolute_form_target(self):
+        # Evita que el cliente use pt-web como proxy abierto usando URLs absolutas
+        sock = MockSocket(b"GET http://evil.com/ HTTP/1.1\r\nHost: evil.com\r\n\r\n")
+        with self.assertRaises(proxy_ctrl.ProxyError):
+            proxy_ctrl.read_http_request(sock)
+
+
+class TestProxyControlSocks5(unittest.TestCase):
+    """Verifica codificacion binaria de respuestas SOCKS5."""
+
+    def test_socks_reply_ipv4(self):
+        sock = MockSocket()
+        proxy_ctrl.socks_reply(sock, 0, "10.10.10.10", 80)
+        output = sock.outgoing.getvalue()
+        # [0x05, 0x00, 0x00, 0x01 (IPv4), 4 bytes IP, 2 bytes port]
+        self.assertEqual(len(output), 10)
+        self.assertEqual(output[:4], b"\x05\x00\x00\x01")
+        self.assertEqual(output[4:8], bytes([10, 10, 10, 10]))
+        self.assertEqual(int.from_bytes(output[8:10], "big"), 80)
+
+    def test_socks_reply_error_code(self):
+        sock = MockSocket()
+        proxy_ctrl.socks_reply(sock, 1)  # General SOCKS server failure
+        output = sock.outgoing.getvalue()
+        self.assertEqual(output[0:3], b"\x05\x01\x00")
+
+
+class TestVpnControl(unittest.TestCase):
+    """Verifica listas de control de acceso y protocolos en vpn-control."""
+
+    def test_allowed_actions_whitelist(self):
+        expected_actions = {"list", "status", "doctor", "connect", "disconnect", "switch"}
+        self.assertEqual(vpn_ctrl.ALLOWED_ACTIONS, expected_actions)
+
+    def test_allowed_profiles_whitelist(self):
+        expected_profiles = {"tryhackme", "try", "hackthebox", "htb", "client", "cli"}
+        self.assertEqual(vpn_ctrl.ALLOWED_PROFILES, expected_profiles)
+
+    def test_manager_command_construction(self):
+        cmd_status = vpn_ctrl.manager_command("status")
+        self.assertEqual(cmd_status, ["/usr/local/bin/vpn-manager", "status"])
+
+        cmd_connect = vpn_ctrl.manager_command("connect", "tryhackme")
+        self.assertEqual(cmd_connect, ["/usr/local/bin/vpn-manager", "connect", "tryhackme"])
+
+    def test_response_payload_framing(self):
+        payload = vpn_ctrl.response_payload(0, "salida ok", "")
+        self.assertTrue(payload.endswith("\n"))
+        parsed = json.loads(payload.strip())
+        self.assertEqual(parsed["code"], 0)
+        self.assertEqual(parsed["stdout"], "salida ok")
+        self.assertEqual(parsed["stderr"], "")
+
+    def test_output_limit_truncation(self):
+        short_text = "test output"
+        self.assertEqual(vpn_ctrl.output_limit(short_text), short_text)
+
+        long_text = "A" * 20000
+        truncated = vpn_ctrl.output_limit(long_text)
+        self.assertEqual(len(truncated), 16000)
+
+
+def main():
+    suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    if result.wasSuccessful():
+        print("python_units_check=ok")
+        return 0
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

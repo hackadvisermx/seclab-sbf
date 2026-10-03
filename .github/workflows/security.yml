@@ -93,6 +93,11 @@ jobs:
       - name: Estructura del Makefile
         run: make makefile-check
 
+      # Pruebas unitarias de seguridad de los controladores Python (proxy y VPN):
+      # filtrado estricto de IP, metadata cloud, cabeceras HTTP y control de perfiles.
+      - name: Pruebas unitarias de seguridad Python
+        run: make python-units-check
+
   # La jail de fail2ban es lo unico de la configuracion de host que se
   # puede validar sin un nodo. Levanta un contenedor con la imagen base
   # por digest, el mismo snapshot de Ubuntu que usan los Dockerfiles, y

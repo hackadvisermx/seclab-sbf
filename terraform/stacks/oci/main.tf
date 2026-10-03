@@ -66,7 +66,7 @@ resource "oci_core_security_list" "egress" {
   vcn_id         = data.oci_core_vcn.shared.id
   display_name   = "${local.name_prefix}-egress-sl"
 
-  # Ingress: NADNI UNA REGLA. Ni source CIDR 0.0.0.0/0, ni por tag, ni por
+  # Ingress: NI UNA REGLA. Ni source CIDR 0.0.0.0/0, ni por tag, ni por
   # seguridad. Si alguien anade una aqui, rompe la premisa del diseno.
   egress_security_rules {
     stateless        = false

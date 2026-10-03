@@ -6,6 +6,7 @@ workspace/
 # Material exportado del workspace: notas de engagement y datos de
 # clientes. Nunca debe acabar en un commit por accidente.
 salida/
+backups/
 tmp/
 .secrets/
 __pycache__/

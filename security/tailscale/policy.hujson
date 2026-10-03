@@ -1,0 +1,71 @@
+// Política de ACL declarativa para Tailscale (Zero Trust / Default Deny)
+// Configurable en https://login.tailscale.com/admin/acls
+{
+  // Grupos administrativos autorizados a acceder al laboratorio
+  "groups": {
+    "group:operators": [
+      "autogroup:admin"
+    ]
+  },
+
+  // Etiquetas para nodos del laboratorio (asignables a Auth Keys)
+  "tagOwners": {
+    "tag:seclab": [
+      "group:operators"
+    ]
+  },
+
+  // ACLs: Control de flujo estricto (Default Deny)
+  "acls": [
+    // Operadores autorizados pueden acceder a SSH (puerto 22 o puerto del host) de los nodos del laboratorio
+    {
+      "action": "accept",
+      "src": [
+        "group:operators"
+      ],
+      "dst": [
+        "tag:seclab:22"
+      ]
+    }
+  ],
+
+  // Restricciones de SSH en Tailscale (si se utiliza Tailscale SSH)
+  "ssh": [
+    {
+      "action": "check",
+      "src": [
+        "group:operators"
+      ],
+      "dst": [
+        "tag:seclab"
+      ],
+      "users": [
+        "root",
+        "ubuntu"
+      ]
+    }
+  ],
+
+  // Aislamiento: Los nodos del laboratorio nunca pueden iniciar tráfico hacia otros nodos del tailnet
+  // (solo responden a conexiones iniciadas por operators)
+  "tests": [
+    {
+      "src": "group:operators",
+      "accept": [
+        "tag:seclab:22"
+      ],
+      "deny": [
+        "tag:seclab:80",
+        "tag:seclab:8080",
+        "tag:seclab:443"
+      ]
+    },
+    {
+      "src": "tag:seclab",
+      "deny": [
+        "group:operators:22",
+        "100.64.0.0/10:*"
+      ]
+    }
+  ]
+}

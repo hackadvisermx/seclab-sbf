@@ -4,10 +4,18 @@ Tailscale se instala y ejecuta únicamente en el host. No se instala en la image
 
 ## Requisitos
 
-- Una auth key one-off, etiquetada, preaprobada y con expiración corta.
-- ACL del tailnet en modo deny por defecto.
-- MFA y device approval activos para los dispositivos administrativos.
+- Una auth key one-off, etiquetada con `tag:seclab`, preaprobada y con expiración corta.
+- ACL del tailnet en modo deny por defecto (`policy.hujson`).
+- MFA y device approval activos para los dispositivos administrativos en la consola de Tailscale.
 - El contenedor y sus puertos Docker siguen sin publicación pública.
+
+## Política de ACL (Zero Trust / Default Deny)
+
+El archivo [`policy.hujson`](policy.hujson) define las reglas declarativas recomendadas para la Tailnet:
+- Define la etiqueta `tag:seclab` administrada por `group:operators`.
+- Restringe el tráfico entrante a los nodos etiquetados exclusivamente al puerto SSH (22) desde los operadores autorizados.
+- Bloquea explícitamente cualquier inicio de tráfico saliente desde el laboratorio hacia el resto de la Tailnet (`tests` con deny a `100.64.0.0/10:*`).
+- Se aplica desde la consola web: **Tailscale Admin Console -> Access Controls**.
 
 ## Bootstrap manual
 

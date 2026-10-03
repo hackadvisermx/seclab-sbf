@@ -19,6 +19,9 @@ controladas.
   como `make fail2ban-check`.
 - `security/policies/nftables-lab.nft` y `security/systemd/`: política de
   firewall del host, aplicada y persistente en el host OCI final.
+- `security/tailscale/policy.hujson`: política ACL declarativa para
+  Tailscale (Zero Trust / Default Deny), documentada en
+  `security/tailscale/README.md`.
 
 ## Jail de sshd
 

@@ -283,6 +283,30 @@ por error en el NSG, el `input` del host sigue sin dejar entrar nada. La IP
 publica es scaneable, pero no responde a nada. El acceso real es **solo por
 Tailscale**, como antes.
 
+### Lo que hay creado hoy, y lo que no
+
+El `apply` del 2026-10-10 creo la red y **no** la instancia. `terraform state
+list` devuelve 9 entradas `oci_core_*`:
+
+| Recurso gestionado | Cantidad |
+|---|---|
+| subnet `10.31.0.0/24` | 1 |
+| route table propia hacia `hermes-clone-igw` | 1 |
+| security list (solo egress) | 1 |
+| network security group (solo egress) | 1 |
+| reglas de seguridad del NSG | 5 (2 DNS por `for_each`, HTTPS, NTP, Tailscale) |
+
+**No hay instancia.** A1.Flex devuelve `Out of host capacity` en
+`mx-monterrey-1`, asi que `oci_core_instance.lab` no llega a existir. La
+consecuencia es que la politica nftables y el cloud-init **siguen sin
+desplegarse en ningun nodo**: el `table inet seclab_host` con `input` en
+`policy drop` esta escrito y validado, pero nadie lo ha cargado todavia.
+
+Esto cambia el estado que se documento antes en este mismo fichero: el
+`state list` que quedo vacio el 2026-10-01 fue el del stack **anterior**. No
+destruir estos 9 recursos sin autorizacion explicita del owner; el proyecto se
+usa solo en local mientras tanto.
+
 ### Lo que este stack NO gestiona
 
 `hermes-clone-vcn`, su IGW y su route table son de otro proyecto. Se leen, no

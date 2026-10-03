@@ -94,6 +94,7 @@ chmod 0644 /var/lib/seclab/ssh/ssh_host_ed25519_key.pub
 
 sshd_pid=""
 ttyd_pid=""
+# shellcheck disable=SC2329 # Invocada mediante traps de señal
 cleanup() {
   set +e
   if [[ -n "$ttyd_pid" ]]; then kill "$ttyd_pid" 2>/dev/null; fi
@@ -102,7 +103,7 @@ cleanup() {
   wait "$sshd_pid" 2>/dev/null
 }
 trap cleanup EXIT
-trap 'exit 143' INT TERM
+trap 'cleanup; exit 143' INT TERM
 
 /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config.seclab &
 sshd_pid=$!

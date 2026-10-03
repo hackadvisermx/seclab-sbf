@@ -25,7 +25,7 @@ image="${1:-${LAB_IMAGE:-seclab-sbf:full}}"
 # terminal). Los 49 se validan contra el manifiesto mas abajo.
 binaries="nmap httpx nuclei subfinder ffuf gobuster feroxbuster dalfox \
 msfconsole nxc john hashcat wpscan bettercap s3scanner gdb-multiarch \
-zsteg exiftool hexedit zsh ttyd sshd"
+zsteg exiftool hexedit zsh ttyd sshd sqlmap pspy nikto enum4linux-ng"
 
 nbins="$(printf '%s' "$binaries" | wc -w | tr -d ' ')"
 

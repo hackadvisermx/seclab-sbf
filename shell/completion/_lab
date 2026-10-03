@@ -1,0 +1,39 @@
+#compdef lab labsh labtmux labws
+# Autocompletado Zsh para la utilidad de host 'lab'
+
+_lab() {
+  local -a commands
+  commands=(
+    'up:Iniciar el laboratorio en segundo plano'
+    'down:Detener los servicios del laboratorio'
+    'shell:Abrir shell interactiva como tester'
+    'zsh:Abrir Zsh interactiva como tester'
+    'tmux:Entrar a la sesion tmux de tester'
+    'help:Mostrar ayuda de comandos del Makefile'
+    'smoke-test:Ejecutar pruebas de humo sobre la imagen'
+    'image-tools-check:Verificar herramientas y manifiesto de la imagen'
+    'scan-image:Escanear vulnerabilidades de la imagen con Trivy'
+    'sbom:Generar SBOM CycloneDX de la imagen'
+    'build-full:Construir la imagen completa del laboratorio'
+    'workspace-list:Listar archivos en el workspace'
+    'workspace-export:Exportar contenido del workspace a la carpeta destino'
+    'vpn-up:Asegurar daemon VPN y dispositivo tun0'
+    'vpn-down:Detener la VPN'
+    'vpn-status:Mostrar estado del daemon VPN'
+    'vpn-tun-check:Verificar dispositivo tun0 y permisos NET_ADMIN'
+    'proxy-status:Consultar estado del proxy'
+    'proxy-doctor:Diagnosticar rutas y conectividad del proxy'
+    'proxy-stop:Detener el proxy'
+    'proxy-bridge:Exponer loopback del contenedor en el host'
+    'security-check:Validar politica nftables en host Linux'
+    'fail2ban-check:Validar jail y servicio fail2ban en el host'
+    'tailscale-check:Validar daemon Tailscale en el host'
+    'verify:Ejecutar checks estaticos (gitleaks, hadolint, shellcheck)'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe -t commands 'comando lab' commands
+  fi
+}
+
+_lab "$@"

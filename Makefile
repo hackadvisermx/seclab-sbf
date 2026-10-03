@@ -17,7 +17,7 @@ SHELL := /bin/sh
 # caso de `make` sin argumentos y no los `make compose-up`. Comprobado.
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: workspace-dir workspace-list workspace-export compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull
+.PHONY: workspace-dir workspace-list workspace-export compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -617,6 +617,11 @@ makefile-check:
 # permite comprobar una imagen distinta de la que produce el Makefile.
 image-tools-check:
 	cd "$(ROOT)" && /bin/sh scripts/verify/check-image-tools.sh "$(SCAN_IMAGE)"
+
+# Smoke test funcional del contenedor sin servicios en background ni .env.
+# Valida permisos de workspace, carga limpia de Zsh/pt-help, runtimes y tools clave.
+smoke-test:
+	cd "$(ROOT)" && /bin/sh scripts/verify/smoke-test.sh "$(SCAN_IMAGE)"
 
 compose-refs-check:
 	cd "$(ROOT)" && /bin/sh scripts/verify/check-compose-refs.sh compose.yaml compose.local.yaml compose.vpn-inside.yaml

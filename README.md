@@ -254,6 +254,7 @@ devuelve `skipped`.
 
 ```bash
 make verify
+make smoke-test
 make build-full
 make compose-config ENV_FILE=.env.example
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
@@ -270,12 +271,13 @@ Resultados verificados actualmente:
 - Builds nativos `linux/arm64` y `linux/amd64`, sin registry: cada máquina construye la suya. El de amd64 se comprobó desde el portátil arm64 con `make build-full BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`: 0 Critical/High y hashes de `ttyd` y `dalfox` idénticos a los del lockfile.
 - `make scan-image`: 0 vulnerabilidades Critical/High en las imágenes probadas.
 - `make sbom`: emite el SBOM CycloneDX 1.7 en `tmp/sbom/`, con el nombre ligado a la imagen y a su hash de insumos. Verificado en `light` (1.390 componentes) y en `full` (1.969).
+- `make smoke-test`: valida en contenedor efímero los permisos de `/workspace` para `tester`, la carga limpia de Zsh interactivo con `pt-help`, runtimes de Python/Ruby/Perl, respuesta de herramientas ofensivas clave y el estado del proxy `pt-forward`.
 - TUN, `NET_ADMIN` y `tun0` presentes en Docker Desktop macOS.
 - `vpntry` real validado con `tryhackme.ovpn`.
 - Rutas por defecto y DNS sin cambios; `vpn-disconnect` limpia el túnel.
 - `pt-forward`/`pt-socks`/`pt-web` bloquean destinos sin VPN, permiten rutas `tun0` y se detienen al desconectar la VPN.
 - `pt-web` rechaza absolute-form y permanece loopback. El consumo externo se resuelve con el puente host-only más `ssh -L` sobre Tailscale, validado de extremo a extremo en un VPS el 2026-09-25; habilitarlo en el host OCI final queda como paso de despliegue. La sintaxis, el smoke `prerouting` y la persistencia systemd de nftables fueron validados en el host final.
-- `make verify` (Gitleaks, Hadolint, ShellCheck y pines de Actions) pasa; ShellCheck solo informa SC2329 en `scripts/entrypoint/lab-entrypoint.sh` por una función `cleanup` invocada de forma indirecta.
+- `make verify` (Gitleaks, Hadolint, ShellCheck y pines de Actions) pasa con 0 errores y 0 avisos.
 - `make tf-fmt` y `terraform -chdir=terraform/stacks/<stack> validate` pasan en OCI, Azure y DigitalOcean sin `apply`, y los tres corren igual en CI.
 - `make tflint-check` pasa en los tres stacks con el ruleset `terraform` embebido, sin plugins del registro. Requiere `tflint` instalado; sin él sale `unavailable`.
 - `STACK=oci make tf-destroy-check` imprime el plan del stack y sale con código 1 si va a destruir algo **o si el nodo ya no existe**. No aplica nada. El nodo de OCI no existe desde 2026-09-29: se destruyó al reemplazarlo y no se pudo recrear por falta de cuota de shape. La red sigue intacta; el workspace es ahora una carpeta del disco, no un volumen; ver [`docs/phase-8.md`](docs/phase-8.md). Existe porque el nodo de OCI lleva `metadata.user_data`, que el provider trata como inmutable: un cambio en el cloud-init lo reemplaza entero.

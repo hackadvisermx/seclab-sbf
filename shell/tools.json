@@ -235,6 +235,16 @@
       "command": "qsreplace",
       "description": "Reemplazo masivo de valores de query parameters en URLs para fuzzing"
     },
+    "assetfinder": {
+      "category": "recon",
+      "command": "assetfinder",
+      "description": "Descubre dominios y subdominios relacionados consultando fuentes OSINT"
+    },
+    "httprobe": {
+      "category": "recon",
+      "command": "httprobe",
+      "description": "Sondeo rápido y concurrente de servidores HTTP y HTTPS activos"
+    },
     "crunch": {
       "category": "crack",
       "command": "crunch",
@@ -473,6 +483,7 @@
     "GetLAPSPassword.py",
     "GetUserSPNs.py",
     "anew",
+    "assetfinder",
     "atexec.py",
     "bettercap",
     "bloodhound-ce-python",
@@ -504,6 +515,7 @@
     "gobuster",
     "hashcat",
     "hexedit",
+    "httprobe",
     "httpx",
     "ip",
     "john",

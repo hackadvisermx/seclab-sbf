@@ -466,6 +466,28 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("findomain-linux.zip", content)
         self.assertIn("findomain-aarch64.zip", content)
 
+    def test_tools_lock_tracks_post_exploit_payloads(self):
+        lock_file = REPO_ROOT / "supply-chain" / "tools.lock.yaml"
+        self.assertTrue(lock_file.is_file())
+        content = lock_file.read_text(encoding="utf-8")
+
+        self.assertIn("post_exploit_payloads:", content)
+        self.assertIn("linpeas.sh", content)
+        self.assertIn("winPEAS.bat", content)
+        self.assertIn("winPEASany.exe", content)
+        self.assertIn("socat_linux_amd64", content)
+        self.assertIn("socat_linux_arm64", content)
+        self.assertIn("nc.exe", content)
+        self.assertIn("nc64.exe", content)
+        # Checksums verificados
+        self.assertIn("795e315c42c58e27841e4ee2798a73a9309694f0454b34707299bb090e04b98d", content)
+        self.assertIn("11e4ea92ce2465f3d30c5a56fd4aeba2aecaf4d1c2670ac42bd61c4db2becf87", content)
+        self.assertIn("af0154c95d2897e78450d93a05479efca8b315b51e82ad70cd1dc4f94a5ecff5", content)
+        self.assertIn("19fd284b8d48feff2a15cc37bd9ba070223da575e4e84623aea4b88f6efeb597", content)
+        self.assertIn("758f023d9a27ae3b7f5f633ef41bed65b812af0dd86b4afede37925e405ddc3d", content)
+        self.assertIn("e8fbec25db4f9d95b5e8f41cca51a4b32be8674a4dea7a45b6f7aeb22dbc38db", content)
+        self.assertIn("3e59379f585ebf0becb6b4e06d0fbbf806de28a4bb256e837b4555f1b4245571", content)
+
     def test_pentest_lab_plugin_helpers_and_aliases(self):
         plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
         self.assertTrue(plugin_file.is_file())
@@ -477,6 +499,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "pt-nmp()",
             "pt-serv-web()",
             "pt-serv-smb()",
+            "pt-serv-payloads()",
             "pt-s3-ls()",
             "pt-recon()",
         ]
@@ -489,6 +512,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias extractports="pt-extractports"',
             'alias webserverhere="pt-serv-web"',
             'alias smbserverhere="pt-serv-smb"',
+            'alias servpayloads="pt-serv-payloads"',
+            'alias payloadserver="pt-serv-payloads"',
             'alias awsl="pt-s3-ls"',
         ]
         for alias in expected_aliases:
@@ -498,6 +523,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("pt-nmp", content)
         self.assertIn("pt-recon", content)
         self.assertIn("pt-serv-web", content)
+        self.assertIn("pt-serv-payloads", content)
 
 
 def main():

@@ -704,3 +704,48 @@ python_packages_full:
       - "Werkzeug==3.1.9"
       - "winacl==0.1.9"
       - "xmltodict==1.0.4"
+post_exploit_payloads:
+  - name: peass-ng
+    version: 20261003-ea9b2e92
+    source: https://github.com/peass-ng/PEASS-ng/releases/tag/20261003-ea9b2e92
+    note: Scripts y binarios de enumeracion y escalada de privilegios para Linux y Windows (PEASS-ng).
+    files:
+      linpeas.sh:
+        url: https://github.com/peass-ng/PEASS-ng/releases/download/20261003-ea9b2e92/linpeas.sh
+        sha256: 795e315c42c58e27841e4ee2798a73a9309694f0454b34707299bb090e04b98d
+        path: /usr/local/share/seclab/payloads/post-exploit/linpeas.sh
+      winPEAS.bat:
+        url: https://github.com/peass-ng/PEASS-ng/releases/download/20261003-ea9b2e92/winPEAS.bat
+        sha256: 11e4ea92ce2465f3d30c5a56fd4aeba2aecaf4d1c2670ac42bd61c4db2becf87
+        path: /usr/local/share/seclab/payloads/post-exploit/winPEAS.bat
+      winPEASany.exe:
+        url: https://github.com/peass-ng/PEASS-ng/releases/download/20261003-ea9b2e92/winPEASany.exe
+        sha256: af0154c95d2897e78450d93a05479efca8b315b51e82ad70cd1dc4f94a5ecff5
+        path: /usr/local/share/seclab/payloads/post-exploit/winPEASany.exe
+  - name: static-socat
+    version: 1.7.4.4
+    source: https://github.com/ernw/static-toolbox/releases/tag/socat-v1.7.4.4
+    note: Binarios estaticos de socat para Linux (amd64 y arm64) compilados sin dependencias externas por ERNW Research.
+    files:
+      socat_linux_amd64:
+        url: https://github.com/ernw/static-toolbox/releases/download/socat-v1.7.4.4/socat-1.7.4.4-x86_64
+        sha256: 19fd284b8d48feff2a15cc37bd9ba070223da575e4e84623aea4b88f6efeb597
+        path: /usr/local/share/seclab/payloads/post-exploit/socat_linux_amd64
+      socat_linux_arm64:
+        url: https://github.com/ernw/static-toolbox/releases/download/socat-v1.7.4.4/socat-1.7.4.4-aarch64
+        sha256: 758f023d9a27ae3b7f5f633ef41bed65b812af0dd86b4afede37925e405ddc3d
+        path: /usr/local/share/seclab/payloads/post-exploit/socat_linux_arm64
+  - name: netcat-windows
+    version: 1.12
+    source: https://github.com/int0x33/nc.exe
+    commit: fa87aa42c460d34966efb998a1788efca6db11a7
+    note: Binarios de Netcat para Windows (x86 y x64) con soporte de flag -e para reverse/bind shells.
+    files:
+      nc.exe:
+        url: https://raw.githubusercontent.com/int0x33/nc.exe/fa87aa42c460d34966efb998a1788efca6db11a7/nc.exe
+        sha256: e8fbec25db4f9d95b5e8f41cca51a4b32be8674a4dea7a45b6f7aeb22dbc38db
+        path: /usr/local/share/seclab/payloads/post-exploit/nc.exe
+      nc64.exe:
+        url: https://raw.githubusercontent.com/int0x33/nc.exe/fa87aa42c460d34966efb998a1788efca6db11a7/nc64.exe
+        sha256: 3e59379f585ebf0becb6b4e06d0fbbf806de28a4bb256e837b4555f1b4245571
+        path: /usr/local/share/seclab/payloads/post-exploit/nc64.exe

@@ -166,6 +166,58 @@ install -d -m 0755 /etc/gdb
 printf 'source /usr/local/share/seclab/gef/gef.py\n' > /etc/gdb/gdbinit
 chmod 0444 /etc/gdb/gdbinit
 
+# Staging de payloads de post-explotacion (offline, inmutable)
+# linpeas.sh, winPEAS.bat, winPEASany.exe, socat estatico (amd64/arm64) y nc.exe (x86/x64)
+install -d -m 0755 /usr/local/share/seclab/payloads/post-exploit
+
+PEASS_RELEASE="20261003-ea9b2e92"
+PEASS_BASE="https://github.com/peass-ng/PEASS-ng/releases/download/${PEASS_RELEASE}"
+
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${PEASS_BASE}/linpeas.sh" \
+  --output /usr/local/share/seclab/payloads/post-exploit/linpeas.sh
+printf '%s  %s\n' '795e315c42c58e27841e4ee2798a73a9309694f0454b34707299bb090e04b98d' /usr/local/share/seclab/payloads/post-exploit/linpeas.sh | sha256sum -c -
+
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${PEASS_BASE}/winPEAS.bat" \
+  --output /usr/local/share/seclab/payloads/post-exploit/winPEAS.bat
+printf '%s  %s\n' '11e4ea92ce2465f3d30c5a56fd4aeba2aecaf4d1c2670ac42bd61c4db2becf87' /usr/local/share/seclab/payloads/post-exploit/winPEAS.bat | sha256sum -c -
+
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${PEASS_BASE}/winPEASany.exe" \
+  --output /usr/local/share/seclab/payloads/post-exploit/winPEASany.exe
+printf '%s  %s\n' 'af0154c95d2897e78450d93a05479efca8b315b51e82ad70cd1dc4f94a5ecff5' /usr/local/share/seclab/payloads/post-exploit/winPEASany.exe | sha256sum -c -
+
+SOCAT_STATIC_BASE="https://github.com/ernw/static-toolbox/releases/download/socat-v1.7.4.4"
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${SOCAT_STATIC_BASE}/socat-1.7.4.4-x86_64" \
+  --output /usr/local/share/seclab/payloads/post-exploit/socat_linux_amd64
+printf '%s  %s\n' '19fd284b8d48feff2a15cc37bd9ba070223da575e4e84623aea4b88f6efeb597' /usr/local/share/seclab/payloads/post-exploit/socat_linux_amd64 | sha256sum -c -
+
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${SOCAT_STATIC_BASE}/socat-1.7.4.4-aarch64" \
+  --output /usr/local/share/seclab/payloads/post-exploit/socat_linux_arm64
+printf '%s  %s\n' '758f023d9a27ae3b7f5f633ef41bed65b812af0dd86b4afede37925e405ddc3d' /usr/local/share/seclab/payloads/post-exploit/socat_linux_arm64 | sha256sum -c -
+
+case "$(dpkg --print-architecture)" in
+  amd64) ln -sf socat_linux_amd64 /usr/local/share/seclab/payloads/post-exploit/socat ;;
+  arm64) ln -sf socat_linux_arm64 /usr/local/share/seclab/payloads/post-exploit/socat ;;
+esac
+
+NC_COMMIT="fa87aa42c460d34966efb998a1788efca6db11a7"
+NC_BASE="https://raw.githubusercontent.com/int0x33/nc.exe/${NC_COMMIT}"
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${NC_BASE}/nc.exe" \
+  --output /usr/local/share/seclab/payloads/post-exploit/nc.exe
+printf '%s  %s\n' 'e8fbec25db4f9d95b5e8f41cca51a4b32be8674a4dea7a45b6f7aeb22dbc38db' /usr/local/share/seclab/payloads/post-exploit/nc.exe | sha256sum -c -
+
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "${NC_BASE}/nc64.exe" \
+  --output /usr/local/share/seclab/payloads/post-exploit/nc64.exe
+printf '%s  %s\n' '3e59379f585ebf0becb6b4e06d0fbbf806de28a4bb256e837b4555f1b4245571' /usr/local/share/seclab/payloads/post-exploit/nc64.exe | sha256sum -c -
+
+chmod 0555 /usr/local/share/seclab/payloads/post-exploit/*
+
 git clone --depth 1 --branch v10.4.9 https://github.com/projectdiscovery/nuclei-templates.git /tmp/nuclei-templates
 test "$(git -C /tmp/nuclei-templates rev-parse HEAD)" = "893122ffce8ebf8e264f15d2cd3960cb1dd36d6c"
 rm -rf /tmp/nuclei-templates/.git

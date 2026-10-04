@@ -679,6 +679,7 @@ RUN usermod --login tester --home /home/tester --move-home --shell /usr/bin/zsh 
   && install -d -m 0700 /home/tester/.config/subfinder \
   && ln -sfn /usr/local/share/seclab/gf-patterns /home/tester/.gf \
   && ln -sfn /usr/local/share/seclab/gf-patterns /home/tester/.config/gf \
+  && ln -sfn /etc/gdb/gdbinit /home/tester/.gdbinit \
   && printf 'sources: []\n' > /home/tester/.config/subfinder/config.yaml \
   && chown -R tester:tester /home/tester
 COPY .tmux.conf /home/tester/.tmux.conf

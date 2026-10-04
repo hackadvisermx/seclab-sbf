@@ -426,11 +426,19 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         lock_file = REPO_ROOT / "supply-chain" / "tools.lock.yaml"
         self.assertTrue(lock_file.is_file())
         content = lock_file.read_text(encoding="utf-8")
-
         self.assertIn("chisel", content)
         self.assertIn("ligolo-ng", content)
         self.assertIn("proxychains4", content)
         self.assertIn("libproxychains4", content)
+
+    def test_tools_lock_tracks_web_recon_artifacts(self):
+        lock_file = REPO_ROOT / "supply-chain" / "tools.lock.yaml"
+        self.assertTrue(lock_file.is_file())
+        content = lock_file.read_text(encoding="utf-8")
+
+        self.assertIn("gf", content)
+        self.assertIn("qsreplace", content)
+        self.assertIn("gf-patterns", content)
 
     def test_pentest_lab_plugin_helpers_and_aliases(self):
         plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"

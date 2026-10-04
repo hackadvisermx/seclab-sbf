@@ -220,6 +220,16 @@
       "command": "waybackurls",
       "description": "URLs históricas de un dominio vía Wayback"
     },
+    "gf": {
+      "category": "utilities",
+      "command": "gf",
+      "description": "Wrapper de grep con soporte de patrones JSON para análisis de URLs y parámetros"
+    },
+    "qsreplace": {
+      "category": "utilities",
+      "command": "qsreplace",
+      "description": "Reemplazo masivo de valores de query parameters en URLs para fuzzing"
+    },
     "crunch": {
       "category": "crack",
       "command": "crunch",
@@ -483,6 +493,7 @@
     "getPac.py",
     "getST.py",
     "getTGT.py",
+    "gf",
     "git",
     "gobuster",
     "hashcat",
@@ -518,6 +529,7 @@
     "pwn",
     "pypykatz",
     "python3",
+    "qsreplace",
     "rbcd.py",
     "reg.py",
     "rg",

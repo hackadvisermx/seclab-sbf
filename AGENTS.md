@@ -55,7 +55,7 @@
 - `pt-forward`, `pt-socks` y `pt-web` se ejecutan como `tester`, escuchan solo en loopback y validan la tabla de rutas contra `tun0`; el consumo externo usa el puente host-only más `ssh -L` sobre Tailscale, validado en VPS el 2026-09-25.
 - La política `security/policies/nftables-lab.nft` es una plantilla de host Linux y no se carga automáticamente; `security/tailscale/README.md` define el contrato host-only. La validación efímera OCI confirmó el hook `prerouting` y una ruta NAT gateway sin `public_ip`; la aplicación final queda pendiente.
 - `vpntry`, `vpnhtb` y `vpncli` corresponden a `tryhackme.ovpn`, `hackthebox.ovpn` y `client.ovpn` respectivamente; el socket Unix solo permite esas acciones y el servicio root conserva las rutas. Mantén los perfiles aislados y limpia las rutas al desconectarse (plan.md seccion 12).
-- Oh My Zsh y los plugins externos están fijados a commits concretos; el plugin local `pentest-lab` contiene `pt-help`, `pt-tools`, `pt-banner`, `pentest-reset`, los alias VPN de la Fase 5 y `pt-forward`/`pt-socks`/`pt-web` de la Fase 6 (plan.md seccion 14).
+- Oh My Zsh y los plugins externos están fijados a commits concretos; el plugin local `pentest-lab` contiene `pt-help`, `pt-tools`, `pt-banner`, `pentest-reset`, los alias VPN de la Fase 5, `pt-forward`/`pt-socks`/`pt-web` de la Fase 6 y los helpers de pentest (`pt-extractports`, `pt-nmp`, `pt-serv-web`, `pt-serv-smb`, `pt-s3-ls`, `pt-recon` con aliases `nmp`, `extractports`, `webserverhere`, `smbserverhere`, `awsl`) (plan.md seccion 14).
 
 ## Flujo de implementación
 

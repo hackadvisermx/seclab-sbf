@@ -432,6 +432,39 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("proxychains4", content)
         self.assertIn("libproxychains4", content)
 
+    def test_pentest_lab_plugin_helpers_and_aliases(self):
+        plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
+        self.assertTrue(plugin_file.is_file())
+        content = plugin_file.read_text(encoding="utf-8")
+
+        # Invariantes: helpers de ergonomia y reconocimiento
+        expected_helpers = [
+            "pt-extractports()",
+            "pt-nmp()",
+            "pt-serv-web()",
+            "pt-serv-smb()",
+            "pt-s3-ls()",
+            "pt-recon()",
+        ]
+        for helper in expected_helpers:
+            self.assertIn(helper, content, f"Helper no encontrado en plugin: {helper}")
+
+        # Aliases ergonomicos compatibles
+        expected_aliases = [
+            'alias nmp="pt-nmp"',
+            'alias extractports="pt-extractports"',
+            'alias webserverhere="pt-serv-web"',
+            'alias smbserverhere="pt-serv-smb"',
+            'alias awsl="pt-s3-ls"',
+        ]
+        for alias in expected_aliases:
+            self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
+
+        # pt-help incluye mención a helpers
+        self.assertIn("pt-nmp", content)
+        self.assertIn("pt-recon", content)
+        self.assertIn("pt-serv-web", content)
+
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])

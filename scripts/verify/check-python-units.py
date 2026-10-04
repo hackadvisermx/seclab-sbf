@@ -540,11 +540,15 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias cheat="pt-cheat"',
             'alias ptlog="pt-log"',
             'alias logeng="pt-log"',
+            'alias ptskills="pt-skills"',
+            'alias skills="pt-skills"',
+            'alias pt-skill="pt-skills"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-skills", content)
         self.assertIn("pt-cheat", content)
         self.assertIn("pt-log", content)
         self.assertIn("pt-nmp", content)
@@ -622,6 +626,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "param-discovery": "fuzzing",
             "triage-gatekeeper": "triage",
             "report-generation": "reporting",
+            "auth-matrix-audit": "auth",
+            "business-logic-audit": "logic",
         }
 
         for skill_name, category in expected_skills.items():
@@ -660,6 +666,14 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             seed_skill_md = seed_skills_dir / skill_name / "SKILL.md"
             self.assertTrue(seed_skill_md.is_file(), f"Skill no reflejada en workspace-seed: {skill_name}")
             self.assertEqual(content, seed_skill_md.read_text(encoding="utf-8"), f"Discrepancia de contenido en workspace-seed para {skill_name}")
+
+        # Validar existencia del helper interactivo pt-skills en el plugin Zsh
+        plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
+        self.assertTrue(plugin_file.is_file())
+        plugin_content = plugin_file.read_text(encoding="utf-8")
+        self.assertIn("pt-skills-dir()", plugin_content)
+        self.assertIn("pt-skills()", plugin_content)
+        self.assertIn("SECLAB-Skills >", plugin_content)
 
 
 

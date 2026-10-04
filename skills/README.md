@@ -21,6 +21,8 @@ Este directorio contiene las especificaciones y flujos de trabajo de **Agent Ski
 | **Descubrimiento de Parámetros** | [`param-discovery`](./param-discovery/SKILL.md) | `fuzzing` | Fuzzing rápido de parámetros HTTP ocultos y rutas REST/JSON mediante `x8` y `pt-fuzz-params`. |
 | **Compuerta de Triaje** | [`triage-gatekeeper`](./triage-gatekeeper/SKILL.md) | `triage` | Filtro anti-alucinaciones y anti-ruido (falsos positivos, WAFs) con validación estricta de evidencia. |
 | **Generación de Reportes** | [`report-generation`](./report-generation/SKILL.md) | `reporting` | Redacción de informes técnicos y ejecutivos con métricas CVSS v3.1 / v4.0 y enlaces a logs de auditoría. |
+| **Matriz de Control de Acceso** | [`auth-matrix-audit`](./auth-matrix-audit/SKILL.md) | `auth` | Auditoría de autorización horizontal/vertical (IDOR), validación de JWT y ciclo de vida de sesiones. |
+| **Lógica de Negocio y Estados** | [`business-logic-audit`](./business-logic-audit/SKILL.md) | `logic` | Detección de salto de estados, manipulación de precios/cantidades y condiciones de carrera (Race Conditions). |
 
 ---
 

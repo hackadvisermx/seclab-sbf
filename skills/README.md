@@ -50,3 +50,42 @@ Cada engagement evaluado bajo estas skills organiza sus artefactos en `/workspac
 │   └── VULN-02.md
 └── REPORT.md               # Informe final generado
 ```
+
+---
+
+## 4. Suite de Prompts para Agentes Especializados
+
+Ubicados en `skills/prompts/` (y sincronizados en `/workspace/templates/prompts/`), proporcionan los system prompts operativos y guardrails anti-alucinación para modelos de lenguaje autónomos:
+
+| Prompt | Archivo | Rol Operativo |
+|---|---|---|
+| **Reconocimiento Autónomo** | [`recon-agent.prompt.md`](./prompts/recon-agent.prompt.md) | Mapeo pasivo/activo de superficie y descubrimiento de activos. |
+| **Control de Acceso & Auth** | [`auth-agent.prompt.md`](./prompts/auth-agent.prompt.md) | Pruebas de IDOR/BFLA, matrices multi-rol y tokens JWT sin alteración no autorizada. |
+| **Lógica de Negocio & Estados** | [`logic-agent.prompt.md`](./prompts/logic-agent.prompt.md) | Transiciones ilícitas, salteo de pasos y condiciones de carrera seguras. |
+| **Inyecciones & SSRF** | [`injection-agent.prompt.md`](./prompts/injection-agent.prompt.md) | Detección segura de SSRF (vía `pt-callback`), SSTI y fallos estructurales. |
+| **Triaje & Compuerta de Calidad** | [`triage-agent.prompt.md`](./prompts/triage-agent.prompt.md) | Filtro anti-ruido, descarte de falsos positivos y verificación Evidence-First. |
+| **Redacción de Reportes** | [`report-agent.prompt.md`](./prompts/report-agent.prompt.md) | Compilación técnica y ejecutiva hacia `REPORT.md` con métricas CVSS. |
+
+---
+
+## 5. Agregador de Contexto para Agentes (`pt-context`)
+
+El comando `pt-context` (`/usr/local/bin/pt-agent-context`) sintetiza en tiempo real:
+1. Alcance, exclusiones y límites operacionales de `target.yaml` / `scope.txt`.
+2. Resumen de reconocimiento (hosts vivos, URLs, subdominios, patrones de `gf`).
+3. Matriz consolidada de hallazgos en `evidence/*.md`.
+4. Bitácora de terminal y marcas forenses de `terminal.log`.
+5. Playbook metodológico o system prompt del agente asignado (`--skill <nombre>`).
+
+```bash
+# Sintetizar contexto del engagement activo
+pt-context
+
+# Sintetizar engagement específico inyectando directivas de autorización
+pt-context acme-corp auth
+
+# Exportar en formato JSON o copiar al portapapeles
+pt-context acme-corp logic --json
+pt-context --copy
+```
+

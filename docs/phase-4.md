@@ -11,7 +11,7 @@ La fase 4 v1 está implementada y verificada en Docker Desktop ARM64, con build 
 - Plugins nativos habilitados: `git`, `tmux`, `ssh`, `extract`, `history`, `aliases` y `jsontools`; la finalización la inicializa el núcleo de Oh My Zsh.
 - `fzf` 0.74.4 y `zoxide` 0.10.0 verificados por lockfile y hash.
 - `shell/tools.json` es el manifiesto estático de herramientas; no se ejecutan herramientas de red para generar el resumen.
-- `shell/pentest-lab/pentest-lab.plugin.zsh` proporciona `pt-banner`, `pt-help`, `pt-tools`, `pentest-reset` y aliases VPN de la Fase 5.
+- `shell/pentest-lab/pentest-lab.plugin.zsh` proporciona `pt-banner`, `pt-help`, `pt-tools`, `pentest-reset`, aliases VPN de la Fase 5 y los helpers de pentest (`pt-extractports`, `pt-nmp`, `pt-serv-web`, `pt-serv-smb`, `pt-s3-ls`, `pt-recon`) con sus aliases ergonómicos (`nmp`, `extractports`, `webserverhere`, `smbserverhere`, `awsl`).
 - `images/light/Dockerfile` copia `.tmux.conf` a `/home/tester/.tmux.conf` como `root:root` con modo `0444`; los cambios requieren `make build-light` y recrear el contenedor.
 
 ## Banner y estado
@@ -68,6 +68,15 @@ pt-tools
 pt-banner
 pentest-reset
 ```
+
+### Helpers de Pentest y Ergonomía
+
+- `pt-extractports [archivo.gnmap]`: Parsea la salida grepeable de nmap (`-oG`), extrayendo los puertos abiertos en formato separado por comas (ej. `22,80,443`) y la IP objetivo. Si `xclip` o `pbcopy` están presentes, los copia al portapapeles. Alias: `extractports`.
+- `pt-nmp <IP/Host> [prefijo]`: Flujo de escaneo inteligente en dos fases. Fase 1 ejecuta un SYN scan rápido de los 65535 puertos (`-sS -p- --min-rate 5000 -Pn -n -vvv -oG <prefijo>_allports.gnmap`). Fase 2 extrae los puertos descubiertos y ejecuta escaneo exhaustivo de scripts y versiones (`-sC -sV -oN <prefijo>_targeted.nmap`) únicamente sobre dichos puertos. Alias: `nmp`.
+- `pt-serv-web [puerto]`: Inicia un servidor web HTTP de staging (`python3 -m http.server`) en el directorio actual (por defecto puerto 8000, apto para usuario `tester` sin requerir privilegios de enlace a puertos bajos). Alias: `webserverhere`.
+- `pt-serv-smb [recurso] [ruta] [usuario] [contraseña]`: Inicia un servidor SMB de staging mediante `smbserver.py` de Impacket con soporte SMB2 para captura de hashes o transferencia con hosts Windows. Alias: `smbserverhere`.
+- `pt-s3-ls <bucket>`: Consulta el contenido público de buckets AWS S3 sin firma (`--no-sign-request` vía `aws`, `s3scanner` o endpoint S3). Alias: `awsl`.
+- `pt-recon <dominio>`: Pipeline básico de reconocimiento que integra `subfinder` (descubrimiento de subdominios), `httpx` (detección de hosts activos) y `waybackurls` / `anew` (recolección de URLs históricas únicas).
 
 ## Verificación realizada
 

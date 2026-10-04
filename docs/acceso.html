@@ -87,17 +87,38 @@
     </ol>
   </div>
 
-  <h2>2. Comandos Make de Acceso Rápido (Recomendado)</h2>
+  <h2>2. Comandos Make de Acceso Rápido por Proveedor</h2>
   <div class="card">
-    <p>Ya configuramos <code>CLOUD_HOST=100.111.178.40</code> en tu archivo local <code>.env</code>, por lo que <strong>no necesitas ingresar la IP ni especificar la ruta de las llaves manualmente</strong>:</p>
+    <p>Los comandos <code>make</code> detectan automáticamente el host desde tu archivo <code>.env</code> o aceptan <code>TF_HOST=&lt;ip&gt;</code>:</p>
 
-    <h3>A. Entrar al Laboratorio de Pentesting (Contenedor Tester)</h3>
-    <p>Abre la shell interactiva como usuario <code>tester</code> (sesión tmux, zsh, plugins, herramientas de auditoría en puerto 2222):</p>
-    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud</code></pre>
+    <h3>A. Microsoft Azure (Nodo Actual Activo: 100.111.178.40)</h3>
+    <p>Configurado en tu <code>.env</code> con <code>AZURE_HOST=100.111.178.40</code>:</p>
+    <ul>
+      <li><strong>Entrar al Laboratorio (Contenedor Tester, puerto 2222)</strong>:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-az</code></pre>
+        <em>(o su alias extendido: <code>make lab-ssh-azure</code>)</em>
+      </li>
+      <li><strong>Entrar al Host VPS (Administración Ubuntu, puerto 22)</strong>:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make host-ssh-az</code></pre>
+        <em>(o su alias extendido: <code>make host-ssh-azure</code>)</em>
+      </li>
+    </ul>
 
-    <h3>B. Entrar a la Administración del VPS (Host Ubuntu)</h3>
-    <p>Abre la sesión de administración como usuario <code>ubuntu</code> (docker, systemd, firewall, logs en puerto 22):</p>
-    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make host-ssh-cloud</code></pre>
+    <h3>B. Oracle Cloud Infrastructure (OCI)</h3>
+    <p>Para entornos desplegados en Oracle Cloud (usa <code>OCI_HOST</code> en <code>.env</code> o parámetro en línea):</p>
+    <ul>
+      <li><strong>Entrar al Laboratorio OCI (Contenedor Tester)</strong>:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-oci</code></pre>
+      </li>
+      <li><strong>Entrar al Host VPS OCI (Administración Ubuntu)</strong>:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make host-ssh-oci</code></pre>
+      </li>
+    </ul>
+
+    <h3>C. Atajos Genéricos de Nube</h3>
+    <p>Conectan al host principal especificado en <code>CLOUD_HOST</code>:</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud   # Entra al contenedor del lab cloud activo
+make host-ssh-cloud  # Entra al host VPS cloud activo</code></pre>
   </div>
 
   <h2>3. Comandos SSH Directos Equivalentes</h2>

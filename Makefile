@@ -17,7 +17,7 @@ SHELL := /bin/sh
 # caso de `make` sin argumentos y no los `make compose-up`. Comprobado.
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check
+.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-azure host-ssh-azure lab-ssh-az host-ssh-az lab-ssh-oci host-ssh-oci lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -39,6 +39,8 @@ HOST_SSH_KEY ?= .secrets/ssh/seclab_ed25519
 # CLOUD_HOST se puede dejar fijo en el .env para no repetirlo en cada
 # llamada; si no esta, se acepta TF_HOST en la linea de comandos.
 CLOUD_HOST ?= $(or $(TF_HOST),$(shell sed -n 's/^CLOUD_HOST=//p' "$(ENV_FILE)" 2>/dev/null))
+AZURE_HOST ?= $(or $(TF_HOST),$(shell sed -n 's/^AZURE_HOST=//p' "$(ENV_FILE)" 2>/dev/null),$(CLOUD_HOST))
+OCI_HOST ?= $(or $(TF_HOST),$(shell sed -n 's/^OCI_HOST=//p' "$(ENV_FILE)" 2>/dev/null))
 CLOUD_SSH_PORT ?= 2222
 CLOUD_REPO_DIR ?= ~/seclab-sbf
 CLOUD_WORKSPACE_DIR ?= /opt/seclab-sbf/workspace
@@ -515,6 +517,28 @@ lab-ssh-cloud:
 host-ssh-cloud:
 	@cd "$(ROOT)" && test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host (ej. make host-ssh-cloud TF_HOST=100.x.y.z)\n' >&2; exit 2)
 	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" -p 22 "$(TF_ADMIN)@$(CLOUD_HOST)"
+
+# Entradas especificas por proveedor (Azure / OCI)
+lab-ssh-azure:
+	@cd "$(ROOT)" && test -n "$(AZURE_HOST)" || (printf 'AZURE_HOST o TF_HOST requerido (ej. make lab-ssh-azure TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(CLOUD_SSH_PORT)" tester@"$(AZURE_HOST)"
+
+lab-ssh-az: lab-ssh-azure
+
+host-ssh-azure:
+	@cd "$(ROOT)" && test -n "$(AZURE_HOST)" || (printf 'AZURE_HOST o TF_HOST requerido (ej. make host-ssh-azure TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" -p 22 "$(TF_ADMIN)@$(AZURE_HOST)"
+
+host-ssh-az: host-ssh-azure
+
+lab-ssh-oci:
+	@cd "$(ROOT)" && test -n "$(OCI_HOST)" || (printf 'OCI_HOST o TF_HOST requerido (ej. make lab-ssh-oci TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(CLOUD_SSH_PORT)" tester@"$(OCI_HOST)"
+
+host-ssh-oci:
+	@cd "$(ROOT)" && test -n "$(OCI_HOST)" || (printf 'OCI_HOST o TF_HOST requerido (ej. make host-ssh-oci TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" -p 22 "$(TF_ADMIN)@$(OCI_HOST)"
+
 
 
 # En el cloud la imagen no se elige al conectar: hay que recrear el

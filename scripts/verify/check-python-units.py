@@ -628,6 +628,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "report-generation": "reporting",
             "auth-matrix-audit": "auth",
             "business-logic-audit": "logic",
+            "client-side-spa-audit": "client",
+            "duplicate-scope-guard": "guard",
         }
 
         for skill_name, category in expected_skills.items():
@@ -674,6 +676,23 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("pt-skills-dir()", plugin_content)
         self.assertIn("pt-skills()", plugin_content)
         self.assertIn("SECLAB-Skills >", plugin_content)
+
+        # Validar existencia de plantillas de prompts para agentes
+        prompt_templates = [
+            "recon-agent.prompt.md",
+            "triage-agent.prompt.md",
+            "report-agent.prompt.md",
+        ]
+        seed_prompts_dir = REPO_ROOT / "workspace-seed" / "templates" / "prompts"
+        skills_prompts_dir = REPO_ROOT / "skills" / "prompts"
+        self.assertTrue(seed_prompts_dir.is_dir(), "Directorio workspace-seed/templates/prompts no existe")
+        self.assertTrue(skills_prompts_dir.is_dir(), "Directorio skills/prompts no existe")
+        for pt in prompt_templates:
+            seed_pt = seed_prompts_dir / pt
+            skills_pt = skills_prompts_dir / pt
+            self.assertTrue(seed_pt.is_file(), f"Prompt template no existe en workspace-seed: {pt}")
+            self.assertTrue(skills_pt.is_file(), f"Prompt template no existe en skills/prompts: {pt}")
+            self.assertEqual(seed_pt.read_text(encoding="utf-8"), skills_pt.read_text(encoding="utf-8"))
 
 
 

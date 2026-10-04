@@ -24,6 +24,7 @@ Este directorio contiene las especificaciones y flujos de trabajo de **Agent Ski
 | **Matriz de Control de Acceso** | [`auth-matrix-audit`](./auth-matrix-audit/SKILL.md) | `auth` | Auditoría de autorización horizontal/vertical (IDOR), validación de JWT y ciclo de vida de sesiones. |
 | **Lógica de Negocio y Estados** | [`business-logic-audit`](./business-logic-audit/SKILL.md) | `logic` | Detección de salto de estados, manipulación de precios/cantidades y condiciones de carrera (Race Conditions). |
 | **Client-Side & SPAs** | [`client-side-spa-audit`](./client-side-spa-audit/SKILL.md) | `client` | Auditoría de aplicaciones React/SPA, endpoints en JavaScript, configuraciones CORS y postMessage. |
+| **Seguridad de APIs & Webhooks** | [`api-security-audit`](./api-security-audit/SKILL.md) | `api` | Auditoría de APIs REST y GraphQL, Mass Assignment, Verb Tampering y validación de firmas HMAC. |
 | **Guardia de Scope y Duplicados** | [`duplicate-scope-guard`](./duplicate-scope-guard/SKILL.md) | `guard` | Filtro pre-reporte para evitar penalizaciones por duplicados o hallazgos fuera de política de alcance. |
 
 ---

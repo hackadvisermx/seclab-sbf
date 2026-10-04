@@ -36,6 +36,7 @@ proxy_ctrl = load_module("proxy_control", REPO_ROOT / "scripts" / "proxy-control
 vpn_ctrl = load_module("vpn_control", REPO_ROOT / "scripts" / "vpn-control.py")
 compose_sec = load_module("compose_security", REPO_ROOT / "scripts" / "verify" / "check-compose-security.py")
 scope_validator = load_module("scope_validator", REPO_ROOT / "scripts" / "pt-scope-validator.py")
+report_compiler = load_module("report_compiler", REPO_ROOT / "scripts" / "pt-report-compiler.py")
 
 
 class MockSocket:
@@ -517,6 +518,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "pt-log()",
             "pt-scope()",
             "pt-eng()",
+            "pt-finding()",
+            "pt-report()",
             "pt-extractports()",
             "pt-nmp()",
             "pt-serv-web()",
@@ -550,11 +553,19 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias engagement="pt-eng"',
             'alias ptscope="pt-scope"',
             'alias scopecheck="pt-scope"',
+            'alias ptfinding="pt-finding"',
+            'alias ptvuln="pt-finding"',
+            'alias finding="pt-finding"',
+            'alias vuln="pt-finding"',
+            'alias ptreport="pt-report"',
+            'alias report="pt-report"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-finding", content)
+        self.assertIn("pt-report", content)
         self.assertIn("pt-eng", content)
         self.assertIn("pt-scope", content)
         self.assertIn("pt-skills", content)
@@ -638,6 +649,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "auth-matrix-audit": "auth",
             "business-logic-audit": "logic",
             "client-side-spa-audit": "client",
+            "api-security-audit": "api",
             "duplicate-scope-guard": "guard",
         }
 
@@ -771,6 +783,64 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("_pt-eng-help()", plugin)
         self.assertIn("pt-eng()", plugin)
         self.assertIn("pt-scope()", plugin)
+
+    def test_finding_manager_and_report_compiler(self):
+        """Verifica la plantilla evidence.md, compilador de reportes y linter Evidence-First."""
+        # 1. Validar plantilla de evidencia
+        evidence_tmpl = REPO_ROOT / "workspace-seed" / "templates" / "evidence.md"
+        self.assertTrue(evidence_tmpl.is_file(), "workspace-seed/templates/evidence.md no existe")
+
+        parsed = report_compiler.parse_evidence_file(evidence_tmpl)
+        self.assertEqual(parsed["id"], "VULN-01")
+        self.assertEqual(parsed["severity"], "HIGH")
+        self.assertEqual(parsed["cvss_score"], 6.5)
+        self.assertEqual(parsed["cwe"], "CWE-639")
+        self.assertTrue(parsed["has_poc"])
+        self.assertTrue(parsed["has_remediation"])
+
+        # 2. Validar compilación y linting en un engagement simulado
+        import tempfile, shutil
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = pathlib.Path(tmp_dir)
+            ev_dir = tmp / "evidence"
+            ev_dir.mkdir()
+            shutil.copy(evidence_tmpl, ev_dir / "VULN-01.md")
+            target_yaml = REPO_ROOT / "workspace-seed" / "templates" / "target.yaml"
+            shutil.copy(target_yaml, tmp / "target.yaml")
+
+            # Comprobar check_findings en estado saludable
+            ok, issues = report_compiler.check_findings(tmp)
+            self.assertTrue(ok)
+
+            # Comprobar compilación de REPORT.md
+            report_out = report_compiler.build_report(tmp)
+            self.assertTrue(report_out.is_file())
+            content = report_out.read_text(encoding="utf-8")
+            self.assertIn("# Informe de Auditoría de Seguridad:", content)
+            self.assertIn("## 1. Resumen Ejecutivo", content)
+            self.assertIn("## 2. Alcance y Límites Operacionales", content)
+            self.assertIn("## 3. Matriz Consolidada de Hallazgos", content)
+            self.assertIn("## 4. Detalle Técnico de Hallazgos", content)
+            self.assertIn("VULN-01", content)
+            self.assertIn("CWE-639", content)
+
+            # Comprobar detección de activo fuera de alcance
+            vuln_file = ev_dir / "VULN-01.md"
+            vuln_file.write_text(vuln_file.read_text().replace("https://api.example.com/v1/users/1234/profile", "https://payments.example.com/checkout"))
+            ok_bad, issues_bad = report_compiler.check_findings(tmp)
+            self.assertFalse(ok_bad)
+            self.assertTrue(any("FUERA DE ALCANCE" in msg for msg in issues_bad))
+
+        # 3. Validar integración en Dockerfile y plugin Zsh
+        dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("pt-report-compiler", dockerfile)
+
+        plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+        self.assertIn("_pt-report-script()", plugin)
+        self.assertIn("_pt-finding-help()", plugin)
+        self.assertIn("pt-finding()", plugin)
+        self.assertIn("_pt-report-help()", plugin)
+        self.assertIn("pt-report()", plugin)
 
 
 def main():

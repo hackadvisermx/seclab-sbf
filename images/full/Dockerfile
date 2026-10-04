@@ -52,6 +52,11 @@ ARG CHISEL_VERSION=1.12.0
 ARG CHISEL_COMMIT=fe4f4fe7e6a849b4aa6d1b8ee47037e16033f42a
 ARG LIGOLO_VERSION=0.9.2
 ARG LIGOLO_COMMIT=e543732f4be6dc899096ae322ae620bf010bfbfc
+ARG GF_VERSION=0.1.0
+ARG GF_COMMIT=dcd4c361f9f5ba302294ed38b8ce278e8ba69006
+ARG QSREPLACE_VERSION=0.0.3
+ARG QSREPLACE_COMMIT=320475befaf66d986400aa8c3ed9b43e0b6b5a02
+ARG GF_PATTERNS_COMMIT=f686f06ae647726578920084c894100d702496cc
 
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS fzf-builder
 ARG FZF_VERSION=0.74.4
@@ -160,6 +165,9 @@ ARG CHISEL_VERSION
 ARG CHISEL_COMMIT
 ARG LIGOLO_VERSION
 ARG LIGOLO_COMMIT
+ARG GF_COMMIT
+ARG QSREPLACE_COMMIT
+ARG GF_PATTERNS_COMMIT
 RUN git init /src/subfinder \
  && git -C /src/subfinder remote add origin https://github.com/projectdiscovery/subfinder.git \
  && git -C /src/subfinder fetch --depth 1 origin "${SUBFINDER_COMMIT}" \
@@ -310,6 +318,36 @@ RUN mkdir -p /out \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
       -o /out/waybackurls .
+RUN git init /src/gf \
+ && git -C /src/gf remote add origin https://github.com/tomnomnom/gf.git \
+ && git -C /src/gf fetch --depth 1 origin "${GF_COMMIT}" \
+ && git -C /src/gf checkout --detach "${GF_COMMIT}" \
+ && test "$(git -C /src/gf rev-parse HEAD)" = "${GF_COMMIT}"
+WORKDIR /src/gf
+RUN mkdir -p /out \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w" \
+      -o /out/gf .
+RUN git init /src/qsreplace \
+ && git -C /src/qsreplace remote add origin https://github.com/tomnomnom/qsreplace.git \
+ && git -C /src/qsreplace fetch --depth 1 origin "${QSREPLACE_COMMIT}" \
+ && git -C /src/qsreplace checkout --detach "${QSREPLACE_COMMIT}" \
+ && test "$(git -C /src/qsreplace rev-parse HEAD)" = "${QSREPLACE_COMMIT}"
+WORKDIR /src/qsreplace
+RUN mkdir -p /out \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w" \
+      -o /out/qsreplace .
+RUN git init /src/gf-patterns \
+ && git -C /src/gf-patterns remote add origin https://github.com/1ndianl33t/Gf-Patterns.git \
+ && git -C /src/gf-patterns fetch --depth 1 origin "${GF_PATTERNS_COMMIT}" \
+ && git -C /src/gf-patterns checkout --detach "${GF_PATTERNS_COMMIT}" \
+ && test "$(git -C /src/gf-patterns rev-parse HEAD)" = "${GF_PATTERNS_COMMIT}" \
+ && mkdir -p /out/gf-patterns \
+ && cp /src/gf/examples/*.json /out/gf-patterns/ \
+ && cp /src/gf-patterns/*.json /out/gf-patterns/
 RUN git init /src/chisel \
  && git -C /src/chisel remote add origin https://github.com/jpillora/chisel.git \
  && git -C /src/chisel fetch --depth 1 origin "${CHISEL_COMMIT}" \
@@ -618,11 +656,15 @@ COPY --from=upstream-builder /out/gobuster /usr/bin/gobuster
 COPY --from=upstream-builder /out/dnsx /usr/bin/dnsx
 COPY --from=upstream-builder /out/anew /usr/bin/anew
 COPY --from=upstream-builder /out/waybackurls /usr/bin/waybackurls
+COPY --from=upstream-builder /out/gf /usr/bin/gf
+COPY --from=upstream-builder /out/qsreplace /usr/bin/qsreplace
+COPY --from=upstream-builder /out/gf-patterns /usr/local/share/seclab/gf-patterns
 COPY --from=upstream-builder /out/chisel /usr/bin/chisel
 COPY --from=upstream-builder /out/ligolo-proxy /usr/bin/ligolo-proxy
 COPY --from=upstream-builder /out/pivoting /usr/local/share/seclab/payloads/pivoting
 COPY security/proxychains/proxychains4.conf /etc/proxychains4.conf
-RUN chmod 0555 /usr/bin/chisel /usr/bin/ligolo-proxy /usr/local/share/seclab/payloads/pivoting/* \
+RUN chmod 0555 /usr/bin/chisel /usr/bin/ligolo-proxy /usr/bin/gf /usr/bin/qsreplace /usr/local/share/seclab/payloads/pivoting/* \
+ && chmod -R 0555 /usr/local/share/seclab/gf-patterns \
  && chmod 0644 /etc/proxychains4.conf
 COPY shell/tools.json /usr/local/share/seclab/tools.json
 COPY shell/zshrc /usr/local/share/seclab/zshrc
@@ -633,7 +675,10 @@ RUN usermod --login tester --home /home/tester --move-home --shell /usr/bin/zsh 
  && usermod --groups tester tester \
 && install -d -m 0755 /home/tester \
   && install -d -m 0700 /var/lib/seclab/ssh \
+  && install -d -m 0755 /home/tester/.config \
   && install -d -m 0700 /home/tester/.config/subfinder \
+  && ln -sfn /usr/local/share/seclab/gf-patterns /home/tester/.gf \
+  && ln -sfn /usr/local/share/seclab/gf-patterns /home/tester/.config/gf \
   && printf 'sources: []\n' > /home/tester/.config/subfinder/config.yaml \
   && chown -R tester:tester /home/tester
 COPY .tmux.conf /home/tester/.tmux.conf

@@ -140,6 +140,12 @@ templates:
     source: https://github.com/projectdiscovery/nuclei-templates
     commit: 893122ffce8ebf8e264f15d2cd3960cb1dd36d6c
     path: /usr/local/share/seclab/nuclei-templates
+  - name: gf-patterns
+    version: 1.0.0
+    source: https://github.com/1ndianl33t/Gf-Patterns
+    commit: f686f06ae647726578920084c894100d702496cc
+    path: /usr/local/share/seclab/gf-patterns
+    note: Coleccion comunitaria de patrones JSON para gf (XSS, SSRF, SQLi, RCE, LFI, etc.) complementada con los ejemplos oficiales de tomnomnom/gf.
 wordlists:
   - source: SecLists
     commit: eccfbd405af82194e125a450a0076dbe4252d6f9
@@ -400,6 +406,27 @@ built_binaries:
     package: .
     note: sin dependencias, solo biblioteca estandar. Solo aporta con targets
           publicos; en direcciones internas no hay datos en Wayback.
+  - name: gf
+    version: 0.1.0
+    source: https://github.com/tomnomnom/gf
+    commit: dcd4c361f9f5ba302294ed38b8ce278e8ba69006
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.18
+    cgo: false
+    package: .
+    note: wrapper de grep con soporte de patrones JSON para analisis de URLs y parametros.
+  - name: qsreplace
+    version: 0.0.3
+    source: https://github.com/tomnomnom/qsreplace
+    commit: 320475befaf66d986400aa8c3ed9b43e0b6b5a02
+    tag: v0.0.3
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    go_directive: 1.18
+    cgo: false
+    package: .
+    note: reemplazo masivo de query parameters en URLs para fuzzing e inyeccion de payloads.
   - name: bettercap
     version: 2.41.7
     source: https://github.com/bettercap/bettercap

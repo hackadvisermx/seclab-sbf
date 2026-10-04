@@ -35,6 +35,7 @@ def load_module(name: str, path: pathlib.Path):
 proxy_ctrl = load_module("proxy_control", REPO_ROOT / "scripts" / "proxy-control.py")
 vpn_ctrl = load_module("vpn_control", REPO_ROOT / "scripts" / "vpn-control.py")
 compose_sec = load_module("compose_security", REPO_ROOT / "scripts" / "verify" / "check-compose-security.py")
+scope_validator = load_module("scope_validator", REPO_ROOT / "scripts" / "pt-scope-validator.py")
 
 
 class MockSocket:
@@ -514,6 +515,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         expected_helpers = [
             "pt-cheat()",
             "pt-log()",
+            "pt-scope()",
+            "pt-eng()",
             "pt-extractports()",
             "pt-nmp()",
             "pt-serv-web()",
@@ -543,11 +546,17 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias ptskills="pt-skills"',
             'alias skills="pt-skills"',
             'alias pt-skill="pt-skills"',
+            'alias pteng="pt-eng"',
+            'alias engagement="pt-eng"',
+            'alias ptscope="pt-scope"',
+            'alias scopecheck="pt-scope"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-eng", content)
+        self.assertIn("pt-scope", content)
         self.assertIn("pt-skills", content)
         self.assertIn("pt-cheat", content)
         self.assertIn("pt-log", content)
@@ -694,6 +703,74 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertTrue(skills_pt.is_file(), f"Prompt template no existe en skills/prompts: {pt}")
             self.assertEqual(seed_pt.read_text(encoding="utf-8"), skills_pt.read_text(encoding="utf-8"))
 
+    def test_engagement_scaffolding_and_scope_guard(self):
+        """Verifica la especificacion target.yaml, motor de scope y scaffolding pt-eng."""
+        # 1. Validar plantilla target.yaml
+        target_template = REPO_ROOT / "workspace-seed" / "templates" / "target.yaml"
+        self.assertTrue(target_template.is_file(), "workspace-seed/templates/target.yaml no existe")
+
+        # Debe cargarse y validarse mediante scope_validator
+        target_data = scope_validator.load_target_yaml(target_template)
+        self.assertIn("scope", target_data)
+        self.assertIn("in_scope", target_data["scope"])
+        self.assertIn("out_of_scope", target_data["scope"])
+        self.assertIn("domains", target_data["scope"]["in_scope"])
+        self.assertIn("ips", target_data["scope"]["in_scope"])
+        self.assertIn("cidrs", target_data["scope"]["in_scope"])
+        self.assertIn("operational_limits", target_data)
+
+        # 2. Validar normalizacion y extraccion de objetivos
+        self.assertEqual(scope_validator.normalize_target("https://api.example.com/v1/auth"), "api.example.com")
+        self.assertEqual(scope_validator.normalize_target("HTTP://Test.Org:8080/path?arg=1"), "test.org")
+        self.assertEqual(scope_validator.normalize_target("192.0.2.1:443"), "192.0.2.1")
+        self.assertEqual(scope_validator.normalize_target("admin.internal.net"), "admin.internal.net")
+
+        # 3. Validar coincidencia de dominios (exacto y wildcards)
+        self.assertTrue(scope_validator.domain_matches("example.com", "example.com"))
+        self.assertTrue(scope_validator.domain_matches("sub.example.com", "*.example.com"))
+        self.assertTrue(scope_validator.domain_matches("deep.sub.example.com", "*.example.com"))
+        self.assertFalse(scope_validator.domain_matches("notexample.com", "*.example.com"))
+        self.assertFalse(scope_validator.domain_matches("example.org", "example.com"))
+
+        # 4. Validar decisiones de scope y precedencia de exclusion
+        # In-scope directo
+        verdict, _ = scope_validator.check_scope("example.com", target_data)
+        self.assertEqual(verdict, "IN_SCOPE")
+
+        # In-scope wildcard
+        verdict, _ = scope_validator.check_scope("api.example.com", target_data)
+        self.assertEqual(verdict, "IN_SCOPE")
+
+        # Out-of-scope directo
+        verdict, _ = scope_validator.check_scope("payments.example.com", target_data)
+        self.assertEqual(verdict, "OUT_OF_SCOPE")
+
+        # Out-of-scope URL compleja
+        verdict, _ = scope_validator.check_scope("https://payments.example.com/v1/checkout", target_data)
+        self.assertEqual(verdict, "OUT_OF_SCOPE")
+
+        # IP in-scope por CIDR
+        verdict, _ = scope_validator.check_scope("192.0.2.50", target_data)
+        self.assertEqual(verdict, "IN_SCOPE")
+
+        # IP excluida explicitamente a pesar de pertenecer al CIDR in-scope (precedencia de exclusion)
+        verdict, _ = scope_validator.check_scope("192.0.2.254", target_data)
+        self.assertEqual(verdict, "OUT_OF_SCOPE")
+
+        # Objetivo desconocido / no listado
+        verdict, _ = scope_validator.check_scope("unauthorized.com", target_data)
+        self.assertEqual(verdict, "UNKNOWN")
+
+        # 5. Validar integracion en Dockerfile y plugin Zsh
+        dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("pt-scope-validator", dockerfile)
+
+        plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+        self.assertIn("_pt-scope-script()", plugin)
+        self.assertIn("_pt-scope-resolve-config()", plugin)
+        self.assertIn("_pt-eng-help()", plugin)
+        self.assertIn("pt-eng()", plugin)
+        self.assertIn("pt-scope()", plugin)
 
 
 def main():

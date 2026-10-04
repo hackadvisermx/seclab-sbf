@@ -1,0 +1,51 @@
+# =============================================================================
+# Especificación de Alcance y Reglas de Engagement (SecLab-SBF)
+# =============================================================================
+version: "1.0"
+engagement:
+  name: "example-engagement"
+  type: "engagement" # engagement | reto
+  created_at: "YYYY-MM-DD"
+  auditor: "tester"
+  client: "Organización / Plataforma Objetivo"
+  tos_reference: "Contrato firmado / Reglas de Bug Bounty / TOS"
+  emergency_contact: "security@example.com"
+
+network:
+  vpn_profile: "none" # tryhackme | hackthebox | client | none
+  assigned_ip: ""
+  gateway_dns: ""
+
+scope:
+  in_scope:
+    domains:
+      - "example.com"
+      - "*.example.com"
+    ips:
+      - "192.0.2.10"
+    cidrs:
+      - "192.0.2.0/24"
+    endpoints:
+      - "https://api.example.com/v1"
+
+  out_of_scope:
+    domains:
+      - "payments.example.com"
+      - "status.example.com"
+    ips:
+      - "192.0.2.254"
+    cidrs: []
+    notes:
+      - "Prohibido evaluar pasarelas de pago o infraestructuras de terceros"
+
+operational_limits:
+  max_requests_per_second: 20
+  max_parallel_threads: 5
+  dos_testing: false
+  social_engineering: false
+  brute_force_account_lockout_safe: true
+
+reporting:
+  cvss_version: "3.1"
+  format: "markdown"
+  language: "es"

@@ -35,9 +35,15 @@ variable "admin_password" {
 }
 
 variable "vm_size" {
-  description = "Tamaño de la VM (2 vCPU / 8 GB por defecto)."
+  description = "Tamaño de la VM (ARM Ampere Altra 2 vCPU / 8 GB por defecto)."
   type        = string
-  default     = "Standard_D2s_v5"
+  default     = "Standard_B2ps_v2"
+}
+
+variable "image_sku" {
+  description = "SKU de la imagen de Ubuntu (server-arm64 para ARM, server para x64)."
+  type        = string
+  default     = "server-arm64"
 }
 
 variable "os_disk_gbs" {

@@ -64,6 +64,8 @@ case "$(dpkg --print-architecture)" in
     dalfox_sha256=99d2bbe01a7c0ac6e455cba0363900c5aef2866bd08a2cd5f00b83d7b9671c20
     ferox_asset=x86_64-linux-feroxbuster.tar.gz
     ferox_sha256=7985c00e6803b0f25d5e9139f7472279f3f4d891429627a5cedc629e53992d80
+    findomain_asset=findomain-linux.zip
+    findomain_sha256=7a1b90aaf291868e0fb2d643cefa238caddb7aa932b2355f0e0ce8b47a4b5083
     ;;
   arm64)
     ttyd_asset=ttyd.aarch64
@@ -74,6 +76,8 @@ case "$(dpkg --print-architecture)" in
     dalfox_sha256=e10f3f95e3033899c0912c1b9032d35f754caeeb002b0b8153e2958e54485694
     ferox_asset=aarch64-linux-feroxbuster.zip
     ferox_sha256=1e5244e1f52e55a647b65e0c76ae7afe0b9983c1fbea30ed7c67e477175eb381
+    findomain_asset=findomain-aarch64.zip
+    findomain_sha256=780056cba200722f49628bf89b5cd42f3927e694bd383af679d72cf96efc1621
     ;;
   *)
     printf 'unsupported architecture: %s\n' "$(dpkg --print-architecture)" >&2
@@ -120,6 +124,16 @@ case "$ferox_asset" in
 esac
 install -m 0555 /tmp/ferox/feroxbuster /usr/bin/feroxbuster
 rm -rf /tmp/ferox "/tmp/ferox.${ferox_asset##*.}"
+
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "https://github.com/Findomain/Findomain/releases/download/10.0.1/${findomain_asset}" \
+  --output /tmp/findomain.zip
+printf '%s  %s\n' "$findomain_sha256" /tmp/findomain.zip | sha256sum -c -
+rm -rf /tmp/findomain
+mkdir -p /tmp/findomain
+unzip -q -o /tmp/findomain.zip -d /tmp/findomain
+install -m 0555 /tmp/findomain/findomain /usr/bin/findomain
+rm -rf /tmp/findomain /tmp/findomain.zip
 
 # pspy 1.2.1 NO esta aqui: no hay release con binario arm64, asi que se
 # compila en su propio stage (pspy-builder) del Dockerfile de full, igual que

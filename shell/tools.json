@@ -245,6 +245,11 @@
       "command": "httprobe",
       "description": "Sondeo rápido y concurrente de servidores HTTP y HTTPS activos"
     },
+    "findomain": {
+      "category": "recon",
+      "command": "findomain",
+      "description": "Enumerador de subdominios multi-hilo de alto rendimiento en Rust"
+    },
     "crunch": {
       "category": "crack",
       "command": "crunch",
@@ -503,6 +508,7 @@
     "feroxbuster",
     "ffuf",
     "findDelegation.py",
+    "findomain",
     "fzf",
     "gdb",
     "gdb-multiarch",

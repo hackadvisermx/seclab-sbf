@@ -457,6 +457,15 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("httprobe", content)
         self.assertIn("Descubrimiento de dominios y subdominios relacionados", content)
 
+    def test_tools_lock_tracks_findomain(self):
+        lock_file = REPO_ROOT / "supply-chain" / "tools.lock.yaml"
+        self.assertTrue(lock_file.is_file())
+        content = lock_file.read_text(encoding="utf-8")
+
+        self.assertIn("findomain", content)
+        self.assertIn("findomain-linux.zip", content)
+        self.assertIn("findomain-aarch64.zip", content)
+
     def test_pentest_lab_plugin_helpers_and_aliases(self):
         plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
         self.assertTrue(plugin_file.is_file())

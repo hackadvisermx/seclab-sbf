@@ -57,6 +57,9 @@ sqlmap --version >/dev/null
 pspy -h >/dev/null
 enum4linux-ng -h >/dev/null
 hashcat --version >/dev/null
+chisel --version >/dev/null
+ligolo-proxy -version >/dev/null 2>&1 || true
+proxychains4 curl -h >/dev/null
 
 # 5. pt-forward / proxy-control sintaxis y estado base
 pt-forward status >/dev/null 2>&1 || test $? -eq 1

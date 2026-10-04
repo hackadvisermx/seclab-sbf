@@ -38,6 +38,7 @@ compose_sec = load_module("compose_security", REPO_ROOT / "scripts" / "verify" /
 scope_validator = load_module("scope_validator", REPO_ROOT / "scripts" / "pt-scope-validator.py")
 report_compiler = load_module("report_compiler", REPO_ROOT / "scripts" / "pt-report-compiler.py")
 agent_context = load_module("agent_context", REPO_ROOT / "scripts" / "pt-agent-context.py")
+engagement_packer = load_module("engagement_packer", REPO_ROOT / "scripts" / "pt-engagement-packer.py")
 
 
 class MockSocket:
@@ -568,9 +569,14 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias agentcontext="pt-context"',
             'alias pt-ctx="pt-context"',
             'alias ctx="pt-context"',
+            'alias ptpack="pt-eng pack"',
+            'alias engpack="pt-eng pack"',
+            'alias ptclose="pt-eng close"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
+
+        self.assertIn("_pt-packer-script()", content)
 
         # pt-help incluye mención a helpers
         self.assertIn("pt-context", content)
@@ -989,6 +995,103 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("_pt-context-script()", plugin)
             self.assertIn("_pt-context-help()", plugin)
             self.assertIn("pt-context()", plugin)
+
+    def test_engagement_packaging_and_lifecycle_closure(self):
+        """Verifica la sanitización, empaquetado reproducible con SHA-256 y cierre de engagements."""
+        import shutil
+        import tarfile
+        import tempfile
+
+        # 1. Validar motor de sanitización
+        dummy_jwt = "eyJ" + "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." + "eyJ" + "zdWIiOiIxMjM0NTY3ODkwIn0." + "abcdef1234567890"
+        dirty_text = (
+            "curl -u tester:SuperSecretPassword123! https://admin:pass456@api.target.com/v1 "
+            f"-H 'Authorization: Bearer {dummy_jwt}' "
+            "-H 'Cookie: session=sess_987654321; other=public'\n"
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----\n"
+        )
+        clean_text, count = engagement_packer.sanitize_text(dirty_text)
+        self.assertGreaterEqual(count, 4)
+        self.assertNotIn("SuperSecretPassword123!", clean_text)
+        self.assertNotIn("pass456", clean_text)
+        self.assertNotIn("sess_987654321", clean_text)
+        self.assertIn("[REDACTED_PASSWORD]", clean_text)
+        self.assertIn("[REDACTED_AUTH_TOKEN]", clean_text)
+        self.assertIn("[REDACTED_SESSION]", clean_text)
+        self.assertIn("[REDACTED_PRIVATE_KEY]", clean_text)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = pathlib.Path(tmp_dir)
+
+            # 2. Configurar estructura de engagement con credenciales sin sanitizar en evidencia
+            target_tmpl = REPO_ROOT / "workspace-seed" / "templates" / "target.yaml"
+            shutil.copy(target_tmpl, tmp / "target.yaml")
+            scope_tmpl = REPO_ROOT / "workspace-seed" / "templates" / "scope.txt"
+            shutil.copy(scope_tmpl, tmp / "scope.txt")
+
+            ev_dir = tmp / "evidence"
+            ev_dir.mkdir()
+            ev_file = ev_dir / "VULN-01.md"
+            ev_tmpl = REPO_ROOT / "workspace-seed" / "templates" / "evidence.md"
+            ev_content = ev_tmpl.read_text(encoding="utf-8") + "\n```bash\n" + dirty_text + "\n```\n"
+            ev_file.write_text(ev_content, encoding="utf-8")
+
+            recon_dir = tmp / "recon"
+            recon_dir.mkdir()
+            (recon_dir / "live_hosts.txt").write_text("https://api.example.com\n", encoding="utf-8")
+
+            # 3. Validar empaquetado con sanitización y manifiesto SHA-256
+            out_tar = tmp / "exports" / "test_bundle.tar.gz"
+            res = engagement_packer.pack_engagement(tmp, output_path=out_tar, sanitize=True, archive_format="tar.gz")
+
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["engagement"], tmp.name)
+            self.assertTrue(out_tar.is_file())
+            self.assertGreater(res["archive_size"], 0)
+            self.assertGreaterEqual(res["redactions_count"], 4)
+            self.assertEqual(len(res["archive_sha256"]), 64)
+
+            # Verificar contenido del tarball y el manifest.sha256
+            with tarfile.open(out_tar, "r:gz") as tf:
+                names = tf.getnames()
+                self.assertTrue(any("manifest.sha256" in n for n in names))
+                self.assertTrue(any("REPORT.md" in n for n in names))
+                self.assertTrue(any("target.yaml" in n for n in names))
+                self.assertTrue(any("evidence/VULN-01.md" in n for n in names))
+
+                # Extraer y verificar que la evidencia dentro del tarball esté sanitizada
+                san_ev = tf.extractfile(f"{tmp.name}/evidence/VULN-01.md").read().decode("utf-8")
+                self.assertNotIn("SuperSecretPassword123!", san_ev)
+                self.assertIn("[REDACTED_PASSWORD]", san_ev)
+
+                # Verificar integridad de los hashes en manifest.sha256
+                manifest_content = tf.extractfile(f"{tmp.name}/manifest.sha256").read().decode("utf-8")
+                for line in manifest_content.splitlines():
+                    if line.strip():
+                        hash_val, rel_p = line.split("  ", 1)
+                        self.assertEqual(len(hash_val), 64)
+
+            # 4. Validar cierre formal de auditoría
+            close_res = engagement_packer.close_engagement(tmp)
+            self.assertEqual(close_res["status"], "closed")
+            self.assertTrue(close_res["target_yaml_updated"])
+
+            target_updated = (tmp / "target.yaml").read_text(encoding="utf-8")
+            self.assertIn("status: closed", target_updated)
+            self.assertIn("closed_at:", target_updated)
+
+            # 5. Validar integración en Dockerfile y plugin Zsh
+            dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
+            self.assertIn("pt-engagement-packer", dockerfile)
+
+            plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+            self.assertIn("_pt-packer-script()", plugin)
+            self.assertIn("pack)", plugin)
+            self.assertIn("close)", plugin)
+            self.assertIn("alias ptpack=", plugin)
+            self.assertIn("alias engpack=", plugin)
+            self.assertIn("alias ptclose=", plugin)
+
 
 
 

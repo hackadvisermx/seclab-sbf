@@ -57,6 +57,10 @@ ARG GF_COMMIT=dcd4c361f9f5ba302294ed38b8ce278e8ba69006
 ARG QSREPLACE_VERSION=0.0.3
 ARG QSREPLACE_COMMIT=320475befaf66d986400aa8c3ed9b43e0b6b5a02
 ARG GF_PATTERNS_COMMIT=f686f06ae647726578920084c894100d702496cc
+ARG ASSETFINDER_VERSION=0.1.1
+ARG ASSETFINDER_COMMIT=4e95d8701aae8cff1c27af2626eb22ba110ad583
+ARG HTTPROBE_VERSION=0.2
+ARG HTTPROBE_COMMIT=7e8abdb4096ab224f21616478b699b4dfda9d409
 
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS fzf-builder
 ARG FZF_VERSION=0.74.4
@@ -348,6 +352,29 @@ RUN git init /src/gf-patterns \
  && mkdir -p /out/gf-patterns \
  && cp /src/gf/examples/*.json /out/gf-patterns/ \
  && cp /src/gf-patterns/*.json /out/gf-patterns/
+RUN git init /src/assetfinder \
+ && git -C /src/assetfinder remote add origin https://github.com/tomnomnom/assetfinder.git \
+ && git -C /src/assetfinder fetch --depth 1 origin "${ASSETFINDER_COMMIT}" \
+ && git -C /src/assetfinder checkout --detach "${ASSETFINDER_COMMIT}" \
+ && test "$(git -C /src/assetfinder rev-parse HEAD)" = "${ASSETFINDER_COMMIT}"
+WORKDIR /src/assetfinder
+RUN mkdir -p /out \
+ && go mod init github.com/tomnomnom/assetfinder 2>/dev/null || true \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w" \
+      -o /out/assetfinder .
+RUN git init /src/httprobe \
+ && git -C /src/httprobe remote add origin https://github.com/tomnomnom/httprobe.git \
+ && git -C /src/httprobe fetch --depth 1 origin "${HTTPROBE_COMMIT}" \
+ && git -C /src/httprobe checkout --detach "${HTTPROBE_COMMIT}" \
+ && test "$(git -C /src/httprobe rev-parse HEAD)" = "${HTTPROBE_COMMIT}"
+WORKDIR /src/httprobe
+RUN mkdir -p /out \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w" \
+      -o /out/httprobe .
 RUN git init /src/chisel \
  && git -C /src/chisel remote add origin https://github.com/jpillora/chisel.git \
  && git -C /src/chisel fetch --depth 1 origin "${CHISEL_COMMIT}" \
@@ -658,12 +685,14 @@ COPY --from=upstream-builder /out/anew /usr/bin/anew
 COPY --from=upstream-builder /out/waybackurls /usr/bin/waybackurls
 COPY --from=upstream-builder /out/gf /usr/bin/gf
 COPY --from=upstream-builder /out/qsreplace /usr/bin/qsreplace
+COPY --from=upstream-builder /out/assetfinder /usr/bin/assetfinder
+COPY --from=upstream-builder /out/httprobe /usr/bin/httprobe
 COPY --from=upstream-builder /out/gf-patterns /usr/local/share/seclab/gf-patterns
 COPY --from=upstream-builder /out/chisel /usr/bin/chisel
 COPY --from=upstream-builder /out/ligolo-proxy /usr/bin/ligolo-proxy
 COPY --from=upstream-builder /out/pivoting /usr/local/share/seclab/payloads/pivoting
 COPY security/proxychains/proxychains4.conf /etc/proxychains4.conf
-RUN chmod 0555 /usr/bin/chisel /usr/bin/ligolo-proxy /usr/bin/gf /usr/bin/qsreplace /usr/local/share/seclab/payloads/pivoting/* \
+RUN chmod 0555 /usr/bin/chisel /usr/bin/ligolo-proxy /usr/bin/gf /usr/bin/qsreplace /usr/bin/assetfinder /usr/bin/httprobe /usr/local/share/seclab/payloads/pivoting/* \
  && chmod -R 0555 /usr/local/share/seclab/gf-patterns \
  && chmod 0644 /etc/proxychains4.conf
 COPY shell/tools.json /usr/local/share/seclab/tools.json

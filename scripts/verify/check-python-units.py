@@ -448,6 +448,15 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("gef", content)
         self.assertIn("GDB Enhanced Features", content)
 
+    def test_tools_lock_tracks_assetfinder_and_httprobe(self):
+        lock_file = REPO_ROOT / "supply-chain" / "tools.lock.yaml"
+        self.assertTrue(lock_file.is_file())
+        content = lock_file.read_text(encoding="utf-8")
+
+        self.assertIn("assetfinder", content)
+        self.assertIn("httprobe", content)
+        self.assertIn("Descubrimiento de dominios y subdominios relacionados", content)
+
     def test_pentest_lab_plugin_helpers_and_aliases(self):
         plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
         self.assertTrue(plugin_file.is_file())

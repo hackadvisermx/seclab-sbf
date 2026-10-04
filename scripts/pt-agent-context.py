@@ -449,12 +449,74 @@ def resolve_skill_or_prompt(query: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _get_audit_checklist_module():
+    """Carga dinámicamente el módulo pt-audit-checklist si está disponible."""
+    candidate_paths = [
+        pathlib.Path(__file__).resolve().parent / "pt-audit-checklist.py",
+        pathlib.Path("/usr/local/bin/pt-audit-checklist"),
+        pathlib.Path("./scripts/pt-audit-checklist.py"),
+    ]
+    for cp in candidate_paths:
+        if cp.is_file():
+            try:
+                spec = importlib.util.spec_from_file_location("pt_audit_checklist", cp)
+                if spec and spec.loader:
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    return mod
+            except Exception:
+                pass
+    return None
+
+
+def collect_coverage_summary(engagement_dir: pathlib.Path) -> Dict[str, Any]:
+    """Extrae el resumen de cobertura metodológica y estado del checklist."""
+    mod = _get_audit_checklist_module()
+    if mod and hasattr(mod, "AuditChecklistEvaluator"):
+        try:
+            evaluator = mod.AuditChecklistEvaluator(engagement_dir)
+            res = evaluator.evaluate()
+            return {
+                "coverage_score": res.get("coverage_score", 0.0),
+                "completed_areas": res.get("completed_areas", 0),
+                "in_progress_areas": res.get("in_progress_areas", 0),
+                "total_areas": res.get("total_areas", 8),
+                "ready_for_closure": res.get("readiness", {}).get("ready_for_closure", False),
+                "blocking_issues": res.get("readiness", {}).get("blocking_issues", []),
+                "recommendations": res.get("readiness", {}).get("recommendations", []),
+                "matrix": [
+                    {
+                        "id": m.get("id"),
+                        "name": m.get("name"),
+                        "skill": m.get("skill"),
+                        "status": m.get("status"),
+                        "findings_count": m.get("findings_count", 0),
+                    }
+                    for m in res.get("matrix", [])
+                ],
+            }
+        except Exception:
+            pass
+
+    return {
+        "coverage_score": 0.0,
+        "completed_areas": 0,
+        "in_progress_areas": 0,
+        "total_areas": 8,
+        "ready_for_closure": False,
+        "blocking_issues": [],
+        "recommendations": [],
+        "matrix": [],
+    }
+
+
 def generate_context_dict(engagement_dir: pathlib.Path, skill_query: Optional[str] = None) -> Dict[str, Any]:
     """Consolida todos los componentes de contexto en una estructura dict determinista."""
     scope_data = load_scope_data(engagement_dir)
     recon_data = collect_recon_summary(engagement_dir)
     findings = collect_findings(engagement_dir)
     log_lines, log_size, recent_marks = collect_audit_marks(engagement_dir)
+    coverage_data = collect_coverage_summary(engagement_dir)
 
     sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
     for f in findings:
@@ -470,6 +532,7 @@ def generate_context_dict(engagement_dir: pathlib.Path, skill_query: Optional[st
         },
         "scope": scope_data.get("scope", {}),
         "operational_limits": scope_data.get("operational_limits", {}),
+        "coverage": coverage_data,
         "recon": recon_data,
         "findings": {
             "total": len(findings),
@@ -498,6 +561,7 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
     in_scope = scope.get("in_scope", {})
     out_of_scope = scope.get("out_of_scope", {})
     limits = data.get("operational_limits", {})
+    coverage = data.get("coverage", {})
     recon = data.get("recon", {})
     findings = data.get("findings", {})
     audit = data.get("audit", {})
@@ -553,12 +617,43 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
         for k, v in limits.items():
             lines.append(f"- **{k}:** {v}")
 
+    # Cobertura Metodológica & Checklist
+    lines.extend([
+        "",
+        "---",
+        "",
+        f"## 2. Cobertura Metodológica & Checklist ({coverage.get('coverage_score', 0.0)}%)",
+        "",
+    ])
+    completed = coverage.get("completed_areas", 0)
+    in_prog = coverage.get("in_progress_areas", 0)
+    tot = coverage.get("total_areas", 8)
+    lines.append(f"- **Progreso Metodológico:** {completed}/{tot} disciplinas completadas, {in_prog} en curso (Puntaje: **{coverage.get('coverage_score', 0.0)}%**)")
+    ready = coverage.get("ready_for_closure", False)
+    lines.append(f"- **Compuerta de Cierre:** {'Listo para cerrar' if ready else 'Requisitos de cierre pendientes'}")
+
+    matrix = coverage.get("matrix", [])
+    if matrix:
+        lines.append("")
+        lines.append("| Disciplina Metodológica | Skill Sugerida | Estado | Hallazgos |")
+        lines.append("|---|---|---|---|")
+        for m in matrix:
+            status_badge = "COMPLETADO" if m["status"] == "COMPLETED" else ("EN CURSO" if m["status"] == "IN_PROGRESS" else "PENDIENTE")
+            lines.append(f"| {m['name']} | `{m['skill']}` | {status_badge} | {m['findings_count']} |")
+
+    blocking = coverage.get("blocking_issues", [])
+    if blocking:
+        lines.append("")
+        lines.append("- **Bloqueos para Cierre:**")
+        for b in blocking:
+            lines.append(f"  - ⚠️ {b}")
+
     # Reconocimiento
     lines.extend([
         "",
         "---",
         "",
-        "## 2. Superficie de Ataque y Reconocimiento",
+        "## 3. Superficie de Ataque y Reconocimiento",
         "",
     ])
     live_hosts = recon.get("live_hosts", [])
@@ -584,7 +679,7 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
         "",
         "---",
         "",
-        "## 3. Matriz de Hallazgos Validados (Evidence-First)",
+        "## 4. Matriz de Hallazgos Validados (Evidence-First)",
         "",
     ])
     total_findings = findings.get("total", 0)
@@ -607,7 +702,7 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
         "",
         "---",
         "",
-        "## 4. Trazabilidad de Auditoría",
+        "## 5. Trazabilidad de Auditoría",
         "",
         f"- **Bitácora Activa:** `{eng['directory']}/terminal.log` ({audit.get('log_lines', 0)} líneas, {audit.get('log_size', '0 B')})",
     ])
@@ -626,7 +721,7 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
             "",
             "---",
             "",
-            f"## 5. Directivas de Agente: {active_skill.get('name', 'Especialidad')}",
+            f"## 6. Directivas de Agente: {active_skill.get('name', 'Especialidad')}",
             "",
         ])
         if active_skill.get("type") == "skill":

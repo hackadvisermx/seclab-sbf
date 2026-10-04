@@ -380,6 +380,59 @@ class TestComposeSecurityAuditor(unittest.TestCase):
         self.assertTrue(any("no-new-privileges" in i for i in issues))
 
 
+class TestPivotingToolkitAndConfig(unittest.TestCase):
+    """Verifica la configuracion y manifiestos de las herramientas de pivoting."""
+
+    def test_tools_json_manifest_consistency(self):
+        tools_file = REPO_ROOT / "shell" / "tools.json"
+        self.assertTrue(tools_file.is_file())
+        with open(tools_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        installed = set(data.get("installed", []))
+        tools = set(data.get("tools", {}).keys())
+        self.assertEqual(installed, tools, f"Desincronizacion en tools.json: {installed ^ tools}")
+
+        for tool_name in ["chisel", "ligolo-proxy", "proxychains4"]:
+            self.assertIn(tool_name, tools, f"{tool_name} debe estar en tools.json")
+            tool_entry = data["tools"][tool_name]
+            self.assertEqual(tool_entry["category"], "network")
+            self.assertTrue(len(tool_entry["description"]) > 10)
+
+    def test_proxychains_config_security_and_format(self):
+        conf_file = REPO_ROOT / "security" / "proxychains" / "proxychains4.conf"
+        self.assertTrue(conf_file.is_file())
+        content = conf_file.read_text(encoding="utf-8")
+
+        self.assertIn("dynamic_chain", content)
+        self.assertIn("proxy_dns", content)
+        self.assertIn("quiet_mode", content)
+        self.assertIn("[ProxyList]", content)
+
+        # Invariante: solo proxies en loopback 127.0.0.1 por defecto
+        proxy_lines = [
+            line.strip()
+            for line in content.splitlines()
+            if line.strip() and not line.strip().startswith("#") and "[ProxyList]" not in line
+        ]
+        self.assertTrue(len(proxy_lines) >= 1)
+        for line in proxy_lines:
+            parts = line.split()
+            if parts[0] in ("socks4", "socks5", "http"):
+                ip = parts[1]
+                self.assertEqual(ip, "127.0.0.1", f"Proxy por defecto no es loopback: {line}")
+                self.assertEqual(parts[2], "1080", f"Puerto por defecto no es 1080: {line}")
+
+    def test_tools_lock_tracks_pivoting_artifacts(self):
+        lock_file = REPO_ROOT / "supply-chain" / "tools.lock.yaml"
+        self.assertTrue(lock_file.is_file())
+        content = lock_file.read_text(encoding="utf-8")
+
+        self.assertIn("chisel", content)
+        self.assertIn("ligolo-ng", content)
+        self.assertIn("proxychains4", content)
+        self.assertIn("libproxychains4", content)
+
+
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
     runner = unittest.TextTestRunner(verbosity=2)

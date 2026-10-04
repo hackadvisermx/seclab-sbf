@@ -48,6 +48,10 @@ ARG WAYBACKURLS_VERSION=0.1.0
 ARG WAYBACKURLS_COMMIT=86aeb97852707e1a6fb3bcd33e61d5433a6476c5
 ARG NAABU_VERSION=2.6.1
 ARG NAABU_COMMIT=5a0ca8bde91b5bb16213e9e8b5c6871eac954bd8
+ARG CHISEL_VERSION=1.12.0
+ARG CHISEL_COMMIT=fe4f4fe7e6a849b4aa6d1b8ee47037e16033f42a
+ARG LIGOLO_VERSION=0.9.2
+ARG LIGOLO_COMMIT=e543732f4be6dc899096ae322ae620bf010bfbfc
 
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS fzf-builder
 ARG FZF_VERSION=0.74.4
@@ -152,6 +156,10 @@ ARG GOBUSTER_COMMIT
 ARG DNSX_COMMIT
 ARG ANEW_COMMIT
 ARG WAYBACKURLS_COMMIT
+ARG CHISEL_VERSION
+ARG CHISEL_COMMIT
+ARG LIGOLO_VERSION
+ARG LIGOLO_COMMIT
 RUN git init /src/subfinder \
  && git -C /src/subfinder remote add origin https://github.com/projectdiscovery/subfinder.git \
  && git -C /src/subfinder fetch --depth 1 origin "${SUBFINDER_COMMIT}" \
@@ -302,6 +310,60 @@ RUN mkdir -p /out \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
       -o /out/waybackurls .
+RUN git init /src/chisel \
+ && git -C /src/chisel remote add origin https://github.com/jpillora/chisel.git \
+ && git -C /src/chisel fetch --depth 1 origin "${CHISEL_COMMIT}" \
+ && git -C /src/chisel checkout --detach "${CHISEL_COMMIT}" \
+ && test "$(git -C /src/chisel rev-parse HEAD)" = "${CHISEL_COMMIT}"
+WORKDIR /src/chisel
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.58.0; fi \
+ && GOTOOLCHAIN=local go mod tidy
+RUN mkdir -p /out/pivoting \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.version=${CHISEL_VERSION}" \
+      -o /out/chisel . \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.version=${CHISEL_VERSION}" \
+      -o /out/pivoting/chisel_linux_amd64 . \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.version=${CHISEL_VERSION}" \
+      -o /out/pivoting/chisel_linux_arm64 . \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.version=${CHISEL_VERSION}" \
+      -o /out/pivoting/chisel_windows_amd64.exe .
+RUN git init /src/ligolo \
+ && git -C /src/ligolo remote add origin https://github.com/nicocha30/ligolo-ng.git \
+ && git -C /src/ligolo fetch --depth 1 origin "${LIGOLO_COMMIT}" \
+ && git -C /src/ligolo checkout --detach "${LIGOLO_COMMIT}" \
+ && test "$(git -C /src/ligolo rev-parse HEAD)" = "${LIGOLO_COMMIT}"
+WORKDIR /src/ligolo
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.58.0; fi \
+ && GOTOOLCHAIN=local go mod tidy
+RUN mkdir -p /out/pivoting \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.version=${LIGOLO_VERSION}" \
+      -o /out/ligolo-proxy ./cmd/proxy \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.version=${LIGOLO_VERSION}" \
+      -o /out/pivoting/ligolo_agent_linux_amd64 ./cmd/agent \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.version=${LIGOLO_VERSION}" \
+      -o /out/pivoting/ligolo_agent_linux_arm64 ./cmd/agent \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+      go build -mod=readonly -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.version=${LIGOLO_VERSION}" \
+      -o /out/pivoting/ligolo_agent_windows_amd64.exe ./cmd/agent
 
 FROM ${UBUNTU_IMAGE} AS nxc-builder
 ARG UBUNTU_SNAPSHOT
@@ -556,6 +618,12 @@ COPY --from=upstream-builder /out/gobuster /usr/bin/gobuster
 COPY --from=upstream-builder /out/dnsx /usr/bin/dnsx
 COPY --from=upstream-builder /out/anew /usr/bin/anew
 COPY --from=upstream-builder /out/waybackurls /usr/bin/waybackurls
+COPY --from=upstream-builder /out/chisel /usr/bin/chisel
+COPY --from=upstream-builder /out/ligolo-proxy /usr/bin/ligolo-proxy
+COPY --from=upstream-builder /out/pivoting /usr/local/share/seclab/payloads/pivoting
+COPY security/proxychains/proxychains4.conf /etc/proxychains4.conf
+RUN chmod 0555 /usr/bin/chisel /usr/bin/ligolo-proxy /usr/local/share/seclab/payloads/pivoting/* \
+ && chmod 0644 /etc/proxychains4.conf
 COPY shell/tools.json /usr/local/share/seclab/tools.json
 COPY shell/zshrc /usr/local/share/seclab/zshrc
 COPY shell/pentest-lab /usr/local/share/seclab/pentest-lab

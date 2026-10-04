@@ -29,6 +29,7 @@ apt:
     libimage-exiftool-perl: 13.50+dfsg-1
     libpcap0.8t64: 1.10.6-1ubuntu1.1
     libpq5: 18.6-0ubuntu0.26.04.1
+    libproxychains4: 4.17-3build1
     libreadline8t64: 8.3-4
     libsqlite3-0: 3.46.1-9ubuntu0.3
     libusb-1.0-0: 2:1.0.29-2build1
@@ -42,6 +43,7 @@ apt:
     openvpn: 2.7.0-1ubuntu1.3
     pocl-opencl-icd: 6.0-7build1
     procps: 2:4.0.4-9ubuntu1
+    proxychains4: 4.17-3build1
     python3: 3.14.3-0ubuntu2
     python3-ldap3: 2.9.1-2build1
     python3-packaging: 26.0-1
@@ -482,6 +484,43 @@ built_binaries:
     note: >-
       Vigila procesos y eventos de filesystem en tiempo real. Lee /proc, asi que
       sin privilegios solo ve lo del usuario actual. Solo entra en la imagen full.
+  - name: chisel
+    version: 1.12.0
+    source: https://github.com/jpillora/chisel
+    commit: fe4f4fe7e6a849b4aa6d1b8ee47037e16033f42a
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    cgo: false
+    package: .
+    built_from_source: true
+    dependency_overrides:
+      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.58.0
+    payloads:
+      - /usr/local/share/seclab/payloads/pivoting/chisel_linux_amd64
+      - /usr/local/share/seclab/payloads/pivoting/chisel_linux_arm64
+      - /usr/local/share/seclab/payloads/pivoting/chisel_windows_amd64.exe
+    note: >-
+      Tuneles TCP/UDP rapidos sobre HTTP/WebSockets con SSH embebido. Permite
+      listeners SOCKS5 inversos e integracion con proxychains4.
+  - name: ligolo-ng
+    version: 0.9.2
+    source: https://github.com/nicocha30/ligolo-ng
+    commit: e543732f4be6dc899096ae322ae620bf010bfbfc
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    cgo: false
+    package: ./cmd/proxy
+    built_from_source: true
+    dependency_overrides:
+      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.58.0
+    payloads:
+      - /usr/local/share/seclab/payloads/pivoting/ligolo_agent_linux_amd64
+      - /usr/local/share/seclab/payloads/pivoting/ligolo_agent_linux_arm64
+      - /usr/local/share/seclab/payloads/pivoting/ligolo_agent_windows_amd64.exe
+    note: >-
+      Herramienta avanzada de tunelado y pivoting de red con multiplexacion gVisor/yamux.
 python_packages_full:
   - name: netexec
     version: 1.5.1

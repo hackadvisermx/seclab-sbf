@@ -38,6 +38,7 @@ apt-get install -y --no-install-recommends \
   openvpn \
   7zip \
   procps \
+  proxychains4 \
   python3 \
   python3-ldap3 \
   python3-packaging \

@@ -1,5 +1,20 @@
 {
   "tools": {
+    "chisel": {
+      "category": "network",
+      "command": "chisel",
+      "description": "Túneles TCP/UDP y proxy SOCKS5 inverso sobre HTTP/WebSockets"
+    },
+    "ligolo-proxy": {
+      "category": "network",
+      "command": "ligolo-proxy",
+      "description": "Controlador y servidor de túneles Ligolo-ng para pivoting avanzado"
+    },
+    "proxychains4": {
+      "category": "network",
+      "command": "proxychains4",
+      "description": "Fuerza conexiones TCP de cualquier comando a través de proxies SOCKS4/5 o HTTP"
+    },
     "curl": {
       "category": "network",
       "command": "curl",
@@ -447,6 +462,7 @@
     "bettercap",
     "bloodhound-ce-python",
     "certipy",
+    "chisel",
     "crunch",
     "curl",
     "dacledit.py",
@@ -480,6 +496,7 @@
     "ldapdomaindump",
     "ldapsearch",
     "ldd2bloodhound",
+    "ligolo-proxy",
     "mimikatz.py",
     "msfconsole",
     "msfvenom",
@@ -496,6 +513,7 @@
     "owneredit.py",
     "psexec.py",
     "pspy",
+    "proxychains4",
     "pt-forward",
     "pwn",
     "pypykatz",

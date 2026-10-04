@@ -158,12 +158,28 @@ sudo nft list table inet seclab_host</code></pre>
     </ul>
   </div>
 
-  <h2>6. Seguridad y Buenas Prácticas</h2>
+  <h2>6. Apagar y Encender el VPS (Ahorro de Créditos en Azure)</h2>
+  <div class="card">
+    <p>Para no consumir créditos cuando no estés usando el laboratorio, desasigna la VM:</p>
+
+    <h3>A. Apagar y Desasignar la VM (Cómputo = $0.00/h)</h3>
+    <p>Ejecuta desde tu Mac (hace <code>deallocate</code> liberando vCPU y memoria para detener el cobro por hora):</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make vm-stop-az</code></pre>
+
+    <h3>B. Encender la VM</h3>
+    <p>Inicia la VM; Tailscale, Docker y el laboratorio arrancan automáticamente:</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make vm-start-az</code></pre>
+
+    <h3>C. Consultar Estado</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make vm-status-az</code></pre>
+  </div>
+
+  <h2>7. Seguridad y Buenas Prácticas</h2>
   <div class="warn">
     <strong>Zero Ingress Enforced:</strong> La IP pública <code>158.23.145.139</code> solo tiene función de salida a internet (egress para descargar paquetes/herramientas sin costo de NAT Gateway). Cualquier intento de conexión entrante a esa IP es descartado de inmediato por el NSG de Azure y por la cadena <code>input</code> de <code>nftables</code> (política DROP). Todo el tráfico administrativo transita únicamente por la interfaz <code>tailscale0</code>.
   </div>
 
-  <h2>7. Solución de Problemas</h2>
+  <h2>8. Solución de Problemas</h2>
   <table>
     <tr><th>Síntoma</th><th>Diagnóstico y Solución</th></tr>
     <tr>

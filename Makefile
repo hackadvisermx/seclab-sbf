@@ -17,7 +17,7 @@ SHELL := /bin/sh
 # caso de `make` sin argumentos y no los `make compose-up`. Comprobado.
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-azure host-ssh-azure lab-ssh-az host-ssh-az lab-ssh-oci host-ssh-oci lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check
+.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-azure host-ssh-azure lab-ssh-az host-ssh-az lab-ssh-oci host-ssh-oci vm-status-azure vm-status-az vm-stop-azure vm-stop-az vm-start-azure vm-start-az lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -618,6 +618,8 @@ fail2ban-check:
 TF_STACK ?= oci
 TF_HOST ?=
 TF_ADMIN ?= ubuntu
+AZURE_RG ?= seclab-sbf-prod
+AZURE_VM ?= seclab-sbf-prod-lab
 
 tf-fmt:
 	cd "$(ROOT)" && terraform fmt -check -recursive terraform/
@@ -703,6 +705,29 @@ tf-apply-azure:
 
 tf-destroy-azure:
 	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh azure destroy
+
+# Gestion de energia de la VM en Azure:
+# vm-stop-azure ejecuta `deallocate`, lo cual libera vCPU y RAM deteniendo
+# por completo el cobro por hora de computo ($0.00/h). `az vm stop` solo
+# pararia el SO pero seguiria cobrando.
+vm-status-azure:
+	@az vm get-instance-view --resource-group "$(AZURE_RG)" --name "$(AZURE_VM)" --query "instanceView.statuses[?starts_with(code, 'PowerState/')].displayStatus" -o tsv 2>/dev/null || printf 'No se pudo consultar el estado de %s\n' "$(AZURE_VM)"
+
+vm-status-az: vm-status-azure
+
+vm-stop-azure:
+	@printf 'Desasignando VM %s en %s (deallocate libera vCPU/RAM y detiene costos de computo)...\n' "$(AZURE_VM)" "$(AZURE_RG)"
+	az vm deallocate --resource-group "$(AZURE_RG)" --name "$(AZURE_VM)"
+	@printf 'VM desasignada correctamente. Estado: Deallocated (computo = $$0.00/h).\n'
+
+vm-stop-az: vm-stop-azure
+
+vm-start-azure:
+	@printf 'Iniciando VM %s en %s...\n' "$(AZURE_VM)" "$(AZURE_RG)"
+	az vm start --resource-group "$(AZURE_RG)" --name "$(AZURE_VM)"
+	@printf 'VM iniciada correctamente. Tailnet: %s\n' "$(AZURE_HOST)"
+
+vm-start-az: vm-start-azure
 
 tf-plan-do:
 	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh digitalocean plan

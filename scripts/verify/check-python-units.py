@@ -523,6 +523,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "pt-extractports()",
             "pt-nmp()",
             "pt-serv-web()",
+            "pt-callback()",
             "pt-serv-smb()",
             "pt-serv-payloads()",
             "pt-s3-ls()",
@@ -559,11 +560,14 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias vuln="pt-finding"',
             'alias ptreport="pt-report"',
             'alias report="pt-report"',
+            'alias ptcallback="pt-callback"',
+            'alias callback="pt-callback"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-callback", content)
         self.assertIn("pt-finding", content)
         self.assertIn("pt-report", content)
         self.assertIn("pt-eng", content)
@@ -650,6 +654,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "business-logic-audit": "logic",
             "client-side-spa-audit": "client",
             "api-security-audit": "api",
+            "ssrf-injection-audit": "injection",
             "duplicate-scope-guard": "guard",
         }
 
@@ -703,6 +708,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "recon-agent.prompt.md",
             "triage-agent.prompt.md",
             "report-agent.prompt.md",
+            "injection-agent.prompt.md",
         ]
         seed_prompts_dir = REPO_ROOT / "workspace-seed" / "templates" / "prompts"
         skills_prompts_dir = REPO_ROOT / "skills" / "prompts"
@@ -841,6 +847,38 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("pt-finding()", plugin)
         self.assertIn("_pt-report-help()", plugin)
         self.assertIn("pt-report()", plugin)
+
+    def test_ssrf_injection_audit_and_callback_helper(self):
+        """Verifica la skill ssrf-injection-audit, prompt de inyección y helper pt-callback."""
+        # 1. Validar skill y sincronización
+        skill_src = REPO_ROOT / "skills" / "ssrf-injection-audit" / "SKILL.md"
+        skill_seed = REPO_ROOT / "workspace-seed" / "skills" / "ssrf-injection-audit" / "SKILL.md"
+        self.assertTrue(skill_src.is_file(), "skills/ssrf-injection-audit/SKILL.md no existe")
+        self.assertTrue(skill_seed.is_file(), "workspace-seed/skills/ssrf-injection-audit/SKILL.md no existe")
+        self.assertEqual(skill_src.read_text(encoding="utf-8"), skill_seed.read_text(encoding="utf-8"))
+
+        content = skill_src.read_text(encoding="utf-8")
+        self.assertIn("name: ssrf-injection-audit", content)
+        self.assertIn("category: injection", content)
+        self.assertIn("pt-callback", content)
+        self.assertIn("## 1. Propósito y Alcance", content)
+        self.assertIn("## 2. Precondiciones y Guardrails", content)
+        self.assertIn("## 3. Flujo de Ejecución", content)
+
+        # 2. Validar prompt template de agente
+        prompt_src = REPO_ROOT / "skills" / "prompts" / "injection-agent.prompt.md"
+        prompt_seed = REPO_ROOT / "workspace-seed" / "templates" / "prompts" / "injection-agent.prompt.md"
+        self.assertTrue(prompt_src.is_file())
+        self.assertTrue(prompt_seed.is_file())
+        self.assertEqual(prompt_src.read_text(encoding="utf-8"), prompt_seed.read_text(encoding="utf-8"))
+
+        # 3. Validar helper pt-callback en plugin Zsh
+        plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+        self.assertIn("pt-callback()", plugin)
+        self.assertIn("alias ptcallback=", plugin)
+        self.assertIn("alias callback=", plugin)
+        self.assertIn("/tmp/seclab-callback.log", plugin)
+        self.assertIn("/tmp/seclab-callback.pid", plugin)
 
 
 def main():

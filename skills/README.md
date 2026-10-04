@@ -25,6 +25,7 @@ Este directorio contiene las especificaciones y flujos de trabajo de **Agent Ski
 | **Lógica de Negocio y Estados** | [`business-logic-audit`](./business-logic-audit/SKILL.md) | `logic` | Detección de salto de estados, manipulación de precios/cantidades y condiciones de carrera (Race Conditions). |
 | **Client-Side & SPAs** | [`client-side-spa-audit`](./client-side-spa-audit/SKILL.md) | `client` | Auditoría de aplicaciones React/SPA, endpoints en JavaScript, configuraciones CORS y postMessage. |
 | **Seguridad de APIs & Webhooks** | [`api-security-audit`](./api-security-audit/SKILL.md) | `api` | Auditoría de APIs REST y GraphQL, Mass Assignment, Verb Tampering y validación de firmas HMAC. |
+| **Inyecciones de Servidor & SSRF** | [`ssrf-injection-audit`](./ssrf-injection-audit/SKILL.md) | `injection` | Evaluación controlada de SSRF reflejado/ciego, SSTI con canaries aritméticos y fallos estructurales. |
 | **Guardia de Scope y Duplicados** | [`duplicate-scope-guard`](./duplicate-scope-guard/SKILL.md) | `guard` | Filtro pre-reporte para evitar penalizaciones por duplicados o hallazgos fuera de política de alcance. |
 
 ---

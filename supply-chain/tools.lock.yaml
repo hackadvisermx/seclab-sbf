@@ -58,6 +58,7 @@ apt:
     wireguard-tools: 1.0.20250521-1ubuntu1
     zlib1g: 1:1.3.dfsg+really1.3.1-1ubuntu3.1
     zsh: 5.9-8ubuntu3
+    zstd: 1.5.7+dfsg-3
 base_images:
   - name: ubuntu
     reference: docker.io/library/ubuntu:26.04
@@ -126,6 +127,33 @@ third_party_binaries:
         file: findomain-aarch64.zip
         sha256: 780056cba200722f49628bf89b5cd42f3927e694bd383af679d72cf96efc1621
         binary_sha256: db9ad0e0fa5ca0c91cd08c923d1a2b30cc2185665c10594d37dc9166bea39c10
+  - name: gau
+    version: 2.2.4
+    source: https://github.com/lc/gau/releases/download/v2.2.4/
+    note: Recolecta URLs pasivas desde AlienVault OTX, Wayback Machine, Common Crawl y URLScan; binarios oficiales Go verificados
+    assets:
+      linux/amd64:
+        file: gau_2.2.4_linux_amd64.tar.gz
+        sha256: 10e2e248c37cafb0be3f6d2931125296b95cd4186066d596d47fa417237529a9
+        binary_sha256: 22a7061bfa74e90b2995b2d82cab7d432ddb4ba85e3665dc5c06ac6eaad36cc3
+      linux/arm64:
+        file: gau_2.2.4_linux_arm64.tar.gz
+        sha256: c194992df360d3a24e021c6dc5a5a0576cfd769be1d19cccb29adc1d3759637d
+        binary_sha256: b6c7880b094696b322bb8df1857ad60c5e2109ce721362542921dfc8a8706838
+  - name: x8
+    version: 4.3.0
+    source: https://github.com/Sh1Yo/x8/releases/download/v4.3.0/
+    note: Fuzzer de parametros ocultos ultra-rapido en Rust; binarios verificados por SHA-256 (release oficial en x86_64, BlackArch en aarch64)
+    assets:
+      linux/amd64:
+        file: x86_64-linux-x8.gz
+        sha256: b3e54da4c0cc62163a3485addea6671368ee69342ea5740e56d6d6112196bd0e
+        binary_sha256: 6204625bb47ad073c8eabe75fd69763f812dbd0b77ac8e05632adfcf559b4815
+      linux/arm64:
+        file: x8-1:v4.3.0.r10.gc78f246-1-aarch64.pkg.tar.zst
+        source: https://mirror.cyberbits.eu/blackarch/blackarch/os/aarch64/x8-1:v4.3.0.r10.gc78f246-1-aarch64.pkg.tar.zst
+        sha256: 35f355231ac2420eca6aa466e8fdf9f71542bb81726b46930ea9885c29ef1b4c
+        binary_sha256: 143c89b92ba31a2bc9bf9f30bc602085963ac8799887542a8c63a723cb7946dc
   - name: enum4linux-ng
     version: 1.3.10
     source: https://raw.githubusercontent.com/cddmp/enum4linux-ng/v1.3.10/enum4linux-ng.py

@@ -513,6 +513,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         # Invariantes: helpers de ergonomia y reconocimiento
         expected_helpers = [
             "pt-cheat()",
+            "pt-log()",
             "pt-extractports()",
             "pt-nmp()",
             "pt-serv-web()",
@@ -537,17 +538,49 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias awsl="pt-s3-ls"',
             'alias ptcheat="pt-cheat"',
             'alias cheat="pt-cheat"',
+            'alias ptlog="pt-log"',
+            'alias logeng="pt-log"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         # pt-help incluye mención a helpers
         self.assertIn("pt-cheat", content)
+        self.assertIn("pt-log", content)
         self.assertIn("pt-nmp", content)
         self.assertIn("pt-recon", content)
         self.assertIn("pt-serv-web", content)
         self.assertIn("pt-serv-payloads", content)
         self.assertIn("pt-fuzz-params", content)
+
+    def test_engagement_logging_helpers(self):
+        """Verifica la implementacion modular y defensiva de pt-log para auditoria."""
+        plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
+        self.assertTrue(plugin_file.is_file())
+        content = plugin_file.read_text(encoding="utf-8")
+
+        # Subcomandos modulares
+        subcommands = [
+            "_pt-log-workspace-dir()",
+            "_pt-log-start()",
+            "_pt-log-stop()",
+            "_pt-log-status()",
+            "_pt-log-mark()",
+            "_pt-log-list()",
+            "_pt-log-view()",
+            "_pt-log-tail()",
+            "_pt-log-help()",
+        ]
+        for subcmd in subcommands:
+            self.assertIn(subcmd, content, f"Subcomando no encontrado en pt-log: {subcmd}")
+
+        # Invariantes de seguridad: validacion alfanumerica y tmux pipe-pane
+        self.assertIn("tmux pipe-pane -o", content)
+        self.assertIn("^[a-zA-Z0-9._-]+$", content)
+        self.assertIn("terminal.log", content)
+        self.assertIn("SECLAB AUDIT LOG STARTED", content)
+        self.assertIn("SECLAB AUDIT LOG STOPPED", content)
+        self.assertIn("@seclab_log_file", content)
 
     def test_cheatsheet_dataset_integrity(self):
         """Verifica existencia, formato TSV y validez del catalogo cheatsheet.tsv."""

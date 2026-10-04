@@ -37,6 +37,7 @@ vpn_ctrl = load_module("vpn_control", REPO_ROOT / "scripts" / "vpn-control.py")
 compose_sec = load_module("compose_security", REPO_ROOT / "scripts" / "verify" / "check-compose-security.py")
 scope_validator = load_module("scope_validator", REPO_ROOT / "scripts" / "pt-scope-validator.py")
 report_compiler = load_module("report_compiler", REPO_ROOT / "scripts" / "pt-report-compiler.py")
+agent_context = load_module("agent_context", REPO_ROOT / "scripts" / "pt-agent-context.py")
 
 
 class MockSocket:
@@ -520,6 +521,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "pt-eng()",
             "pt-finding()",
             "pt-report()",
+            "pt-context()",
             "pt-extractports()",
             "pt-nmp()",
             "pt-serv-web()",
@@ -562,11 +564,16 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias report="pt-report"',
             'alias ptcallback="pt-callback"',
             'alias callback="pt-callback"',
+            'alias ptcontext="pt-context"',
+            'alias agentcontext="pt-context"',
+            'alias pt-ctx="pt-context"',
+            'alias ctx="pt-context"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-context", content)
         self.assertIn("pt-callback", content)
         self.assertIn("pt-finding", content)
         self.assertIn("pt-report", content)
@@ -695,20 +702,24 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertTrue(seed_skill_md.is_file(), f"Skill no reflejada en workspace-seed: {skill_name}")
             self.assertEqual(content, seed_skill_md.read_text(encoding="utf-8"), f"Discrepancia de contenido en workspace-seed para {skill_name}")
 
-        # Validar existencia del helper interactivo pt-skills en el plugin Zsh
+        # Validar existencia del helper interactivo pt-skills y selector de prompts en el plugin Zsh
         plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
         self.assertTrue(plugin_file.is_file())
         plugin_content = plugin_file.read_text(encoding="utf-8")
         self.assertIn("pt-skills-dir()", plugin_content)
+        self.assertIn("pt-prompts-dir()", plugin_content)
         self.assertIn("pt-skills()", plugin_content)
         self.assertIn("SECLAB-Skills >", plugin_content)
+        self.assertIn("SECLAB-Prompts >", plugin_content)
 
-        # Validar existencia de plantillas de prompts para agentes
+        # Validar existencia de la suite completa de plantillas de prompts para agentes (6 roles)
         prompt_templates = [
             "recon-agent.prompt.md",
+            "auth-agent.prompt.md",
+            "logic-agent.prompt.md",
+            "injection-agent.prompt.md",
             "triage-agent.prompt.md",
             "report-agent.prompt.md",
-            "injection-agent.prompt.md",
         ]
         seed_prompts_dir = REPO_ROOT / "workspace-seed" / "templates" / "prompts"
         skills_prompts_dir = REPO_ROOT / "skills" / "prompts"
@@ -879,6 +890,106 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("alias callback=", plugin)
         self.assertIn("/tmp/seclab-callback.log", plugin)
         self.assertIn("/tmp/seclab-callback.pid", plugin)
+
+    def test_agent_context_aggregator(self):
+        """Verifica la agregación determinista de contexto (pt-context) para agentes."""
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = pathlib.Path(tmp_dir)
+
+            # 1. Crear estructura de engagement
+            target_tmpl = REPO_ROOT / "workspace-seed" / "templates" / "target.yaml"
+            shutil.copy(target_tmpl, tmp / "target.yaml")
+
+            recon_dir = tmp / "recon"
+            recon_dir.mkdir()
+            (recon_dir / "live_hosts.txt").write_text("https://api.example.com\nhttps://admin.example.com\n", encoding="utf-8")
+            (recon_dir / "subdomains.txt").write_text("api.example.com\nadmin.example.com\napp.example.com\n", encoding="utf-8")
+            (recon_dir / "urls_all.txt").write_text("https://api.example.com/v1/auth\nhttps://api.example.com/v1/users\n", encoding="utf-8")
+            (recon_dir / "js_files.txt").write_text("https://api.example.com/main.js\n", encoding="utf-8")
+
+            patterns_dir = recon_dir / "patterns"
+            patterns_dir.mkdir()
+            (patterns_dir / "idor.txt").write_text("https://api.example.com/v1/users/123\n", encoding="utf-8")
+
+            ev_dir = tmp / "evidence"
+            ev_dir.mkdir()
+            ev_tmpl = REPO_ROOT / "workspace-seed" / "templates" / "evidence.md"
+            shutil.copy(ev_tmpl, ev_dir / "VULN-01.md")
+
+            term_log = tmp / "terminal.log"
+            term_log.write_text(
+                "tmux session started\n"
+                ">>> [2026-10-04T12:00:00+00:00] [AUDIT-MARK] VULN-01: Confirmado IDOR en perfil <<<\n"
+                "command execution completed\n",
+                encoding="utf-8",
+            )
+
+            # 2. Validar recolección de datos
+            scope_data = agent_context.load_scope_data(tmp)
+            self.assertEqual(scope_data["engagement"]["name"], "example-engagement")
+            self.assertIn("example.com", scope_data["scope"]["in_scope"]["domains"])
+
+            recon_summary = agent_context.collect_recon_summary(tmp)
+            self.assertEqual(len(recon_summary["live_hosts"]), 2)
+            self.assertEqual(recon_summary["subdomains_count"], 3)
+            self.assertEqual(recon_summary["urls_count"], 2)
+            self.assertEqual(recon_summary["js_files_count"], 1)
+            self.assertEqual(recon_summary["patterns"].get("idor"), 1)
+
+            findings = agent_context.collect_findings(tmp)
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0]["id"], "VULN-01")
+            self.assertEqual(findings[0]["severity"], "HIGH")
+
+            lines, size_str, marks = agent_context.collect_audit_marks(tmp)
+            self.assertEqual(lines, 3)
+            self.assertEqual(len(marks), 1)
+            self.assertIn("VULN-01", marks[0])
+
+            # 3. Validar resolución de skills y prompts
+            auth_skill = agent_context.resolve_skill_or_prompt("auth")
+            self.assertIsNotNone(auth_skill)
+            self.assertEqual(auth_skill["type"], "skill")
+            self.assertEqual(auth_skill["category"], "auth")
+
+            auth_prompt = agent_context.resolve_skill_or_prompt("auth-agent")
+            self.assertIsNotNone(auth_prompt)
+            self.assertEqual(auth_prompt["type"], "prompt")
+            self.assertIn("auth-agent.prompt.md", auth_prompt["name"])
+
+            logic_prompt = agent_context.resolve_skill_or_prompt("logic-agent")
+            self.assertIsNotNone(logic_prompt)
+            self.assertEqual(logic_prompt["type"], "prompt")
+            self.assertIn("logic-agent.prompt.md", logic_prompt["name"])
+
+            # 4. Validar construcción de contexto dict y render Markdown
+            ctx_dict = agent_context.generate_context_dict(tmp, "auth-agent")
+            self.assertEqual(ctx_dict["engagement"]["name"], "example-engagement")
+            self.assertEqual(ctx_dict["findings"]["total"], 1)
+            self.assertEqual(ctx_dict["findings"]["severity_counts"]["HIGH"], 1)
+            self.assertIn("active_skill", ctx_dict)
+
+            md = agent_context.format_markdown_context(ctx_dict)
+            self.assertIn("# Contexto de Seguridad del Agente: example-engagement", md)
+            self.assertIn("## 1. Alcance y Reglas de Compromiso", md)
+            self.assertIn("## 2. Superficie de Ataque y Reconocimiento", md)
+            self.assertIn("## 3. Matriz de Hallazgos Validados", md)
+            self.assertIn("## 4. Trazabilidad de Auditoría", md)
+            self.assertIn("## 5. Directivas de Agente: auth-agent.prompt.md", md)
+            self.assertIn("VULN-01", md)
+
+            # 5. Validar integración en Dockerfile y plugin Zsh
+            dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
+            self.assertIn("pt-agent-context", dockerfile)
+
+            plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+            self.assertIn("_pt-context-script()", plugin)
+            self.assertIn("_pt-context-help()", plugin)
+            self.assertIn("pt-context()", plugin)
+
 
 
 def main():

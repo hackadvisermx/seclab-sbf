@@ -40,6 +40,7 @@ report_compiler = load_module("report_compiler", REPO_ROOT / "scripts" / "pt-rep
 agent_context = load_module("agent_context", REPO_ROOT / "scripts" / "pt-agent-context.py")
 engagement_packer = load_module("engagement_packer", REPO_ROOT / "scripts" / "pt-engagement-packer.py")
 recon_pipeline = load_module("recon_pipeline", REPO_ROOT / "scripts" / "pt-recon-pipeline.py")
+audit_checklist = load_module("audit_checklist", REPO_ROOT / "scripts" / "pt-audit-checklist.py")
 
 
 class MockSocket:
@@ -576,14 +577,19 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias ptrecon="pt-recon"',
             'alias reconpipeline="pt-recon"',
             'alias recon="pt-recon"',
+            'alias ptcheck="pt-checklist"',
+            'alias engcheck="pt-eng check"',
+            'alias coverage="pt-checklist"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         self.assertIn("_pt-packer-script()", content)
         self.assertIn("_pt-recon-script()", content)
+        self.assertIn("_pt-checklist-script()", content)
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-checklist", content)
         self.assertIn("pt-context", content)
         self.assertIn("pt-callback", content)
         self.assertIn("pt-finding", content)
@@ -1198,6 +1204,79 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("_pt-recon-help()", plugin)
             self.assertIn("alias ptrecon=", plugin)
             self.assertIn("alias reconpipeline=", plugin)
+
+    def test_audit_checklist_and_coverage_evaluator(self):
+        """Verifica la matriz de cobertura metodológica y checklist de auditoría."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            eng_path = pathlib.Path(tmpdir) / "engagements" / "acme-corp"
+            eng_path.mkdir(parents=True)
+
+            # 1. Crear estructura parcial de engagement
+            (eng_path / "target.yaml").write_text("engagement:\n  name: acme-corp\n  status: active\n", encoding="utf-8")
+            recon_dir = eng_path / "recon"
+            recon_dir.mkdir()
+            (recon_dir / "subdomains.txt").write_text("api.acme.corp\nauth.acme.corp\n", encoding="utf-8")
+            (recon_dir / "live_hosts.txt").write_text("https://api.acme.corp\nhttps://auth.acme.corp\n", encoding="utf-8")
+            (recon_dir / "urls_all.txt").write_text("https://api.acme.corp/v1/users\n", encoding="utf-8")
+            (recon_dir / "js_files.txt").write_text("https://api.acme.corp/bundle.js\n", encoding="utf-8")
+
+            # 2. Agregar evidencia con IDOR verificado
+            ev_dir = eng_path / "evidence"
+            ev_dir.mkdir()
+            (ev_dir / "VULN-01.md").write_text(
+                "---\n"
+                "title: 'IDOR en API de Usuarios'\n"
+                "id: 'VULN-01'\n"
+                "severity: 'High'\n"
+                "cwe: 'CWE-639'\n"
+                "status: 'Confirmado'\n"
+                "---\n\n"
+                "# [VULN-01] IDOR en API\n\n"
+                "## 1. Resumen\nFalla en capa de autorizacion.\n\n"
+                "## 2. Pasos Detallados de Reproducción (PoC)\n```bash\ncurl -i https://api.acme.corp/v1/users/999\n```\n\n"
+                "## 3. Petición y Respuesta Crudas (Raw HTTP Evidence)\n```http\nHTTP/1.1 200 OK\n```\n",
+                encoding="utf-8",
+            )
+
+            # 3. Evaluar checklist
+            evaluator = audit_checklist.AuditChecklistEvaluator(eng_path)
+            res = evaluator.evaluate()
+
+            self.assertEqual(res["engagement"], "acme-corp")
+            self.assertGreater(res["coverage_score"], 0)
+            self.assertEqual(res["total_findings"], 1)
+            self.assertEqual(res["findings_summary"]["verified"], 1)
+
+            # Validar que recon y auth estén completados
+            matrix_map = {row["id"]: row for row in res["matrix"]}
+            self.assertEqual(matrix_map["recon"]["status"], "COMPLETED")
+            self.assertEqual(matrix_map["auth"]["status"], "COMPLETED")
+            self.assertIn("VULN-01", matrix_map["auth"]["findings"])
+            self.assertEqual(matrix_map["client"]["status"], "IN_PROGRESS")
+
+            # 4. Validar formato de salida visual y markdown
+            term_out = audit_checklist.format_terminal_output(res)
+            self.assertIn("acme-corp", term_out)
+            self.assertIn("Checklist Metodológico", term_out)
+
+            md_out = audit_checklist.format_markdown_output(res)
+            self.assertIn("## Matriz de Cobertura Metodológica", md_out)
+            self.assertIn("| 1 | Reconocimiento", md_out)
+
+            # 5. Validar integración en Dockerfile y plugin Zsh
+            dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
+            self.assertIn("pt-audit-checklist", dockerfile)
+
+            plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+            self.assertIn("_pt-checklist-script()", plugin)
+            self.assertIn("_pt-checklist-help()", plugin)
+            self.assertIn("pt-checklist()", plugin)
+            self.assertIn("check|checklist|coverage)", plugin)
+            self.assertIn("alias ptcheck=", plugin)
+            self.assertIn("alias engcheck=", plugin)
+            self.assertIn("alias coverage=", plugin)
 
 
 

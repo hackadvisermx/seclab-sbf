@@ -9,11 +9,13 @@ Directorio de trabajo de `tester`. Es una carpeta del proyecto montada en
 /workspace
   engagements/   un directorio por cada engagement o labor
   retos/         un directorio por cada reto o CTF
+  templates/     plantillas de alcance (scope.txt) e informes (report.md)
 ```
 
 Cada trabajo empieza en su propio directorio dentro de `engagements/` o de
-`retos/`, copiando la plantilla que corresponda. Las plantillas estan aqui y se
-copiaron desde `workspace-seed/` cuando `make` creo la carpeta.
+`retos/`, copiando la plantilla que corresponda (`templates/scope.txt`,
+`templates/report.md` o las plantillas en cada subdirectorio). Las plantillas
+estan aqui y se copiaron desde `workspace-seed/` cuando `make` creo la carpeta.
 
 ## Que se anota aqui
 

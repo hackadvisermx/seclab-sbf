@@ -1,0 +1,51 @@
+# =============================================================================
+# Ficha de alcance y autorización del laboratorio / engagement
+# =============================================================================
+# Creado: YYYY-MM-DD
+# Perfil VPN: [tryhackme | hackthebox | client | none]
+#
+# Este archivo es tu cuaderno de trabajo y control de alcance. No es un firewall:
+# sirve para tener claridad absoluta sobre qué objetivos están autorizados,
+# bajo qué reglas y con qué ventana operativa.
+# =============================================================================
+
+## Objetivo y autorización
+Plataforma o Cliente:
+Autorización formal / TOS: (e.g. TOS de HTB/THM, o contrato firmado con fecha)
+Contacto de emergencia / Escalación:
+
+## Perfil VPN y Red
+Perfil activo:
+IP asignada en tun0:
+Rangos permitidos (red destino):
+Gateway / DNS:
+
+## Activos y Objetivos en Alcance
+- [IP / Hostname 1] (Propósito / Servicio)
+- [IP / Hostname 2] (Propósito / Servicio)
+
+## Fuera de Alcance (Exclusiones estrictas)
+- [Sistemas de producción, pasarelas de pago, dominios ajenos, etc.]
+
+## Ventana operativa
+Fecha inicio:
+Fecha fin:
+Horarios permitidos:
+
+## Límites operativos
+- Fuzzing / Escaneo: (e.g. máximo 20 req/s, sin DoS)
+- Fuerza bruta: (e.g. máximo 5 hilos, respetar bloqueo de cuentas)
+- Explotación: (e.g. prueba de concepto no destructiva)
+
+## Evidencias
+Ubicación de capturas: screenshots/
+Ubicación de botín / loot: loot/
+Salidas de herramientas: recon/
+
+## Remediación preliminar y notas
+- Qué controles se recomiendan implementar.
+
+## Registro de limpieza post-prueba
+- Cuentas de prueba creadas a eliminar:
+- Archivos o webshells subidos a retirar:
+- Configuraciones temporales revertidas:

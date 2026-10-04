@@ -98,6 +98,11 @@ jobs:
       - name: Pruebas unitarias de seguridad Python
         run: make python-units-check
 
+      # Auditor de seguridad de Docker Compose: verifica que no se expongan
+      # puertos en 0.0.0.0, no se use privileged: true ni montajes de docker.sock.
+      - name: Seguridad de Docker Compose
+        run: make compose-security-check
+
   # La jail de fail2ban es lo unico de la configuracion de host que se
   # puede validar sin un nodo. Levanta un contenedor con la imagen base
   # por digest, el mismo snapshot de Ubuntu que usan los Dockerfiles, y

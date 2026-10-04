@@ -34,6 +34,7 @@ def load_module(name: str, path: pathlib.Path):
 
 proxy_ctrl = load_module("proxy_control", REPO_ROOT / "scripts" / "proxy-control.py")
 vpn_ctrl = load_module("vpn_control", REPO_ROOT / "scripts" / "vpn-control.py")
+compose_sec = load_module("compose_security", REPO_ROOT / "scripts" / "verify" / "check-compose-security.py")
 
 
 class MockSocket:
@@ -256,6 +257,127 @@ class TestVpnControl(unittest.TestCase):
         long_text = "A" * 20000
         truncated = vpn_ctrl.output_limit(long_text)
         self.assertEqual(len(truncated), 16000)
+
+
+class TestComposeSecurityAuditor(unittest.TestCase):
+    """Verifica reglas de auditoria de seguridad para Docker Compose."""
+
+    def test_valid_hardened_service(self):
+        config = {
+            "services": {
+                "lab": {
+                    "cap_drop": ["ALL"],
+                    "cap_add": ["NET_ADMIN"],
+                    "security_opt": ["no-new-privileges:true"],
+                    "volumes": ["/home/user/workspace:/workspace"],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertEqual(issues, [])
+
+    def test_detect_privileged_container(self):
+        config = {
+            "services": {
+                "lab": {
+                    "privileged": True,
+                    "cap_drop": ["ALL"],
+                    "security_opt": ["no-new-privileges:true"],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertTrue(any("privileged: true" in i for i in issues))
+
+    def test_detect_network_mode_host(self):
+        config = {
+            "services": {
+                "lab": {
+                    "network_mode": "host",
+                    "cap_drop": ["ALL"],
+                    "security_opt": ["no-new-privileges:true"],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertTrue(any("network_mode: host" in i for i in issues))
+
+    def test_detect_dangerous_capabilities(self):
+        config = {
+            "services": {
+                "lab": {
+                    "cap_drop": ["ALL"],
+                    "cap_add": ["SYS_ADMIN", "SYS_PTRACE"],
+                    "security_opt": ["no-new-privileges:true"],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertTrue(any("capacidades peligrosas" in i for i in issues))
+
+    def test_detect_docker_sock_mount(self):
+        config = {
+            "services": {
+                "lab": {
+                    "cap_drop": ["ALL"],
+                    "security_opt": ["no-new-privileges:true"],
+                    "volumes": [
+                        {"source": "/var/run/docker.sock", "target": "/var/run/docker.sock"}
+                    ],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertTrue(any("socket de Docker" in i for i in issues))
+
+    def test_detect_public_port_binding(self):
+        config = {
+            "services": {
+                "lab": {
+                    "cap_drop": ["ALL"],
+                    "security_opt": ["no-new-privileges:true"],
+                    "ports": [{"host_ip": "0.0.0.0", "published": 2222, "target": 2222}],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertTrue(any("0.0.0.0" in i for i in issues))
+
+    def test_allow_loopback_port_binding(self):
+        config = {
+            "services": {
+                "lab": {
+                    "cap_drop": ["ALL"],
+                    "security_opt": ["no-new-privileges:true"],
+                    "ports": [{"host_ip": "127.0.0.1", "published": 2222, "target": 2222}],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertEqual(issues, [])
+
+    def test_detect_missing_cap_drop_all(self):
+        config = {
+            "services": {
+                "lab": {
+                    "cap_drop": ["NET_RAW"],
+                    "security_opt": ["no-new-privileges:true"],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertTrue(any("cap_drop: ALL" in i for i in issues))
+
+    def test_detect_missing_no_new_privileges(self):
+        config = {
+            "services": {
+                "lab": {
+                    "cap_drop": ["ALL"],
+                }
+            }
+        }
+        issues = compose_sec.analyze_compose(config, name="test")
+        self.assertTrue(any("no-new-privileges" in i for i in issues))
 
 
 def main():

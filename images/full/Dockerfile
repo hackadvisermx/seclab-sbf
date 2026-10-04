@@ -739,7 +739,8 @@ COPY scripts/pt-scope-validator.py /usr/local/bin/pt-scope-validator
 COPY scripts/pt-report-compiler.py /usr/local/bin/pt-report-compiler
 COPY scripts/pt-agent-context.py /usr/local/bin/pt-agent-context
 COPY scripts/pt-engagement-packer.py /usr/local/bin/pt-engagement-packer
-RUN chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck /usr/local/bin/pt-scope-validator /usr/local/bin/pt-report-compiler /usr/local/bin/pt-agent-context /usr/local/bin/pt-engagement-packer
+COPY scripts/pt-recon-pipeline.py /usr/local/bin/pt-recon-pipeline
+RUN chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck /usr/local/bin/pt-scope-validator /usr/local/bin/pt-report-compiler /usr/local/bin/pt-agent-context /usr/local/bin/pt-engagement-packer /usr/local/bin/pt-recon-pipeline
 
 # Workspace de tester. En local esto se monta como volumen con nombre, y un
 # volumen nuevo toma como dueño el directorio de la imagen: si /workspace

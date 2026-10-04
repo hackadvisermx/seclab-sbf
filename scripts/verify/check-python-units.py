@@ -39,6 +39,7 @@ scope_validator = load_module("scope_validator", REPO_ROOT / "scripts" / "pt-sco
 report_compiler = load_module("report_compiler", REPO_ROOT / "scripts" / "pt-report-compiler.py")
 agent_context = load_module("agent_context", REPO_ROOT / "scripts" / "pt-agent-context.py")
 engagement_packer = load_module("engagement_packer", REPO_ROOT / "scripts" / "pt-engagement-packer.py")
+recon_pipeline = load_module("recon_pipeline", REPO_ROOT / "scripts" / "pt-recon-pipeline.py")
 
 
 class MockSocket:
@@ -572,11 +573,15 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias ptpack="pt-eng pack"',
             'alias engpack="pt-eng pack"',
             'alias ptclose="pt-eng close"',
+            'alias ptrecon="pt-recon"',
+            'alias reconpipeline="pt-recon"',
+            'alias recon="pt-recon"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         self.assertIn("_pt-packer-script()", content)
+        self.assertIn("_pt-recon-script()", content)
 
         # pt-help incluye mención a helpers
         self.assertIn("pt-context", content)
@@ -1091,6 +1096,108 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("alias ptpack=", plugin)
             self.assertIn("alias engpack=", plugin)
             self.assertIn("alias ptclose=", plugin)
+
+    def test_recon_pipeline_with_scope_guard(self):
+        """Verifica el pipeline determinista de reconocimiento con Scope Guard integrado."""
+        import json
+        import shutil
+        import tempfile
+
+        # 1. Normalización y verificación de alcance
+        self.assertEqual(recon_pipeline.normalize_target("https://api.acme.corp:8443/v1/users"), "api.acme.corp")
+        self.assertEqual(recon_pipeline.normalize_target("admin.internal.net"), "admin.internal.net")
+
+        scope_rules = {
+            "scope": {
+                "in_scope": {
+                    "domains": ["acme.corp", "*.acme.corp"],
+                    "ips": ["192.168.1.50"],
+                    "cidrs": ["10.0.0.0/24"],
+                },
+                "out_of_scope": {
+                    "domains": ["admin.acme.corp", "*.internal.acme.corp"],
+                    "ips": ["192.168.1.1"],
+                },
+            }
+        }
+
+        # Verificación positiva en alcance
+        verdict, _ = recon_pipeline.check_scope("acme.corp", scope_rules)
+        self.assertEqual(verdict, "IN_SCOPE")
+        verdict, _ = recon_pipeline.check_scope("api.acme.corp", scope_rules)
+        self.assertEqual(verdict, "IN_SCOPE")
+        verdict, _ = recon_pipeline.check_scope("192.168.1.50", scope_rules)
+        self.assertEqual(verdict, "IN_SCOPE")
+
+        # Verificación de exclusiones (OUT_OF_SCOPE gana siempre)
+        verdict, reason = recon_pipeline.check_scope("admin.acme.corp", scope_rules)
+        self.assertEqual(verdict, "OUT_OF_SCOPE")
+        self.assertIn("admin.acme.corp", reason)
+
+        verdict, reason = recon_pipeline.check_scope("db.internal.acme.corp", scope_rules)
+        self.assertEqual(verdict, "OUT_OF_SCOPE")
+
+        verdict, _ = recon_pipeline.check_scope("192.168.1.1", scope_rules)
+        self.assertEqual(verdict, "OUT_OF_SCOPE")
+
+        # Desconocido fuera de alcance explícito
+        verdict, _ = recon_pipeline.check_scope("evil.com", scope_rules)
+        self.assertEqual(verdict, "UNKNOWN")
+
+        # 2. Ejecución simulada (dry_run) del pipeline completo en un engagement temporal
+        with tempfile.TemporaryDirectory() as tmpdir:
+            eng_path = pathlib.Path(tmpdir) / "engagements" / "test-target"
+            eng_path.mkdir(parents=True)
+
+            target_yaml_content = (
+                "engagement:\n"
+                "  name: test-target\n"
+                "  status: active\n"
+                "scope:\n"
+                "  in_scope:\n"
+                "    domains:\n"
+                "      - test-target.com\n"
+                "      - '*.test-target.com'\n"
+                "  out_of_scope:\n"
+                "    domains:\n"
+                "      - admin.test-target.com\n"
+                "      - '*.internal.test-target.com'\n"
+            )
+            (eng_path / "target.yaml").write_text(target_yaml_content, encoding="utf-8")
+
+            pipeline = recon_pipeline.ReconPipeline(eng_path, dry_run=True)
+            res = pipeline.run_all(stage="all")
+
+            self.assertIn("summary", res)
+            summary = res["summary"]
+            self.assertEqual(summary["engagement"], "test-target")
+            self.assertEqual(summary["in_scope_domains"], ["test-target.com", "*.test-target.com"])
+
+            # 3. Validar filtrado de subdominios
+            sub_raw = [
+                "test-target.com",
+                "api.test-target.com",
+                "admin.test-target.com",
+                "portal.internal.test-target.com",
+                "evil.com",
+            ]
+            valid_subs, discarded = pipeline.filter_domains_by_scope(sub_raw)
+            self.assertIn("test-target.com", valid_subs)
+            self.assertIn("api.test-target.com", valid_subs)
+            self.assertNotIn("admin.test-target.com", valid_subs)
+            self.assertNotIn("portal.internal.test-target.com", valid_subs)
+            self.assertNotIn("evil.com", valid_subs)
+            self.assertEqual(len(discarded), 3)
+
+            # 4. Validar integración en Dockerfile y plugin Zsh
+            dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
+            self.assertIn("pt-recon-pipeline", dockerfile)
+
+            plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+            self.assertIn("_pt-recon-script()", plugin)
+            self.assertIn("_pt-recon-help()", plugin)
+            self.assertIn("alias ptrecon=", plugin)
+            self.assertIn("alias reconpipeline=", plugin)
 
 
 

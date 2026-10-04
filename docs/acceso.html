@@ -87,26 +87,30 @@
     </ol>
   </div>
 
-  <h2>2. Acceso SSH al Host (Administración)</h2>
+  <h2>2. Comandos Make de Acceso Rápido (Recomendado)</h2>
   <div class="card">
-    <h3>Conexión directa como usuario <code>ubuntu</code></h3>
-    <p>Utilizado para tareas de sistema operativo, estado de servicios y monitoreo Docker:</p>
+    <p>Ya configuramos <code>CLOUD_HOST=100.111.178.40</code> en tu archivo local <code>.env</code>, por lo que <strong>no necesitas ingresar la IP ni especificar la ruta de las llaves manualmente</strong>:</p>
+
+    <h3>A. Entrar al Laboratorio de Pentesting (Contenedor Tester)</h3>
+    <p>Abre la shell interactiva como usuario <code>tester</code> (sesión tmux, zsh, plugins, herramientas de auditoría en puerto 2222):</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud</code></pre>
+
+    <h3>B. Entrar a la Administración del VPS (Host Ubuntu)</h3>
+    <p>Abre la sesión de administración como usuario <code>ubuntu</code> (docker, systemd, firewall, logs en puerto 22):</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make host-ssh-cloud</code></pre>
+  </div>
+
+  <h2>3. Comandos SSH Directos Equivalentes</h2>
+  <div class="card">
+    <h3>A. Host VPS (Puerto 22, usuario ubuntu)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i .secrets/ssh/seclab_ed25519 ubuntu@100.111.178.40</code></pre>
     <p>Comandos útiles en el host:</p>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>cd ~/seclab-sbf
 sudo systemctl status seclab-nftables fail2ban --no-pager
 docker compose ps
 sudo nft list table inet seclab_host</code></pre>
-  </div>
 
-  <h2>3. Acceso al Laboratorio (Contenedor Tester)</h2>
-  <div class="card">
-    <h3>A. Vía Atajo Make desde tu Mac</h3>
-    <p>Comando integrado que conecta directamente al contenedor de pentesting vía Tailscale:</p>
-    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud TF_HOST=100.111.178.40</code></pre>
-
-    <h3>B. SSH Directo al Contenedor (Puerto 2222)</h3>
-    <p>Accede directamente a la sesión tmux persistente del usuario <code>tester</code>:</p>
+    <h3>B. Contenedor Lab (Puerto 2222, usuario tester)</h3>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i .secrets/ssh/seclab_ed25519 -p 2222 tester@100.111.178.40</code></pre>
   </div>
 

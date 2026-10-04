@@ -285,11 +285,94 @@ def pack_engagement(
     }
 
 
-def close_engagement(engagement_dir: pathlib.Path) -> Dict[str, Any]:
-    """Cierra formalmente un engagement actualizando target.yaml y verificando checklist."""
+def check_closure_readiness(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[str]]:
+    """Verifica si el engagement cumple con los requisitos de calidad para cierre."""
+    # 1. Intentar delegar a AuditChecklistEvaluator si está disponible
+    candidate_checklist_paths = [
+        pathlib.Path(__file__).resolve().parent / "pt-audit-checklist.py",
+        pathlib.Path("/usr/local/bin/pt-audit-checklist"),
+        pathlib.Path("./scripts/pt-audit-checklist.py"),
+    ]
+    for cp in candidate_checklist_paths:
+        if cp.is_file():
+            try:
+                spec = importlib.util.spec_from_file_location("pt_audit_checklist", cp)
+                if spec and spec.loader:
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    if hasattr(mod, "AuditChecklistEvaluator"):
+                        res = mod.AuditChecklistEvaluator(engagement_dir).evaluate()
+                        readiness = res.get("readiness", {})
+                        return (
+                            readiness.get("ready_for_closure", True),
+                            readiness.get("blocking_issues", []),
+                            readiness.get("recommendations", []),
+                        )
+            except Exception:
+                pass
+
+    # 2. Fallback determinista autónomo
+    blocking: List[str] = []
+    recommendations: List[str] = []
+
+    target_yaml = engagement_dir / "target.yaml"
+    scope_txt = engagement_dir / "scope.txt"
+    if not target_yaml.is_file() and not scope_txt.is_file():
+        blocking.append("No se encontró target.yaml ni scope.txt")
+
+    ev_dir = engagement_dir / "evidence"
+    unverified: List[str] = []
+    finding_count = 0
+    if ev_dir.is_dir():
+        for f in sorted(ev_dir.glob("*.md")):
+            if f.name.startswith("_") or f.name.lower() == "readme.md":
+                continue
+            finding_count += 1
+            try:
+                content = f.read_text(encoding="utf-8")
+                status = "Confirmado"
+                fid = f.stem.upper()
+                if content.startswith("---"):
+                    parts = content.split("---", 2)
+                    if len(parts) >= 3:
+                        for line in parts[1].splitlines():
+                            if line.strip().startswith("status:"):
+                                status = line.split(":", 1)[1].strip().strip("'\"")
+                            elif line.strip().startswith("id:"):
+                                fid = line.split(":", 1)[1].strip().strip("'\"")
+                if status.lower() in ("borrador", "unverified", "draft"):
+                    unverified.append(fid)
+            except Exception:
+                pass
+
+    if unverified:
+        blocking.append(f"Existen hallazgos sin verificar formalmente: {', '.join(unverified)}")
+
+    report_md = engagement_dir / "REPORT.md"
+    if not report_md.is_file() and finding_count > 0:
+        blocking.append("El informe final REPORT.md no ha sido compilado (ejecute: pt-report build)")
+
+    return len(blocking) == 0, blocking, recommendations
+
+
+def close_engagement(engagement_dir: pathlib.Path, force: bool = False) -> Dict[str, Any]:
+    """Cierra formalmente un engagement actualizando target.yaml y verificando compuertas de calidad."""
     eng_name = engagement_dir.name
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
     target_yaml = engagement_dir / "target.yaml"
+
+    ready, blocking_issues, recommendations = check_closure_readiness(engagement_dir)
+    if not ready and not force:
+        return {
+            "status": "blocked",
+            "forced": False,
+            "engagement": eng_name,
+            "directory": str(engagement_dir),
+            "ready_for_closure": False,
+            "blocking_issues": blocking_issues,
+            "recommendations": recommendations,
+            "message": "Cierre bloqueado por compuerta de calidad. Use --force para omitir estas comprobaciones.",
+        }
 
     updated_target = False
     if target_yaml.is_file():
@@ -337,14 +420,18 @@ def close_engagement(engagement_dir: pathlib.Path) -> Dict[str, Any]:
         "clean_up_audit_logs_recommended": True,
     }
 
-    return {
+    res: Dict[str, Any] = {
         "status": "closed",
+        "forced": force and not ready,
         "engagement": eng_name,
         "closed_at": now_iso,
         "directory": str(engagement_dir),
         "target_yaml_updated": updated_target,
         "checklist": checklist,
     }
+    if force and not ready:
+        res["bypassed_issues"] = blocking_issues
+    return res
 
 
 def main() -> int:
@@ -365,6 +452,7 @@ def main() -> int:
     # close
     p_close = subparsers.add_parser("close", help="Sella y cierra formalmente la auditoría en target.yaml")
     p_close.add_argument("engagement", nargs="?", help="Ruta o nombre del engagement a cerrar")
+    p_close.add_argument("-f", "--force", action="store_true", help="Forzar el cierre omitiendo comprobaciones de calidad")
     p_close.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
 
     # sanitize (standalone)
@@ -414,18 +502,35 @@ def main() -> int:
         return 0
 
     elif args.subcommand == "close":
-        res = close_engagement(eng_dir)
+        res = close_engagement(eng_dir, force=args.force)
         if args.json:
             print(json.dumps(res, indent=2))
+            return 1 if res.get("status") == "blocked" else 0
+
+        if res.get("status") == "blocked":
+            print(f"\n\033[31m[!] Cierre bloqueado por compuerta de calidad para {res['engagement']}:\033[0m")
+            for issue in res.get("blocking_issues", []):
+                print(f"    - ❌ {issue}")
+            print("\n  Para corregir:")
+            print("    - Verifica hallazgos en evidence/*.md (status: Confirmado)")
+            print("    - Compila el reporte: pt-report build")
+            print("    - O fuerza el cierre con: pt-eng close --force\n")
+            return 1
+
+        if res.get("forced"):
+            print(f"\n\033[33m[!] Advertencia: Engagement cerrado con --force (requisitos omitidos):\033[0m")
+            for issue in res.get("bypassed_issues", []):
+                print(f"    - ⚠️ {issue}")
         else:
             print(f"\n\033[32m[+] Engagement cerrado satisfactoriamente:\033[0m")
-            print(f"    Engagement:        {res['engagement']}")
-            print(f"    Fecha de cierre:   {res['closed_at']}")
-            print(f"    target.yaml:       {'Actualizado a status: closed' if res['target_yaml_updated'] else 'No encontrado'}")
-            print("\n  Recordatorios post-engagement:")
-            print("    1. Detén receptores OOB si siguen activos: pt-callback stop")
-            print("    2. Detén la bitácora si sigue grabando:   pt-log stop")
-            print("    3. Genera el entregable sanitizado:       pt-eng pack --sanitize\n")
+
+        print(f"    Engagement:        {res['engagement']}")
+        print(f"    Fecha de cierre:   {res['closed_at']}")
+        print(f"    target.yaml:       {'Actualizado a status: closed' if res['target_yaml_updated'] else 'No encontrado'}")
+        print("\n  Recordatorios post-engagement:")
+        print("    1. Detén receptores OOB si siguen activos: pt-callback stop")
+        print("    2. Detén la bitácora si sigue grabando:   pt-log stop")
+        print("    3. Genera el entregable sanitizado:       pt-eng pack --sanitize\n")
         return 0
 
     return 0

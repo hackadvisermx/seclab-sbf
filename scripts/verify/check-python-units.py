@@ -988,14 +988,17 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertEqual(ctx_dict["findings"]["total"], 1)
             self.assertEqual(ctx_dict["findings"]["severity_counts"]["HIGH"], 1)
             self.assertIn("active_skill", ctx_dict)
+            self.assertIn("coverage", ctx_dict)
+            self.assertGreater(ctx_dict["coverage"]["coverage_score"], 0)
 
             md = agent_context.format_markdown_context(ctx_dict)
             self.assertIn("# Contexto de Seguridad del Agente: example-engagement", md)
             self.assertIn("## 1. Alcance y Reglas de Compromiso", md)
-            self.assertIn("## 2. Superficie de Ataque y Reconocimiento", md)
-            self.assertIn("## 3. Matriz de Hallazgos Validados", md)
-            self.assertIn("## 4. Trazabilidad de Auditoría", md)
-            self.assertIn("## 5. Directivas de Agente: auth-agent.prompt.md", md)
+            self.assertIn("## 2. Cobertura Metodológica & Checklist", md)
+            self.assertIn("## 3. Superficie de Ataque y Reconocimiento", md)
+            self.assertIn("## 4. Matriz de Hallazgos Validados", md)
+            self.assertIn("## 5. Trazabilidad de Auditoría", md)
+            self.assertIn("## 6. Directivas de Agente: auth-agent.prompt.md", md)
             self.assertIn("VULN-01", md)
 
             # 5. Validar integración en Dockerfile y plugin Zsh
@@ -1275,10 +1278,107 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("pt-checklist()", plugin)
             self.assertIn("check|checklist|coverage)", plugin)
             self.assertIn("alias ptcheck=", plugin)
-            self.assertIn("alias engcheck=", plugin)
-            self.assertIn("alias coverage=", plugin)
+            alias_coverage = 'alias coverage="pt-checklist"'
+            self.assertIn(alias_coverage, plugin)
 
+    def test_context_coverage_and_closure_guard(self):
+        """Verifica la integración de cobertura en pt-context y compuerta pre-cierre en pt-eng close."""
+        import tempfile
 
+        with tempfile.TemporaryDirectory() as tmpdir:
+            eng_path = pathlib.Path(tmpdir) / "engagements" / "guard-test"
+            eng_path.mkdir(parents=True)
+
+            # 1. Sembrar target.yaml con status activo
+            target_file = eng_path / "target.yaml"
+            target_file.write_text(
+                "engagement:\n"
+                "  name: guard-test\n"
+                "  status: active\n"
+                "scope:\n"
+                "  in_scope:\n"
+                "    domains:\n"
+                "      - guard.test\n",
+                encoding="utf-8",
+            )
+
+            # 2. Agregar un hallazgo no verificado (borrador)
+            ev_dir = eng_path / "evidence"
+            ev_dir.mkdir()
+            (ev_dir / "draft-vuln.md").write_text(
+                "---\n"
+                "id: VULN-DRAFT-01\n"
+                "title: Borrador de Vulnerabilidad Sin Confirmar\n"
+                "status: Borrador\n"
+                "severity: MEDIUM\n"
+                "---\n\n"
+                "# Borrador de prueba\n",
+                encoding="utf-8",
+            )
+
+            # 3. Validar que close_engagement bloquea el cierre sin --force
+            blocked_res = engagement_packer.close_engagement(eng_path, force=False)
+            self.assertEqual(blocked_res["status"], "blocked")
+            self.assertFalse(blocked_res["ready_for_closure"])
+            self.assertGreater(len(blocked_res["blocking_issues"]), 0)
+            self.assertTrue(any("sin verificar" in issue for issue in blocked_res["blocking_issues"]))
+
+            # target.yaml NO debe haberse cerrado
+            target_unmod = target_file.read_text(encoding="utf-8")
+            self.assertNotIn("status: closed", target_unmod)
+
+            # 4. Validar que close_engagement con force=True permite forzar el cierre
+            forced_res = engagement_packer.close_engagement(eng_path, force=True)
+            self.assertEqual(forced_res["status"], "closed")
+            self.assertTrue(forced_res["forced"])
+            self.assertIn("bypassed_issues", forced_res)
+
+            target_closed = target_file.read_text(encoding="utf-8")
+            self.assertIn("status: closed", target_closed)
+            self.assertIn("closed_at:", target_closed)
+
+            # 5. Restablecer target a active y corregir requisitos para cierre limpio
+            target_file.write_text(
+                "engagement:\n"
+                "  name: guard-test\n"
+                "  status: active\n"
+                "scope:\n"
+                "  in_scope:\n"
+                "    domains:\n"
+                "      - guard.test\n",
+                encoding="utf-8",
+            )
+            # Confirmar el hallazgo
+            (ev_dir / "draft-vuln.md").write_text(
+                "---\n"
+                "id: VULN-DRAFT-01\n"
+                "title: Vulnerabilidad Confirmada\n"
+                "status: Confirmado\n"
+                "severity: MEDIUM\n"
+                "---\n\n"
+                "# Vulnerabilidad Confirmada\n",
+                encoding="utf-8",
+            )
+            # Generar REPORT.md
+            (eng_path / "REPORT.md").write_text("# Reporte Final de Auditoría\n", encoding="utf-8")
+
+            # Ahora el cierre debe ser limpio sin force
+            clean_res = engagement_packer.close_engagement(eng_path, force=False)
+            self.assertEqual(clean_res["status"], "closed")
+            self.assertFalse(clean_res["forced"])
+            self.assertTrue(clean_res["target_yaml_updated"])
+
+            # 6. Validar que pt-context ingesta correctamente la cobertura
+            ctx = agent_context.generate_context_dict(eng_path)
+            self.assertIn("coverage", ctx)
+            self.assertIn("coverage_score", ctx["coverage"])
+            self.assertIn("matrix", ctx["coverage"])
+            self.assertTrue(ctx["coverage"]["ready_for_closure"])
+
+            # 7. Validar opciones documentadas en plugin Zsh
+            plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+            self.assertIn("pt-eng close [nombre] [opciones]", plugin)
+            self.assertIn("-f, --force", plugin)
 
 
 def main():

@@ -172,6 +172,8 @@ ARG LIGOLO_COMMIT
 ARG GF_COMMIT
 ARG QSREPLACE_COMMIT
 ARG GF_PATTERNS_COMMIT
+ARG ASSETFINDER_COMMIT
+ARG HTTPROBE_COMMIT
 RUN git init /src/subfinder \
  && git -C /src/subfinder remote add origin https://github.com/projectdiscovery/subfinder.git \
  && git -C /src/subfinder fetch --depth 1 origin "${SUBFINDER_COMMIT}" \
@@ -329,6 +331,7 @@ RUN git init /src/gf \
  && test "$(git -C /src/gf rev-parse HEAD)" = "${GF_COMMIT}"
 WORKDIR /src/gf
 RUN mkdir -p /out \
+ && ( test -f go.mod || go mod init github.com/tomnomnom/gf ) \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \

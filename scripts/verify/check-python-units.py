@@ -606,6 +606,62 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
 
         self.assertEqual(found_categories, allowed_categories, f"Faltan categorias en cheatsheet: {allowed_categories ^ found_categories}")
 
+    def test_agent_security_skills_framework(self):
+        """Verifica la integridad estructural y formato de las Agent Security Skills."""
+        skills_dir = REPO_ROOT / "skills"
+        seed_skills_dir = REPO_ROOT / "workspace-seed" / "skills"
+
+        self.assertTrue(skills_dir.is_dir(), "Directorio skills/ no existe")
+        self.assertTrue(seed_skills_dir.is_dir(), "Directorio workspace-seed/skills/ no existe")
+
+        skills_readme = skills_dir / "README.md"
+        self.assertTrue(skills_readme.is_file(), "skills/README.md no existe")
+
+        expected_skills = {
+            "recon-profiling": "recon",
+            "param-discovery": "fuzzing",
+            "triage-gatekeeper": "triage",
+            "report-generation": "reporting",
+        }
+
+        for skill_name, category in expected_skills.items():
+            skill_path = skills_dir / skill_name
+            self.assertTrue(skill_path.is_dir(), f"Directorio de skill no existe: {skill_name}")
+
+            skill_md = skill_path / "SKILL.md"
+            self.assertTrue(skill_md.is_file(), f"SKILL.md no existe en {skill_name}")
+
+            content = skill_md.read_text(encoding="utf-8")
+            self.assertTrue(content.startswith("---\n"), f"SKILL.md debe iniciar con frontmatter YAML: {skill_name}")
+
+            # Extraer y validar frontmatter
+            parts = content.split("---\n", 2)
+            self.assertGreaterEqual(len(parts), 3, f"Frontmatter malformado en {skill_name}")
+            fm_text = parts[1]
+
+            fm_dict = {}
+            for line in fm_text.splitlines():
+                if ":" in line and not line.startswith(" ") and not line.startswith("-"):
+                    k, v = line.split(":", 1)
+                    fm_dict[k.strip()] = v.strip()
+
+            self.assertEqual(fm_dict.get("name"), skill_name, f"El campo 'name' no coincide con el directorio: {skill_name}")
+            self.assertEqual(fm_dict.get("category"), category, f"Categoria incorrecta para {skill_name}")
+            self.assertTrue(len(fm_dict.get("description", "")) > 15, f"Descripcion demasiado corta en {skill_name}")
+            self.assertEqual(fm_dict.get("author"), "hackadvisermx/seclab-sbf")
+
+            # Validar secciones metodologicas criticas
+            body = parts[2]
+            self.assertIn("## 1. Propósito y Alcance", body, f"Falta seccion de proposito en {skill_name}")
+            self.assertIn("## 2. Precondiciones y Guardrails", body, f"Falta seccion de guardrails en {skill_name}")
+            self.assertIn("## 3. Flujo de Ejecución", body, f"Falta seccion de flujo en {skill_name}")
+
+            # Validar reflejo en workspace-seed/skills/
+            seed_skill_md = seed_skills_dir / skill_name / "SKILL.md"
+            self.assertTrue(seed_skill_md.is_file(), f"Skill no reflejada en workspace-seed: {skill_name}")
+            self.assertEqual(content, seed_skill_md.read_text(encoding="utf-8"), f"Discrepancia de contenido en workspace-seed para {skill_name}")
+
+
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])

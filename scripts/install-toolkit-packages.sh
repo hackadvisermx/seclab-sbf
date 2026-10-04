@@ -140,6 +140,18 @@ curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
   --output /opt/enum4linux-ng.py
 printf '%s  %s\n' "$E4LNG_SHA256" /opt/enum4linux-ng.py | sha256sum -c -
 
+GEF_COMMIT=18404074f469c70480aae071fbb77b75a2ed8507
+GEF_SHA256=04cdfe961f1e9151933d32cf6b548d9e6a76a1aef8b27c020c575b8d4264ed20
+install -d -m 0755 /usr/local/share/seclab/gef
+curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+  "https://raw.githubusercontent.com/hugsy/gef/${GEF_COMMIT}/gef.py" \
+  --output /usr/local/share/seclab/gef/gef.py
+printf '%s  %s\n' "$GEF_SHA256" /usr/local/share/seclab/gef/gef.py | sha256sum -c -
+chmod 0555 /usr/local/share/seclab/gef/gef.py
+install -d -m 0755 /etc/gdb
+printf 'source /usr/local/share/seclab/gef/gef.py\n' > /etc/gdb/gdbinit
+chmod 0444 /etc/gdb/gdbinit
+
 git clone --depth 1 --branch v10.4.9 https://github.com/projectdiscovery/nuclei-templates.git /tmp/nuclei-templates
 test "$(git -C /tmp/nuclei-templates rev-parse HEAD)" = "893122ffce8ebf8e264f15d2cd3960cb1dd36d6c"
 rm -rf /tmp/nuclei-templates/.git

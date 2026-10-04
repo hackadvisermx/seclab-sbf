@@ -134,6 +134,16 @@ third_party_binaries:
     note: >-
       Enumeracion SMB/LDAP/NBNS de Windows. Complementa a smbclient y rpcclient
       a pelo. Solo entra en la imagen full.
+  - name: gef
+    version: 2026.01
+    source: https://raw.githubusercontent.com/hugsy/gef/18404074f469c70480aae071fbb77b75a2ed8507/gef.py
+    kind: script python
+    commit: 18404074f469c70480aae071fbb77b75a2ed8507
+    sha256: 04cdfe961f1e9151933d32cf6b548d9e6a76a1aef8b27c020c575b8d4264ed20
+    path: /usr/local/share/seclab/gef/gef.py
+    note: >-
+      GDB Enhanced Features para reversing, binary exploitation y CTFs. Extension
+      en Python puro sin dependencias externas para gdb y gdb-multiarch.
 templates:
   - name: nuclei-templates
     version: v10.4.9

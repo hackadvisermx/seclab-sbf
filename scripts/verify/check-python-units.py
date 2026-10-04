@@ -488,6 +488,23 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("e8fbec25db4f9d95b5e8f41cca51a4b32be8674a4dea7a45b6f7aeb22dbc38db", content)
         self.assertIn("3e59379f585ebf0becb6b4e06d0fbbf806de28a4bb256e837b4555f1b4245571", content)
 
+    def test_tools_lock_tracks_x8_and_gau(self):
+        lock_file = REPO_ROOT / "supply-chain" / "tools.lock.yaml"
+        self.assertTrue(lock_file.is_file())
+        content = lock_file.read_text(encoding="utf-8")
+
+        self.assertIn("gau", content)
+        self.assertIn("gau_2.2.4_linux_amd64.tar.gz", content)
+        self.assertIn("gau_2.2.4_linux_arm64.tar.gz", content)
+        self.assertIn("10e2e248c37cafb0be3f6d2931125296b95cd4186066d596d47fa417237529a9", content)
+        self.assertIn("c194992df360d3a24e021c6dc5a5a0576cfd769be1d19cccb29adc1d3759637d", content)
+
+        self.assertIn("x8", content)
+        self.assertIn("x86_64-linux-x8.gz", content)
+        self.assertIn("x8-1:v4.3.0.r10.gc78f246-1-aarch64.pkg.tar.zst", content)
+        self.assertIn("b3e54da4c0cc62163a3485addea6671368ee69342ea5740e56d6d6112196bd0e", content)
+        self.assertIn("35f355231ac2420eca6aa466e8fdf9f71542bb81726b46930ea9885c29ef1b4c", content)
+
     def test_pentest_lab_plugin_helpers_and_aliases(self):
         plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
         self.assertTrue(plugin_file.is_file())
@@ -501,6 +518,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "pt-serv-smb()",
             "pt-serv-payloads()",
             "pt-s3-ls()",
+            "pt-fuzz-params()",
             "pt-recon()",
         ]
         for helper in expected_helpers:
@@ -514,6 +532,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias smbserverhere="pt-serv-smb"',
             'alias servpayloads="pt-serv-payloads"',
             'alias payloadserver="pt-serv-payloads"',
+            'alias fuzzparams="pt-fuzz-params"',
             'alias awsl="pt-s3-ls"',
         ]
         for alias in expected_aliases:
@@ -524,6 +543,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("pt-recon", content)
         self.assertIn("pt-serv-web", content)
         self.assertIn("pt-serv-payloads", content)
+        self.assertIn("pt-fuzz-params", content)
 
 
 def main():

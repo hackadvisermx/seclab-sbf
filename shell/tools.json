@@ -235,6 +235,16 @@
       "command": "qsreplace",
       "description": "Reemplazo masivo de valores de query parameters en URLs para fuzzing"
     },
+    "gau": {
+      "category": "recon",
+      "command": "gau",
+      "description": "Recolecta URLs pasivas desde AlienVault OTX, Wayback, Common Crawl y URLScan"
+    },
+    "x8": {
+      "category": "web",
+      "command": "x8",
+      "description": "Fuzzing de alta velocidad y detección heurística de parámetros HTTP ocultos en Rust"
+    },
     "assetfinder": {
       "category": "recon",
       "command": "assetfinder",
@@ -510,6 +520,7 @@
     "findDelegation.py",
     "findomain",
     "fzf",
+    "gau",
     "gdb",
     "gdb-multiarch",
     "gef",
@@ -575,6 +586,7 @@
     "wireguard",
     "wmiexec.py",
     "wpscan",
+    "x8",
     "zoxide",
     "zsh",
     "zsteg"

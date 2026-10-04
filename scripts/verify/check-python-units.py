@@ -41,6 +41,7 @@ agent_context = load_module("agent_context", REPO_ROOT / "scripts" / "pt-agent-c
 engagement_packer = load_module("engagement_packer", REPO_ROOT / "scripts" / "pt-engagement-packer.py")
 recon_pipeline = load_module("recon_pipeline", REPO_ROOT / "scripts" / "pt-recon-pipeline.py")
 audit_checklist = load_module("audit_checklist", REPO_ROOT / "scripts" / "pt-audit-checklist.py")
+audit_next = load_module("audit_next", REPO_ROOT / "scripts" / "pt-audit-next.py")
 
 
 class MockSocket:
@@ -580,6 +581,9 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias ptcheck="pt-checklist"',
             'alias engcheck="pt-eng check"',
             'alias coverage="pt-checklist"',
+            'alias ptnext="pt-next"',
+            'alias engnext="pt-eng next"',
+            'alias next="pt-next"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
@@ -587,8 +591,10 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("_pt-packer-script()", content)
         self.assertIn("_pt-recon-script()", content)
         self.assertIn("_pt-checklist-script()", content)
+        self.assertIn("_pt-next-script()", content)
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-next", content)
         self.assertIn("pt-checklist", content)
         self.assertIn("pt-context", content)
         self.assertIn("pt-callback", content)
@@ -1379,6 +1385,91 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
             self.assertIn("pt-eng close [nombre] [opciones]", plugin)
             self.assertIn("-f, --force", plugin)
+
+    def test_methodology_next_step_recommender(self):
+        """Verifica el recomendador de próximo paso metodológico y guía interactiva (pt-next)."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            eng_path = pathlib.Path(tmpdir) / "engagements" / "next-test"
+            eng_path.mkdir(parents=True)
+
+            # 1. Caso A: Directorio vacío -> Recomienda scope
+            steps_scope = audit_next.determine_roadmap(eng_path)
+            self.assertEqual(steps_scope[0]["id"], "scope")
+            self.assertEqual(steps_scope[0]["discipline"], "recon")
+            self.assertIn("target.yaml", steps_scope[0]["reason"])
+
+            # 2. Caso B: target.yaml sembrado -> Recomienda recon
+            target_file = eng_path / "target.yaml"
+            target_file.write_text(
+                "engagement:\n"
+                "  name: next-test\n"
+                "  status: active\n"
+                "scope:\n"
+                "  in_scope:\n"
+                "    domains:\n"
+                "      - next.test\n",
+                encoding="utf-8",
+            )
+            steps_recon = audit_next.determine_roadmap(eng_path)
+            self.assertEqual(steps_recon[0]["id"], "recon")
+            self.assertEqual(steps_recon[0]["skill"], "recon-profiling")
+            self.assertIn("pt-recon", steps_recon[0]["command"])
+
+            # 3. Caso C: recon completado -> Recomienda fuzzing
+            recon_dir = eng_path / "recon"
+            recon_dir.mkdir()
+            (recon_dir / "live_hosts.txt").write_text("https://next.test\n", encoding="utf-8")
+            (recon_dir / "subdomains.txt").write_text("next.test\n", encoding="utf-8")
+
+            steps_fuzz = audit_next.determine_roadmap(eng_path)
+            self.assertEqual(steps_fuzz[0]["id"], "fuzzing")
+            self.assertEqual(steps_fuzz[0]["skill"], "param-discovery")
+            self.assertIn("pt-fuzz-params", steps_fuzz[0]["command"])
+
+            # 4. Caso D: Hallazgo en borrador -> Recomienda verificación
+            fuzz_dir = eng_path / "fuzzing"
+            fuzz_dir.mkdir()
+            (fuzz_dir / "params.txt").write_text("id\nuser\n", encoding="utf-8")
+
+            ev_dir = eng_path / "evidence"
+            ev_dir.mkdir()
+            (ev_dir / "draft-vuln.md").write_text(
+                "---\n"
+                "id: VULN-DRAFT-01\n"
+                "status: Borrador\n"
+                "severity: HIGH\n"
+                "---\n\n# Borrador\n",
+                encoding="utf-8",
+            )
+
+            steps_draft = audit_next.determine_roadmap(eng_path)
+            has_triage = any(s["id"] == "verify_findings" for s in steps_draft)
+            self.assertTrue(has_triage)
+
+            # 5. Validar generación de prompt para LLM y salida formateada
+            prompt_out = audit_next.generate_llm_prompt(eng_path, steps_recon[0])
+            self.assertIn("SYSTEM PROMPT", prompt_out)
+            self.assertIn("next-test", prompt_out)
+            self.assertIn("pt-scope show", prompt_out)
+
+            term_out = audit_next.format_terminal_output(eng_path, steps_recon[0], steps_recon, show_all=True)
+            self.assertIn("next-test", term_out)
+            self.assertIn("Próximo Paso Recomendado", term_out)
+
+            # 6. Validar integración en Dockerfile y plugin Zsh
+            dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
+            self.assertIn("pt-next", dockerfile)
+
+            plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+            self.assertIn("_pt-next-script()", plugin)
+            self.assertIn("_pt-next-help()", plugin)
+            self.assertIn("pt-next()", plugin)
+            self.assertIn("next)", plugin)
+            self.assertIn("alias ptnext=", plugin)
+            self.assertIn("alias engnext=", plugin)
+            self.assertIn("alias next=", plugin)
 
 
 def main():

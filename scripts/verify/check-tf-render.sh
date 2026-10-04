@@ -89,6 +89,11 @@ except yaml.YAMLError as err:
     print("tf_render_check=invalid-yaml error=%s" % str(err).replace("\n", " ")[:200])
     sys.exit(1)
 
+for idx, cmd in enumerate(doc.get("runcmd", [])):
+    if not isinstance(cmd, (str, list)):
+        print("tf_render_check=invalid-runcmd index=%d type=%s val=%r" % (idx, type(cmd).__name__, cmd))
+        sys.exit(1)
+
 files = {f["path"]: f for f in doc.get("write_files", [])}
 target = "/etc/fail2ban/jail.d/seclab-sshd.conf"
 if target not in files:

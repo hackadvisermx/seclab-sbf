@@ -21,6 +21,7 @@ procedimiento no se ha ejecutado nunca, se dice.
 - [Rotar la llave one-off de Tailscale](#rotar-la-llave-one-off-de-tailscale)
 - [Recuperación ante desastres (Disaster Recovery)](#recuperación-ante-desastres-disaster-recovery)
 - [Alertas y Notificaciones (Webhook)](#alertas-y-notificaciones-webhook)
+- [Control de energía y ahorro de costos en Azure](#control-de-energía-y-ahorro-de-costos-en-azure)
 - [Verificaciones de rutina](#verificaciones-de-rutina)
 
 ---
@@ -358,6 +359,50 @@ ALERT_WEBHOOK_URL="https://discord.com/api/webhooks/..." ./scripts/host/notify.s
 ```
 
 Si la variable `ALERT_WEBHOOK_URL` está vacía, el script registra el evento en la salida estándar sin provocar errores.
+
+## Control de energía y ahorro de costos en Azure
+
+**Objetivo:** Suspender la VM cuando no se utilice para que el cómputo sea $0.00 USD/h, y reactivarla manteniendo IP de Tailscale y estado del laboratorio.
+
+En Azure, apagar el SO con `sudo poweroff` o `az vm stop` deja la VM en estado *Stopped (Allocated)*, lo cual **sigue facturando las vCPUs y la RAM**. Para detener el cobro de cómputo, la VM debe ser **desasignada** (*Deallocated*).
+
+### 1. Apagar y desasignar (Cómputo = $0.00/h)
+
+Desde tu Mac:
+
+```bash
+make vm-stop-az
+```
+
+Equivalente directo:
+```bash
+az vm deallocate --resource-group seclab-sbf-prod --name seclab-sbf-prod-lab
+```
+
+### 2. Comprobar estado de energía
+
+```bash
+make vm-status-az
+```
+- Devuelve `VM deallocated` cuando está apagada sin costo.
+- Devuelve `VM running` cuando está activa.
+
+### 3. Encender la VM
+
+```bash
+make vm-start-az
+```
+
+Equivalente directo:
+```bash
+az vm start --resource-group seclab-sbf-prod --name seclab-sbf-prod-lab
+```
+
+**Comportamiento al encender:**
+- Tailscale se reconecta en ~30-40 segundos y conserva la IP `100.111.178.40`.
+- Docker reanuda el contenedor del laboratorio automáticamente (`restart: unless-stopped`).
+- Los puentes `seclab-ssh-tailnet` (2222) y `seclab-ttyd-tailnet` (7681) vuelven a escuchar.
+- Puedes ingresar directamente con `make lab-ssh-az` o `make host-ssh-az`.
 
 ## Verificaciones de rutina
 

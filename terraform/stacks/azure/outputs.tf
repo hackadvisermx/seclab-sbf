@@ -4,8 +4,13 @@ output "vm_id" {
 }
 
 output "private_ip" {
-  description = "IP privada de la VM (sin IP pública por diseño)."
+  description = "IP privada de la VM."
   value       = azurerm_network_interface.lab.private_ip_address
+}
+
+output "public_ip" {
+  description = "IP pública de la VM (solo-salida para internet, ingress cerrado por NSG y firewall nftables)."
+  value       = azurerm_public_ip.lab.ip_address
 }
 
 output "workspace_mount" {

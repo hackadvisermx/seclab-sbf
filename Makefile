@@ -17,7 +17,7 @@ SHELL := /bin/sh
 # caso de `make` sin argumentos y no los `make compose-up`. Comprobado.
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check
+.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-azure host-ssh-azure lab-ssh-az host-ssh-az lab-ssh-oci host-ssh-oci vm-status-azure vm-status-az vm-stop-azure vm-stop-az vm-start-azure vm-start-az lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -39,6 +39,8 @@ HOST_SSH_KEY ?= .secrets/ssh/seclab_ed25519
 # CLOUD_HOST se puede dejar fijo en el .env para no repetirlo en cada
 # llamada; si no esta, se acepta TF_HOST en la linea de comandos.
 CLOUD_HOST ?= $(or $(TF_HOST),$(shell sed -n 's/^CLOUD_HOST=//p' "$(ENV_FILE)" 2>/dev/null))
+AZURE_HOST ?= $(or $(TF_HOST),$(shell sed -n 's/^AZURE_HOST=//p' "$(ENV_FILE)" 2>/dev/null),$(CLOUD_HOST))
+OCI_HOST ?= $(or $(TF_HOST),$(shell sed -n 's/^OCI_HOST=//p' "$(ENV_FILE)" 2>/dev/null))
 CLOUD_SSH_PORT ?= 2222
 CLOUD_REPO_DIR ?= ~/seclab-sbf
 CLOUD_WORKSPACE_DIR ?= /opt/seclab-sbf/workspace
@@ -53,7 +55,7 @@ COMPOSE_BASE := WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECR
 COMPOSE_VPN := VPN_MODE="$(VPN_MODE)" VPN_DIR="$(VPN_DIR)" WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" docker compose $(VPN_COMPOSE)
 
 help:
-	@cd "$(ROOT)" && printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base y full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  python-units-check Pruebas de seguridad proxy/VPN (py-test)' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-full        Imagen del laboratorio (la unica)' '  image-publish    Publica la imagen en Docker Hub (no escanea)' '  image-publish-checked Publica despues de pasar el gate de CVEs' '  image-pull       Baja la imagen por digest (DOCKER_DIGEST) y la deja lista' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  workspace-dir    Crea la carpeta de trabajo y la siembra si esta vacia' '  workspace-list   Ver que hay en el workspace' '  workspace-export Saca material del workspace (RUTA= | ENG= | ALL=1)' '  workspace-backup Empaqueta el workspace con timestamp y checksum SHA-256' '  workspace-restore Restaura un respaldo en el workspace (BACKUP=... [FORCE=1])' '  lab-ssh           SSH a tester en un comando' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' '  smoke-test        Pruebas de humo funcionales en contenedor efimero' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  makefile-check       Recetas del Makefile con comillas balanceadas' '  image-tools-check   Herramientas del manifiesto presentes en la imagen' '  compose-refs-check  Referencias de compose que existan (Dockerfile, imagen)' '  compose-security-check Auditor de seguridad Compose (puertos, privilegios)' '  doc-targets-check Comandos make citados que existan' '  tf-destroy-check  Avisa si el plan destruye algo (STACK=oci|azure|do)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE IMAGE_SOURCE WORKSPACE_DIR DEST LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
+	@cd "$(ROOT)" && printf '%s\n' 'Verificacion:' '  verify            Verificaciones locales (secretos, docker, shell)' '  verify-secrets    Gitleaks' '  lint-docker       Hadolint base y full' '  lint-shell        ShellCheck scripts' '  verify-pins      Cada uses: de los workflows apunta a un commit real' '  python-units-check Pruebas de seguridad proxy/VPN (py-test)' '  scan-image        Escaneo local de CVEs de una imagen (SCAN_IMAGE, por defecto LAB_IMAGE)' '  sbom              SBOM CycloneDX de la imagen, ligado a su hash de insumos' 'Imagenes:' '  build-base        Imagen base' '  build-full        Imagen del laboratorio (la unica)' '  image-publish    Publica la imagen en Docker Hub (no escanea)' '  image-publish-checked Publica despues de pasar el gate de CVEs' '  image-pull       Baja la imagen por digest (DOCKER_DIGEST) y la deja lista' 'Laboratorio (todo make objetivo-con-guiones):' '  compose-config    Valida compose.yaml' '  compose-up        Levanta tester, daemon VPN y tun0; no conecta tunel' '  compose-down      Detiene tester y daemon VPN' '  compose-shell     Bash como tester (depuracion)' '  compose-zsh       Zsh efimero (previsualizacion)' '  compose-tmux      Sesion tmux del servicio activo' '  workspace-dir    Crea la carpeta de trabajo y la siembra si esta vacia' '  workspace-list   Ver que hay en el workspace' '  workspace-export Saca material del workspace (RUTA= | ENG= | ALL=1)' '  workspace-backup Empaqueta el workspace con timestamp y checksum SHA-256' '  workspace-restore Restaura un respaldo en el workspace (BACKUP=... [FORCE=1])' '  lab-ssh           SSH a tester en un comando' '  lab-ssh-cloud     SSH al contenedor del host cloud (CLOUD_HOST o TF_HOST)' '  host-ssh-cloud    SSH al host cloud como ubuntu (CLOUD_HOST o TF_HOST)' '  lab-ssh-cloud-image Atajo cloud: construye en el host la imagen pedida y entra' '  base-check        Healthcheck efimero de la imagen base' '  smoke-test        Pruebas de humo funcionales en contenedor efimero' 'VPN inside:' '  vpn-up            Asegura daemon/control VPN y tun0' '  vpn-tun-check     Comprueba /dev/net/tun, tun0, NET_ADMIN' '  vpn-down          Detiene el daemon VPN' '  vpn-list          Lista perfiles' '  vpn-status        Estado de la VPN' '  vpn-connect       Conecta VPN_PROFILE a demanda' '  vpn-disconnect    Desconecta la VPN' '  vpn-switch        Cambia al perfil VPN_PROFILE' '  vpn-doctor        Valida perfiles y capacidades' 'Proxy:' '  proxy-status      Estado de pt-forward' '  proxy-doctor      Valida route guard' '  proxy-stop        Detiene pt-forward y SOCKS5' '  proxy-bridge      Puente host-only (SERVICE=tcp|socks|web)' 'Seguridad:' '  security-check    Sintaxis nftables (Linux)' '  tailscale-check   Tailscale host-only (Linux)' '  fail2ban-check    Jail de sshd del host (Linux)' 'Nube (TF_HOST=... para env-copy):' '  tf-fmt            Formato Terraform' '  tf-render-check   Renderiza el cloud-init y valida el YAML' '  tflint-check      Linter de Terraform (requiere tflint)' '  fail2ban-jail-check  Jail de sshd validada con fail2ban (requiere Docker)' '  makefile-check       Recetas del Makefile con comillas balanceadas' '  image-tools-check   Herramientas del manifiesto presentes en la imagen' '  compose-refs-check  Referencias de compose que existan (Dockerfile, imagen)' '  compose-security-check Auditor de seguridad Compose (puertos, privilegios)' '  doc-targets-check Comandos make citados que existan' '  tf-destroy-check  Avisa si el plan destruye algo (STACK=oci|azure|do)' '  tf-plan-*         Plan (oci|azure|do)' '  tf-apply-*        Aplica' '  tf-destroy-*      Destruye' '  env-copy-*        Copia .env por tailnet' '  vpn-copy          Copia perfiles .ovpn al host por tailnet' 'Variables: ENV_FILE IMAGE_SOURCE WORKSPACE_DIR DEST LAB_IMAGE VPN_* LAB_SSH_PORT LAB_SSH_KEY LAB_SSH_HOST HOST_SSH_KEY CLOUD_HOST CLOUD_SSH_PORT CLOUD_REPO_DIR CLOUD_WORKSPACE_DIR TF_HOST'
 
 verify: verify-secrets lint-docker lint-shell verify-pins makefile-check compose-refs-check compose-security-check python-units-check
 
@@ -511,6 +513,34 @@ lab-ssh-cloud:
 	@cd "$(ROOT)" && test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host (ej. make lab-ssh-cloud TF_HOST=100.x.y.z)\n' >&2; exit 2)
 	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(CLOUD_SSH_PORT)" tester@"$(CLOUD_HOST)"
 
+# Entrada directa al host cloud (usuario ubuntu, administracion del sistema, puerto 22).
+host-ssh-cloud:
+	@cd "$(ROOT)" && test -n "$(CLOUD_HOST)" || (printf 'CLOUD_HOST requerido: tailnet del host (ej. make host-ssh-cloud TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" -p 22 "$(TF_ADMIN)@$(CLOUD_HOST)"
+
+# Entradas especificas por proveedor (Azure / OCI)
+lab-ssh-azure:
+	@cd "$(ROOT)" && test -n "$(AZURE_HOST)" || (printf 'AZURE_HOST o TF_HOST requerido (ej. make lab-ssh-azure TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(CLOUD_SSH_PORT)" tester@"$(AZURE_HOST)"
+
+lab-ssh-az: lab-ssh-azure
+
+host-ssh-azure:
+	@cd "$(ROOT)" && test -n "$(AZURE_HOST)" || (printf 'AZURE_HOST o TF_HOST requerido (ej. make host-ssh-azure TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" -p 22 "$(TF_ADMIN)@$(AZURE_HOST)"
+
+host-ssh-az: host-ssh-azure
+
+lab-ssh-oci:
+	@cd "$(ROOT)" && test -n "$(OCI_HOST)" || (printf 'OCI_HOST o TF_HOST requerido (ej. make lab-ssh-oci TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(CLOUD_SSH_PORT)" tester@"$(OCI_HOST)"
+
+host-ssh-oci:
+	@cd "$(ROOT)" && test -n "$(OCI_HOST)" || (printf 'OCI_HOST o TF_HOST requerido (ej. make host-ssh-oci TF_HOST=100.x.y.z)\n' >&2; exit 2)
+	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" -p 22 "$(TF_ADMIN)@$(OCI_HOST)"
+
+
+
 # En el cloud la imagen no se elige al conectar: hay que recrear el
 # contenedor en el host. Por eso el atajo remoto primero levanta el lab
 # alla con la imagen pedida y despues entra.
@@ -588,6 +618,8 @@ fail2ban-check:
 TF_STACK ?= oci
 TF_HOST ?=
 TF_ADMIN ?= ubuntu
+AZURE_RG ?= seclab-sbf-prod
+AZURE_VM ?= seclab-sbf-prod-lab
 
 tf-fmt:
 	cd "$(ROOT)" && terraform fmt -check -recursive terraform/
@@ -673,6 +705,29 @@ tf-apply-azure:
 
 tf-destroy-azure:
 	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh azure destroy
+
+# Gestion de energia de la VM en Azure:
+# vm-stop-azure ejecuta `deallocate`, lo cual libera vCPU y RAM deteniendo
+# por completo el cobro por hora de computo ($0.00/h). `az vm stop` solo
+# pararia el SO pero seguiria cobrando.
+vm-status-azure:
+	@az vm get-instance-view --resource-group "$(AZURE_RG)" --name "$(AZURE_VM)" --query "instanceView.statuses[?starts_with(code, 'PowerState/')].displayStatus" -o tsv 2>/dev/null || printf 'No se pudo consultar el estado de %s\n' "$(AZURE_VM)"
+
+vm-status-az: vm-status-azure
+
+vm-stop-azure:
+	@printf 'Desasignando VM %s en %s (deallocate libera vCPU/RAM y detiene costos de computo)...\n' "$(AZURE_VM)" "$(AZURE_RG)"
+	az vm deallocate --resource-group "$(AZURE_RG)" --name "$(AZURE_VM)"
+	@printf 'VM desasignada correctamente. Estado: Deallocated (computo = $$0.00/h).\n'
+
+vm-stop-az: vm-stop-azure
+
+vm-start-azure:
+	@printf 'Iniciando VM %s en %s...\n' "$(AZURE_VM)" "$(AZURE_RG)"
+	az vm start --resource-group "$(AZURE_RG)" --name "$(AZURE_VM)"
+	@printf 'VM iniciada correctamente. Tailnet: %s\n' "$(AZURE_HOST)"
+
+vm-start-az: vm-start-azure
 
 tf-plan-do:
 	cd "$(ROOT)" && /bin/sh scripts/cloud/tf.sh digitalocean plan

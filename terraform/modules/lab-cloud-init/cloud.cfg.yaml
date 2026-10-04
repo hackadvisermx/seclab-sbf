@@ -102,5 +102,5 @@ runcmd:
   # queda igual que estaba (fail-open) y por eso se avisa en el motd y en el
   # log, en vez de dar por hecho que quedo aplicada.
   - systemctl daemon-reload
-  - nft -c -f /etc/nftables/seclab-lab.nft && systemctl enable --now seclab-nftables || echo 'ATENCION: no se pudo aplicar el firewall del host; revisar /etc/nftables/seclab-lab.nft'
+  - "nft -c -f /etc/nftables/seclab-lab.nft && systemctl enable --now seclab-nftables || echo 'ATENCION: no se pudo aplicar el firewall del host; revisar /etc/nftables/seclab-lab.nft'"
 final_message: "seclab-sbf listo. Une Tailscale manualmente y copia .env por SSH sobre el tailnet. El acceso por IP publica no funciona a proposito."

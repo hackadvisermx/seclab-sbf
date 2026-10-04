@@ -30,8 +30,10 @@ resource "azurerm_subnet" "private" {
   address_prefixes     = [var.subnet_cidr]
 }
 
-resource "azurerm_public_ip" "nat" {
-  name                = "${local.name_prefix}-nat-pip"
+# IP pública directa para egress (sin NAT Gateway para minimizar costos).
+# Cero ingress: el NSG y nftables bloquean todo el tráfico entrante.
+resource "azurerm_public_ip" "lab" {
+  name                = "${local.name_prefix}-pip"
   resource_group_name = azurerm_resource_group.lab.name
   location            = azurerm_resource_group.lab.location
   allocation_method   = "Static"
@@ -39,26 +41,8 @@ resource "azurerm_public_ip" "nat" {
   tags                = local.tags
 }
 
-resource "azurerm_nat_gateway" "lab" {
-  name                = "${local.name_prefix}-nat"
-  resource_group_name = azurerm_resource_group.lab.name
-  location            = azurerm_resource_group.lab.location
-  sku_name            = "Standard"
-  tags                = local.tags
-}
-
-resource "azurerm_nat_gateway_public_ip_association" "lab" {
-  nat_gateway_id       = azurerm_nat_gateway.lab.id
-  public_ip_address_id = azurerm_public_ip.nat.id
-}
-
-resource "azurerm_subnet_nat_gateway_association" "lab" {
-  subnet_id      = azurerm_subnet.private.id
-  nat_gateway_id = azurerm_nat_gateway.lab.id
-}
-
-# Sin reglas allow de ingress: la VM no tiene IP pública y el NSG
-# niega todo lo entrante de forma explícita.
+# Cero ingress: la VM tiene IP pública solo para salida (egress); el NSG
+# y la política nftables niegan todo el tráfico entrante de forma explícita.
 resource "azurerm_network_security_group" "lab" {
   name                = "${local.name_prefix}-nsg"
   resource_group_name = azurerm_resource_group.lab.name
@@ -88,6 +72,7 @@ resource "azurerm_network_interface" "lab" {
     name                          = "interna"
     subnet_id                     = azurerm_subnet.private.id
     private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.lab.id
   }
 }
 
@@ -122,7 +107,7 @@ resource "azurerm_linux_virtual_machine" "lab" {
   source_image_reference {
     publisher = "Canonical"
     offer     = "ubuntu-24_04-lts"
-    sku       = "server"
+    sku       = var.image_sku
     version   = var.image_version
   }
 

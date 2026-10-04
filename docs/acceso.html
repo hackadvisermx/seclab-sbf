@@ -3,126 +3,214 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Acceso al laboratorio — seclab-sbf</title>
+<title>Acceso al laboratorio — seclab-sbf (Azure)</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: #0d1117; color: #e6edf3; line-height: 1.55; }
-  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
-  h1 { font-size: 1.7rem; margin-bottom: 0; }
-  h2 { margin-top: 2.2em; border-bottom: 1px solid #30363d; padding-bottom: .3em; }
-  p.sub { color: #8b949e; margin-top: .3em; }
-  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 18px 20px; margin: 16px 0; }
-  .card h3 { margin-top: 0; }
-  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  pre { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px 14px; overflow-x: auto; position: relative; }
-  button.copy { position: absolute; top: 8px; right: 8px; background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: .8rem; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; background: #0d1117; color: #e6edf3; line-height: 1.6; }
+  main { max-width: 900px; margin: 0 auto; padding: 36px 24px 72px; }
+  h1 { font-size: 1.85rem; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  h2 { margin-top: 2.2em; border-bottom: 1px solid #30363d; padding-bottom: .4em; font-size: 1.35rem; }
+  p.sub { color: #8b949e; margin-top: 0; margin-bottom: 24px; font-size: 0.95rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-online { background: #238636; color: #fff; }
+  .badge-azure { background: #0078d4; color: #fff; }
+  .badge-sec { background: #6e40c9; color: #fff; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px 22px; margin: 18px 0; }
+  .card h3 { margin-top: 0; font-size: 1.1rem; color: #58a6ff; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  code { background: #21262d; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+  pre { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 14px 16px; overflow-x: auto; position: relative; }
+  pre code { background: none; padding: 0; }
+  button.copy { position: absolute; top: 10px; right: 10px; background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: .8rem; transition: background 0.15s; }
   button.copy:hover { background: #30363d; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #30363d; vertical-align: top; }
-  th { color: #8b949e; font-weight: 600; }
-  .warn { background: #2a1a05; border: 1px solid #9e6a03; border-radius: 10px; padding: 14px 18px; margin: 16px 0; }
-  .ok { color: #3fb950; } .bad { color: #f85149; }
-  a { color: #58a6ff; }
-  footer { color: #8b949e; font-size: .85rem; margin-top: 3em; }
-  ol li, ul li { margin-bottom: .5em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #30363d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; background: #161b22; }
+  .warn { background: #2a1a05; border: 1px solid #9e6a03; border-radius: 10px; padding: 16px 20px; margin: 18px 0; }
+  .info { background: #0c2d6b; border: 1px solid #1f6feb; border-radius: 10px; padding: 16px 20px; margin: 18px 0; }
+  .ok { color: #3fb950; font-weight: bold; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  footer { color: #8b949e; font-size: .85rem; margin-top: 3em; border-top: 1px solid #30363d; padding-top: 1.5em; }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 12px; }
+  .stat-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px 14px; }
+  .stat-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; font-weight: 600; }
+  .stat-value { font-size: 1.05rem; font-weight: 600; margin-top: 4px; color: #f0f6fc; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Acceso al laboratorio <span class="ok">●</span></h1>
-  <p class="sub">seclab-sbf-prod · tailnet únicamente · sin puertos públicos · VM sin IP pública</p>
+  <h1>Acceso al laboratorio <span class="badge badge-online">Activo</span> <span class="badge badge-azure">Azure</span></h1>
+  <p class="sub">Nodo: <strong>seclab-sbf-prod</strong> · Tailnet privado únicamente · Arquitectura Zero Ingress · Linux x86_64</p>
 
   <div class="card">
-    <h3>0. Requisitos (una vez)</h3>
+    <h3>Resumen de Infraestructura</h3>
+    <div class="grid-stats">
+      <div class="stat-box">
+        <div class="stat-label">Tailnet IP (IPv4)</div>
+        <div class="stat-value"><code>100.111.178.40</code></div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Tailnet Hostname</div>
+        <div class="stat-value"><code>seclab-sbf-prod</code></div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Región / Shape</div>
+        <div class="stat-value">Mexico Central (D2as_v4)</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Especificaciones</div>
+        <div class="stat-value">AMD EPYC™ · 2 vCPU · 8 GB RAM</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">IP Egress (Salida)</div>
+        <div class="stat-value"><code>158.23.145.139</code></div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Seguridad Perimetral</div>
+        <div class="stat-value">Zero Ingress (NSG + nftables)</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>1. Requisitos de Conexión</h2>
+  <div class="card">
     <ol>
-      <li><strong>Tailscale conectado</strong> en tu Mac: <code>tailscale status</code> debe mostrar <code>seclab-sbf-prod</code> con IP <code>100.113.178.15</code>.</li>
-      <li><strong>Llaves del proyecto</strong> en <code>/Users/castr/tmp/t01/.secrets/ssh/</code>:
-        <code>seclab_ed25519</code> (lab) y <code>seclab_console_rsa</code> (consola OCI).</li>
-      <li><strong>Contraseña web</strong>: la obtienes con
-        <code>grep TTYD_PASSWORD /Users/castr/tmp/t01/.env</code> (cámbiala si aún es la de defecto).</li>
+      <li><strong>Tailscale conectado en tu equipo</strong>: Ejecuta <code>tailscale status</code> y verifica que el nodo <code>seclab-sbf-prod</code> (<code>100.111.178.40</code>) esté visible.</li>
+      <li><strong>Clave privada SSH</strong>: Debe encontrarse en <code>.secrets/ssh/seclab_ed25519</code> con permisos estrictos <code>600</code>.</li>
+      <li><strong>Contraseña Web ttyd</strong>: Consulta tu clave en el archivo local con:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>grep TTYD_PASSWORD .env</code></pre>
+      </li>
     </ol>
   </div>
 
-  <h2>1. VPS por SSH (host Ubuntu)</h2>
+  <h2>2. Comandos Make de Acceso Rápido por Proveedor</h2>
   <div class="card">
-    <h3>Sesión de administración del host</h3>
-    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i /Users/castr/tmp/t01/.secrets/ssh/seclab_ed25519 ubuntu@100.113.178.15</code></pre>
-    <p>Desde ahí, el repo vive en <code>~/seclab-sbf</code>. Comandos útiles:</p>
+    <p>Los comandos <code>make</code> detectan automáticamente el host desde tu archivo <code>.env</code> o aceptan <code>TF_HOST=&lt;ip&gt;</code>:</p>
+
+    <h3>A. Microsoft Azure (Nodo Actual Activo: 100.111.178.40)</h3>
+    <p>Configurado en tu <code>.env</code> con <code>AZURE_HOST=100.111.178.40</code>:</p>
+    <ul>
+      <li><strong>Entrar al Laboratorio (Contenedor Tester, puerto 2222)</strong>:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-az</code></pre>
+        <em>(o su alias extendido: <code>make lab-ssh-azure</code>)</em>
+      </li>
+      <li><strong>Entrar al Host VPS (Administración Ubuntu, puerto 22)</strong>:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make host-ssh-az</code></pre>
+        <em>(o su alias extendido: <code>make host-ssh-azure</code>)</em>
+      </li>
+    </ul>
+
+    <h3>B. Oracle Cloud Infrastructure (OCI)</h3>
+    <p>Para entornos desplegados en Oracle Cloud (usa <code>OCI_HOST</code> en <code>.env</code> o parámetro en línea):</p>
+    <ul>
+      <li><strong>Entrar al Laboratorio OCI (Contenedor Tester)</strong>:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-oci</code></pre>
+      </li>
+      <li><strong>Entrar al Host VPS OCI (Administración Ubuntu)</strong>:
+        <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make host-ssh-oci</code></pre>
+      </li>
+    </ul>
+
+    <h3>C. Atajos Genéricos de Nube</h3>
+    <p>Conectan al host principal especificado en <code>CLOUD_HOST</code>:</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud   # Entra al contenedor del lab cloud activo
+make host-ssh-cloud  # Entra al host VPS cloud activo</code></pre>
+  </div>
+
+  <h2>3. Comandos SSH Directos Equivalentes</h2>
+  <div class="card">
+    <h3>A. Host VPS (Puerto 22, usuario ubuntu)</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i .secrets/ssh/seclab_ed25519 ubuntu@100.111.178.40</code></pre>
+    <p>Comandos útiles en el host:</p>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>cd ~/seclab-sbf
-export WORKSPACE_DIR=/opt/seclab-sbf/workspace LAB_ENV_FILE=.env
-sudo systemctl status seclab-nftables seclab-ttyd-tailnet seclab-ssh-tailnet --no-pager
-docker compose -f compose.yaml -f compose.local.yaml -f compose.vpn-inside.yaml ps</code></pre>
+sudo systemctl status seclab-nftables fail2ban --no-pager
+docker compose ps
+sudo nft list table inet seclab_host</code></pre>
+
+    <h3>B. Contenedor Lab (Puerto 2222, usuario tester)</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i .secrets/ssh/seclab_ed25519 -p 2222 tester@100.111.178.40</code></pre>
   </div>
 
-  <h2>2. Contenedor por SSH (usuario tester)</h2>
+  <h2>4. Acceso Web a la Terminal (ttyd)</h2>
   <div class="card">
-    <h3>En tu Mac (un comando)</h3>
-    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh</code></pre>
-    <p>Levanta el lab si hace falta, publica <code>127.0.0.1:2222</code> v&iacute;a override temporal (sin tocar <code>compose.yaml</code>) y entra como <code>tester</code> con banner + tmux.</p>
-    <p>Construye la imagen <strong>en tu Mac</strong> si falta <em>o si el c&oacute;digo ha cambiado</em>: la imagen lleva una etiqueta con un hash de sus ficheros de build y <code>ensure-image</code> la compara. Si no coinciden, reconstruye. Si nada cambi&oacute;, no toca nada.</p>
-    <p>Si el puerto est&aacute; ocupado: <code>make lab-ssh LAB_SSH_PORT=2223</code>. Solo hay una imagen de sesi&oacute;n, <code>seclab-sbf:full</code>, as&iacute; que no hay nada que elegir. La imagen <code>base</code> no admite sesi&oacute;n (no trae sshd ni usuario tester); se valida con <code>make base-check</code>.</p>
-    <h3>En el contenedor del host cloud (un comando)</h3>
-    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make lab-ssh-cloud TF_HOST=100.113.178.15</code></pre>
-    <p>Entra directo por el tailnet, sin t&uacute;nel. El puente lo publica el servicio systemd <code>seclab-ssh-tailnet</code> en la IP Tailscale del host, as&iacute; que no hace falta ning&uacute;n override de puertos. Acepta <code>TF_HOST</code> o <code>CLOUD_HOST</code> (queda en el <code>.env</code>).</p>
-    <p>Esto entra tal cual est&aacute; el contenedor, que es siempre la imagen <code>full</code>.</p>
-    <p>Que recrea el lab en el host antes de entrar, compilando all&iacute; la imagen si hace falta o si el c&oacute;digo del host cambi&oacute;.</p>
-    <p>El repo del host se actualiza por <code>git archive</code> + <code>scp</code>, no es un clon (el repo es privado y el host no tiene credenciales de GitHub). Si has cambiado c&oacute;digo en tu Mac y quieres que el host lo use, resincroniza antes; si no, el host se queda con lo suyo.</p>
-    <h3>Im&aacute;genes: se construyen donde se usan</h3>
+    <h3>Terminal en el Navegador</h3>
+    <p>Acceso interactivo HTTP sobre la red segura de Tailscale (no requiere túnel local):</p>
+    <p>👉 <a href="http://100.111.178.40:7681" target="_blank" rel="noopener noreferrer"><strong>http://100.111.178.40:7681</strong></a></p>
     <table>
-      <tr><th>Imagen</th><th>D&oacute;nde se construye</th><th>Notas</th></tr>
-      <tr><td><code>base</code>, <code>full</code></td><td><strong>En la m&aacute;quina que las usa</strong></td><td>Construcci&oacute;n nativa: el port&aacute;til en <code>arm64</code>, el host en <code>amd64</code>.</td></tr>
-      <tr><td><code>full</code></td><td><strong>En el host donde va a correr</strong></td><td>VM desechable. Sus CVEs se comprueban con <code>make scan-image</code>.</td></tr>
+      <tr><th>Parámetro</th><th>Valor</th></tr>
+      <tr><td>Usuario</td><td><code>tester</code></td></tr>
+      <tr><td>Contraseña</td><td>Valor de <code>TTYD_PASSWORD</code> en tu <code>.env</code></td></tr>
+      <tr><td>Persistencia</td><td>Sesión tmux activa (el cierre de ventana no mata procesos)</td></tr>
     </table>
-    <div class="warn">
-      <strong>No hay registry.</strong> El paquete de GHCR se borr&oacute; el 2026-09-28 y no se vuelve a publicar. Cada m&aacute;quina construye en caliente la imagen que necesita, as&iacute; que <code>make scan-image</code> es la &uacute;nica puerta de CVEs. Si el host pierde la imagen, hay que reconstruirla: no hay copia que descargar.
-      <pre style="margin-top:10px"><button class="copy" onclick="copiar(this)">copiar</button><code>make scan-image SCAN_IMAGE=seclab-sbf:full</code></pre>
-    </div>
-    <div class="ok">
-      <strong>Solo hay una imagen.</strong> <code>seclab-sbf:full</code> contiene tanto el toolkit base como Metasploit, NetExec y el resto, as&iacute; que no hay perfiles ni nada que deduucir. Antes exist&iacute;a un perfil <code>light</code>: se fusion&oacute; con <code>full</code> el 2026-09-29.
-    </div>
-
-    <h3>Directo por el tailnet, sin túnel (puerto 2222, solo llaves)</h3>
-    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i /Users/castr/tmp/t01/.secrets/ssh/seclab_ed25519 -p 2222 tester@100.113.178.15</code></pre>
-    <p>Entrarás al shell del laboratorio (banner <code>SECLAB-SBF</code>). Alternativa desde el host con <code>docker compose exec</code> (no usa red).</p>
   </div>
 
-  <h2>3. Contenedor por web (ttyd)</h2>
+  <h2>5. Directorio de Trabajo (/workspace)</h2>
   <div class="card">
-    <h3>Terminal en el navegador</h3>
-    <p>Abre <a href="http://100.113.178.15:7681">http://100.113.178.15:7681</a> e inicia sesión con usuario <code>tester</code> y tu <code>TTYD_PASSWORD</code>.</p>
-    <p>La sesión es tmux persistente: cerrar el navegador no la mata. El túnel <code>ssh -L</code> ya no hace falta (quedó como alternativa).</p>
+    <p>El directorio de trabajo está mapeado para persistencia de reportes, evidencias y notas:</p>
+    <ul>
+      <li><strong>En el host</strong>: <code>/opt/seclab-sbf/workspace</code></li>
+      <li><strong>Dentro del contenedor</strong>: <code>/workspace</code> (pertenece a <code>tester:tester</code>)</li>
+      <li><strong>Respaldo bajo demanda</strong>: Ejecuta <code>make workspace-backup</code> desde tu máquina para generar un tarball reproducible con SHA-256.</li>
+    </ul>
   </div>
 
-  <h2>4. Si algo falla</h2>
+  <h2>6. Apagar y Encender el VPS (Ahorro de Créditos en Azure)</h2>
+  <div class="card">
+    <p>Para no consumir créditos cuando no estés usando el laboratorio, desasigna la VM:</p>
+
+    <h3>A. Apagar y Desasignar la VM (Cómputo = $0.00/h)</h3>
+    <p>Ejecuta desde tu Mac (hace <code>deallocate</code> liberando vCPU y memoria para detener el cobro por hora):</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make vm-stop-az</code></pre>
+
+    <h3>B. Encender la VM</h3>
+    <p>Inicia la VM; Tailscale, Docker y el laboratorio arrancan automáticamente:</p>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make vm-start-az</code></pre>
+
+    <h3>C. Consultar Estado</h3>
+    <pre><button class="copy" onclick="copiar(this)">copiar</button><code>make vm-status-az</code></pre>
+  </div>
+
+  <h2>7. Seguridad y Buenas Prácticas</h2>
+  <div class="warn">
+    <strong>Zero Ingress Enforced:</strong> La IP pública <code>158.23.145.139</code> solo tiene función de salida a internet (egress para descargar paquetes/herramientas sin costo de NAT Gateway). Cualquier intento de conexión entrante a esa IP es descartado de inmediato por el NSG de Azure y por la cadena <code>input</code> de <code>nftables</code> (política DROP). Todo el tráfico administrativo transita únicamente por la interfaz <code>tailscale0</code>.
+  </div>
+
+  <h2>8. Solución de Problemas</h2>
   <table>
-    <tr><th>Síntoma</th><th>Causa probable / solución</th></tr>
-    <tr><td><code>Permission denied (publickey)</code></td><td>Usa <code>-i</code> con la llave correcta (<code>seclab_ed25519</code>, no la de consola).</td></tr>
-    <tr><td>Timeout al puerto 7681/2222</td><td>Tailscale caído en Mac o host; revisa <code>tailscale status</code> en ambos. Revisa los servicios systemd del host.</td></tr>
-    <tr><td>ttyd pide login en bucle / 401</td><td>Contraseña incorrecta: verifica <code>TTYD_PASSWORD</code> de tu <code>.env</code> local.</td></tr>
-    <tr><td><code>exec request failed</code> / PTY, <code>warptmp</code>, <code>/.zshenv</code> read-only, o SSH sin tmux ni banner</td><td>Estás en Warp: su integración remota rompe el login (fija <code>ZDOTDIR=/</code>). Atajo en sesión: <code>ZDOTDIR=/home/tester exec /usr/bin/zsh -il</code>. Permanente: usa <code>/usr/bin/ssh</code>, Terminal.app, o desactiva por completo la integración SSH/shell de Warp.</td></tr>
-    <tr><td><code>imagen ausente, construyendo</code> tarda mucho</td><td>Sin registry, la primera vez en cada m&aacute;quina construye. Puede pasar de una hora. Las siguientes reutilizan la imagen si el c&oacute;digo no cambi&oacute; (<code>imagen lista</code>).</td></tr>
-    <tr><td>El contenedor arranca pero sin Metasploit ni NetExec</td><td>No puede pasar con la imagen actual: <code>full</code> trae las dos. S&iacute; que el host corre un repo viejo: resincroniza el repo y deja que <code>ensure-image</code> reconstruya.</td></tr>
-    <tr><td>La imagen del host parece vieja</td><td>El repo del host lleva otro c&oacute;digo. Resincroniza el repo al host; <code>ensure-image</code> lo detecta por la etiqueta de insumos y reconstruye solo.</td></tr>
-    <tr><td><code>msfconsole: ruby not found</code></td><td>El PATH de <code>/opt/ruby/bin</code> lo a&ntilde;aden <code>sshd_config</code> y el <code>zshrc</code>, no un <code>su</code> a pelo. Entra por SSH o por el terminal web, no con <code>docker exec su tester -c</code>.</td></tr>
-    <tr><td>Todo el tailnet falla</td><td>Último recurso: <strong>console connection de OCI</strong> (llave <code>seclab_console_rsa</code>, login <code>ubuntu</code> + contraseña de consola). Pregunta por el comando vigente.</td></tr>
+    <tr><th>Síntoma</th><th>Diagnóstico y Solución</th></tr>
+    <tr>
+      <td><code>Permission denied (publickey)</code></td>
+      <td>Asegúrate de pasar la llave <code>.secrets/ssh/seclab_ed25519</code> y verifica que sus permisos sean <code>chmod 600</code>.</td>
+    </tr>
+    <tr>
+      <td>Timeout al conectar a <code>100.111.178.40</code></td>
+      <td>Verifica que la app de Tailscale en tu Mac esté activa (verde) y ejecuta <code>tailscale ping 100.111.178.40</code>.</td>
+    </tr>
+    <tr>
+      <td>Login incorrecto en Web (7681)</td>
+      <td>Verifica tu variable <code>TTYD_PASSWORD</code> en el <code>.env</code> tanto local como en el remoto (<code>~/seclab-sbf/.env</code>).</td>
+    </tr>
+    <tr>
+      <td>Host bloquea conexiones SSH temporalmente</td>
+      <td>Fail2ban protege el puerto SSH. Si hubo 5 intentos fallidos, espera 10 minutos o ejecuta desde consola de Azure: <code>sudo fail2ban-client set sshd unbanip &lt;tu-ip-tailscale&gt;</code>.</td>
+    </tr>
   </table>
 
-  <div class="warn">
-    <strong>Pendientes de seguridad (tu lado admin):</strong> ACL del tailnet en deny-by-default,
-    MFA y device approval (<code>admin.tailscale.com</code>), y eliminar la máquina vieja
-    <code>seclab-cloud-20260924154553</code>. Además: cambia <code>TTYD_PASSWORD</code> si sigue
-    siendo el valor de defecto y reinicia el contenedor lab para aplicarlo.
-  </div>
-
-  <footer>Actualizado 2026-09-27 · bootstrap/baseline · Verificado en esa fecha: <code>make lab-ssh</code>, <code>make lab-ssh-cloud</code>, SSH al tailnet p&uacute;rto 2222 (msfconsole 6.5.5-dev y nxc 1.5.1) y ttyd en 7681 con autenticaci&oacute;n (HTTP 200). Sin secretos en este archivo: las credenciales viven en tu <code>.env</code> y <code>.secrets/</code> locales.</footer>
+  <footer>
+    seclab-sbf · Actualizado: Octubre 2026 · Despliegue en Microsoft Azure (Mexico Central) sobre Tailscale. Sin secretos incluidos en este documento.
+  </footer>
 </main>
 <script>
 function copiar(btn) {
   const code = btn.parentElement.querySelector('code').innerText;
   navigator.clipboard.writeText(code).then(() => {
-    const t = btn.innerText; btn.innerText = 'ok';
-    setTimeout(() => btn.innerText = t, 1200);
+    const orig = btn.innerText;
+    btn.innerText = 'Copiado';
+    setTimeout(() => btn.innerText = orig, 1500);
   });
 }
 </script>

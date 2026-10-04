@@ -35,9 +35,15 @@ variable "admin_password" {
 }
 
 variable "vm_size" {
-  description = "Tamaño de la VM (2 vCPU / 8 GB por defecto)."
+  description = "Tamaño de la VM (AMD EPYC 2 vCPU / 8 GB por defecto)."
   type        = string
-  default     = "Standard_D2s_v5"
+  default     = "Standard_D2as_v4"
+}
+
+variable "image_sku" {
+  description = "SKU de la imagen de Ubuntu (server para x64, server-arm64 para ARM)."
+  type        = string
+  default     = "server"
 }
 
 variable "os_disk_gbs" {

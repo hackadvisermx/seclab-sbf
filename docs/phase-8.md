@@ -352,3 +352,40 @@ Con dos bloques CIDR en la VCN hay dos resolvers, asi que la regla
 `egress_dns` se genera con `for_each` sobre `cidr_blocks` en lugar de apuntar a
 uno fijo. Apunta al `.2` de cada bloque, no a `0.0.0.0/0`: abrir DNS a todo
 permitiria exfiltrar datos por consultas.
+
+## Estado real de Azure (desplegado y verificado 2026-10-04)
+
+Hay un **nodo desplegado y verificado**: `seclab-sbf-prod-lab`, en `mexicocentral` (Resource Group `seclab-sbf-prod`), creado en la rama `phase/55-azure-cost-optimized`.
+
+### Topología y Optimización de Costos
+
+- **Shape de la VM**: `Standard_D2as_v4` (AMD EPYC™ 7742, 2 vCPU, 8 GB RAM, 50 GB SSD). La opción ARM `Standard_B2ps_v2` se descartó porque Azure aún no dispone de la serie B2ps en la región `mexicocentral`.
+- **Arquitectura de Costo Optimizado**: Se eliminó el recurso `azurerm_nat_gateway` y su asociación pública (ahorro directo de ~$32.40 USD/mes). La VM utiliza una IP pública estándar (`158.23.145.139`) asociada directamente a la interfaz de red para salida a internet (**egress-only**).
+- **Zero Ingress Enforced**: El acceso público está completamente cerrado a través del NSG (`deny-all-inbound` con prioridad 4096) y del firewall nftables en el host (`table inet seclab_host` con `policy drop`).
+- **State remoto**: Backend Azure Blob Storage configurado en `seclab-tfstate-rg/seclabtfstate96fb/tfstate` con permisos `600` en `deploy/backend-azure.hcl`.
+
+### Conectividad y Endurecimiento
+
+- **Tailscale**: Conectado a la tailnet con hostname `seclab-sbf-prod` y dirección IPv4 `100.111.178.40`.
+- **Firewall nftables**: Servicio `seclab-nftables.service` activo y verificado en el host; solo permite tráfico en `lo` y `tailscale0`.
+- **Fail2ban**: Servicio `fail2ban.service` activo protegiendo sshd en el host.
+- **Docker & Compose**: Docker 29.1.3 y plugin Compose v5.5.1 instalado con checksum SHA-256 verificado.
+
+### Corrección en Cloud-Init (Fase 55)
+
+Durante el arranque inicial se detectó que `cloud.cfg.yaml` fallaba al procesar `runcmd` (`TypeError: Unable to shellify type 'dict'`) debido a que la regla `echo 'ATENCION: ...'` incluía dos puntos seguidos de espacio, interpretado por el parser YAML como un diccionario.
+- Se entrecomilló el comando en `terraform/modules/lab-cloud-init/cloud.cfg.yaml`.
+- Se incorporó validación estricta de tipos (`str` o `list`) en `scripts/verify/check-tf-render.sh`.
+
+### Laboratorio y Publicación de Imagen
+
+- La imagen del laboratorio `seclab-sbf:full` se construyó de forma nativa en la VM (`linux/amd64`) en ~6 minutos.
+- Se publicó en Docker Hub bajo `hackadvisermx/sec-lab`:
+  - Base: `hackadvisermx/sec-lab:base-amd64-a5a032f1d5cda709`
+  - Full: `hackadvisermx/sec-lab:26.04-amd64-a5a032f1d5cda709` (Digest: `sha256:12eaf8d5717d65d26bccf550d26a101260c632104b8186b57f9f01e1cbc9536e`).
+- Se ejecutó `docker logout` y eliminación inmediata del archivo de credenciales en la VM.
+- Puentes Tailscale (`seclab-ssh-tailnet` en puerto 2222 y `seclab-ttyd-tailnet` en puerto 7681) activos y probados exitosamente.
+
+### Control de Energía
+
+- Para ahorro de costos, la VM se gestiona con `make vm-stop-az` (ejecuta `az vm deallocate`, liberando vCPU y memoria para llevar el cobro a $0.00 USD/h), `make vm-start-az` y `make vm-status-az`.

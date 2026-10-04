@@ -512,6 +512,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
 
         # Invariantes: helpers de ergonomia y reconocimiento
         expected_helpers = [
+            "pt-cheat()",
             "pt-extractports()",
             "pt-nmp()",
             "pt-serv-web()",
@@ -534,16 +535,43 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias payloadserver="pt-serv-payloads"',
             'alias fuzzparams="pt-fuzz-params"',
             'alias awsl="pt-s3-ls"',
+            'alias ptcheat="pt-cheat"',
+            'alias cheat="pt-cheat"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-cheat", content)
         self.assertIn("pt-nmp", content)
         self.assertIn("pt-recon", content)
         self.assertIn("pt-serv-web", content)
         self.assertIn("pt-serv-payloads", content)
         self.assertIn("pt-fuzz-params", content)
+
+    def test_cheatsheet_dataset_integrity(self):
+        """Verifica existencia, formato TSV y validez del catalogo cheatsheet.tsv."""
+        tsv_file = REPO_ROOT / "shell" / "pentest-lab" / "cheatsheet.tsv"
+        self.assertTrue(tsv_file.is_file(), "cheatsheet.tsv no existe")
+        content = tsv_file.read_text(encoding="utf-8")
+        lines = [line.strip() for line in content.splitlines() if line.strip() and not line.startswith("#")]
+
+        self.assertGreaterEqual(len(lines), 40, f"Se esperaban al menos 40 comandos en cheatsheet, encontrados {len(lines)}")
+
+        allowed_categories = {"ad", "pivot", "tty", "web", "staging", "crack", "net"}
+        found_categories = set()
+
+        for idx, line in enumerate(lines, 1):
+            parts = line.split("\t")
+            self.assertEqual(len(parts), 4, f"Linea {idx} no contiene exactamente 4 columnas: {line}")
+            cat, title, cmd, desc = parts
+            self.assertIn(cat, allowed_categories, f"Categoria invalida '{cat}' en linea {idx}")
+            self.assertGreater(len(title.strip()), 3, f"Titulo demasiado corto en linea {idx}")
+            self.assertGreater(len(cmd.strip()), 5, f"Comando demasiado corto en linea {idx}")
+            self.assertGreater(len(desc.strip()), 10, f"Descripcion demasiado corta en linea {idx}")
+            found_categories.add(cat)
+
+        self.assertEqual(found_categories, allowed_categories, f"Faltan categorias en cheatsheet: {allowed_categories ^ found_categories}")
 
 
 def main():

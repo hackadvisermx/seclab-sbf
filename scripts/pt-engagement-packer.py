@@ -1,0 +1,435 @@
+#!/usr/bin/env python3
+"""Empaquetador Seguro, Sanitizador y Gestor de Cierre de Engagements para SecLab-SBF.
+
+Provee empaquetado reproducible de informes y evidencias (REPORT.md, evidence/*.md, recon/),
+sanitización automática de secretos y tokens (JWT, Bearer, Passwords, Cookies sensibles),
+generación de manifiestos criptográficos de integridad (manifest.sha256) y cierre formal
+de auditoría (status: closed en target.yaml).
+
+Sin dependencias externas obligatorias (Python 3 stdlib).
+"""
+
+import argparse
+import datetime
+import hashlib
+import importlib.util
+import json
+import os
+import pathlib
+import re
+import shutil
+import sys
+import tarfile
+import zipfile
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+# Patrones para sanitización automática de credenciales
+RE_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b")
+RE_AUTH_HEADER = re.compile(r"(?i)(Authorization:\s*(?:Bearer|Basic|Token)\s+)[^\r\n\"\'`]+")
+RE_CURL_USER = re.compile(r"(?i)(curl\s+.*?--?(?:u|user)\s+[^:\s]+:)[^\s\"\'`]+")
+RE_URL_CREDS = re.compile(r"https?://([^:/@\s]+):([^@/\s]+)@")
+RE_COOKIE_SENSITIVE = re.compile(
+    r"(?i)\b((?:session|PHPSESSID|JSESSIONID|token|auth|access_token|jwt|connect\.sid)=)[^;\r\n\"\'`]+"
+)
+RE_PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----")
+
+
+def sanitize_text(text: str) -> Tuple[str, int]:
+    """Sanitiza tokens, contraseñas y credenciales sensibles en un texto.
+    
+    Devuelve la tupla (texto_sanitizado, total_reemplazos).
+    """
+    total_redactions = 0
+
+    # 1. Private keys
+    matches_pk = len(RE_PRIVATE_KEY.findall(text))
+    if matches_pk > 0:
+        text = RE_PRIVATE_KEY.sub("[REDACTED_PRIVATE_KEY]", text)
+        total_redactions += matches_pk
+
+    # 2. JWTs
+    matches_jwt = len(RE_JWT.findall(text))
+    if matches_jwt > 0:
+        text = RE_JWT.sub("[REDACTED_JWT]", text)
+        total_redactions += matches_jwt
+
+    # 3. Auth headers
+    def _auth_sub(m: re.Match) -> str:
+        return f"{m.group(1)}[REDACTED_AUTH_TOKEN]"
+    subbed_auth, count_auth = RE_AUTH_HEADER.subn(_auth_sub, text)
+    if count_auth > 0:
+        text = subbed_auth
+        total_redactions += count_auth
+
+    # 4. Curl user:pass
+    def _curl_sub(m: re.Match) -> str:
+        return f"{m.group(1)}[REDACTED_PASSWORD]"
+    subbed_curl, count_curl = RE_CURL_USER.subn(_curl_sub, text)
+    if count_curl > 0:
+        text = subbed_curl
+        total_redactions += count_curl
+
+    # 5. URL user:pass
+    def _url_sub(m: re.Match) -> str:
+        return f"https://{m.group(1)}:[REDACTED_PASSWORD]@"
+    subbed_url, count_url = RE_URL_CREDS.subn(_url_sub, text)
+    if count_url > 0:
+        text = subbed_url
+        total_redactions += count_url
+
+    # 6. Sensitive cookies
+    def _cookie_sub(m: re.Match) -> str:
+        return f"{m.group(1)}[REDACTED_SESSION]"
+    subbed_cookie, count_cookie = RE_COOKIE_SENSITIVE.subn(_cookie_sub, text)
+    if count_cookie > 0:
+        text = subbed_cookie
+        total_redactions += count_cookie
+
+    return text, total_redactions
+
+
+def compute_sha256(file_path: pathlib.Path) -> str:
+    """Calcula el hash SHA-256 de un archivo."""
+    hasher = hashlib.sha256()
+    with file_path.open("rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib.Path]:
+    """Localiza el directorio del engagement basado en argumento o contexto actual."""
+    if target_arg:
+        p = pathlib.Path(target_arg).expanduser()
+        if p.is_dir():
+            return p.resolve()
+
+        ws_env = os.environ.get("WORKSPACE_DIR")
+        ws_dirs = [pathlib.Path(ws_env)] if ws_env else []
+        ws_dirs.extend([
+            pathlib.Path("/workspace"),
+            pathlib.Path("./workspace"),
+            pathlib.Path("."),
+        ])
+
+        for base in ws_dirs:
+            for cat in ("engagements", "retos"):
+                candidate = base / cat / target_arg
+                if candidate.is_dir():
+                    return candidate.resolve()
+            candidate_direct = base / target_arg
+            if candidate_direct.is_dir() and (candidate_direct / "target.yaml").is_file():
+                return candidate_direct.resolve()
+
+    cwd = pathlib.Path.cwd().resolve()
+    if (cwd / "target.yaml").is_file() or (cwd / "evidence").is_dir() or (cwd / "REPORT.md").is_file():
+        return cwd
+
+    return None
+
+
+def ensure_report_built(engagement_dir: pathlib.Path) -> Optional[pathlib.Path]:
+    """Verifica si REPORT.md existe o lo compila automáticamente con pt-report-compiler."""
+    rep_file = engagement_dir / "REPORT.md"
+    if rep_file.is_file():
+        return rep_file
+
+    compiler_path = pathlib.Path(__file__).resolve().parent / "pt-report-compiler.py"
+    if not compiler_path.is_file():
+        compiler_path = pathlib.Path("/usr/local/bin/pt-report-compiler")
+
+    if compiler_path.is_file():
+        spec = importlib.util.spec_from_file_location("report_compiler", compiler_path)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            try:
+                mod.build_report(engagement_dir)
+                if rep_file.is_file():
+                    return rep_file
+            except Exception:
+                pass
+
+    return rep_file if rep_file.is_file() else None
+
+
+def pack_engagement(
+    engagement_dir: pathlib.Path,
+    output_path: Optional[pathlib.Path] = None,
+    sanitize: bool = False,
+    archive_format: str = "tar.gz",
+) -> Dict[str, Any]:
+    """Empaqueta los entregables del engagement con manifiesto SHA-256 y sanitización opcional."""
+    report_file = ensure_report_built(engagement_dir)
+    eng_name = engagement_dir.name
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+    # Determinar ruta de salida por defecto
+    if not output_path:
+        exports_dir = engagement_dir / "exports"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        ext = ".tar.gz" if archive_format == "tar.gz" else ".zip"
+        output_path = exports_dir / f"{eng_name}_bundle_{now_str}{ext}"
+    else:
+        output_path = output_path.resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Directorio temporal de staging para empaquetado
+    staging_dir = engagement_dir / f".staging_pack_{now_str}"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_entries: List[str] = []
+    total_redactions = 0
+    packed_files: List[str] = []
+
+    try:
+        # 1. REPORT.md
+        if report_file and report_file.is_file():
+            rep_text = report_file.read_text(encoding="utf-8")
+            if sanitize:
+                rep_text, red = sanitize_text(rep_text)
+                total_redactions += red
+            stg_rep = staging_dir / "REPORT.md"
+            stg_rep.write_text(rep_text, encoding="utf-8")
+            sha = compute_sha256(stg_rep)
+            manifest_entries.append(f"{sha}  REPORT.md")
+            packed_files.append("REPORT.md")
+
+        # 2. target.yaml y scope.txt
+        for cfg_name in ("target.yaml", "scope.txt", "notes.md"):
+            src_cfg = engagement_dir / cfg_name
+            if src_cfg.is_file():
+                cfg_text = src_cfg.read_text(encoding="utf-8")
+                if sanitize and cfg_name == "notes.md":
+                    cfg_text, red = sanitize_text(cfg_text)
+                    total_redactions += red
+                stg_cfg = staging_dir / cfg_name
+                stg_cfg.write_text(cfg_text, encoding="utf-8")
+                sha = compute_sha256(stg_cfg)
+                manifest_entries.append(f"{sha}  {cfg_name}")
+                packed_files.append(cfg_name)
+
+        # 3. evidence/*.md
+        src_ev_dir = engagement_dir / "evidence"
+        if src_ev_dir.is_dir():
+            stg_ev_dir = staging_dir / "evidence"
+            stg_ev_dir.mkdir(parents=True, exist_ok=True)
+            for ev_file in sorted(src_ev_dir.glob("*.md")):
+                if ev_file.name.startswith("_"):
+                    continue
+                ev_text = ev_file.read_text(encoding="utf-8")
+                if sanitize:
+                    ev_text, red = sanitize_text(ev_text)
+                    total_redactions += red
+                dest_ev = stg_ev_dir / ev_file.name
+                dest_ev.write_text(ev_text, encoding="utf-8")
+                sha = compute_sha256(dest_ev)
+                rel_path = f"evidence/{ev_file.name}"
+                manifest_entries.append(f"{sha}  {rel_path}")
+                packed_files.append(rel_path)
+
+        # 4. recon/ resúmenes
+        src_recon = engagement_dir / "recon"
+        if src_recon.is_dir():
+            stg_recon = staging_dir / "recon"
+            stg_recon.mkdir(parents=True, exist_ok=True)
+            for recon_candidate in ("live_hosts.txt", "subdomains.txt", "surface.json"):
+                rf = src_recon / recon_candidate
+                if rf.is_file():
+                    rf_dest = stg_recon / recon_candidate
+                    shutil.copy2(rf, rf_dest)
+                    sha = compute_sha256(rf_dest)
+                    rel_path = f"recon/{recon_candidate}"
+                    manifest_entries.append(f"{sha}  {rel_path}")
+                    packed_files.append(rel_path)
+
+        # 5. Generar manifest.sha256
+        manifest_file = staging_dir / "manifest.sha256"
+        manifest_file.write_text("\n".join(manifest_entries) + "\n", encoding="utf-8")
+        packed_files.append("manifest.sha256")
+
+        # 6. Crear archivo comprimido
+        if archive_format == "zip":
+            with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, _, files in os.walk(staging_dir):
+                    for file in files:
+                        full_p = pathlib.Path(root) / file
+                        arcname = full_p.relative_to(staging_dir)
+                        zf.write(full_p, arcname=f"{eng_name}/{arcname}")
+        else:
+            with tarfile.open(output_path, "w:gz") as tf:
+                for root, _, files in os.walk(staging_dir):
+                    for file in files:
+                        full_p = pathlib.Path(root) / file
+                        arcname = full_p.relative_to(staging_dir)
+                        tf.add(full_p, arcname=f"{eng_name}/{arcname}")
+
+    finally:
+        # Limpiar staging
+        if staging_dir.is_dir():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+    archive_sha256 = compute_sha256(output_path)
+    archive_size = output_path.stat().st_size
+
+    return {
+        "status": "success",
+        "engagement": eng_name,
+        "archive_path": str(output_path),
+        "archive_sha256": archive_sha256,
+        "archive_size": archive_size,
+        "files_packed": len(packed_files),
+        "redactions_count": total_redactions,
+        "sanitized": sanitize,
+        "timestamp": now_str,
+    }
+
+
+def close_engagement(engagement_dir: pathlib.Path) -> Dict[str, Any]:
+    """Cierra formalmente un engagement actualizando target.yaml y verificando checklist."""
+    eng_name = engagement_dir.name
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    target_yaml = engagement_dir / "target.yaml"
+
+    updated_target = False
+    if target_yaml.is_file():
+        lines = target_yaml.read_text(encoding="utf-8").splitlines()
+        new_lines: List[str] = []
+        in_eng_sec = False
+        has_status = False
+        has_closed_at = False
+
+        for line in lines:
+            if line.startswith("engagement:"):
+                in_eng_sec = True
+                new_lines.append(line)
+                continue
+            elif in_eng_sec and not line.startswith(" ") and not line.startswith("\t"):
+                if not has_status:
+                    new_lines.append("  status: closed")
+                if not has_closed_at:
+                    new_lines.append(f"  closed_at: '{now_iso}'")
+                in_eng_sec = False
+
+            if in_eng_sec and line.strip().startswith("status:"):
+                new_lines.append("  status: closed")
+                has_status = True
+            elif in_eng_sec and line.strip().startswith("closed_at:"):
+                new_lines.append(f"  closed_at: '{now_iso}'")
+                has_closed_at = True
+            else:
+                new_lines.append(line)
+
+        if in_eng_sec:
+            if not has_status:
+                new_lines.append("  status: closed")
+            if not has_closed_at:
+                new_lines.append(f"  closed_at: '{now_iso}'")
+
+        target_yaml.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        updated_target = True
+
+    # Comprobar checklist post-engagement
+    checklist = {
+        "report_compiled": (engagement_dir / "REPORT.md").is_file(),
+        "target_status_closed": updated_target,
+        "clean_up_callbacks_recommended": True,
+        "clean_up_audit_logs_recommended": True,
+    }
+
+    return {
+        "status": "closed",
+        "engagement": eng_name,
+        "closed_at": now_iso,
+        "directory": str(engagement_dir),
+        "target_yaml_updated": updated_target,
+        "checklist": checklist,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Empaquetador Seguro, Sanitizador y Cierre de Engagements de SecLab-SBF (pt-eng pack/close).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subparsers = parser.add_subparsers(dest="subcommand", help="Subcomandos disponibles")
+
+    # pack
+    p_pack = subparsers.add_parser("pack", help="Empaqueta informe y evidencias con manifiesto SHA-256")
+    p_pack.add_argument("engagement", nargs="?", help="Ruta o nombre del engagement a empaquetar")
+    p_pack.add_argument("-o", "--output", help="Ruta de destino del archivo generado (.tar.gz o .zip)")
+    p_pack.add_argument("-s", "--sanitize", action="store_true", help="Ofuscar tokens, JWTs y passwords sensibles")
+    p_pack.add_argument("--format", choices=["tar.gz", "zip"], default="tar.gz", help="Formato de compresión")
+    p_pack.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
+
+    # close
+    p_close = subparsers.add_parser("close", help="Sella y cierra formalmente la auditoría en target.yaml")
+    p_close.add_argument("engagement", nargs="?", help="Ruta o nombre del engagement a cerrar")
+    p_close.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
+
+    # sanitize (standalone)
+    p_san = subparsers.add_parser("sanitize", help="Sanitiza un archivo o texto plano en stdout")
+    p_san.add_argument("file", help="Archivo a sanitizar")
+    p_san.add_argument("-o", "--output", help="Archivo de salida (si se omite, imprime en stdout)")
+
+    args = parser.parse_args()
+
+    if not args.subcommand:
+        parser.print_help(sys.stderr)
+        return 2
+
+    if args.subcommand == "sanitize":
+        f_path = pathlib.Path(args.file)
+        if not f_path.is_file():
+            print(f"Error: Archivo no encontrado: {f_path}", file=sys.stderr)
+            return 1
+        content = f_path.read_text(encoding="utf-8")
+        clean_text, count = sanitize_text(content)
+        if args.output:
+            out_p = pathlib.Path(args.output)
+            out_p.write_text(clean_text, encoding="utf-8")
+            print(f"[+] Archivo sanitizado guardado en: {out_p} ({count} ofuscaciones)")
+        else:
+            print(clean_text)
+        return 0
+
+    eng_dir = resolve_engagement_dir(args.engagement)
+    if not eng_dir or not eng_dir.is_dir():
+        print(f"Error: No se pudo localizar el directorio del engagement: {args.engagement or 'no especificado'}", file=sys.stderr)
+        return 1
+
+    if args.subcommand == "pack":
+        out_p = pathlib.Path(args.output).resolve() if args.output else None
+        res = pack_engagement(eng_dir, output_path=out_p, sanitize=args.sanitize, archive_format=args.format)
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print(f"\n\033[32m[+] Paquete de engagement generado con éxito:\033[0m")
+            print(f"    Engagement:       {res['engagement']}")
+            print(f"    Archivo:          {res['archive_path']}")
+            print(f"    Archivos empaq:   {res['files_packed']} (incluye manifest.sha256)")
+            print(f"    Sanitizado:       {'Sí (' + str(res['redactions_count']) + ' ofuscaciones)' if res['sanitized'] else 'No'}")
+            print(f"    SHA-256 Bundle:   {res['archive_sha256']}")
+            print(f"    Tamaño:           {res['archive_size']} bytes\n")
+        return 0
+
+    elif args.subcommand == "close":
+        res = close_engagement(eng_dir)
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print(f"\n\033[32m[+] Engagement cerrado satisfactoriamente:\033[0m")
+            print(f"    Engagement:        {res['engagement']}")
+            print(f"    Fecha de cierre:   {res['closed_at']}")
+            print(f"    target.yaml:       {'Actualizado a status: closed' if res['target_yaml_updated'] else 'No encontrado'}")
+            print("\n  Recordatorios post-engagement:")
+            print("    1. Detén receptores OOB si siguen activos: pt-callback stop")
+            print("    2. Detén la bitácora si sigue grabando:   pt-log stop")
+            print("    3. Genera el entregable sanitizado:       pt-eng pack --sanitize\n")
+        return 0
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

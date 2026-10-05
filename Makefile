@@ -35,6 +35,7 @@ VPN_PROFILE ?= tryhackme
 VPN_COMPOSE := -f compose.yaml -f compose.local.yaml
 LAB_SSH_PORT ?= 2222
 LAB_TTYD_PORT ?= 7681
+LAB_DASHBOARD_PORT ?= 8080
 LAB_SSH_KEY ?= .secrets/ssh/seclab_ed25519
 HOST_SSH_KEY ?= .secrets/ssh/seclab_ed25519
 # CLOUD_HOST se puede dejar fijo en el .env para no repetirlo en cada
@@ -213,12 +214,22 @@ compose-config: ensure-env vpn-require-dir workspace-dir
 up: compose-up
 
 compose-up: ensure-env vpn-require-dir ensure-image sync-secrets workspace-dir
-	cd "$(ROOT)" && $(COMPOSE_VPN) up -d
+	@cd "$(ROOT)" && mkdir -p tmp
+	@cd "$(ROOT)" && printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n      - "127.0.0.1:%s:7681"\n      - "127.0.0.1:%s:8080"\n' "$(LAB_SSH_PORT)" "$(LAB_TTYD_PORT)" "$(LAB_DASHBOARD_PORT)" > tmp/compose.ssh.yaml
+	cd "$(ROOT)" && $(COMPOSE_VPN) -f tmp/compose.ssh.yaml up -d
+	@printf '\n\033[32m✔ Laboratorio SecLab activo en loopback:\033[0m\n'
+	@printf '   Dashboard Táctico: http://127.0.0.1:%s\n' "$(LAB_DASHBOARD_PORT)"
+	@printf '   Terminal Web:      http://127.0.0.1:%s\n' "$(LAB_TTYD_PORT)"
+	@printf '   SSH tester:        ssh -p %s tester@localhost\n\n' "$(LAB_SSH_PORT)"
 
 down: compose-down
 
 compose-down: ensure-env
-	cd "$(ROOT)" && $(COMPOSE_VPN) down --remove-orphans
+	cd "$(ROOT)" && if [ -f tmp/compose.ssh.yaml ]; then \
+		$(COMPOSE_VPN) -f tmp/compose.ssh.yaml down --remove-orphans; \
+	else \
+		$(COMPOSE_VPN) down --remove-orphans; \
+	fi
 
 
 shell: compose-shell
@@ -374,9 +385,9 @@ sbom:
 # en silencio la imagen anterior: con full son 4 GB de diferencia.
 # Se pasan a proposito todos los directorios que van en el contexto, para
 # errar hacia reconstruir de mas antes que hacia dejar una imagen vieja.
-BUILD_INPUT_DIRS = images scripts shell security supply-chain
-BUILD_INPUT_FILES = .tmux.conf
-BUILD_INPUTS = $(shell { find $(BUILD_INPUT_DIRS) -type f 2>/dev/null; echo $(BUILD_INPUT_FILES); } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | cut -c1-16)
+BUILD_INPUT_DIRS = images scripts shell security supply-chain dashboard/backend/app dashboard/frontend/src dashboard/frontend/dist
+BUILD_INPUT_FILES = .tmux.conf dashboard/backend/requirements.txt dashboard/frontend/package.json dashboard/frontend/package-lock.json
+BUILD_INPUTS = $(shell { find $(BUILD_INPUT_DIRS) -type f ! -path '*/__pycache__/*' 2>/dev/null; echo $(BUILD_INPUT_FILES); } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | cut -c1-16)
 
 # Reconstruye la imagen local indicada. Lo usan ensure-image cuando falta o
 # cuando el codigo ha cambiado, para no repetir el case en dos sitios.
@@ -503,9 +514,9 @@ base-check: ensure-image
 
 lab-ports: ensure-env vpn-require-dir ensure-image sync-secrets
 	@cd "$(ROOT)" && mkdir -p tmp
-	@cd "$(ROOT)" && printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n      - "127.0.0.1:%s:7681"\n' "$(LAB_SSH_PORT)" "$(LAB_TTYD_PORT)" > tmp/compose.ssh.yaml
+	@cd "$(ROOT)" && printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n      - "127.0.0.1:%s:7681"\n      - "127.0.0.1:%s:8080"\n' "$(LAB_SSH_PORT)" "$(LAB_TTYD_PORT)" "$(LAB_DASHBOARD_PORT)" > tmp/compose.ssh.yaml
 	cd "$(ROOT)" && WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" docker compose -f compose.yaml -f compose.local.yaml -f tmp/compose.ssh.yaml up -d lab
-	@printf '%s\n' "puertos loopback listos: SSH=127.0.0.1:$(LAB_SSH_PORT) ttyd=127.0.0.1:$(LAB_TTYD_PORT)"
+	@printf '%s\n' "puertos loopback listos: Dashboard=http://127.0.0.1:$(LAB_DASHBOARD_PORT) ttyd=http://127.0.0.1:$(LAB_TTYD_PORT) SSH=127.0.0.1:$(LAB_SSH_PORT)"
 
 lab-ssh: lab-ports
 	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(LAB_SSH_PORT)" tester@$(LAB_SSH_HOST)
@@ -788,13 +799,21 @@ dashboard-build:
 dashboard: dashboard-up
 
 dashboard-up:
-	@cd "$(ROOT)" && DASHBOARD_PORT="$(DASHBOARD_PORT)" ./dashboard/run.sh
+	@cd "$(ROOT)" && if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'seclab-sbf-lab-1'; then \
+		$(MAKE) lab-ports; \
+	else \
+		$(MAKE) compose-up; \
+	fi
 
-dashboard-daemon:
-	@cd "$(ROOT)" && DASHBOARD_PORT="$(DASHBOARD_PORT)" ./dashboard/run.sh daemon
+dashboard-daemon: dashboard-up
 
 dashboard-stop:
-	@cd "$(ROOT)" && ./dashboard/run.sh stop
+	@cd "$(ROOT)" && if [ -f ./dashboard/dashboard.pid ]; then ./dashboard/run.sh stop; fi
+	@cd "$(ROOT)" && $(MAKE) compose-down
 
 dashboard-status:
-	@cd "$(ROOT)" && DASHBOARD_PORT="$(DASHBOARD_PORT)" ./dashboard/run.sh status
+	@cd "$(ROOT)" && if curl -s -I -m 1 "http://127.0.0.1:$(LAB_DASHBOARD_PORT)/" >/dev/null 2>&1; then \
+		printf 'Dashboard: ACTIVO en http://127.0.0.1:%s (Terminal en http://127.0.0.1:%s)\n' "$(LAB_DASHBOARD_PORT)" "$(LAB_TTYD_PORT)"; \
+	else \
+		printf 'Dashboard: INACTIVO (ejecute make up o make dashboard-up)\n'; \
+	fi

@@ -61,6 +61,7 @@ ARG ASSETFINDER_VERSION=0.1.1
 ARG ASSETFINDER_COMMIT=4e95d8701aae8cff1c27af2626eb22ba110ad583
 ARG HTTPROBE_VERSION=0.2
 ARG HTTPROBE_COMMIT=7e8abdb4096ab224f21616478b699b4dfda9d409
+ARG GAU_COMMIT=5d4e1270e632732756fe98717520c43c86e8bd18
 
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS fzf-builder
 ARG FZF_VERSION=0.74.4
@@ -567,6 +568,27 @@ RUN mkdir -p /out \
       -ldflags "-s -w -X main.version=${S3SCANNER_VERSION}" \
       -o /out/s3scanner .
 
+FROM --platform=$BUILDPLATFORM ${GO_UPSTREAM} AS gau-builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG GAU_COMMIT
+RUN git init /src/gau \
+ && git -C /src/gau remote add origin https://github.com/lc/gau.git \
+ && git -C /src/gau fetch --depth 1 origin "${GAU_COMMIT}" \
+ && git -C /src/gau checkout --detach "${GAU_COMMIT}" \
+ && test "$(git -C /src/gau rev-parse HEAD)" = "${GAU_COMMIT}"
+WORKDIR /src/gau
+RUN GOTOOLCHAIN=local go get \
+      github.com/sirupsen/logrus@v1.9.3 \
+      github.com/valyala/fasthttp@v1.74.0 \
+      golang.org/x/net@v0.58.0 \
+ && GOTOOLCHAIN=local go mod tidy \
+ && GOTOOLCHAIN=local go mod verify \
+ && GOTOOLCHAIN=local go test ./... \
+ && mkdir -p /out \
+ && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -mod=readonly -trimpath -buildvcs=false -ldflags "-s -w" -o /out/gau ./cmd/gau
+
 FROM ${UBUNTU_IMAGE} AS msf-builder
 ARG UBUNTU_SNAPSHOT
 ARG RUBY_VERSION
@@ -690,6 +712,7 @@ COPY --from=upstream-builder /out/gf /usr/bin/gf
 COPY --from=upstream-builder /out/qsreplace /usr/bin/qsreplace
 COPY --from=upstream-builder /out/assetfinder /usr/bin/assetfinder
 COPY --from=upstream-builder /out/httprobe /usr/bin/httprobe
+COPY --from=gau-builder /out/gau /usr/bin/gau
 COPY --from=upstream-builder /out/gf-patterns /usr/local/share/seclab/gf-patterns
 COPY --from=upstream-builder /out/chisel /usr/bin/chisel
 COPY --from=upstream-builder /out/ligolo-proxy /usr/bin/ligolo-proxy
@@ -848,6 +871,22 @@ RUN for tool in netview.py wmiexec.py psexec.py smbexec.py smbclient.py \
  && enum4linux-ng --help >/dev/null 2>&1 || { printf 'enum4linux-ng no arranca\n' >&2; exit 1; } \
  && printf '%s\n' 'AD tools de impacket, certipy, pspy y enum4linux-ng ok'
 COPY --from=go-builder /out/s3scanner /usr/bin/s3scanner
+
+# Dependencias e integracion del Dashboard Tactico Web & API Key Vault
+RUN /opt/nxc/bin/pip install --no-cache-dir \
+      "fastapi==0.142.2" \
+      "uvicorn==0.54.0" \
+      "pydantic==2.13.5" \
+      "websockets==17.2" \
+ && /opt/nxc/bin/python3 -c "import fastapi, uvicorn, pydantic, websockets; print('dashboard dependencies ok')"
+
+COPY dashboard/backend /usr/local/share/seclab/dashboard/backend
+COPY dashboard/frontend/dist /usr/local/share/seclab/dashboard/frontend/dist
+COPY scripts/dashboard-service.sh /usr/local/bin/dashboard-service
+COPY scripts/pt-vault-bridge.py /usr/local/bin/pt-vault-bridge
+RUN chmod 0555 /usr/local/bin/dashboard-service /usr/local/bin/pt-vault-bridge \
+ && chmod -R 0555 /usr/local/share/seclab/dashboard
+
 ENV PATH="/opt/ruby/bin:/opt/nxc/bin:${PATH}"
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/lab-entrypoint"]

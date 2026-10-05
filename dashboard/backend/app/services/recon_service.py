@@ -11,7 +11,12 @@ from app.config import SCRIPTS_DIR, WORKSPACE_DIR
 class ReconService:
     def __init__(self):
         self.py_bin = sys.executable
-        self.pipeline_script = SCRIPTS_DIR / "pt-recon-pipeline.py"
+        if (SCRIPTS_DIR / "pt-recon-pipeline.py").exists():
+            self.pipeline_script = SCRIPTS_DIR / "pt-recon-pipeline.py"
+        elif pathlib.Path("/usr/local/bin/pt-recon-pipeline").exists():
+            self.pipeline_script = pathlib.Path("/usr/local/bin/pt-recon-pipeline")
+        else:
+            self.pipeline_script = SCRIPTS_DIR / "pt-recon-pipeline.py"
         # Estructura: { engagement_id: { "status": "running"|"completed"|"failed"|"idle", ... } }
         self._jobs: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()

@@ -52,7 +52,7 @@ Estación de control web unificada para la gestión operativa y técnica de audi
 El ciclo de vida del dashboard se controla mediante recetas nativas del `Makefile`:
 
 ```bash
-# Iniciar en primer plano (consola activa)
+# Iniciar el laboratorio con el dashboard integrado en segundo plano
 make dashboard
 
 # Iniciar como demonio en segundo plano (background)
@@ -61,7 +61,7 @@ make dashboard-daemon
 # Consultar estado del demonio y puerto
 make dashboard-status
 
-# Detener el demonio y liberar puertos
+# Detener todo el laboratorio, incluido el dashboard y la VPN
 make dashboard-stop
 
 # Recompilar la interfaz SPA frontend
@@ -70,6 +70,8 @@ make dashboard-build
 # Ejecutar la suite completa de pruebas unitarias
 make python-units-check
 ```
+
+El backend y el frontend compilado viven dentro de `seclab-sbf:full`. `make compose-up` también inicia el dashboard y publica sus puertos solo en loopback. `make dashboard-build` recompila el frontend; después se necesita `make build-full` y recrear el contenedor para aplicar cambios. La etiqueta `seclab.build-inputs` incluye las fuentes y el frontend compilado del dashboard, excluyendo datos del Vault y cachés de Python.
 
 ---
 
@@ -84,6 +86,7 @@ Ubicado en la barra superior (`Navbar.vue`):
   - 🔵 **CLI** (`Cliente`): Azul corporativo.
   - ⚪ **OFFLINE**: Gris cuando no hay túnel activo.
 * **Encendido y Apagado**: Botones directos para encender o apagar la VPN con un clic.
+  El dashboard ejecuta `/usr/local/bin/vpn-control client` como `tester` y consulta el estado por el socket Unix del daemon. El perfil y el PID proceden del controlador; la mera existencia de `tun0` no significa que haya una VPN conectada. La interfaz distingue `APAGADO`, `CONECTANDO` y `ENCENDIDO`.
 * **Modos de Autenticación**:
   - **Conexión Directa**: Para perfiles con certificados y claves embebidos (TryHackMe, HackTheBox).
   - **Usuario / Contraseña**: Soporte para ingresar usuario y contraseña opcionales, con la capacidad de persistirlos cifrados en el Vault (AES-256-GCM) o utilizarlos de forma efímera durante la sesión.
@@ -153,7 +156,7 @@ Disponible en la pestaña **📡 Reconocimiento** de cada auditoría:
    ```
 2. Inspeccionar registros de arranque:
    ```bash
-   tail -n 50 dashboard/backend/data/dashboard.log
+   docker logs --tail 50 seclab-sbf-lab-1
    ```
 3. Reiniciar el servicio:
    ```bash
@@ -168,3 +171,5 @@ make python-units-check
 make makefile-check
 make compose-refs-check
 ```
+
+La reparación del control VPN de la fase 81 se verificó localmente con 77 pruebas Python, `make verify`, el build nativo arm64, el gate `make scan-image` y un ciclo real de encendido/apagado desde los botones del navegador con TryHackMe. El perfil se obtiene del daemon como `tester`; al apagar, `tun0` puede permanecer presente sin mostrar una conexión activa. La ruta por defecto y el hash de `/etc/resolv.conf` permanecieron iguales durante el ciclo. Para pasar el gate fue necesario recompilar `gau` 2.2.4 desde su commit fijado con Go y dependencias parcheadas; se mantiene la política de excepciones de Trivy existente.

@@ -72,7 +72,8 @@ install -d -m 0700 -o "$SSH_USER" -g "$SSH_USER" \
   /var/lib/seclab/tester/zoxide \
   /var/lib/seclab/tester/.msf4 \
   /var/lib/seclab/tester/.nxc \
-  /var/lib/seclab/tester/.cache
+  /var/lib/seclab/tester/.cache \
+  /var/lib/seclab/dashboard
 
 install -d -m 0755 /run/sshd
 install -d -m 0755 -o root -g root /run/ssh
@@ -94,13 +95,18 @@ chmod 0644 /var/lib/seclab/ssh/ssh_host_ed25519_key.pub
 
 sshd_pid=""
 ttyd_pid=""
+vpn_control_pid=""
+dashboard_pid=""
 # shellcheck disable=SC2329 # Invocada mediante traps de señal
 cleanup() {
   set +e
+  if [[ -n "$dashboard_pid" ]]; then kill "$dashboard_pid" 2>/dev/null; fi
+  if [[ -n "$vpn_control_pid" ]]; then kill "$vpn_control_pid" 2>/dev/null; fi
   if [[ -n "$ttyd_pid" ]]; then kill "$ttyd_pid" 2>/dev/null; fi
   if [[ -n "$sshd_pid" ]]; then kill "$sshd_pid" 2>/dev/null; fi
   wait "$ttyd_pid" 2>/dev/null
   wait "$sshd_pid" 2>/dev/null
+  if [[ -n "$dashboard_pid" ]]; then wait "$dashboard_pid" 2>/dev/null; fi
 }
 trap cleanup EXIT
 trap 'cleanup; exit 143' INT TERM
@@ -118,8 +124,19 @@ printf '%s\n' "$ttyd_pid" > /run/ttyd.pid
 vpn_control_pid=$!
 printf '%s\n' "$vpn_control_pid" > /run/vpn-control.pid
 
+# Start Tactical Dashboard & API Vault if installed
+if [[ -x /usr/local/bin/dashboard-service ]]; then
+  su -m -s /bin/bash "$SSH_USER" -c /usr/local/bin/dashboard-service &
+  dashboard_pid=$!
+  printf '%s\n' "$dashboard_pid" > /run/dashboard.pid
+fi
+
 set +e
-wait -n "$sshd_pid" "$ttyd_pid" "$vpn_control_pid"
+wait_pids=("$sshd_pid" "$ttyd_pid" "$vpn_control_pid")
+if [[ -n "$dashboard_pid" ]]; then
+  wait_pids+=("$dashboard_pid")
+fi
+wait -n "${wait_pids[@]}"
 status=$?
 set -e
 exit "$status"

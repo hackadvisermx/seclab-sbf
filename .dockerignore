@@ -16,3 +16,7 @@ docs
 plan.md
 AGENTS.md
 supply-chain
+dashboard/.venv
+dashboard/frontend/node_modules
+dashboard/backend/data
+dashboard/*.pid

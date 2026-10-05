@@ -5,15 +5,16 @@ from typing import List
 # Rutas base
 APP_DIR = pathlib.Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
-DASHBOARD_DIR = BACKEND_DIR.parent
-REPO_ROOT = DASHBOARD_DIR.parent
+DASHBOARD_DIR = pathlib.Path(os.environ.get("DASHBOARD_DIR", str(BACKEND_DIR.parent)))
+REPO_ROOT = pathlib.Path(os.environ.get("REPO_ROOT", str(DASHBOARD_DIR.parent)))
 
 # Detección de Workspace
-DEFAULT_WS = REPO_ROOT / "workspace" if (REPO_ROOT / "workspace").exists() else pathlib.Path("/workspace")
+DEFAULT_WS = pathlib.Path("/workspace") if pathlib.Path("/workspace").exists() else REPO_ROOT / "workspace"
 WORKSPACE_DIR = pathlib.Path(os.environ.get("WORKSPACE_DIR", os.environ.get("SECLAB_WORKSPACE_DIR", str(DEFAULT_WS)))).resolve()
 
 # Directorio de datos locales
-DATA_DIR = BACKEND_DIR / "data"
+DEFAULT_DATA_DIR = pathlib.Path("/var/lib/seclab/dashboard") if pathlib.Path("/var/lib/seclab").exists() else BACKEND_DIR / "data"
+DATA_DIR = pathlib.Path(os.environ.get("SECLAB_DATA_DIR", str(DEFAULT_DATA_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 VAULT_DB_PATH = DATA_DIR / "vault.db"
 VAULT_KEY_PATH = DATA_DIR / ".vault.key"
@@ -23,11 +24,11 @@ HOST = os.environ.get("DASHBOARD_HOST", "0.0.0.0")
 PORT = int(os.environ.get("DASHBOARD_PORT", "8080"))
 
 # Rutas de herramientas del laboratorio
-SCRIPTS_DIR = REPO_ROOT / "scripts"
+SCRIPTS_DIR = pathlib.Path("/usr/local/bin") if pathlib.Path("/usr/local/bin/pt-scope-validator").exists() else REPO_ROOT / "scripts"
 SHELL_DIR = REPO_ROOT / "shell"
-CHEATSHEET_FILE = SHELL_DIR / "pentest-lab" / "cheatsheet.tsv"
-SKILLS_DIR = REPO_ROOT / "skills"
-TEMPLATES_DIR = REPO_ROOT / "workspace-seed" / "templates"
+CHEATSHEET_FILE = pathlib.Path("/home/tester/.oh-my-zsh/custom/plugins/pentest-lab/cheatsheet.tsv") if pathlib.Path("/home/tester/.oh-my-zsh/custom/plugins/pentest-lab/cheatsheet.tsv").exists() else SHELL_DIR / "pentest-lab" / "cheatsheet.tsv"
+SKILLS_DIR = pathlib.Path("/workspace/skills") if pathlib.Path("/workspace/skills").exists() else REPO_ROOT / "skills"
+TEMPLATES_DIR = pathlib.Path("/workspace/templates") if pathlib.Path("/workspace/templates").exists() else REPO_ROOT / "workspace-seed" / "templates"
 
 # Seguridad y Autenticación
 SECRET_KEY = os.environ.get("SECLAB_SECRET_KEY", "seclab-tactical-dashboard-secret-key-default-2026")

@@ -16,9 +16,11 @@ import sys
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 BACKEND_DIR = REPO_ROOT / "dashboard" / "backend"
+CONTAINER_BACKEND = pathlib.Path("/usr/local/share/seclab/dashboard/backend")
 
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+for candidate in (BACKEND_DIR, CONTAINER_BACKEND):
+    if candidate.exists() and str(candidate) not in sys.path:
+        sys.path.insert(0, str(candidate))
 
 try:
     from app.services.vault_service import vault_service

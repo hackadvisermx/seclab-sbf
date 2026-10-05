@@ -89,16 +89,16 @@
                   class="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold"
                   :class="telemetry.vpn?.connected ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'"
                 >
-                  {{ telemetry.vpn?.connected ? 'ENCENDIDO' : 'APAGADO' }}
+                  {{ telemetry.vpn?.connecting ? 'CONECTANDO' : (telemetry.vpn?.connected ? 'ENCENDIDO' : 'APAGADO') }}
                 </span>
                 <button
-                  v-if="telemetry.vpn?.connected"
-                  @click="handleDisconnectVpn"
+                  @click="vpnActive ? handleDisconnectVpn() : handleConnectWithSelected()"
                   :disabled="vpnLoading"
-                  class="px-2 py-0.5 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                  title="Apagar túnel VPN inmediatamente"
+                  class="px-2 py-0.5 rounded border text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                  :class="vpnActive ? 'bg-rose-950/80 hover:bg-rose-900 border-rose-500/50 text-rose-300' : 'bg-emerald-950/80 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300'"
+                  :title="vpnActive ? 'Apagar túnel VPN' : 'Encender el perfil seleccionado'"
                 >
-                  APAGAR
+                  {{ vpnLoading ? 'PROCESANDO…' : (vpnActive ? 'APAGAR' : 'ENCENDER') }}
                 </button>
               </div>
             </div>
@@ -213,16 +213,16 @@
             <div class="space-y-1.5 pt-1">
               <button
                 @click="handleConnectWithSelected"
-                :disabled="vpnLoading"
+                :disabled="vpnLoading || (vpnActive && telemetry.vpn?.profile === selectedProfile)"
                 class="w-full py-2 px-3 rounded font-mono font-bold text-xs transition-all flex items-center justify-center space-x-1.5 shadow-md cursor-pointer disabled:opacity-50"
                 :class="telemetry.vpn?.connected ? 'bg-cyan-600 hover:bg-cyan-500 text-slate-950' : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'"
               >
                 <span>{{ vpnLoading ? '⏳' : '⚡' }}</span>
-                <span>{{ vpnLoading ? 'Procesando...' : (telemetry.vpn?.connected ? `Conmutar a ${selectedProfile}` : `Encender VPN (${selectedProfile})`) }}</span>
+                <span>{{ vpnLoading ? 'Procesando...' : (vpnActive && telemetry.vpn?.profile === selectedProfile ? 'Perfil activo' : (vpnActive ? `Conmutar a ${selectedProfile}` : `Encender VPN (${selectedProfile})`)) }}</span>
               </button>
 
               <button
-                v-if="telemetry.vpn?.connected"
+                v-if="vpnActive"
                 @click="handleDisconnectVpn"
                 :disabled="vpnLoading"
                 class="w-full py-1.5 px-3 rounded bg-rose-950/70 hover:bg-rose-900 border border-rose-600/50 text-rose-300 text-xs font-bold transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50 cursor-pointer"
@@ -284,6 +284,7 @@ const vpnUsername = ref('')
 const vpnPassword = ref('')
 const vpnSaveInVault = ref(false)
 const savedProfiles = ref({})
+const vpnActive = computed(() => !!(telemetry.value.vpn?.connected || telemetry.value.vpn?.connecting))
 
 const hasSavedCredentials = computed(() => {
   return !!savedProfiles.value[selectedProfile.value]?.has_credentials
@@ -321,9 +322,10 @@ const vpnIndicatorClasses = computed(() => {
 
 const vpnBadgeText = computed(() => {
   const v = telemetry.value.vpn
+  if (v?.connecting) return 'VPN: conectando…'
   if (!v || !v.connected) return 'VPN: offline'
   const prof = (v.profile || '').toLowerCase()
-  const shortProf = prof.includes('try') ? 'THM' : prof.includes('htb') ? 'HTB' : prof.includes('client') ? 'CLI' : 'VPN'
+  const shortProf = prof.includes('try') ? 'THM' : (prof.includes('htb') || prof.includes('hack')) ? 'HTB' : prof.includes('client') ? 'CLI' : 'VPN'
   return `${shortProf}: ${v.ip || 'tun0'}`
 })
 
@@ -349,6 +351,7 @@ async function loadSavedCredentials() {
 }
 
 async function handleConnectWithSelected() {
+  if (vpnLoading.value) return
   vpnLoading.value = true
   vpnMessage.value = ''
   try {
@@ -358,7 +361,7 @@ async function handleConnectWithSelected() {
       password: vpnPassword.value || null,
       save_in_vault: vpnSaveInVault.value,
     }
-    const res = telemetry.value.vpn?.connected
+    const res = vpnActive.value
       ? await api.switchVpn(payload)
       : await api.connectVpn(payload)
 
@@ -389,6 +392,7 @@ async function handleDeleteSavedCredentials() {
 }
 
 async function handleDisconnectVpn() {
+  if (vpnLoading.value) return
   vpnLoading.value = true
   vpnMessage.value = ''
   try {
@@ -407,7 +411,9 @@ async function handleDisconnectVpn() {
 onMounted(() => {
   loadTelemetry()
   loadSavedCredentials()
-  timer = setInterval(loadTelemetry, 8000)
+  timer = setInterval(() => {
+    if (!vpnLoading.value) loadTelemetry()
+  }, 2000)
 })
 
 onUnmounted(() => {

@@ -176,8 +176,10 @@ class WorkspaceSyncService:
                 },
             },
             "operational_limits": {
-                "max_requests_per_second": 20,
-                "max_parallel_threads": 5,
+                "max_requests_per_second": 1,
+                "max_parallel_threads": 1,
+                "max_probe_targets": 1000,
+                "probe_timeout_seconds": 8,
                 "dos_testing": False,
                 "social_engineering": False,
                 "brute_force_account_lockout_safe": True,

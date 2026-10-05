@@ -103,6 +103,36 @@ jobs:
       - name: Seguridad de Docker Compose
         run: make compose-security-check
 
+      - name: Frontend audit, tests and build
+        timeout-minutes: 10
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            if git diff --quiet "$BASE_SHA" HEAD -- dashboard/frontend scripts/install-dashboard-npm.mjs images/full/Dockerfile .github/workflows/security.yml supply-chain/tools.lock.yaml; then
+              echo 'Frontend unchanged: audit/tests/build skipped for this PR'
+              exit 0
+            fi
+          fi
+          docker run --rm --security-opt no-new-privileges \
+            --mount "type=bind,source=$PWD/dashboard/frontend,target=/source,readonly" \
+            --mount "type=bind,source=$PWD/scripts/install-dashboard-npm.mjs,target=/install-dashboard-npm.mjs,readonly" \
+            --workdir /tmp/frontend \
+            docker.io/library/node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 \
+            sh -ec '
+              apt-get update
+              apt-get install -y --no-install-recommends libpcre2-8-0=10.42-1+deb12u2
+              rm -rf /var/lib/apt/lists/*
+              node /install-dashboard-npm.mjs
+              test "$(npm --version)" = "12.2.0"
+              cp -R /source/. /tmp/frontend/
+              npm ci --no-audit --no-fund
+              npm run audit
+              npm test
+              npm run build
+            '
+
   # La jail de fail2ban es lo unico de la configuracion de host que se
   # puede validar sin un nodo. Levanta un contenedor con la imagen base
   # por digest, el mismo snapshot de Ubuntu que usan los Dockerfiles, y

@@ -87,6 +87,8 @@ El builder corrige sus dependencias con PCRE2 `10.42-1+deb12u2`, npm `12.2.0` y 
 
 El builder ejecuta `npm run audit` antes de las pruebas y la compilación, bloqueando High/Critical. Una capa en caché puede reutilizar el resultado de esa auditoría; para consultar el estado actual del registro, ejecuta `npm --prefix dashboard/frontend run audit`. La consulta requiere acceso al registro npm y falla si no puede completarse. El cambio de CSS requiere navegadores modernos: Safari 16.4+, Chrome 111+ o Firefox 128+ según la [guía oficial de Tailwind 4](https://tailwindcss.com/docs/upgrade-guide). El frontend no incluye soporte para navegadores anteriores.
 
+El job `static-analysis` también ejecuta auditoría, pruebas y build del frontend en un contenedor Node efímero fijado al mismo digest del builder, con sus mismos parches PCRE2/npm. Monta solo frontend e instalador en lectura y no construye ni publica imágenes, ni abre puertos. En PRs omite el paso si no cambian frontend, instalador, Dockerfile full, workflow o lockfile; en push a `bootstrap/baseline`, ejecución semanal y manual siempre lo ejecuta. La auditoría de CI consulta el registro en cada ejecución del paso. El checkout completo permite comparar el commit base del PR con HEAD. El paso tiene un límite de diez minutos.
+
 ---
 
 ### Acceso del operador

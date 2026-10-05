@@ -3,6 +3,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
@@ -102,6 +103,21 @@ class WorkspaceSyncService:
                     )
                 )
         return results
+
+    def delete_engagement(self, eng_id: str, eng_type: str = "engagement") -> None:
+        if eng_type not in {"engagement", "reto"}:
+            raise ValueError("Tipo de proyecto no válido.")
+        if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]*", eng_id):
+            raise ValueError("Identificador de proyecto no válido.")
+        category = self.ws_path / ("retos" if eng_type == "reto" else "engagements")
+        target = category / eng_id
+        if category.is_symlink() or target.is_symlink():
+            raise ValueError("No se pueden eliminar proyectos mediante enlaces simbólicos.")
+        if target.resolve().parent != category.resolve() or category.resolve().parent != self.ws_path.resolve():
+            raise ValueError("El proyecto debe estar dentro del workspace.")
+        if not target.is_dir():
+            raise FileNotFoundError("Proyecto no encontrado.")
+        shutil.rmtree(target)
 
     def create_engagement(
         self,

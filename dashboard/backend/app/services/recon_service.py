@@ -18,7 +18,7 @@ class ReconService:
         else:
             self.pipeline_script = SCRIPTS_DIR / "pt-recon-pipeline.py"
         # Estructura: { engagement_id: { "status": "running"|"completed"|"failed"|"idle", ... } }
-        self._jobs: Dict[str, Dict[str, Any]] = {}
+        self._jobs: Dict[tuple[str, str], Dict[str, Any]] = {}
         self._lock = threading.Lock()
 
     def get_target_dir(self, engagement_id: str, engagement_type: str = "engagement") -> Optional[pathlib.Path]:
@@ -74,7 +74,7 @@ class ReconService:
 
         # Comprobar trabajo en memoria
         with self._lock:
-            job = self._jobs.get(engagement_id, {
+            job = self._jobs.get((engagement_type, engagement_id), {
                 "status": "idle",
                 "stage": None,
                 "dry_run": False,
@@ -133,12 +133,12 @@ class ReconService:
         engagement_type: str = "engagement",
     ) -> Dict[str, Any]:
         """Inicia el pipeline de reconocimiento en un hilo en segundo plano."""
-        target_dir = self.get_target_dir(engagement_id, engagement_type)
-        if not target_dir:
-            return {"success": False, "error": f"Directorio no encontrado: {engagement_id}"}
-
         with self._lock:
-            existing = self._jobs.get(engagement_id)
+            target_dir = self.get_target_dir(engagement_id, engagement_type)
+            if not target_dir:
+                return {"success": False, "error": f"Directorio no encontrado: {engagement_id}"}
+            job_key = (engagement_type, engagement_id)
+            existing = self._jobs.get(job_key)
             if existing and existing.get("status") == "running":
                 return {
                     "success": False,
@@ -159,12 +159,12 @@ class ReconService:
                 "finished_at": None,
                 "error": None,
             }
-            self._jobs[engagement_id] = job_info
+            self._jobs[job_key] = job_info
 
         # Iniciar hilo de ejecución desacoplado
         t = threading.Thread(
             target=self._execute_pipeline_worker,
-            args=(engagement_id, target_dir, stage, dry_run, log_path),
+            args=(job_key, target_dir, stage, dry_run, log_path),
             daemon=True,
         )
         t.start()
@@ -175,9 +175,18 @@ class ReconService:
             "job": job_info,
         }
 
+    def delete_engagement(self, engagement_id: str, engagement_type: str = "engagement"):
+        from app.services.workspace_sync import workspace_service
+        job_key = (engagement_type, engagement_id)
+        with self._lock:
+            if self._jobs.get(job_key, {}).get("status") == "running":
+                raise RuntimeError("El reconocimiento está en curso. Espera a que termine antes de eliminar el proyecto.")
+            workspace_service.delete_engagement(engagement_id, engagement_type)
+            self._jobs.pop(job_key, None)
+
     def _execute_pipeline_worker(
         self,
-        engagement_id: str,
+        job_key: tuple[str, str],
         target_dir: pathlib.Path,
         stage: str,
         dry_run: bool,
@@ -212,16 +221,16 @@ class ReconService:
 
             with self._lock:
                 status = "completed" if proc.returncode == 0 else "failed"
-                self._jobs[engagement_id]["status"] = status
-                self._jobs[engagement_id]["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                self._jobs[job_key]["status"] = status
+                self._jobs[job_key]["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 if proc.returncode != 0:
-                    self._jobs[engagement_id]["error"] = f"Código de salida: {proc.returncode}"
+                    self._jobs[job_key]["error"] = f"Código de salida: {proc.returncode}"
 
         except Exception as e:
             with self._lock:
-                self._jobs[engagement_id]["status"] = "failed"
-                self._jobs[engagement_id]["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                self._jobs[engagement_id]["error"] = str(e)
+                self._jobs[job_key]["status"] = "failed"
+                self._jobs[job_key]["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                self._jobs[job_key]["error"] = str(e)
 
 
 recon_service = ReconService()

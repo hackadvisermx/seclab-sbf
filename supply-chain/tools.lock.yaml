@@ -127,19 +127,6 @@ third_party_binaries:
         file: findomain-aarch64.zip
         sha256: 780056cba200722f49628bf89b5cd42f3927e694bd383af679d72cf96efc1621
         binary_sha256: db9ad0e0fa5ca0c91cd08c923d1a2b30cc2185665c10594d37dc9166bea39c10
-  - name: gau
-    version: 2.2.4
-    source: https://github.com/lc/gau/releases/download/v2.2.4/
-    note: Recolecta URLs pasivas desde AlienVault OTX, Wayback Machine, Common Crawl y URLScan; binarios oficiales Go verificados
-    assets:
-      linux/amd64:
-        file: gau_2.2.4_linux_amd64.tar.gz
-        sha256: 10e2e248c37cafb0be3f6d2931125296b95cd4186066d596d47fa417237529a9
-        binary_sha256: 22a7061bfa74e90b2995b2d82cab7d432ddb4ba85e3665dc5c06ac6eaad36cc3
-      linux/arm64:
-        file: gau_2.2.4_linux_arm64.tar.gz
-        sha256: c194992df360d3a24e021c6dc5a5a0576cfd769be1d19cccb29adc1d3759637d
-        binary_sha256: b6c7880b094696b322bb8df1857ad60c5e2109ce721362542921dfc8a8706838
   - name: x8
     version: 4.3.0
     source: https://github.com/Sh1Yo/x8/releases/download/v4.3.0/
@@ -256,7 +243,30 @@ python:
       porque el snapshot de 26.04 solo tiene 26.0 y es la que instala dpkg, y
       con 26.3 pip intenta desinstalar la del sistema y falla con "no RECORD
       file". pwntools pide `packaging` sin fijar version, asi que 26.0 cumple.
+dashboard_python:
+  packages:
+    fastapi: "0.142.2"
+    uvicorn: "0.54.0"
+    pydantic: "2.13.5"
+    cryptography: "50.0.2"
+    httpx: "0.28.1"
+    pyyaml: "6.0.3"
+    websockets: "17.2"
 built_binaries:
+  - name: gau
+    version: 2.2.4
+    source: https://github.com/lc/gau
+    commit: 5d4e1270e632732756fe98717520c43c86e8bd18
+    tag: v2.2.4
+    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+    go: 1.26.8
+    cgo: false
+    package: ./cmd/gau
+    dependency_overrides:
+      github.com/sirupsen/logrus: v1.9.3
+      github.com/valyala/fasthttp: v1.74.0
+      golang.org/x/net: v0.58.0
+    note: Recompilado desde el commit de v2.2.4 para retirar 31 CVEs High y uno Critical del binario oficial; sin excluir hallazgos del gate.
   - name: fzf
     version: 0.74.4
     source: https://github.com/junegunn/fzf

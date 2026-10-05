@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#070b14] text-slate-100 min-h-screen;
+  }
+}
+
+/* Custom Tactical Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d1322;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00ffcc;
+}
+
+/* Card Glow Effect */
+.tactical-card {
+  @apply bg-[#0d1322] border border-[#1b253b] rounded-lg p-5 shadow-lg shadow-black/40 transition-all duration-200;
+}
+.tactical-card:hover {
+  border-color: rgba(0, 255, 204, 0.4);
+}
+
+.glow-accent {
+  box-shadow: 0 0 15px rgba(0, 255, 204, 0.25);
+}

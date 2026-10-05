@@ -14,6 +14,13 @@ pid_file="${VPN_STATE_DIR}/openvpn.pid"
 log_file="${VPN_STATE_DIR}/openvpn.log"
 lock_dir="${VPN_STATE_DIR}/lock"
 
+# Credenciales puntuales enviadas por vpn-control (dashboard o CLI). Llegan por
+# entorno, nunca por argv, y se copian a variables NO exportadas para que
+# openvpn y cualquier otro hijo no las herede en su /proc/<pid>/environ.
+auth_override_user="${VPN_AUTH_USER:-}"
+auth_override_password="${VPN_AUTH_PASSWORD:-}"
+unset VPN_AUTH_USER VPN_AUTH_PASSWORD
+
 usage() {
   printf '%s\n' 'Uso: vpn-manager <list|validate|connect|status|disconnect|switch|doctor> [perfil]'
 }
@@ -191,8 +198,15 @@ validate_profile() {
 
   if [ "$needs_auth" -eq 1 ] && [ "$inline_auth" -eq 0 ]; then
     prefix="$(profile_credential_key "$profile")"
-    user_value="$(credential_value "${prefix}_USER")"
-    pass_value="$(credential_value "${prefix}_PASSWORD")"
+    # Prioridad: credenciales puntuales de vpn-control y, si no hay, las del
+    # archivo de secretos (VPNTRY_USER, VPNHTB_PASSWORD, ...).
+    if [ -n "$auth_override_user" ] && [ -n "$auth_override_password" ]; then
+      user_value="$auth_override_user"
+      pass_value="$auth_override_password"
+    else
+      user_value="$(credential_value "${prefix}_USER")"
+      pass_value="$(credential_value "${prefix}_PASSWORD")"
+    fi
     if [ -z "$user_value" ] || [ -z "$pass_value" ]; then
       printf 'el perfil pide usuario y faltan %s_USER o %s_PASSWORD en el archivo de credenciales.\n' "$prefix" "$prefix" >&2
       printf 'definelas para que la conexion no se quede esperando entrada.\n' >&2

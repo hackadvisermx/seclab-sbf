@@ -49,7 +49,30 @@ def manager_command(action, profile=None):
     return command
 
 
-def run_manager(action, profile=None):
+MAX_CREDENTIAL_LENGTH = 256
+
+
+def valid_credential(value):
+    """Usuario o password puntual: texto corto, sin saltos de linea ni NUL.
+
+    Un salto de linea romperia el formato de dos lineas del .auth de openvpn y
+    permitiria inyectar una tercera linea, asi que se rechaza en el daemon.
+    """
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= MAX_CREDENTIAL_LENGTH
+        and not any(ch in value for ch in ("\n", "\r", "\x00"))
+    )
+
+
+def manager_env(credentials=None):
+    env = {key: value for key, value in os.environ.items() if key not in {"VPN_AUTH_USER", "VPN_AUTH_PASSWORD"}}
+    if credentials:
+        env["VPN_AUTH_USER"], env["VPN_AUTH_PASSWORD"] = credentials
+    return env
+
+
+def run_manager(action, profile=None, credentials=None):
     try:
         result = subprocess.run(
             manager_command(action, profile),
@@ -57,6 +80,7 @@ def run_manager(action, profile=None):
             text=True,
             timeout=60,
             check=False,
+            env=manager_env(credentials),
         )
     except subprocess.TimeoutExpired:
         return 124, "", "La operacion VPN excedio el tiempo limite."
@@ -122,8 +146,15 @@ def handle_connection(connection):
             raise ValueError("perfil no permitido")
         if action in {"list", "status", "doctor", "disconnect"}:
             profile = None
+        credentials = None
+        username = request.get("username")
+        password = request.get("password")
+        if action in {"connect", "switch"} and (username is not None or password is not None):
+            if not (valid_credential(username) and valid_credential(password)):
+                raise ValueError("credenciales invalidas: usuario y password requeridos, sin saltos de linea")
+            credentials = (username, password)
         with request_lock:
-            code, stdout, stderr = run_manager(action, profile)
+            code, stdout, stderr = run_manager(action, profile, credentials)
         connection.sendall(response_payload(code, stdout, stderr).encode("utf-8"))
     except (OSError, ValueError, json.JSONDecodeError) as error:
         try:
@@ -214,6 +245,13 @@ def request(action, profile=None):
         payload = {"action": action}
         if profile is not None:
             payload["profile"] = profile
+        # Credenciales puntuales: solo por entorno (no aparecen en ps ni en
+        # el historial) y solo para acciones que conectan.
+        auth_user = os.environ.get("VPN_AUTH_USER")
+        auth_password = os.environ.get("VPN_AUTH_PASSWORD")
+        if action in {"connect", "switch"} and auth_user and auth_password:
+            payload["username"] = auth_user
+            payload["password"] = auth_password
         encoded = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(65)

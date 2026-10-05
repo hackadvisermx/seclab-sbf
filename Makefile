@@ -17,7 +17,7 @@ SHELL := /bin/sh
 # caso de `make` sin argumentos y no los `make compose-up`. Comprobado.
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-azure host-ssh-azure lab-ssh-az host-ssh-az lab-ssh-oci host-ssh-oci vm-status-azure vm-status-az vm-stop-azure vm-stop-az vm-start-azure vm-start-az lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check
+.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ports lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-azure host-ssh-azure lab-ssh-az host-ssh-az lab-ssh-oci host-ssh-oci vm-status-azure vm-status-az vm-stop-azure vm-stop-az vm-start-azure vm-start-az lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check dashboard dashboard-build dashboard-up dashboard-daemon dashboard-stop dashboard-status
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -34,6 +34,8 @@ VPN_MODE ?= inside
 VPN_PROFILE ?= tryhackme
 VPN_COMPOSE := -f compose.yaml -f compose.local.yaml
 LAB_SSH_PORT ?= 2222
+LAB_TTYD_PORT ?= 7681
+LAB_DASHBOARD_PORT ?= 8080
 LAB_SSH_KEY ?= .secrets/ssh/seclab_ed25519
 HOST_SSH_KEY ?= .secrets/ssh/seclab_ed25519
 # CLOUD_HOST se puede dejar fijo en el .env para no repetirlo en cada
@@ -212,12 +214,22 @@ compose-config: ensure-env vpn-require-dir workspace-dir
 up: compose-up
 
 compose-up: ensure-env vpn-require-dir ensure-image sync-secrets workspace-dir
-	cd "$(ROOT)" && $(COMPOSE_VPN) up -d
+	@cd "$(ROOT)" && mkdir -p tmp
+	@cd "$(ROOT)" && printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n      - "127.0.0.1:%s:7681"\n      - "127.0.0.1:%s:8080"\n' "$(LAB_SSH_PORT)" "$(LAB_TTYD_PORT)" "$(LAB_DASHBOARD_PORT)" > tmp/compose.ssh.yaml
+	cd "$(ROOT)" && $(COMPOSE_VPN) -f tmp/compose.ssh.yaml up -d
+	@printf '\n\033[32m✔ Laboratorio SecLab activo en loopback:\033[0m\n'
+	@printf '   Dashboard Táctico: http://127.0.0.1:%s\n' "$(LAB_DASHBOARD_PORT)"
+	@printf '   Terminal Web:      http://127.0.0.1:%s\n' "$(LAB_TTYD_PORT)"
+	@printf '   SSH tester:        ssh -p %s tester@localhost\n\n' "$(LAB_SSH_PORT)"
 
 down: compose-down
 
 compose-down: ensure-env
-	cd "$(ROOT)" && $(COMPOSE_VPN) down --remove-orphans
+	cd "$(ROOT)" && if [ -f tmp/compose.ssh.yaml ]; then \
+		$(COMPOSE_VPN) -f tmp/compose.ssh.yaml down --remove-orphans; \
+	else \
+		$(COMPOSE_VPN) down --remove-orphans; \
+	fi
 
 
 shell: compose-shell
@@ -373,9 +385,9 @@ sbom:
 # en silencio la imagen anterior: con full son 4 GB de diferencia.
 # Se pasan a proposito todos los directorios que van en el contexto, para
 # errar hacia reconstruir de mas antes que hacia dejar una imagen vieja.
-BUILD_INPUT_DIRS = images scripts shell security supply-chain
-BUILD_INPUT_FILES = .tmux.conf
-BUILD_INPUTS = $(shell { find $(BUILD_INPUT_DIRS) -type f 2>/dev/null; echo $(BUILD_INPUT_FILES); } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | cut -c1-16)
+BUILD_INPUT_DIRS = images scripts shell security supply-chain dashboard/backend/app dashboard/frontend/src dashboard/frontend/dist
+BUILD_INPUT_FILES = .tmux.conf dashboard/backend/requirements.txt dashboard/frontend/package.json dashboard/frontend/package-lock.json
+BUILD_INPUTS = $(shell { find $(BUILD_INPUT_DIRS) -type f ! -path '*/__pycache__/*' 2>/dev/null; echo $(BUILD_INPUT_FILES); } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | cut -c1-16)
 
 # Reconstruye la imagen local indicada. Lo usan ensure-image cuando falta o
 # cuando el codigo ha cambiado, para no repetir el case en dos sitios.
@@ -500,10 +512,13 @@ ensure-image:
 base-check: ensure-image
 	cd "$(ROOT)" && WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE=seclab-sbf:base$(BUILD_TAG) docker compose -f compose.yaml -f compose.local.yaml run --rm --entrypoint /usr/local/bin/base-healthcheck lab
 
-lab-ssh: ensure-env vpn-require-dir ensure-image sync-secrets
+lab-ports: ensure-env vpn-require-dir ensure-image sync-secrets
 	@cd "$(ROOT)" && mkdir -p tmp
-	@cd "$(ROOT)" && printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n' "$(LAB_SSH_PORT)" > tmp/compose.ssh.yaml
+	@cd "$(ROOT)" && printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:%s:2222"\n      - "127.0.0.1:%s:7681"\n      - "127.0.0.1:%s:8080"\n' "$(LAB_SSH_PORT)" "$(LAB_TTYD_PORT)" "$(LAB_DASHBOARD_PORT)" > tmp/compose.ssh.yaml
 	cd "$(ROOT)" && WORKSPACE_DIR="$(WORKSPACE_DIR)" LAB_ENV_FILE="$(ENV_FILE)" SECRETS_DIR="$(SECRETS_DIR)" LAB_IMAGE="$(LAB_IMAGE_RESOLVED)" docker compose -f compose.yaml -f compose.local.yaml -f tmp/compose.ssh.yaml up -d lab
+	@printf '%s\n' "puertos loopback listos: Dashboard=http://127.0.0.1:$(LAB_DASHBOARD_PORT) ttyd=http://127.0.0.1:$(LAB_TTYD_PORT) SSH=127.0.0.1:$(LAB_SSH_PORT)"
+
+lab-ssh: lab-ports
 	cd "$(ROOT)" && ssh -o StrictHostKeyChecking=accept-new -i "$(LAB_SSH_KEY)" -p "$(LAB_SSH_PORT)" tester@$(LAB_SSH_HOST)
 
 # Entrada directa al contenedor del host cloud. Ahi el puente lo publica
@@ -772,3 +787,33 @@ vpn-copy:
 		scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$$profile" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/vpn/"; \
 	done; \
 	ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(TF_ADMIN)@$(TF_HOST)" 'chmod 600 ~/seclab-sbf/vpn/*.ovpn; ls -l ~/seclab-sbf/vpn'
+
+# ==============================================================================
+# Tactical Dashboard & API Vault
+# ==============================================================================
+DASHBOARD_PORT ?= 8080
+
+dashboard-build:
+	@cd "$(ROOT)/dashboard/frontend" && npm install && npm run build
+
+dashboard: dashboard-up
+
+dashboard-up:
+	@cd "$(ROOT)" && if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'seclab-sbf-lab-1'; then \
+		$(MAKE) lab-ports; \
+	else \
+		$(MAKE) compose-up; \
+	fi
+
+dashboard-daemon: dashboard-up
+
+dashboard-stop:
+	@cd "$(ROOT)" && if [ -f ./dashboard/dashboard.pid ]; then ./dashboard/run.sh stop; fi
+	@cd "$(ROOT)" && $(MAKE) compose-down
+
+dashboard-status:
+	@cd "$(ROOT)" && if curl -s -I -m 1 "http://127.0.0.1:$(LAB_DASHBOARD_PORT)/" >/dev/null 2>&1; then \
+		printf 'Dashboard: ACTIVO en http://127.0.0.1:%s (Terminal en http://127.0.0.1:%s)\n' "$(LAB_DASHBOARD_PORT)" "$(LAB_TTYD_PORT)"; \
+	else \
+		printf 'Dashboard: INACTIVO (ejecute make up o make dashboard-up)\n'; \
+	fi

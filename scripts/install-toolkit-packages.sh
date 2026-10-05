@@ -67,8 +67,6 @@ case "$(dpkg --print-architecture)" in
     ferox_sha256=7985c00e6803b0f25d5e9139f7472279f3f4d891429627a5cedc629e53992d80
     findomain_asset=findomain-linux.zip
     findomain_sha256=7a1b90aaf291868e0fb2d643cefa238caddb7aa932b2355f0e0ce8b47a4b5083
-    gau_asset=gau_2.2.4_linux_amd64.tar.gz
-    gau_sha256=10e2e248c37cafb0be3f6d2931125296b95cd4186066d596d47fa417237529a9
     x8_asset=x86_64-linux-x8.gz
     x8_sha256=b3e54da4c0cc62163a3485addea6671368ee69342ea5740e56d6d6112196bd0e
     x8_url="https://github.com/Sh1Yo/x8/releases/download/v4.3.0/${x8_asset}"
@@ -84,8 +82,6 @@ case "$(dpkg --print-architecture)" in
     ferox_sha256=1e5244e1f52e55a647b65e0c76ae7afe0b9983c1fbea30ed7c67e477175eb381
     findomain_asset=findomain-aarch64.zip
     findomain_sha256=780056cba200722f49628bf89b5cd42f3927e694bd383af679d72cf96efc1621
-    gau_asset=gau_2.2.4_linux_arm64.tar.gz
-    gau_sha256=c194992df360d3a24e021c6dc5a5a0576cfd769be1d19cccb29adc1d3759637d
     x8_asset=x8-1:v4.3.0.r10.gc78f246-1-aarch64.pkg.tar.zst
     x8_sha256=35f355231ac2420eca6aa466e8fdf9f71542bb81726b46930ea9885c29ef1b4c
     x8_url="https://mirror.cyberbits.eu/blackarch/blackarch/os/aarch64/${x8_asset}"
@@ -145,16 +141,6 @@ mkdir -p /tmp/findomain
 unzip -q -o /tmp/findomain.zip -d /tmp/findomain
 install -m 0555 /tmp/findomain/findomain /usr/bin/findomain
 rm -rf /tmp/findomain /tmp/findomain.zip
-
-curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
-  "https://github.com/lc/gau/releases/download/v2.2.4/${gau_asset}" \
-  --output /tmp/gau.tar.gz
-printf '%s  %s\n' "$gau_sha256" /tmp/gau.tar.gz | sha256sum -c -
-rm -rf /tmp/gau
-mkdir -p /tmp/gau
-tar -xzf /tmp/gau.tar.gz -C /tmp/gau
-install -m 0555 /tmp/gau/gau /usr/bin/gau
-rm -rf /tmp/gau /tmp/gau.tar.gz
 
 curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
   "$x8_url" \

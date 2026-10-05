@@ -1,0 +1,356 @@
+import datetime
+import time
+from typing import Any, Dict, List, Optional
+import httpx
+from app.core.database import get_db_connection
+from app.core.security import encrypt_secret, decrypt_secret, mask_secret
+from app.models.schemas import ApiKeyCreate, ApiKeyResponse, ApiKeyUpdate, HealthCheckResult
+
+
+class VaultService:
+    def list_keys(self) -> List[ApiKeyResponse]:
+        """Obtiene la lista de API keys configuradas con las claves enmascaradas."""
+        conn = get_db_connection()
+        rows = conn.execute("SELECT * FROM api_keys ORDER BY service_type, provider").fetchall()
+        conn.close()
+
+        results = []
+        for r in rows:
+            decrypted = decrypt_secret(r["encrypted_key"])
+            results.append(
+                ApiKeyResponse(
+                    id=r["id"],
+                    provider=r["provider"],
+                    label=r["label"],
+                    service_type=r["service_type"],
+                    masked_key=mask_secret(decrypted),
+                    base_url=r["base_url"],
+                    model_name=r["model_name"],
+                    is_active=bool(r["is_active"]),
+                    last_checked=r["last_checked"],
+                    status=r["status"],
+                    status_message=r["status_message"],
+                    created_at=r["created_at"] or "",
+                    updated_at=r["updated_at"] or "",
+                )
+            )
+        return results
+
+    def get_raw_key(self, provider: str) -> Optional[str]:
+        """Obtiene la clave descifrada para uso interno del proxy o clientes de auditoría."""
+        conn = get_db_connection()
+        row = conn.execute("SELECT encrypted_key, is_active FROM api_keys WHERE provider = ?", (provider,)).fetchone()
+        conn.close()
+        if not row or not row["is_active"]:
+            return None
+        return decrypt_secret(row["encrypted_key"])
+
+    def get_key_entry(self, provider: str) -> Optional[Dict[str, Any]]:
+        """Obtiene registro completo con la clave descifrada."""
+        conn = get_db_connection()
+        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider,)).fetchone()
+        conn.close()
+        if not row:
+            return None
+        data = dict(row)
+        data["api_key"] = decrypt_secret(row["encrypted_key"])
+        return data
+
+    def upsert_key(self, key_create: ApiKeyCreate) -> ApiKeyResponse:
+        """Crea o reemplaza una API key en el vault cifrado."""
+        now_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        encrypted = encrypt_secret(key_create.api_key)
+
+        conn = get_db_connection()
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO api_keys (
+                    provider, label, service_type, encrypted_key, base_url, model_name,
+                    is_active, last_checked, status, status_message, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'untested', NULL, ?, ?)
+                ON CONFLICT(provider) DO UPDATE SET
+                    label = excluded.label,
+                    service_type = excluded.service_type,
+                    encrypted_key = excluded.encrypted_key,
+                    base_url = excluded.base_url,
+                    model_name = excluded.model_name,
+                    is_active = excluded.is_active,
+                    status = 'untested',
+                    updated_at = excluded.updated_at;
+                """,
+                (
+                    key_create.provider.lower(),
+                    key_create.label,
+                    key_create.service_type,
+                    encrypted,
+                    key_create.base_url,
+                    key_create.model_name,
+                    1 if key_create.is_active else 0,
+                    now_ts,
+                    now_ts,
+                ),
+            )
+        conn.close()
+        return self.get_response_by_provider(key_create.provider.lower())
+
+    def update_key(self, provider: str, update: ApiKeyUpdate) -> Optional[ApiKeyResponse]:
+        """Actualiza parcialmente una clave existente."""
+        conn = get_db_connection()
+        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider.lower(),)).fetchone()
+        if not row:
+            conn.close()
+            return None
+
+        now_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        label = update.label if update.label is not None else row["label"]
+        base_url = update.base_url if update.base_url is not None else row["base_url"]
+        model_name = update.model_name if update.model_name is not None else row["model_name"]
+        is_active = (1 if update.is_active else 0) if update.is_active is not None else row["is_active"]
+
+        encrypted = row["encrypted_key"]
+        if update.api_key:
+            encrypted = encrypt_secret(update.api_key)
+
+        with conn:
+            conn.execute(
+                """
+                UPDATE api_keys SET
+                    label = ?, base_url = ?, model_name = ?, is_active = ?,
+                    encrypted_key = ?, updated_at = ?
+                WHERE provider = ?
+                """,
+                (label, base_url, model_name, is_active, encrypted, now_ts, provider.lower()),
+            )
+        conn.close()
+        return self.get_response_by_provider(provider.lower())
+
+    def delete_key(self, provider: str) -> bool:
+        """Elimina una clave del vault."""
+        conn = get_db_connection()
+        with conn:
+            cursor = conn.execute("DELETE FROM api_keys WHERE provider = ?", (provider.lower(),))
+            deleted = cursor.rowcount > 0
+        conn.close()
+        return deleted
+
+    def get_response_by_provider(self, provider: str) -> Optional[ApiKeyResponse]:
+        conn = get_db_connection()
+        r = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider.lower(),)).fetchone()
+        conn.close()
+        if not r:
+            return None
+        decrypted = decrypt_secret(r["encrypted_key"])
+        return ApiKeyResponse(
+            id=r["id"],
+            provider=r["provider"],
+            label=r["label"],
+            service_type=r["service_type"],
+            masked_key=mask_secret(decrypted),
+            base_url=r["base_url"],
+            model_name=r["model_name"],
+            is_active=bool(r["is_active"]),
+            last_checked=r["last_checked"],
+            status=r["status"],
+            status_message=r["status_message"],
+            created_at=r["created_at"] or "",
+            updated_at=r["updated_at"] or "",
+        )
+
+    async def check_health(self, provider: str) -> HealthCheckResult:
+        """Prueba la validez y conectividad de una API key contra su servicio upstream."""
+        entry = self.get_key_entry(provider.lower())
+        if not entry:
+            return HealthCheckResult(provider=provider, status="error", message="Proveedor no encontrado en el vault")
+
+        api_key = entry["api_key"]
+        base_url = entry["base_url"]
+        start_time = time.time()
+        status = "error"
+        message = ""
+        details = {}
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # 1. SHODAN
+                if provider == "shodan":
+                    res = await client.get(f"https://api.shodan.io/api-info?key={api_key}")
+                    if res.status_code == 200:
+                        data = res.json()
+                        status = "online"
+                        message = f"Activa. Créditos de escaneo: {data.get('scan_credits', 'N/A')}, plan: {data.get('plan', 'N/A')}"
+                        details = data
+                    elif res.status_code == 401:
+                        status = "error"
+                        message = "API key de Shodan inválida o revocada (401)"
+                    else:
+                        status = "error"
+                        message = f"Respuesta inesperada ({res.status_code})"
+
+                # 2. CENSYS
+                elif provider == "censys":
+                    # Censys usualmente usa auth básica o token v2
+                    auth = None
+                    if ":" in api_key:
+                        uid, secret = api_key.split(":", 1)
+                        auth = (uid.strip(), secret.strip())
+                    headers = {"Authorization": f"Bearer {api_key}"} if not auth else {}
+                    res = await client.get("https://search.censys.io/api/v1/account", auth=auth, headers=headers)
+                    if res.status_code == 200:
+                        status = "online"
+                        message = "Conexión a Censys validada exitosamente"
+                        details = res.json()
+                    elif res.status_code == 401:
+                        status = "error"
+                        message = "Credenciales Censys no autorizadas (401)"
+                    else:
+                        status = "error"
+                        message = f"Censys retornó código {res.status_code}"
+
+                # 3. VIRUSTOTAL
+                elif provider == "virustotal":
+                    res = await client.get(
+                        "https://www.virustotal.com/api/v3/users/current",
+                        headers={"x-apikey": api_key},
+                    )
+                    if res.status_code == 200:
+                        status = "online"
+                        user_info = res.json().get("data", {}).get("attributes", {})
+                        message = f"Activa para usuario: {user_info.get('id', 'OK')}"
+                        details = {"user": user_info.get("id")}
+                    elif res.status_code == 401 or res.status_code == 403:
+                        status = "error"
+                        message = "API key de VirusTotal inválida (401/403)"
+                    else:
+                        status = "error"
+                        message = f"VirusTotal código {res.status_code}"
+
+                # 4. CHAOS / PROJECTDISCOVERY
+                elif provider == "chaos":
+                    res = await client.get(
+                        "https://dns.projectdiscovery.io/dns/example.com",
+                        headers={"Authorization": api_key},
+                    )
+                    if res.status_code in (200, 404):
+                        status = "online"
+                        message = "Chaos API key autenticada correctamente"
+                    elif res.status_code == 401:
+                        status = "error"
+                        message = "API key de Chaos rechazada (401)"
+                    else:
+                        status = "error"
+                        message = f"ProjectDiscovery Chaos código {res.status_code}"
+
+                # 5. OPENAI
+                elif provider == "openai":
+                    res = await client.get(
+                        "https://api.openai.com/v1/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    if res.status_code == 200:
+                        status = "online"
+                        models = [m["id"] for m in res.json().get("data", [])][:5]
+                        message = f"Conexión exitosa. Modelos disponibles: {', '.join(models)}"
+                        details = {"sample_models": models}
+                    elif res.status_code == 401:
+                        status = "error"
+                        message = "API key de OpenAI incorrecta (401)"
+                    elif res.status_code == 429:
+                        status = "rate_limited"
+                        message = "OpenAI cuota excedida o rate-limited (429)"
+                    else:
+                        status = "error"
+                        message = f"OpenAI código {res.status_code}"
+
+                # 6. ANTHROPIC
+                elif provider == "anthropic":
+                    res = await client.get(
+                        "https://api.anthropic.com/v1/models",
+                        headers={
+                            "x-api-key": api_key,
+                            "anthropic-version": "2023-06-01",
+                        },
+                    )
+                    if res.status_code == 200:
+                        status = "online"
+                        message = "Conexión a Anthropic validada exitosamente"
+                    elif res.status_code == 401:
+                        status = "error"
+                        message = "API key de Anthropic inválida (401)"
+                    else:
+                        status = "error"
+                        message = f"Anthropic código {res.status_code}"
+
+                # 7. GEMINI
+                elif provider == "gemini":
+                    res = await client.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}")
+                    if res.status_code == 200:
+                        status = "online"
+                        data = res.json()
+                        models = [m["name"].split("/")[-1] for m in data.get("models", [])][:4]
+                        message = f"Google Gemini activo. Modelos: {', '.join(models)}"
+                        details = {"models": models}
+                    elif res.status_code in (400, 401, 403):
+                        status = "error"
+                        message = "API key de Gemini rechazada (400/401/403)"
+                    else:
+                        status = "error"
+                        message = f"Gemini código {res.status_code}"
+
+                # 8. CUSTOM LLM / HERMES PROXY LOCAL
+                elif provider in ("custom_llm", "hermes_local"):
+                    url = (base_url or "http://localhost:11434").rstrip("/") + "/v1/models"
+                    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+                    res = await client.get(url, headers=headers)
+                    if res.status_code == 200:
+                        status = "online"
+                        message = f"Endpoint local {url} respondiendo OK"
+                    else:
+                        status = "error"
+                        message = f"Endpoint {url} retornó código {res.status_code}"
+
+                # 9. HACKTHEBOX
+                elif provider == "hackthebox":
+                    res = await client.get(
+                        "https://www.hackthebox.com/api/v4/user/profile/basic",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    if res.status_code == 200:
+                        status = "online"
+                        profile = res.json().get("profile", {})
+                        message = f"HTB activo para: {profile.get('name', 'Usuario')} (Rango: {profile.get('rank', 'N/A')})"
+                        details = profile
+                    else:
+                        status = "error"
+                        message = f"HTB API retornó {res.status_code}"
+
+                else:
+                    status = "online"
+                    message = "Llave guardada (proveedor genérico)"
+
+        except Exception as e:
+            status = "error"
+            message = f"Fallo de conexión: {str(e)}"
+
+        latency = int((time.time() - start_time) * 1000)
+        now_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        # Actualizar estado en la base de datos
+        conn = get_db_connection()
+        with conn:
+            conn.execute(
+                "UPDATE api_keys SET status = ?, status_message = ?, last_checked = ? WHERE provider = ?",
+                (status, message, now_ts, provider.lower()),
+            )
+        conn.close()
+
+        return HealthCheckResult(
+            provider=provider,
+            status=status,
+            latency_ms=latency,
+            message=message,
+            details=details,
+        )
+
+
+vault_service = VaultService()

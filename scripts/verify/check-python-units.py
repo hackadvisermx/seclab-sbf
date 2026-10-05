@@ -19,6 +19,7 @@ import os
 import pathlib
 import sys
 import unittest
+from unittest.mock import patch
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
@@ -502,10 +503,9 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         content = lock_file.read_text(encoding="utf-8")
 
         self.assertIn("gau", content)
-        self.assertIn("gau_2.2.4_linux_amd64.tar.gz", content)
-        self.assertIn("gau_2.2.4_linux_arm64.tar.gz", content)
-        self.assertIn("10e2e248c37cafb0be3f6d2931125296b95cd4186066d596d47fa417237529a9", content)
-        self.assertIn("c194992df360d3a24e021c6dc5a5a0576cfd769be1d19cccb29adc1d3759637d", content)
+        self.assertIn("5d4e1270e632732756fe98717520c43c86e8bd18", content)
+        self.assertIn("github.com/sirupsen/logrus: v1.9.3", content)
+        self.assertIn("github.com/valyala/fasthttp: v1.74.0", content)
 
         self.assertIn("x8", content)
         self.assertIn("x86_64-linux-x8.gz", content)
@@ -1555,6 +1555,194 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn('alias guide="pt-guide"', plugin)
         self.assertIn('alias engguide="pt-eng guide"', plugin)
         self.assertIn("pt-guide", plugin)
+
+
+class TestSecLabDashboardAndVault(unittest.TestCase):
+    """Verifica la integridad del Dashboard Táctico, API Key Vault y pt-vault-bridge."""
+
+    def test_vault_bridge_cli_integrity(self):
+        bridge_path = REPO_ROOT / "scripts" / "pt-vault-bridge.py"
+        self.assertTrue(bridge_path.exists(), "pt-vault-bridge.py debe existir")
+        content = bridge_path.read_text(encoding="utf-8")
+        self.assertIn("ENV_MAPPINGS", content)
+        self.assertIn("cmd_run", content)
+        self.assertIn("cmd_list", content)
+        self.assertIn("cmd_get", content)
+        # Verificar mapeo de proveedores esenciales
+        self.assertIn("shodan", content)
+        self.assertIn("censys", content)
+        self.assertIn("virustotal", content)
+        self.assertIn("chaos", content)
+        self.assertIn("openai", content)
+        self.assertIn("anthropic", content)
+        self.assertIn("gemini", content)
+
+    def test_pentest_lab_plugin_vault_integration(self):
+        plugin_path = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
+        content = plugin_path.read_text(encoding="utf-8")
+        self.assertIn("_pt-vault-script()", content)
+        self.assertIn("pt-vault()", content)
+        self.assertIn('alias ptvault="pt-vault"', content)
+        self.assertIn('alias vault="pt-vault"', content)
+
+    def test_dashboard_backend_structure(self):
+        backend_dir = REPO_ROOT / "dashboard" / "backend"
+        self.assertTrue(backend_dir.is_dir())
+        self.assertTrue((backend_dir / "app" / "main.py").exists())
+        self.assertTrue((backend_dir / "app" / "config.py").exists())
+        self.assertTrue((backend_dir / "app" / "core" / "security.py").exists())
+        self.assertTrue((backend_dir / "app" / "core" / "database.py").exists())
+        self.assertTrue((backend_dir / "app" / "services" / "vault_service.py").exists())
+        self.assertTrue((backend_dir / "app" / "services" / "proxy_service.py").exists())
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "reports.py").exists())
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "copilot.py").exists())
+
+    def test_dashboard_makefile_targets(self):
+        makefile_path = REPO_ROOT / "Makefile"
+        content = makefile_path.read_text(encoding="utf-8")
+        self.assertIn("dashboard-build:", content)
+        self.assertIn("dashboard:", content)
+        self.assertIn("dashboard-up:", content)
+        self.assertIn("dashboard-daemon:", content)
+        self.assertIn("dashboard-stop:", content)
+        self.assertIn("dashboard-status:", content)
+
+    def test_dashboard_loot_and_terminal_views(self):
+        backend_dir = REPO_ROOT / "dashboard" / "backend"
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "loot.py").exists())
+        frontend_views = REPO_ROOT / "dashboard" / "frontend" / "src" / "views"
+        self.assertTrue((frontend_views / "TerminalView.vue").exists())
+
+    def test_dashboard_vpn_and_recon_services(self):
+        backend_dir = REPO_ROOT / "dashboard" / "backend"
+        self.assertTrue((backend_dir / "app" / "services" / "vpn_service.py").exists())
+        self.assertTrue((backend_dir / "app" / "services" / "recon_service.py").exists())
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "vpn.py").exists())
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "recon.py").exists())
+
+        # Verificar router registra vpn y recon
+        router_file = backend_dir / "app" / "api" / "router.py"
+        content = router_file.read_text(encoding="utf-8")
+        self.assertIn("api_router.include_router(vpn.router)", content)
+        self.assertIn("api_router.include_router(recon.router)", content)
+
+        # Cargar y probar vpn_service
+        sys.path.insert(0, str(backend_dir))
+        try:
+            from app.services.vpn_service import vpn_service
+            self.assertEqual(vpn_service.canonical_profile("try"), "tryhackme")
+            self.assertEqual(vpn_service.canonical_profile("THM"), "tryhackme")
+            self.assertEqual(vpn_service.canonical_profile("htb"), "hackthebox")
+            self.assertEqual(vpn_service.canonical_profile("client"), "client")
+            self.assertIsNone(vpn_service.canonical_profile("prohibited_vpn"))
+
+            status = vpn_service.get_vpn_status()
+            self.assertIn("connected", status)
+            self.assertIn("profile", status)
+            self.assertIn("interface", status)
+            self.assertEqual(status["interface"], "tun0")
+
+            # Conectar perfil inválido debe fallar controladamente
+            res = vpn_service.connect("invalid_xyz")
+            self.assertFalse(res["success"])
+            self.assertIn("no autorizado", res["message"])
+
+            saved = vpn_service.list_saved_profiles()
+            self.assertIn("client", saved)
+            self.assertIn("tryhackme", saved)
+            self.assertIn("hackthebox", saved)
+        finally:
+            if str(backend_dir) in sys.path:
+                sys.path.remove(str(backend_dir))
+
+        # Verificar endpoint de descarga en reports.py y documentación
+        reports_file = backend_dir / "app" / "api" / "endpoints" / "reports.py"
+        content_rep = reports_file.read_text(encoding="utf-8")
+        self.assertIn("download_engagement", content_rep)
+        self.assertTrue((REPO_ROOT / "docs" / "dashboard.md").is_file())
+
+    def test_dashboard_recon_service_logic(self):
+        backend_dir = REPO_ROOT / "dashboard" / "backend"
+        sys.path.insert(0, str(backend_dir))
+        try:
+            from app.services.recon_service import recon_service
+            self.assertIsNone(recon_service.get_target_dir("nonexistent_engagement_12345"))
+            status = recon_service.get_status("nonexistent_engagement_12345")
+            self.assertIn("error", status)
+        finally:
+            if str(backend_dir) in sys.path:
+                sys.path.remove(str(backend_dir))
+
+
+class TestDashboardVpnOperations(unittest.TestCase):
+    def setUp(self):
+        backend_dir = str(REPO_ROOT / "dashboard" / "backend")
+        sys.path.insert(0, backend_dir)
+        try:
+            from app.services import vpn_service
+            self.module = vpn_service
+            self.service = vpn_service.VpnService()
+        finally:
+            sys.path.remove(backend_dir)
+
+    def test_installed_controller_and_credentials_use_child_environment(self):
+        with patch.object(pathlib.Path, "is_file", return_value=True):
+            service = self.module.VpnService()
+        self.assertEqual(service.vpn_control_script, pathlib.Path("/usr/local/bin/vpn-control"))
+        completed = self.module.subprocess.CompletedProcess([], 0, "VPN conectada", "")
+        with patch.object(pathlib.Path, "exists", return_value=True), \
+             patch.dict(os.environ, {"VPN_AUTH_USER": "inherited", "VPN_AUTH_PASSWORD": "inherited"}), \
+             patch.object(self.module.subprocess, "run", return_value=completed) as run:
+            result = service._execute_vpn_control("connect", "client", ("operator", " demo-password "))
+            self.assertTrue(result["success"])
+            command = run.call_args.args[0]
+            self.assertEqual(command[1:], ["/usr/local/bin/vpn-control", "client", "connect", "client"])
+            self.assertNotIn(" demo-password ", command)
+            self.assertEqual(run.call_args.kwargs["env"]["VPN_AUTH_PASSWORD"], " demo-password ")
+            self.assertEqual(os.environ["VPN_AUTH_PASSWORD"], "inherited")
+            service._execute_vpn_control("disconnect")
+            self.assertNotIn("VPN_AUTH_PASSWORD", run.call_args.kwargs["env"])
+
+    def test_status_uses_daemon_and_does_not_treat_persistent_tun_as_connected(self):
+        cases = [
+            ("active=tryhackme\npid=123 running", "192.0.2.10", True, False, "tryhackme"),
+            ("active=tryhackme\npid=123 running", None, False, True, "tryhackme"),
+            ("active=none", "192.0.2.10", False, False, "none"),
+            ("active=tryhackme stale\npid=missing", "192.0.2.10", False, False, "none"),
+        ]
+        for stdout, ip, connected, connecting, profile in cases:
+            with self.subTest(stdout=stdout, ip=ip), \
+                 patch.object(pathlib.Path, "is_socket", return_value=True), \
+                 patch.object(pathlib.Path, "read_text", side_effect=PermissionError), \
+                 patch.object(self.service, "get_tun0_ip", return_value=ip), \
+                 patch.object(self.service, "_execute_vpn_control", return_value={"success": True, "stdout": stdout}) as control:
+                status = self.service.get_vpn_status()
+                control.assert_called_once_with("status")
+                self.assertEqual(status["connected"], connected)
+                self.assertEqual(status["connecting"], connecting)
+                self.assertEqual(status["profile"], profile)
+                self.assertEqual(status["ip"], ip if connected else None)
+
+    def test_saved_credentials_reach_daemon_without_writing_root_state(self):
+        saved = {"username": "operator", "password": " demo-password "}
+        completed = {"success": True, "stdout": "VPN conectada", "stderr": ""}
+        with patch.object(self.service, "get_saved_credentials", return_value=saved), \
+             patch.object(pathlib.Path, "write_text", side_effect=AssertionError("No escribir .auth desde el dashboard")), \
+             patch.object(self.service, "_execute_vpn_control", return_value=completed) as control:
+            self.assertTrue(self.service.connect("cli")["success"])
+            control.assert_called_once_with("connect", "client", ("operator", " demo-password "))
+            control.reset_mock()
+            self.assertTrue(self.service.connect("client", username="operator")["success"])
+            control.assert_called_once_with("connect", "client", ("operator", " demo-password "))
+
+    def test_invalid_credentials_never_start_or_switch_vpn(self):
+        with patch.object(self.service, "get_saved_credentials", return_value=None), \
+             patch.object(self.service, "_execute_vpn_control") as control:
+            for action in (self.service.connect, self.service.switch):
+                for username, password in (("operator", None), ("operator", "bad\nvalue"), ("operator", "bad\x00value"), ("operator", "x" * 257)):
+                    with self.subTest(action=action.__name__, username=username):
+                        self.assertFalse(action("client", username, password)["success"])
+            control.assert_not_called()
 
 
 def main():

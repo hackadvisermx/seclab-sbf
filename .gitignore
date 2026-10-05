@@ -25,3 +25,10 @@ deploy/backend-*.hcl
 *.log
 .DS_Store
 .envrc
+dashboard/.venv/
+dashboard/**/.venv/
+dashboard/**/*.db
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
+dashboard/*.pid
+dashboard/backend/data/

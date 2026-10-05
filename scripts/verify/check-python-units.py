@@ -1557,6 +1557,123 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("pt-guide", plugin)
 
 
+class TestSecLabDashboardAndVault(unittest.TestCase):
+    """Verifica la integridad del Dashboard Táctico, API Key Vault y pt-vault-bridge."""
+
+    def test_vault_bridge_cli_integrity(self):
+        bridge_path = REPO_ROOT / "scripts" / "pt-vault-bridge.py"
+        self.assertTrue(bridge_path.exists(), "pt-vault-bridge.py debe existir")
+        content = bridge_path.read_text(encoding="utf-8")
+        self.assertIn("ENV_MAPPINGS", content)
+        self.assertIn("cmd_run", content)
+        self.assertIn("cmd_list", content)
+        self.assertIn("cmd_get", content)
+        # Verificar mapeo de proveedores esenciales
+        self.assertIn("shodan", content)
+        self.assertIn("censys", content)
+        self.assertIn("virustotal", content)
+        self.assertIn("chaos", content)
+        self.assertIn("openai", content)
+        self.assertIn("anthropic", content)
+        self.assertIn("gemini", content)
+
+    def test_pentest_lab_plugin_vault_integration(self):
+        plugin_path = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
+        content = plugin_path.read_text(encoding="utf-8")
+        self.assertIn("_pt-vault-script()", content)
+        self.assertIn("pt-vault()", content)
+        self.assertIn('alias ptvault="pt-vault"', content)
+        self.assertIn('alias vault="pt-vault"', content)
+
+    def test_dashboard_backend_structure(self):
+        backend_dir = REPO_ROOT / "dashboard" / "backend"
+        self.assertTrue(backend_dir.is_dir())
+        self.assertTrue((backend_dir / "app" / "main.py").exists())
+        self.assertTrue((backend_dir / "app" / "config.py").exists())
+        self.assertTrue((backend_dir / "app" / "core" / "security.py").exists())
+        self.assertTrue((backend_dir / "app" / "core" / "database.py").exists())
+        self.assertTrue((backend_dir / "app" / "services" / "vault_service.py").exists())
+        self.assertTrue((backend_dir / "app" / "services" / "proxy_service.py").exists())
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "reports.py").exists())
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "copilot.py").exists())
+
+    def test_dashboard_makefile_targets(self):
+        makefile_path = REPO_ROOT / "Makefile"
+        content = makefile_path.read_text(encoding="utf-8")
+        self.assertIn("dashboard-build:", content)
+        self.assertIn("dashboard:", content)
+        self.assertIn("dashboard-up:", content)
+        self.assertIn("dashboard-daemon:", content)
+        self.assertIn("dashboard-stop:", content)
+        self.assertIn("dashboard-status:", content)
+
+    def test_dashboard_loot_and_terminal_views(self):
+        backend_dir = REPO_ROOT / "dashboard" / "backend"
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "loot.py").exists())
+        frontend_views = REPO_ROOT / "dashboard" / "frontend" / "src" / "views"
+        self.assertTrue((frontend_views / "TerminalView.vue").exists())
+
+    def test_dashboard_vpn_and_recon_services(self):
+        backend_dir = REPO_ROOT / "dashboard" / "backend"
+        self.assertTrue((backend_dir / "app" / "services" / "vpn_service.py").exists())
+        self.assertTrue((backend_dir / "app" / "services" / "recon_service.py").exists())
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "vpn.py").exists())
+        self.assertTrue((backend_dir / "app" / "api" / "endpoints" / "recon.py").exists())
+
+        # Verificar router registra vpn y recon
+        router_file = backend_dir / "app" / "api" / "router.py"
+        content = router_file.read_text(encoding="utf-8")
+        self.assertIn("api_router.include_router(vpn.router)", content)
+        self.assertIn("api_router.include_router(recon.router)", content)
+
+        # Cargar y probar vpn_service
+        sys.path.insert(0, str(backend_dir))
+        try:
+            from app.services.vpn_service import vpn_service
+            self.assertEqual(vpn_service.canonical_profile("try"), "tryhackme")
+            self.assertEqual(vpn_service.canonical_profile("THM"), "tryhackme")
+            self.assertEqual(vpn_service.canonical_profile("htb"), "hackthebox")
+            self.assertEqual(vpn_service.canonical_profile("client"), "client")
+            self.assertIsNone(vpn_service.canonical_profile("prohibited_vpn"))
+
+            status = vpn_service.get_vpn_status()
+            self.assertIn("connected", status)
+            self.assertIn("profile", status)
+            self.assertIn("interface", status)
+            self.assertEqual(status["interface"], "tun0")
+
+            # Conectar perfil inválido debe fallar controladamente
+            res = vpn_service.connect("invalid_xyz")
+            self.assertFalse(res["success"])
+            self.assertIn("no autorizado", res["message"])
+
+            saved = vpn_service.list_saved_profiles()
+            self.assertIn("client", saved)
+            self.assertIn("tryhackme", saved)
+            self.assertIn("hackthebox", saved)
+        finally:
+            if str(backend_dir) in sys.path:
+                sys.path.remove(str(backend_dir))
+
+        # Verificar endpoint de descarga en reports.py y documentación
+        reports_file = backend_dir / "app" / "api" / "endpoints" / "reports.py"
+        content_rep = reports_file.read_text(encoding="utf-8")
+        self.assertIn("download_engagement", content_rep)
+        self.assertTrue((REPO_ROOT / "docs" / "dashboard.md").is_file())
+
+    def test_dashboard_recon_service_logic(self):
+        backend_dir = REPO_ROOT / "dashboard" / "backend"
+        sys.path.insert(0, str(backend_dir))
+        try:
+            from app.services.recon_service import recon_service
+            self.assertIsNone(recon_service.get_target_dir("nonexistent_engagement_12345"))
+            status = recon_service.get_status("nonexistent_engagement_12345")
+            self.assertIn("error", status)
+        finally:
+            if str(backend_dir) in sys.path:
+                sys.path.remove(str(backend_dir))
+
+
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
     runner = unittest.TextTestRunner(verbosity=2)

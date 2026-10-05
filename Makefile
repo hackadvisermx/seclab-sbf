@@ -17,7 +17,7 @@ SHELL := /bin/sh
 # caso de `make` sin argumentos y no los `make compose-up`. Comprobado.
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-azure host-ssh-azure lab-ssh-az host-ssh-az lab-ssh-oci host-ssh-oci vm-status-azure vm-status-az vm-stop-azure vm-stop-az vm-start-azure vm-start-az lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check
+.PHONY: workspace-dir workspace-list workspace-export workspace-backup workspace-restore compose-refs-check sync-secrets base-check scan-image sbom help verify verify-secrets lint-docker lint-shell build-base build-full env-init keys ensure-env ensure-image compose config up down shell zsh tmux compose-config compose-up compose-down compose-shell compose-zsh compose-tmux lab-ssh lab-ssh-cloud host-ssh-cloud lab-ssh-azure host-ssh-azure lab-ssh-az host-ssh-az lab-ssh-oci host-ssh-oci vm-status-azure vm-status-az vm-stop-azure vm-stop-az vm-start-azure vm-start-az lab-ssh-cloud-image rebuild-image vpn-require-dir vpn-up vpn-tun-check vpn-down vpn-list vpn-status vpn-connect vpn-disconnect vpn-switch vpn-doctor proxy-status proxy-doctor proxy-stop proxy-bridge security-check tailscale-check fail2ban-check tf-fmt tf-render-check tflint-check fail2ban-jail-check doc-targets-check tf-destroy-check tf-plan-oci tf-apply-oci tf-destroy-oci tf-plan-azure tf-apply-azure tf-destroy-azure tf-plan-do tf-apply-do tf-destroy-do env-copy-oci env-copy-azure env-copy-do vpn-copy image-publish image-publish-checked image-pull image-tools-check smoke-test python-units-check py-test compose-security-check dashboard dashboard-build dashboard-up dashboard-daemon dashboard-stop dashboard-status
 
 ENV_FILE ?= .env
 SECRETS_DIR ?= ./.secrets/runtime
@@ -772,3 +772,25 @@ vpn-copy:
 		scp -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$$profile" "$(TF_ADMIN)@$(TF_HOST):~/seclab-sbf/vpn/"; \
 	done; \
 	ssh -o StrictHostKeyChecking=accept-new -i "$(HOST_SSH_KEY)" "$(TF_ADMIN)@$(TF_HOST)" 'chmod 600 ~/seclab-sbf/vpn/*.ovpn; ls -l ~/seclab-sbf/vpn'
+
+# ==============================================================================
+# Tactical Dashboard & API Vault
+# ==============================================================================
+DASHBOARD_PORT ?= 8080
+
+dashboard-build:
+	@cd "$(ROOT)/dashboard/frontend" && npm install && npm run build
+
+dashboard: dashboard-up
+
+dashboard-up:
+	@cd "$(ROOT)" && DASHBOARD_PORT="$(DASHBOARD_PORT)" ./dashboard/run.sh
+
+dashboard-daemon:
+	@cd "$(ROOT)" && DASHBOARD_PORT="$(DASHBOARD_PORT)" ./dashboard/run.sh daemon
+
+dashboard-stop:
+	@cd "$(ROOT)" && ./dashboard/run.sh stop
+
+dashboard-status:
+	@cd "$(ROOT)" && DASHBOARD_PORT="$(DASHBOARD_PORT)" ./dashboard/run.sh status

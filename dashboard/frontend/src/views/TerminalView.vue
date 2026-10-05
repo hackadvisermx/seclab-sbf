@@ -73,7 +73,7 @@
         <span class="text-cyan-400 font-bold">🔐 Credenciales Web:</span>
         <span>Usuario: <code class="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded">tester</code></span>
         <span class="text-slate-500">•</span>
-        <span>Password: <code class="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded">tester</code> <span class="text-slate-500 text-[10px]">(o según .secrets/runtime/lab.env)</span></span>
+        <span>Contraseña: la configurada para el laboratorio</span>
       </div>
       <div class="text-[11px] text-slate-400">
         Si el navegador restringe autenticación en marcos, pulse

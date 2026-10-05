@@ -7,13 +7,9 @@ async function request(endpoint, options = {}) {
     ...(options.headers || {})
   }
 
-  const token = localStorage.getItem('seclab_token')
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const res = await fetch(url, { ...options, headers })
+  const res = await fetch(url, { ...options, headers, credentials: 'same-origin' })
   if (!res.ok) {
+    if (res.status === 401) window.dispatchEvent(new Event('seclab-session-expired'))
     let errorDetail = 'Error en la petición'
     try {
       const errJson = await res.json()
@@ -27,6 +23,9 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  login: (password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username: 'tester', password }) }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
+  session: () => request('/auth/me'),
   // Engagements
   getEngagements: () => request('/engagements'),
   createEngagement: (data) => request('/engagements', { method: 'POST', body: JSON.stringify(data) }),

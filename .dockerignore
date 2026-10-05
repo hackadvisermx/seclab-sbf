@@ -20,3 +20,9 @@ dashboard/.venv
 dashboard/frontend/node_modules
 dashboard/backend/data
 dashboard/*.pid
+
+.secrets
+backups
+tmp
+.env.*
+!.env.example

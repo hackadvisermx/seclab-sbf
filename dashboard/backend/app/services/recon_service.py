@@ -7,6 +7,7 @@ import sys
 import threading
 from typing import Any, Dict, List, Optional
 from app.config import SCRIPTS_DIR, WORKSPACE_DIR
+from app.core.workspace_paths import project_directory
 
 class ReconService:
     def __init__(self):
@@ -22,8 +23,7 @@ class ReconService:
         self._lock = threading.Lock()
 
     def get_target_dir(self, engagement_id: str, engagement_type: str = "engagement") -> Optional[pathlib.Path]:
-        folder = "engagements" if engagement_type == "engagement" else "retos"
-        p = WORKSPACE_DIR / folder / engagement_id
+        p = project_directory(WORKSPACE_DIR, engagement_id, engagement_type)
         if p.is_dir():
             return p
         return None

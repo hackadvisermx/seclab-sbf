@@ -3,6 +3,9 @@ import os
 import pathlib
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from app.services.workspace_sync import workspace_service
+from app.api.endpoints.auth import session_token
+from app.core.security import verify_session_token
+from app.core.workspace_paths import UnsafeWorkspacePath
 
 router = APIRouter(prefix="/logs", tags=["Logs de Auditoría"])
 
@@ -17,8 +20,19 @@ def get_log_snapshot(eng_id: str, lines: int = Query(500), type: str = Query("en
 @router.websocket("/{eng_id}/ws")
 async def websocket_terminal_log(websocket: WebSocket, eng_id: str, type: str = "engagement"):
     """Transmite en tiempo real las nuevas líneas escritas en terminal.log."""
+    try:
+        log_file = workspace_service._resolve_dir(eng_id, type) / "terminal.log"
+    except UnsafeWorkspacePath:
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
-    log_file = workspace_service._resolve_dir(eng_id, type) / "terminal.log"
+    token = session_token(websocket)
+
+    async def session_valid():
+        if verify_session_token(token):
+            return True
+        await websocket.close(code=1008)
+        return False
 
     try:
         if not log_file.exists():
@@ -26,6 +40,8 @@ async def websocket_terminal_log(websocket: WebSocket, eng_id: str, type: str = 
 
         # Esperar a que el archivo exista si aún no fue creado
         while not log_file.exists():
+            if not await session_valid():
+                return
             await asyncio.sleep(1)
 
         # Enviar bloque inicial
@@ -36,6 +52,8 @@ async def websocket_terminal_log(websocket: WebSocket, eng_id: str, type: str = 
         with open(log_file, "r", errors="ignore") as f:
             f.seek(0, os.SEEK_END)
             while True:
+                if not await session_valid():
+                    return
                 line = f.readline()
                 if line:
                     await websocket.send_text(line)

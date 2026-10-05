@@ -1,35 +1,24 @@
 import base64
-import hmac
 import hashlib
 import os
-import pathlib
 import time
 from typing import Optional
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from app.config import VAULT_KEY_PATH, SECRET_KEY
+from app.config import VAULT_KEY_PATH, VAULT_DB_PATH
 
 
 def get_or_create_vault_key() -> bytes:
-    """Obtiene o genera una clave simétrica AES-256 de 32 bytes para el vault cifrado."""
-    if VAULT_KEY_PATH.exists():
+    from app.core.key_store import persistent_key
+    if not VAULT_KEY_PATH.exists() and VAULT_DB_PATH.exists():
+        import sqlite3
+        connection = sqlite3.connect(f"file:{VAULT_DB_PATH}?mode=ro", uri=True)
         try:
-            key_data = VAULT_KEY_PATH.read_bytes()
-            if len(key_data) == 32:
-                return key_data
-        except Exception:
-            pass
-
-    # Generar nueva clave criptográfica
-    new_key = AESGCM.generate_key(bit_length=256)
-    try:
-        VAULT_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        VAULT_KEY_PATH.write_bytes(new_key)
-        os.chmod(VAULT_KEY_PATH, 0o600)
-    except Exception:
-        # Fallback determinista derivado de SECRET_KEY
-        return hashlib.sha256(SECRET_KEY.encode()).digest()
-
-    return new_key
+            has_table = connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'api_keys'").fetchone()
+            if has_table and connection.execute("SELECT 1 FROM api_keys WHERE encrypted_key != '' LIMIT 1").fetchone():
+                raise RuntimeError("Falta la clave de una bóveda con datos: restaura la clave desde el respaldo.")
+        finally:
+            connection.close()
+    return persistent_key(VAULT_KEY_PATH)
 
 
 _VAULT_KEY = get_or_create_vault_key()
@@ -71,26 +60,42 @@ def mask_secret(plaintext: str) -> str:
 
 
 def create_session_token(username: str) -> str:
-    """Crea un token de sesión firmado para autenticación del dashboard."""
-    expires_at = int(time.time()) + (86400 * 7) # 7 días
-    msg = f"{username}:{expires_at}".encode()
-    signature = hmac.new(SECRET_KEY.encode(), msg, hashlib.sha256).hexdigest()
-    raw = f"{username}:{expires_at}:{signature}"
-    return base64.urlsafe_b64encode(raw.encode()).decode()
+    from app.config import SESSION_SECONDS
+    from app.core.database import get_db_connection
+    token = base64.urlsafe_b64encode(os.urandom(32)).decode()
+    connection = get_db_connection()
+    try:
+        with connection:
+            connection.execute("DELETE FROM dashboard_sessions WHERE expires_at <= ?", (int(time.time()),))
+            connection.execute(
+                "INSERT INTO dashboard_sessions (token_hash, username, expires_at) VALUES (?, ?, ?)",
+                (hashlib.sha256(token.encode()).hexdigest(), username, int(time.time()) + SESSION_SECONDS),
+            )
+    finally:
+        connection.close()
+    return token
 
 
 def verify_session_token(token: str) -> Optional[str]:
-    """Verifica la validez y expiración del token de sesión. Retorna el username o None."""
-    try:
-        raw = base64.urlsafe_b64decode(token.encode()).decode()
-        username, expires_at_str, signature = raw.split(":", 2)
-        expires_at = int(expires_at_str)
-        if time.time() > expires_at:
-            return None
-        msg = f"{username}:{expires_at}".encode()
-        expected = hmac.new(SECRET_KEY.encode(), msg, hashlib.sha256).hexdigest()
-        if hmac.compare_digest(expected, signature):
-            return username
-    except Exception:
+    from app.core.database import get_db_connection
+    if not token or len(token) > 256:
         return None
-    return None
+    connection = get_db_connection()
+    try:
+        row = connection.execute(
+            "SELECT username FROM dashboard_sessions WHERE token_hash = ? AND expires_at > ?",
+            (hashlib.sha256(token.encode()).hexdigest(), int(time.time())),
+        ).fetchone()
+        return 'tester' if row and row['username'] == 'tester' else None
+    finally:
+        connection.close()
+
+
+def revoke_session_token(token: str):
+    from app.core.database import get_db_connection
+    connection = get_db_connection()
+    try:
+        with connection:
+            connection.execute("DELETE FROM dashboard_sessions WHERE token_hash = ?", (hashlib.sha256(token.encode()).hexdigest(),))
+    finally:
+        connection.close()

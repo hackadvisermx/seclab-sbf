@@ -1623,8 +1623,8 @@ class TestSecLabDashboardAndVault(unittest.TestCase):
         # Verificar router registra vpn y recon
         router_file = backend_dir / "app" / "api" / "router.py"
         content = router_file.read_text(encoding="utf-8")
-        self.assertIn("api_router.include_router(vpn.router)", content)
-        self.assertIn("api_router.include_router(recon.router)", content)
+        self.assertIn("protected.include_router(vpn.router)", content)
+        self.assertIn("protected.include_router(recon.router)", content)
 
         # Cargar y probar vpn_service
         sys.path.insert(0, str(backend_dir))

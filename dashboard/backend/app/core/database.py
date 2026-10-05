@@ -18,6 +18,13 @@ def init_db():
     conn = get_db_connection()
     with conn:
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS dashboard_sessions (
+                token_hash TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                expires_at INTEGER NOT NULL
+            );
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS api_keys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 provider TEXT NOT NULL UNIQUE,

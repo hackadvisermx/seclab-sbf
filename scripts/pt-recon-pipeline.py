@@ -21,223 +21,13 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-URL_HOST_RE = re.compile(r"^(?:https?://)?([^/:]+)(?::\d+)?(?:/.*)?$", re.IGNORECASE)
-IPV4_RE = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seclab_scope import (ScopeError, normalize_target, is_ip, domain_matches,
+                          parse_simple_yaml_lists, load_scope_rules, load_target_yaml, load_scope_txt, check_scope)
 
-# Patrones estándar de clasificación gf
+from seclab_recon_probe import ProbeClient, operational_limits
+
 DEFAULT_GF_PATTERNS = ["xss", "sqli", "ssrf", "redirect", "idor", "rce", "lfi"]
-
-
-def normalize_target(raw_target: str) -> str:
-    """Extrae el hostname o IP limpia de una URL, host:puerto o ruta."""
-    cleaned = raw_target.strip()
-    match = URL_HOST_RE.match(cleaned)
-    if match:
-        return match.group(1).lower()
-    return cleaned.split(":")[0].split("/")[0].lower()
-
-
-def is_ip(target: str) -> bool:
-    """Verifica si el objetivo es una dirección IP válida."""
-    try:
-        ipaddress.ip_address(target)
-        return True
-    except ValueError:
-        return False
-
-
-def domain_matches(target: str, pattern: str) -> bool:
-    """Verifica si target coincide con pattern (exacto o wildcard *.dominio)."""
-    target = target.lower().strip()
-    pattern = pattern.lower().strip()
-    if pattern.startswith("*."):
-        suffix = pattern[2:]
-        return target == suffix or target.endswith("." + suffix)
-    return target == pattern or target.endswith("." + pattern)
-
-
-def parse_simple_yaml_lists(content: str) -> Dict[str, Any]:
-    """Parser ligero de respaldo para target.yaml sin dependencias externas."""
-    data: Dict[str, Any] = {
-        "scope": {
-            "in_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
-            "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "notes": []},
-        },
-        "operational_limits": {},
-        "engagement": {},
-    }
-
-    current_section = None
-    current_sub = None
-    current_list = None
-
-    for line in content.splitlines():
-        line_str = line.strip()
-        if not line_str or line_str.startswith("#"):
-            continue
-
-        if line.startswith("engagement:"):
-            current_section = "engagement"
-            continue
-        elif line.startswith("scope:"):
-            current_section = "scope"
-            continue
-        elif line.startswith("operational_limits:"):
-            current_section = "operational_limits"
-            continue
-
-        if current_section == "scope":
-            if line.startswith("  in_scope:"):
-                current_sub = "in_scope"
-                current_list = None
-                continue
-            elif line.startswith("  out_of_scope:"):
-                current_sub = "out_of_scope"
-                current_list = None
-                continue
-
-            if current_sub in ("in_scope", "out_of_scope"):
-                list_match = re.match(r"^\s{4}([a-z_]+):(?:\s*\[(.*)\])?", line)
-                if list_match:
-                    key = list_match.group(1)
-                    inline_items = list_match.group(2)
-                    current_list = key
-                    if inline_items is not None:
-                        items = [i.strip(" '\"") for i in inline_items.split(",") if i.strip(" '\"")]
-                        data["scope"][current_sub][key] = items
-                    elif key not in data["scope"][current_sub]:
-                        data["scope"][current_sub][key] = []
-                    continue
-
-                item_match = re.match(r"^\s{6}-\s*[\"']?([^\"']+)[\"']?", line)
-                if item_match and current_list:
-                    item_val = item_match.group(1).strip()
-                    if current_list not in data["scope"][current_sub]:
-                        data["scope"][current_sub][current_list] = []
-                    data["scope"][current_sub][current_list].append(item_val)
-
-        elif current_section in ("engagement", "operational_limits"):
-            kv_match = re.match(r"^\s{2}([a-z_]+):\s*[\"']?([^\"']+)[\"']?", line)
-            if kv_match:
-                k, v = kv_match.group(1), kv_match.group(2).strip()
-                data[current_section][k] = v
-
-    return data
-
-
-def load_scope_rules(engagement_dir: pathlib.Path) -> Dict[str, Any]:
-    """Carga target.yaml o scope.txt del engagement."""
-    target_yaml = engagement_dir / "target.yaml"
-    if target_yaml.is_file():
-        content = target_yaml.read_text(encoding="utf-8")
-        try:
-            import yaml  # type: ignore
-
-            loaded = yaml.safe_load(content)
-            if isinstance(loaded, dict):
-                return loaded
-        except Exception:
-            pass
-        return parse_simple_yaml_lists(content)
-
-    scope_txt = engagement_dir / "scope.txt"
-    if scope_txt.is_file():
-        in_scope_domains: List[str] = []
-        out_scope_domains: List[str] = []
-        current_section = None
-        for line in scope_txt.read_text(encoding="utf-8").splitlines():
-            line_clean = line.strip()
-            if line_clean.startswith("## Activos y Objetivos en Alcance"):
-                current_section = "in"
-                continue
-            elif line_clean.startswith("## Fuera de Alcance"):
-                current_section = "out"
-                continue
-            elif line_clean.startswith("## "):
-                current_section = None
-                continue
-
-            if line_clean.startswith("- "):
-                item = line_clean[2:].strip().split()[0].strip("[]()")
-                if item:
-                    norm = normalize_target(item)
-                    if current_section == "in":
-                        in_scope_domains.append(norm)
-                    elif current_section == "out":
-                        out_scope_domains.append(norm)
-
-        return {
-            "engagement": {"name": engagement_dir.name},
-            "scope": {
-                "in_scope": {"domains": in_scope_domains, "ips": [], "cidrs": [], "endpoints": []},
-                "out_of_scope": {"domains": out_scope_domains, "ips": [], "cidrs": [], "notes": []},
-            },
-            "operational_limits": {},
-        }
-
-    return {
-        "engagement": {"name": engagement_dir.name},
-        "scope": {
-            "in_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
-            "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "notes": []},
-        },
-        "operational_limits": {},
-    }
-
-
-def check_scope(target: str, scope_data: Dict[str, Any]) -> Tuple[str, str]:
-    """Evalúa si target es OUT_OF_SCOPE, IN_SCOPE o UNKNOWN.
-
-    Retorna: (veredicto, regla_coincidente)
-    """
-    clean_target = normalize_target(target)
-    scope = scope_data.get("scope", {})
-    in_scope = scope.get("in_scope", {})
-    out_of_scope = scope.get("out_of_scope", {})
-
-    target_is_ip = is_ip(clean_target)
-    target_addr = ipaddress.ip_address(clean_target) if target_is_ip else None
-
-    # 1. EVALUAR PRIMERO EXCLUSIONES (OUT_OF_SCOPE)
-    if target_is_ip and target_addr:
-        for o_ip in out_of_scope.get("ips", []):
-            try:
-                if target_addr == ipaddress.ip_address(o_ip.strip()):
-                    return ("OUT_OF_SCOPE", f"IP excluida: {o_ip}")
-            except ValueError:
-                pass
-        for o_cidr in out_of_scope.get("cidrs", []):
-            try:
-                if target_addr in ipaddress.ip_network(o_cidr.strip(), strict=False):
-                    return ("OUT_OF_SCOPE", f"CIDR excluido: {o_cidr}")
-            except ValueError:
-                pass
-    else:
-        for o_dom in out_of_scope.get("domains", []):
-            if domain_matches(clean_target, o_dom):
-                return ("OUT_OF_SCOPE", f"Dominio excluido: {o_dom}")
-
-    # 2. EVALUAR COINCIDENCIA EN ALCANCE (IN_SCOPE)
-    if target_is_ip and target_addr:
-        for i_ip in in_scope.get("ips", []):
-            try:
-                if target_addr == ipaddress.ip_address(i_ip.strip()):
-                    return ("IN_SCOPE", f"IP autorizada: {i_ip}")
-            except ValueError:
-                pass
-        for i_cidr in in_scope.get("cidrs", []):
-            try:
-                if target_addr in ipaddress.ip_network(i_cidr.strip(), strict=False):
-                    return ("IN_SCOPE", f"CIDR autorizado: {i_cidr}")
-            except ValueError:
-                pass
-    else:
-        for i_dom in in_scope.get("domains", []):
-            if domain_matches(clean_target, i_dom):
-                return ("IN_SCOPE", f"Dominio autorizado: {i_dom}")
-
-    # 3. NO COINCIDE CON NINGUNA REGLA
-    return ("UNKNOWN", "Objetivo no listado en el alcance explícito")
 
 
 def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib.Path]:
@@ -333,433 +123,194 @@ def record_audit_mark(engagement_dir: pathlib.Path, mark_text: str) -> None:
             pass
 
 
-class ReconPipeline:
-    """Orquestador seguro del pipeline de reconocimiento."""
+class StageError(RuntimeError):
+    pass
 
+
+class ReconPipeline:
     def __init__(self, engagement_dir: pathlib.Path, dry_run: bool = False):
         self.engagement_dir = engagement_dir.resolve()
         self.recon_dir = self.engagement_dir / "recon"
         self.patterns_dir = self.recon_dir / "patterns"
         self.dry_run = dry_run
         self.scope_data = load_scope_rules(self.engagement_dir)
+        self.limits = operational_limits(self.scope_data)
         self.tools = detect_tools()
 
-    def prepare_directories(self) -> None:
-        """Asegura la estructura requerida en recon/."""
-        self.recon_dir.mkdir(parents=True, exist_ok=True)
-        self.patterns_dir.mkdir(parents=True, exist_ok=True)
+    def prepare_directories(self):
+        if not self.dry_run:
+            self.recon_dir.mkdir(parents=True, exist_ok=True)
+            self.patterns_dir.mkdir(parents=True, exist_ok=True)
 
-    def get_in_scope_domains(self) -> List[str]:
-        """Extrae la lista de dominios base autorizados."""
-        scope = self.scope_data.get("scope", {})
-        in_scope = scope.get("in_scope", {})
-        domains = in_scope.get("domains", [])
-        return [d.strip() for d in domains if d.strip()]
+    def get_in_scope_domains(self):
+        return [value.strip() for value in self.scope_data['scope'].get('in_scope', {}).get('domains', [])]
 
-    def filter_domains_by_scope(self, raw_targets: List[str]) -> Tuple[List[str], List[Dict[str, str]]]:
-        """Filtra una lista de objetivos contra las reglas de scope."""
-        in_scope_targets: List[str] = []
-        discarded: List[Dict[str, str]] = []
-
-        seen: Set[str] = set()
+    def filter_domains_by_scope(self, raw_targets):
+        valid, discarded, seen = [], [], set()
         for raw in raw_targets:
-            target = raw.strip()
-            if not target:
+            if not raw.strip():
                 continue
-            norm = normalize_target(target)
-            if norm in seen:
+            target = normalize_target(raw)
+            key = target or raw.strip()
+            if key in seen:
                 continue
-            seen.add(norm)
-
-            verdict, reason = check_scope(norm, self.scope_data)
-            if verdict == "IN_SCOPE":
-                in_scope_targets.append(norm)
+            seen.add(key)
+            verdict, reason = check_scope(raw, self.scope_data)
+            if verdict == 'IN_SCOPE':
+                valid.append(target)
             else:
-                discarded.append({
-                    "target": norm,
-                    "verdict": verdict,
-                    "reason": reason,
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                })
+                discarded.append({'target': key, 'verdict': verdict, 'reason': reason,
+                                  'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat()})
+        return sorted(valid), discarded
 
-        return sorted(in_scope_targets), discarded
+    def _read_lines(self, name):
+        path = self.recon_dir / name
+        return [line.strip() for line in path.read_text(encoding='utf-8').splitlines() if line.strip()] if path.is_file() else []
 
-    def run_subdomain_enumeration(self) -> Dict[str, Any]:
-        """Etapa 1: Enumeración Pasiva/DNS con filtrado estricto de scope."""
-        base_domains = self.get_in_scope_domains()
-        if not base_domains:
-            return {"error": "No hay dominios autorizados en in_scope.domains de target.yaml/scope.txt"}
-
-        discovered_raw: Set[str] = set()
-
-        # Si ya existe un subdomains.txt existente, preservarlo
-        sub_file = self.recon_dir / "subdomains.txt"
-        if sub_file.is_file():
-            for line in sub_file.read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    discovered_raw.add(line.strip())
-
-        # Si estamos en dry-run, simular
-        if self.dry_run:
-            for d in base_domains:
-                clean_dom = d.lstrip("*.")
-                discovered_raw.add(clean_dom)
-                discovered_raw.add(f"api.{clean_dom}")
-                discovered_raw.add(f"admin.{clean_dom}")
-        else:
-            for domain in base_domains:
-                clean_dom = domain.lstrip("*.")
-                discovered_raw.add(clean_dom)
-
-                # Subfinder
-                if self.tools.get("subfinder"):
-                    try:
-                        res = subprocess.run(
-                            [self.tools["subfinder"], "-d", clean_dom, "-silent"],
-                            capture_output=True,
-                            text=True,
-                            timeout=180,
-                            check=False,
-                        )
-                        for line in res.stdout.splitlines():
-                            if line.strip():
-                                discovered_raw.add(line.strip())
-                    except Exception:
-                        pass
-
-                # Assetfinder
-                if self.tools.get("assetfinder"):
-                    try:
-                        res = subprocess.run(
-                            [self.tools["assetfinder"], "--subs-only", clean_dom],
-                            capture_output=True,
-                            text=True,
-                            timeout=120,
-                            check=False,
-                        )
-                        for line in res.stdout.splitlines():
-                            if line.strip():
-                                discovered_raw.add(line.strip())
-                    except Exception:
-                        pass
-
-                # Findomain
-                if self.tools.get("findomain"):
-                    try:
-                        res = subprocess.run(
-                            [self.tools["findomain"], "-t", clean_dom, "-q"],
-                            capture_output=True,
-                            text=True,
-                            timeout=120,
-                            check=False,
-                        )
-                        for line in res.stdout.splitlines():
-                            if line.strip():
-                                discovered_raw.add(line.strip())
-                    except Exception:
-                        pass
-
-        # Filtrar objetivos descubiertos con Scope Guard
-        valid_subs, discarded_subs = self.filter_domains_by_scope(list(discovered_raw))
-
+    def _write_lines(self, name, lines):
         if not self.dry_run:
-            # Escribir subdomains.txt
-            sub_file.write_text("\n".join(valid_subs) + ("\n" if valid_subs else ""), encoding="utf-8")
+            path = self.recon_dir / name
+            temporary = path.with_name(path.name + '.tmp')
+            temporary.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
+            temporary.replace(path)
 
-            # Escribir descartados
-            if discarded_subs:
-                discarded_file = self.recon_dir / "out_of_scope_discarded.txt"
-                lines = [f"[{d['timestamp']}] {d['target']} -> {d['verdict']}: {d['reason']}" for d in discarded_subs]
-                discarded_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    def _tool(self, name, arguments, timeout=180):
+        try:
+            result = subprocess.run([self.tools[name], *arguments], capture_output=True, text=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired:
+            raise StageError(f'{name}: tiempo agotado; los resultados anteriores se conservan.') from None
+        except OSError:
+            raise StageError(f'{name}: no se pudo ejecutar; los resultados anteriores se conservan.') from None
+        if result.returncode != 0:
+            raise StageError(f'{name}: código de salida {result.returncode}; no se usan resultados parciales.')
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
-        return {
-            "stage": "subdomains",
-            "total_raw": len(discovered_raw),
-            "in_scope_count": len(valid_subs),
-            "discarded_count": len(discarded_subs),
-            "subdomains": valid_subs,
-            "discarded": discarded_subs,
-        }
-
-    def run_live_probing(self) -> Dict[str, Any]:
-        """Etapa 2: Sondeo Activo de Servicios Web (HTTP/HTTPS)."""
-        sub_file = self.recon_dir / "subdomains.txt"
-        live_hosts: List[str] = []
-
-        if not sub_file.is_file():
-            return {"error": "No existe recon/subdomains.txt. Ejecute primero la etapa 'subdomains'"}
-
-        subs = [l.strip() for l in sub_file.read_text(encoding="utf-8").splitlines() if l.strip()]
-        if not subs:
-            return {"stage": "probe", "live_hosts_count": 0, "live_hosts": []}
-
+    def run_subdomain_enumeration(self):
+        domains = self.get_in_scope_domains()
+        seeds = self.scope_data['scope'].get('in_scope', {}).get('ips', [])
+        discovered = set(self._read_lines('subdomains.txt')) | set(seeds)
+        bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in domains})
         if self.dry_run:
-            live_hosts = [f"https://{s}" for s in subs]
-        else:
-            # Preferir httpx
-            if self.tools.get("httpx"):
-                try:
-                    res = subprocess.run(
-                        [self.tools["httpx"], "-l", str(sub_file), "-silent", "-no-color"],
-                        capture_output=True,
-                        text=True,
-                        timeout=300,
-                        check=False,
-                    )
-                    for line in res.stdout.splitlines():
-                        if line.strip() and line.startswith("http"):
-                            live_hosts.append(line.strip())
-                except Exception:
-                    pass
-            # Fallback a httprobe
-            elif self.tools.get("httprobe"):
-                try:
-                    proc = subprocess.Popen(
-                        [self.tools["httprobe"], "-c", "40"],
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                    )
-                    stdout, _ = proc.communicate(input="\n".join(subs))
-                    for line in stdout.splitlines():
-                        if line.strip() and line.startswith("http"):
-                            live_hosts.append(line.strip())
-                except Exception:
-                    pass
-            else:
-                # Si ninguna tool está en PATH, fallback heurístico
-                live_hosts = [f"https://{s}" for s in subs]
+            return {'stage': 'subdomains', 'status': 'simulated', 'planned_passive_queries': bases}
+        available = [name for name in ('subfinder', 'assetfinder', 'findomain') if self.tools.get(name)]
+        if bases and not available:
+            raise StageError('No hay enumeradores pasivos disponibles; no se inventaron subdominios.')
+        if not bases and not discovered:
+            raise StageError('No hay dominios ni IPs explícitas. Para un CIDR, prepara una lista de IPs en recon/subdomains.txt.')
+        for base in bases:
+            if check_scope(base, self.scope_data)[0] == 'IN_SCOPE':
+                discovered.add(base)
+            for name in available:
+                arguments = {'subfinder': ['-d', base, '-silent', '-rl', str(max(1, int(self.limits['max_requests_per_second'])))],
+                             'assetfinder': ['--subs-only', base], 'findomain': ['-t', base, '-q']}[name]
+                discovered.update(self._tool(name, arguments))
+        valid, discarded = self.filter_domains_by_scope(sorted(discovered))
+        self._write_lines('subdomains.txt', valid)
+        self._write_lines('out_of_scope_discarded.txt', [f"[{row['timestamp']}] {row['target']} -> {row['verdict']}: {row['reason']}" for row in discarded])
+        return {'stage': 'subdomains', 'status': 'completed', 'total_raw': len(discovered), 'in_scope_count': len(valid),
+                'discarded_count': len(discarded), 'subdomains': valid, 'discarded': discarded}
 
-        # Validar que los hosts de live_hosts sigan dentro de scope
-        valid_live: List[str] = []
-        for host in sorted(set(live_hosts)):
-            verdict, _ = check_scope(host, self.scope_data)
-            if verdict == "IN_SCOPE":
-                valid_live.append(host)
-
-        if not self.dry_run:
-            live_file = self.recon_dir / "live_hosts.txt"
-            live_file.write_text("\n".join(valid_live) + ("\n" if valid_live else ""), encoding="utf-8")
-
-        return {
-            "stage": "probe",
-            "live_hosts_count": len(valid_live),
-            "live_hosts": valid_live,
-        }
-
-    def run_url_harvesting(self) -> Dict[str, Any]:
-        """Etapa 3: Cosecha de URLs Históricas & Endpoints con Filtrado de Scope."""
-        base_domains = self.get_in_scope_domains()
-        raw_urls: Set[str] = set()
-
+    def run_live_probing(self):
+        if not (self.recon_dir / 'subdomains.txt').is_file():
+            if self.dry_run:
+                return {'stage': 'probe', 'status': 'simulated', 'planned_targets': []}
+            raise StageError('No existe recon/subdomains.txt. Ejecuta primero subdomains o prepara una lista autorizada.')
+        hosts, discarded = self.filter_domains_by_scope(self._read_lines('subdomains.txt'))
+        if len(hosts) > self.limits['max_probe_targets']:
+            raise StageError('Demasiados objetivos para max_probe_targets; no se inició el sondeo.')
         if self.dry_run:
-            for d in base_domains:
-                clean_dom = d.lstrip("*.")
-                raw_urls.add(f"https://{clean_dom}/api/v1/users?id=1")
-                raw_urls.add(f"https://{clean_dom}/static/js/app.bundle.js")
-                raw_urls.add(f"https://{clean_dom}/redirect?url=https://other.com")
-        else:
-            for domain in base_domains:
-                clean_dom = domain.lstrip("*.")
-                # gau
-                if self.tools.get("gau"):
-                    try:
-                        res = subprocess.run(
-                            [self.tools["gau"], "--subs", clean_dom],
-                            capture_output=True,
-                            text=True,
-                            timeout=180,
-                            check=False,
-                        )
-                        for line in res.stdout.splitlines():
-                            if line.strip() and line.startswith("http"):
-                                raw_urls.add(line.strip())
-                    except Exception:
-                        pass
+            return {'stage': 'probe', 'status': 'simulated', 'planned_targets': hosts, 'discarded': discarded}
+        observations = ProbeClient(self.scope_data, self.limits).probe(hosts) if hosts else []
+        live = sorted({row['url'] for row in observations if row['status'] == 'response'})
+        self._write_lines('live_hosts.txt', live)
+        self._write_lines('probe_observations.jsonl', [json.dumps(row, ensure_ascii=False) for row in observations])
+        self._write_lines('probe_discarded.txt', [f"{row['target']} -> {row['verdict']}: {row['reason']}" for row in discarded])
+        return {'stage': 'probe', 'status': 'completed', 'live_hosts_count': len(live), 'live_hosts': live,
+                'discarded_count': len(discarded), 'blocked_dns_count': sum(row['status'] == 'blocked' for row in observations),
+                'operational_limits': self.limits}
 
-                # waybackurls
-                if self.tools.get("waybackurls"):
-                    try:
-                        res = subprocess.run(
-                            [self.tools["waybackurls"], clean_dom],
-                            capture_output=True,
-                            text=True,
-                            timeout=180,
-                            check=False,
-                        )
-                        for line in res.stdout.splitlines():
-                            if line.strip() and line.startswith("http"):
-                                raw_urls.add(line.strip())
-                    except Exception:
-                        pass
-
-        # Filtrar URLs para asegurar que pertenezcan a hosts autorizados
-        valid_urls: List[str] = []
-        js_files: List[str] = []
-
-        for url in sorted(raw_urls):
-            verdict, _ = check_scope(url, self.scope_data)
-            if verdict == "IN_SCOPE":
-                valid_urls.append(url)
-                if re.search(r"\.js(\?|$)", url, re.IGNORECASE):
-                    js_files.append(url)
-
-        if not self.dry_run:
-            urls_file = self.recon_dir / "urls_all.txt"
-            urls_file.write_text("\n".join(valid_urls) + ("\n" if valid_urls else ""), encoding="utf-8")
-
-            js_file = self.recon_dir / "js_files.txt"
-            js_file.write_text("\n".join(js_files) + ("\n" if js_files else ""), encoding="utf-8")
-
-        return {
-            "stage": "urls",
-            "urls_count": len(valid_urls),
-            "js_files_count": len(js_files),
-        }
-
-    def run_pattern_classification(self) -> Dict[str, Any]:
-        """Etapa 4: Clasificación Heurística de Parámetros con gf."""
-        urls_file = self.recon_dir / "urls_all.txt"
-        pattern_results: Dict[str, int] = {}
-
-        if not urls_file.is_file():
-            return {"error": "No existe recon/urls_all.txt para clasificar patrones"}
-
-        urls_text = urls_file.read_text(encoding="utf-8")
-        all_urls = [l.strip() for l in urls_text.splitlines() if l.strip()]
-
+    def run_url_harvesting(self):
+        bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in self.get_in_scope_domains()})
         if self.dry_run:
-            for pat in DEFAULT_GF_PATTERNS:
-                pattern_results[pat] = 1 if all_urls else 0
-        elif self.tools.get("gf") and all_urls:
-            for pat in DEFAULT_GF_PATTERNS:
-                try:
-                    res = subprocess.run(
-                        [self.tools["gf"], pat, str(urls_file)],
-                        capture_output=True,
-                        text=True,
-                        timeout=60,
-                        check=False,
-                    )
-                    matches = [l.strip() for l in res.stdout.splitlines() if l.strip()]
-                    if matches:
-                        out_pat = self.patterns_dir / f"{pat}.txt"
-                        out_pat.write_text("\n".join(matches) + "\n", encoding="utf-8")
-                        pattern_results[pat] = len(matches)
-                    else:
-                        out_pat = self.patterns_dir / f"{pat}.txt"
-                        if out_pat.is_file():
-                            out_pat.unlink()
-                        pattern_results[pat] = 0
-                except Exception:
-                    pattern_results[pat] = 0
-        else:
-            # Fallback regex ligero si gf no está instalado
-            patterns_regex = {
-                "xss": re.compile(r"[?&](?:q|s|search|query|msg|message|name|comment|text)=", re.I),
-                "sqli": re.compile(r"[?&](?:id|select|user_id|item|category|order|sort)=", re.I),
-                "ssrf": re.compile(r"[?&](?:url|uri|target|dest|domain|host|endpoint|src)=", re.I),
-                "redirect": re.compile(r"[?&](?:return|redirect|next|url|target|go)=", re.I),
-                "idor": re.compile(r"[?&](?:account|user|profile|doc|file|invoice|order_id)=", re.I),
-            }
-            for pat, rx in patterns_regex.items():
-                matches = [u for u in all_urls if rx.search(u)]
-                pattern_results[pat] = len(matches)
-                if matches and not self.dry_run:
-                    out_pat = self.patterns_dir / f"{pat}.txt"
-                    out_pat.write_text("\n".join(matches) + "\n", encoding="utf-8")
+            return {'stage': 'urls', 'status': 'simulated', 'planned_passive_queries': bases}
+        available = [name for name in ('gau', 'waybackurls') if self.tools.get(name)]
+        if bases and not available:
+            raise StageError('No hay herramientas de URLs históricas; no se inventaron URLs.')
+        raw = set()
+        for base in bases:
+            for name in available:
+                arguments = ['--subs', '--threads', '1', '--timeout', '15', '--retries', '0', base] if name == 'gau' else [base]
+                raw.update(self._tool(name, arguments))
+        urls = sorted(url for url in raw if check_scope(url, self.scope_data)[0] == 'IN_SCOPE')
+        javascript = [url for url in urls if re.search(r'\.js(\?|$)', url, re.I)]
+        self._write_lines('urls_all.txt', urls)
+        self._write_lines('js_files.txt', javascript)
+        return {'stage': 'urls', 'status': 'completed', 'urls_count': len(urls), 'js_files_count': len(javascript)}
 
-        return {
-            "stage": "patterns",
-            "patterns": pattern_results,
-        }
+    def run_pattern_classification(self):
+        if not (self.recon_dir / 'urls_all.txt').is_file():
+            if self.dry_run:
+                return {'stage': 'patterns', 'status': 'simulated'}
+            raise StageError('No existe recon/urls_all.txt para clasificar patrones.')
+        urls = [url for url in self._read_lines('urls_all.txt') if check_scope(url, self.scope_data)[0] == 'IN_SCOPE']
+        if self.dry_run:
+            return {'stage': 'patterns', 'status': 'simulated', 'planned_urls_count': len(urls)}
+        if not self.tools.get('gf') and urls:
+            raise StageError('gf no está disponible; no se generaron resultados de patrones.')
+        results = {}
+        temporary = self.recon_dir / '.pattern-input.txt'
+        try:
+            temporary.write_text(''.join(url + '\n' for url in urls), encoding='utf-8')
+            outputs = {}
+            for pattern in DEFAULT_GF_PATTERNS:
+                matches = self._tool('gf', [pattern, str(temporary)], 60) if urls else []
+                outputs[pattern] = sorted({value for value in matches if check_scope(value, self.scope_data)[0] == 'IN_SCOPE'})
+            for pattern, matches in outputs.items():
+                self._write_lines('patterns/' + pattern + '.txt', matches)
+                results[pattern] = len(matches)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return {'stage': 'patterns', 'status': 'completed', 'patterns': results, 'classification_only': True}
 
-    def generate_summary(self, stage_results: Dict[str, Any]) -> Dict[str, Any]:
-        """Genera y guarda recon/summary.json."""
-        summary: Dict[str, Any] = {
-            "engagement": self.engagement_dir.name,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "in_scope_domains": self.get_in_scope_domains(),
-            "stages_executed": list(stage_results.keys()),
-            "subdomains_count": 0,
-            "subdomains_discarded_out_of_scope": 0,
-            "live_hosts_count": 0,
-            "urls_count": 0,
-            "js_files_count": 0,
-            "gf_patterns": {},
-            "tools_available": {k: bool(v) for k, v in self.tools.items()},
-        }
-
-        # Subdomains
-        sub_file = self.recon_dir / "subdomains.txt"
-        if sub_file.is_file():
-            summary["subdomains_count"] = len([l for l in sub_file.read_text(encoding="utf-8").splitlines() if l.strip()])
-
-        discarded_file = self.recon_dir / "out_of_scope_discarded.txt"
-        if discarded_file.is_file():
-            summary["subdomains_discarded_out_of_scope"] = len(
-                [l for l in discarded_file.read_text(encoding="utf-8").splitlines() if l.strip()]
-            )
-
-        # Live hosts
-        live_file = self.recon_dir / "live_hosts.txt"
-        if live_file.is_file():
-            summary["live_hosts_count"] = len([l for l in live_file.read_text(encoding="utf-8").splitlines() if l.strip()])
-
-        # URLs y JS
-        urls_file = self.recon_dir / "urls_all.txt"
-        if urls_file.is_file():
-            summary["urls_count"] = len([l for l in urls_file.read_text(encoding="utf-8").splitlines() if l.strip()])
-
-        js_file = self.recon_dir / "js_files.txt"
-        if js_file.is_file():
-            summary["js_files_count"] = len([l for l in js_file.read_text(encoding="utf-8").splitlines() if l.strip()])
-
-        # Patrones
-        if self.patterns_dir.is_dir():
-            for p in self.patterns_dir.glob("*.txt"):
-                cnt = len([l for l in p.read_text(encoding="utf-8").splitlines() if l.strip()])
-                summary["gf_patterns"][p.stem] = cnt
-
+    def generate_summary(self, results):
+        failed = any(result.get('status') == 'failed' for result in results.values())
+        summary = {'engagement': self.engagement_dir.name,
+                   'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                   'in_scope_domains': self.get_in_scope_domains(), 'stages_executed': list(results),
+                   'status': 'failed' if failed else 'simulated' if self.dry_run else 'completed',
+                   'dry_run': self.dry_run, 'operational_limits': self.limits,
+                   'stage_results': results, 'tools_available': {name: bool(path) for name, path in self.tools.items()},
+                   'metrics_source': 'none' if self.dry_run else 'previous_artifacts' if failed else 'artifacts',
+                   'subdomains_count': 0, 'subdomains_discarded_out_of_scope': 0,
+                   'live_hosts_count': 0, 'urls_count': 0, 'js_files_count': 0, 'gf_patterns': {}}
         if not self.dry_run:
-            summary_path = self.recon_dir / "summary.json"
-            summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-
+            for key, filename in (('subdomains_count', 'subdomains.txt'), ('subdomains_discarded_out_of_scope', 'out_of_scope_discarded.txt'),
+                                  ('live_hosts_count', 'live_hosts.txt'), ('urls_count', 'urls_all.txt'), ('js_files_count', 'js_files.txt')):
+                summary[key] = len(self._read_lines(filename))
+            if self.patterns_dir.is_dir():
+                for path in self.patterns_dir.glob('*.txt'):
+                    summary['gf_patterns'][path.stem] = len([line for line in path.read_text().splitlines() if line.strip()])
+            self._write_lines('summary.json', [json.dumps(summary, indent=2, ensure_ascii=False)])
         return summary
 
-    def run_all(self, stage: str = "all") -> Dict[str, Any]:
-        """Ejecuta el pipeline completo o una etapa específica."""
+    def run_all(self, stage='all'):
+        if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
+            raise ScopeError('Etapa de reconocimiento no válida.')
         self.prepare_directories()
-        results: Dict[str, Any] = {}
-
-        if stage in ("all", "subdomains"):
-            results["subdomains"] = self.run_subdomain_enumeration()
-
-        if stage in ("all", "probe"):
-            results["probe"] = self.run_live_probing()
-
-        if stage in ("all", "urls"):
-            results["urls"] = self.run_url_harvesting()
-
-        if stage in ("all", "patterns"):
-            results["patterns"] = self.run_pattern_classification()
-
+        results = {}
+        for name, action in (('subdomains', self.run_subdomain_enumeration), ('probe', self.run_live_probing),
+                             ('urls', self.run_url_harvesting), ('patterns', self.run_pattern_classification)):
+            if stage not in ('all', name):
+                continue
+            try:
+                results[name] = action()
+            except (StageError, ScopeError, OSError) as error:
+                results[name] = {'stage': name, 'status': 'failed', 'error': str(error)}
+                break
         summary = self.generate_summary(results)
-
-        # Auditoría
-        mark_msg = (
-            f"RECON PIPELINE: {summary['subdomains_count']} subdominios autorizados "
-            f"({summary['subdomains_discarded_out_of_scope']} descartados por scope), "
-            f"{summary['live_hosts_count']} servicios web vivos, {summary['urls_count']} URLs analizadas"
-        )
-        record_audit_mark(self.engagement_dir, mark_msg)
-
-        return {
-            "summary": summary,
-            "stage_results": results,
-            "dry_run": self.dry_run,
-        }
+        if not self.dry_run:
+            record_audit_mark(self.engagement_dir, f"RECON PIPELINE: {summary['status']}; etapas: {', '.join(results)}")
+        return {'summary': summary, 'stage_results': results, 'dry_run': self.dry_run}
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -769,16 +320,20 @@ def cmd_run(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error: No se pudo localizar el directorio del engagement: {args.target or 'actual'}\n")
         return 1
 
-    pipeline = ReconPipeline(eng_dir, dry_run=args.dry_run)
-    res = pipeline.run_all(stage=args.stage)
+    try:
+        pipeline = ReconPipeline(eng_dir, dry_run=args.dry_run)
+        res = pipeline.run_all(stage=args.stage)
+    except (ScopeError, OSError) as error:
+        sys.stderr.write(f"Error: {error}\n")
+        return 1
 
     if args.json:
         print(json.dumps(res, indent=2, ensure_ascii=False))
-        return 0
+        return 1 if res["summary"]["status"] == "failed" else 0
 
     summary = res["summary"]
     prefix = "[DRY-RUN] " if args.dry_run else ""
-    print(f"\n{prefix}SECLAB Recon Pipeline completado para: {eng_dir.name}")
+    print(f"\n{prefix}SECLAB Recon Pipeline {summary['status']} para: {eng_dir.name}")
     print(f"  Directorio: {pipeline.recon_dir}")
     print(f"  Dominios base autorizados: {', '.join(summary['in_scope_domains']) or 'ninguno'}")
     print(f"  Subdominios autorizados:   {summary['subdomains_count']}")
@@ -793,7 +348,10 @@ def cmd_run(args: argparse.Namespace) -> int:
             print(f"  Patrones gf detectados:    {', '.join(pats)}")
 
     print(f"  Resumen estructurado:      {pipeline.recon_dir / 'summary.json'}\n")
-    return 0
+    for result in res["stage_results"].values():
+        if result.get("error"):
+            print("  Error: " + result["error"])
+    return 1 if summary["status"] == "failed" else 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -803,15 +361,16 @@ def cmd_status(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error: No se pudo localizar el engagement: {args.target or 'actual'}\n")
         return 1
 
-    pipeline = ReconPipeline(eng_dir)
+    pipeline = ReconPipeline(eng_dir, dry_run=True)
     summary_path = pipeline.recon_dir / "summary.json"
     if not summary_path.is_file():
         summary = pipeline.generate_summary({})
+        summary['status'] = 'not_run'
     else:
         try:
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
         except Exception:
-            summary = pipeline.generate_summary({})
+            raise ScopeError('El resumen existente es inválido; no se ha reemplazado.') from None
 
     if args.json:
         print(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -844,7 +403,7 @@ def cmd_filter(args: argparse.Namespace) -> int:
     if target_cfg.is_dir():
         scope_data = load_scope_rules(target_cfg)
     elif target_cfg.is_file():
-        scope_data = load_scope_rules(target_cfg.parent)
+        scope_data = load_scope_txt(target_cfg) if target_cfg.suffix == '.txt' else load_target_yaml(target_cfg)
     else:
         sys.stderr.write(f"Error: No se pudo resolver la configuracion de alcance: {args.target_config}\n")
         return 1
@@ -915,7 +474,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (ScopeError, OSError) as error:
+        sys.stderr.write(f'Error: {error}\n')
+        return 1
 
 
 if __name__ == "__main__":

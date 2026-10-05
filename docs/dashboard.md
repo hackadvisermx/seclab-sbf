@@ -131,12 +131,35 @@ Disponible en la pestaña **📡 Reconocimiento** de cada auditoría:
 * **Etapas Seleccionables**:
   - `all`: Pipeline completo (Subdominios -> Sondeo Web -> URLs -> Patrones GF).
   - `subdomains`: Enumeración de subdominios (`subfinder`, `assetfinder`, `findomain`).
-  - `probe`: Sondeo de puertos y servicios HTTP/HTTPS (`httpx`, `httprobe`).
+  - `probe`: Sondeo controlado de HTTP/HTTPS en 80/443, con `GET /`, IP fijada y TLS verificado. Registra redirecciones sin seguirlas.
   - `urls`: Cosecha pasiva de URLs y endpoints JavaScript (`gau`).
   - `patterns`: Clasificación de parámetros y patrones de riesgo (`gf xss`, `sqli`, `ssrf`, `idor`).
-* **Modo Dry-Run**: Simulación completa sin tráfico real para validar el alcance.
+* **Modo Dry-Run**: Previsualiza el alcance y las etapas sin ejecutar herramientas ni emitir tráfico. El motor no modifica artefactos, `summary.json` ni `terminal.log`; el dashboard conserva únicamente la bitácora del lanzamiento. El estado es **SIMULADO** y las métricas existentes no se presentan como resultados nuevos.
 * **Consola en Vivo**: Streaming en tiempo real de `recon/recon.log`.
 * **Auditoría de Descartados**: Registro de cada objetivo bloqueado con su causa de exclusión.
+
+El validador `pt-scope` y el pipeline usan las mismas reglas en `seclab_scope.py`. Un dominio exacto autoriza solo ese nombre; `*.example.com` autoriza sus descendientes, pero no `example.com`. Para ambos, incluye las dos entradas. Las exclusiones tienen prioridad; los endpoints comparan esquema, host, puerto y límite de segmento de ruta. Un YAML inválido, duplicado o con claves de alcance desconocidas detiene el flujo. El sondeo de raíz requiere autorización del dominio o IP: una lista de endpoints aislados no autoriza explorar el resto del host.
+
+Antes de conectar, se comprueba el alcance y se resuelve el host una vez. Todas las direcciones DNS deben ser permitidas; se fija una de ellas para los intentos HTTP y HTTPS manteniendo Host y SNI. Se bloquean loopback, metadata cloud, Tailscale/CGNAT, interfaces y gateway del laboratorio. Las direcciones privadas requieren además una IP o CIDR explícito en alcance. Un certificado no confiable queda registrado como `tls_untrusted`, sin inventar un servicio HTTPS activo. El flujo no sustituye pruebas autenticadas de una auditoría.
+
+El bloqueo incluye los endpoints de metadata IPv6 documentados por [AWS (`fd00:ec2::254`)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html) y [Google Cloud (`fd20:ce::254`)](https://docs.cloud.google.com/compute/docs/metadata/overview), incluso si se declara un CIDR amplio.
+
+Los límites de **sondeo HTTP activo** se leen de `operational_limits` en `target.yaml`:
+
+| Campo | Por defecto | Rango permitido |
+| --- | --- | --- |
+| `max_requests_per_second` | 1 | 0.1–100 intentos/s, compartidos entre tareas |
+| `max_parallel_threads` | 1 | 1–32, entero |
+| `max_probe_targets` | 1000 | 1–10000, entero; se verifica antes del sondeo |
+| `probe_timeout_seconds` | 8 | 1–30 segundos por intento HTTP, incluyendo conexión, TLS y cabeceras |
+
+La resolución DNS usa el resolver del sistema. Las consultas **pasivas a proveedores** se ejecutan por herramienta de forma secuencial, con timeout de 180 segundos: subfinder recibe su límite de tasa y gau usa una tarea sin reintentos. No se afirma un límite global sobre solicitudes internas de esos proveedores. No se ejecutan pruebas DoS, fuerza bruta ni explotación en estas etapas.
+
+Las plantillas y los proyectos nuevos usan estos valores conservadores. Los proyectos existentes conservan sus límites configurados.
+
+Los fallos de herramientas (ausencia, timeout o salida distinta de cero) detienen las etapas siguientes, devuelven código CLI 1 y marcan el trabajo **FALLIDO**. No se usan stdout parcial ni respuestas ficticias. Los archivos anteriores de la etapa fallida se conservan y el resumen avisa `metrics_source: previous_artifacts`; una ejecución puede haber actualizado etapas anteriores. `recon/probe_observations.jsonl` conserva respuestas y fallos del sondeo; `probe_discarded.txt` conserva los candidatos rechazados por alcance. Consultar `pt-recon status` no escribe archivos.
+
+Las regresiones se ejecutan con `make python-units-check` (incluye `scripts/verify/test_recon_safety.py`); `make dashboard-tests` prueba el runner instalado dentro de la imagen, sin red.
 
 ### 4.4. Modo CTF, Banderas y Botín (Loot)
 

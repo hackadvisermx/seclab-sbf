@@ -199,7 +199,7 @@
               class="px-2 py-0.5 rounded text-xs font-mono font-bold"
               :class="reconIsRunning ? 'bg-cyan-950 text-cyan-400 border border-cyan-500/50 animate-pulse' : 'bg-slate-800 text-slate-400'"
             >
-              {{ reconIsRunning ? '● EJECUTANDO' : 'DETENIDO / LISTO' }}
+              {{ reconIsRunning ? '● EJECUTANDO' : reconStatus.job?.status === 'failed' ? 'FALLIDO' : reconStatus.job?.status === 'simulated' ? 'SIMULADO' : 'DETENIDO / LISTO' }}
             </span>
           </div>
 
@@ -214,7 +214,7 @@
               >
                 <option value="all">Completo (Todas las etapas)</option>
                 <option value="subdomains">1. Subdominios (subfinder, assetfinder, findomain)</option>
-                <option value="probe">2. Sondeo Web (httpx, httprobe)</option>
+                <option value="probe">2. Sondeo Web (HTTP/HTTPS controlado)</option>
                 <option value="urls">3. Cosecha de URLs y JS (gau)</option>
                 <option value="patterns">4. Patrones de Riesgo (gf)</option>
               </select>
@@ -262,7 +262,15 @@
             <span>🛡️ Scope Guard Activo</span>
           </h3>
           <p class="text-[11px] text-slate-400 font-mono">
-            Todo subdominio o URL debe coincidir con las reglas autorizadas de target.yaml antes de emitir tráfico.
+            El sondeo valida alcance y DNS antes de conectar. No sigue redirecciones. Un dominio exacto no incluye subdominios; *.example.com no incluye example.com.
+          </p>
+          <p class="text-[11px] text-slate-400 font-mono">
+            HTTP activo: límites de target.yaml; por defecto 1 intento/s y 1 tarea. Las consultas pasivas a proveedores usan los controles de cada herramienta.
+          </p>
+          <p v-if="reconStatus.summary?.operational_limits" class="text-[11px] text-cyan-300 font-mono">
+            Última ejecución: {{ reconStatus.summary.operational_limits.max_requests_per_second }} intentos/s;
+            {{ reconStatus.summary.operational_limits.max_parallel_threads }} tareas;
+            máximo {{ reconStatus.summary.operational_limits.max_probe_targets }} destinos.
           </p>
           <div class="space-y-1.5 text-xs font-mono bg-[#070b14] p-3 rounded border border-slate-800">
             <div class="text-slate-400 text-[10px] uppercase">Dominios Autorizados:</div>
@@ -276,6 +284,14 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div v-if="reconStatus.job?.status === 'failed' || reconStatus.summary?.status === 'failed'" class="p-3 rounded border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
+        El reconocimiento falló. Consulta la consola para ver la causa. Las métricas pueden incluir archivos de ejecuciones anteriores; no confirman una ejecución completa.
+        <p v-if="reconStatus.job?.error" class="mt-1">{{ reconStatus.job.error }}</p>
+      </div>
+      <div v-if="reconStatus.job?.status === 'simulated'" class="p-3 rounded border border-cyan-500/40 bg-cyan-950/30 text-cyan-300 text-xs font-mono" role="status">
+        Simulación finalizada sin consultas de red. No se generaron resultados de reconocimiento. Las métricas muestran los archivos que ya existían.
       </div>
 
       <!-- Métricas Clave de Reconocimiento -->

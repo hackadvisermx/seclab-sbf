@@ -1747,6 +1747,8 @@ class TestDashboardVpnOperations(unittest.TestCase):
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    recon_safety = load_module('recon_safety_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_recon_safety.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(recon_safety))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

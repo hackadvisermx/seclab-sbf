@@ -1,13 +1,13 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal
 from app.services.recon_service import recon_service
 
 router = APIRouter(prefix="/recon", tags=["Reconocimiento & Scope Guard"])
 
 
 class ReconRunRequest(BaseModel):
-    stage: str = "all"
+    stage: Literal['all', 'subdomains', 'probe', 'urls', 'patterns'] = "all"
     dry_run: bool = False
 
 

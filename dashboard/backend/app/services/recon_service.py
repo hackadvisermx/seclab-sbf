@@ -133,6 +133,8 @@ class ReconService:
         engagement_type: str = "engagement",
     ) -> Dict[str, Any]:
         """Inicia el pipeline de reconocimiento en un hilo en segundo plano."""
+        if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
+            return {"success": False, "error": "Etapa de reconocimiento no válida."}
         with self._lock:
             target_dir = self.get_target_dir(engagement_id, engagement_type)
             if not target_dir:
@@ -213,14 +215,15 @@ class ReconService:
                 )
 
                 if proc.stdout:
-                    for line in proc.stdout:
-                        log_f.write(line)
-                        log_f.flush()
+                    with proc.stdout:
+                        for line in proc.stdout:
+                            log_f.write(line)
+                            log_f.flush()
 
                 proc.wait()
 
             with self._lock:
-                status = "completed" if proc.returncode == 0 else "failed"
+                status = ("simulated" if dry_run else "completed") if proc.returncode == 0 else "failed"
                 self._jobs[job_key]["status"] = status
                 self._jobs[job_key]["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 if proc.returncode != 0:

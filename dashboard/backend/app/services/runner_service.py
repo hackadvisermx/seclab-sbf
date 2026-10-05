@@ -12,16 +12,20 @@ class RunnerService:
     def __init__(self):
         self.py_bin = sys.executable
 
+    def _script(self, source_name: str, installed_name: str) -> pathlib.Path:
+        source = SCRIPTS_DIR / source_name
+        return source if source.is_file() else SCRIPTS_DIR / installed_name
+
     def check_scope(self, target: str, config_or_dir_path: str) -> ScopeCheckResponse:
         """Invoca pt-scope-validator.py para verificar si un target está autorizado o prohibido."""
-        script = SCRIPTS_DIR / "pt-scope-validator.py"
+        script = self._script("pt-scope-validator.py", "pt-scope-validator")
         if not script.exists():
             return ScopeCheckResponse(
                 target=target,
                 normalized=target,
                 allowed=False,
                 status="INVALID_INPUT",
-                reason="Script pt-scope-validator.py no encontrado",
+                reason=f"Herramienta de alcance no encontrada: {script.name}",
             )
 
         cmd = [self.py_bin, str(script), "check", str(config_or_dir_path), target]
@@ -52,7 +56,7 @@ class RunnerService:
 
     def compile_report(self, engagement_dir: str, output_file: Optional[str] = None) -> Dict[str, Any]:
         """Compila el informe técnico y ejecutivo utilizando pt-report-compiler.py."""
-        script = SCRIPTS_DIR / "pt-report-compiler.py"
+        script = self._script("pt-report-compiler.py", "pt-report-compiler")
         target_dir = pathlib.Path(engagement_dir)
 
         if not output_file:
@@ -75,7 +79,7 @@ class RunnerService:
 
     def get_audit_checklist(self, engagement_dir: str) -> Dict[str, Any]:
         """Obtiene la cobertura de las 8 disciplinas metodológicas mediante pt-audit-checklist.py -j."""
-        script = SCRIPTS_DIR / "pt-audit-checklist.py"
+        script = self._script("pt-audit-checklist.py", "pt-audit-checklist")
         cmd = [self.py_bin, str(script), "-j", str(engagement_dir)]
         proc = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -91,7 +95,7 @@ class RunnerService:
 
     def get_audit_next_step(self, engagement_dir: str, prompt_mode: bool = False) -> Dict[str, Any]:
         """Obtiene el próximo paso recomendado por pt-audit-next.py."""
-        script = SCRIPTS_DIR / "pt-audit-next.py"
+        script = self._script("pt-audit-next.py", "pt-next")
         args = ["-j"]
         if prompt_mode:
             args.append("-p")
@@ -108,7 +112,7 @@ class RunnerService:
 
     def pack_engagement(self, engagement_dir: str, sanitize: bool = True, output_path: Optional[str] = None) -> Dict[str, Any]:
         """Empaqueta y calcula hashes SHA-256 usando pt-engagement-packer.py."""
-        script = SCRIPTS_DIR / "pt-engagement-packer.py"
+        script = self._script("pt-engagement-packer.py", "pt-engagement-packer")
         cmd = [self.py_bin, str(script), "pack", str(engagement_dir)]
         if sanitize:
             cmd.append("--sanitize")
@@ -124,7 +128,7 @@ class RunnerService:
 
     def get_agent_context(self, engagement_dir: str, skill_name: Optional[str] = None) -> str:
         """Sintetiza el contexto del proyecto y directivas de skill mediante pt-agent-context.py."""
-        script = SCRIPTS_DIR / "pt-agent-context.py"
+        script = self._script("pt-agent-context.py", "pt-agent-context")
         cmd = [self.py_bin, str(script), str(engagement_dir)]
         if skill_name:
             cmd.append(skill_name)

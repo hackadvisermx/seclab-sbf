@@ -3,13 +3,23 @@
 Directorio de trabajo de `tester`. Es una carpeta del proyecto montada en
 `/workspace`, y aqui se documentan los engagements y las soluciones de retos.
 
+## Guia de Inicio Rapido y Asistencia
+
+Si es tu primera vez en el laboratorio o necesitas saber que paso sigue:
+- **Asistente en Terminal**: Ejecuta `pt-guide` (alias: `guia` o `guide`) para ver el asistente interactivo con comandos listos.
+- **Guia Visual Web**: Abre `guia.html` en tu navegador o ejecuta `pt-guide --web` para iniciar el servidor de ayuda interactivo.
+- **Asesor Metodologico**: Ejecuta `pt-next` (alias: `next`) en cualquier momento para que el sistema analice tu avance y te recomiende la siguiente accion tactica.
+- **Ayuda General**: Ejecuta `pt-help` para ver la lista completa de utilidades y configuracion de seguridad.
+
 ## Como se organiza
 
 ```
 /workspace
+  guia.html      guia interactiva visual y mapa de ruta
   engagements/   un directorio por cada engagement o labor
   retos/         un directorio por cada reto o CTF
-  templates/     plantillas de alcance (scope.txt) e informes (report.md)
+  templates/     plantillas de alcance (target.yaml), hallazgos (evidence.md) e informes (report.md)
+  skills/        playbooks metodologicos de las 10 Agent Security Skills
 ```
 
 Cada trabajo empieza en su propio directorio dentro de `engagements/` o de

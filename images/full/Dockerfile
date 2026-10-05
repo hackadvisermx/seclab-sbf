@@ -742,7 +742,12 @@ COPY scripts/pt-engagement-packer.py /usr/local/bin/pt-engagement-packer
 COPY scripts/pt-recon-pipeline.py /usr/local/bin/pt-recon-pipeline
 COPY scripts/pt-audit-checklist.py /usr/local/bin/pt-audit-checklist
 COPY scripts/pt-audit-next.py /usr/local/bin/pt-next
-RUN chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck /usr/local/bin/pt-scope-validator /usr/local/bin/pt-report-compiler /usr/local/bin/pt-agent-context /usr/local/bin/pt-engagement-packer /usr/local/bin/pt-recon-pipeline /usr/local/bin/pt-audit-checklist /usr/local/bin/pt-next
+COPY scripts/pt-guide.py /usr/local/bin/pt-guide
+RUN install -d -m 0755 /usr/local/share/seclab/guide
+COPY docs/guia-laboratorio.html /usr/local/share/seclab/guide/index.html
+RUN ln -sf /usr/local/share/seclab/guide/index.html /usr/local/share/seclab/guide/guia.html \
+  && chmod -R 0555 /usr/local/share/seclab/guide \
+  && chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck /usr/local/bin/pt-scope-validator /usr/local/bin/pt-report-compiler /usr/local/bin/pt-agent-context /usr/local/bin/pt-engagement-packer /usr/local/bin/pt-recon-pipeline /usr/local/bin/pt-audit-checklist /usr/local/bin/pt-next /usr/local/bin/pt-guide
 
 # Workspace de tester. En local esto se monta como volumen con nombre, y un
 # volumen nuevo toma como dueño el directorio de la imagen: si /workspace

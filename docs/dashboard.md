@@ -77,7 +77,13 @@ make dashboard-tests
 npm --prefix dashboard/frontend test
 ```
 
-El backend y el frontend compilado viven dentro de `seclab-sbf:full`. `make compose-up` también inicia el dashboard y publica sus puertos solo en loopback. `make dashboard-build` recompila el frontend; después se necesita `make build-full` y recrear el contenedor para aplicar cambios. La etiqueta `seclab.build-inputs` incluye las fuentes y el frontend compilado del dashboard, excluyendo datos del Vault y cachés de Python.
+El backend y el frontend compilado viven dentro de `seclab-sbf:full`. `make compose-up` también inicia el dashboard y publica sus puertos solo en loopback. `make build-full` compila el frontend desde sus fuentes dentro de Docker, usando Node 24.21.0 fijado por digest y `npm ci` con el lockfile; ejecuta sus pruebas antes del build. No necesita Node en el host ni un `dist` local. `make dashboard-build` sigue disponible como previsualización local con el Node del host; su `dist` no entra en la imagen. Después de construir y escanear, recrea el contenedor con `make compose-up`.
+
+`scripts/build-inputs.py base|full` calcula la etiqueta `seclab.build-inputs` usando rutas, contenido y permisos de ejecución. La base solo depende de su Dockerfile y sus dos scripts; cambios de frontend, backend, helpers o plantillas no alteran su etiqueta ni invalidan las capas de herramientas por esa vía. El hash de full incluye fuentes, lockfiles, configuraciones de Vite/Tailwind/PostCSS, backend, Makefile, `.dockerignore` y `workspace-seed`; excluye `dist`, `node_modules`, datos de la bóveda y cachés. Los helpers y las plantillas se copian después de las instalaciones costosas. Un cambio de fuentes obliga a actualizar full; datos de ejecución y archivos generados no provocan reconstrucciones.
+
+Esto fija los insumos y evita reutilizar un frontend obsoleto; no garantiza una imagen bit a bit idéntica entre arquitecturas o cambios del resolvedor de paquetes upstream. La construcción y publicación continúan siendo locales, con Docker Hub como destino. Ver [Node 24.21.0](https://nodejs.org/en/blog/release/v24.21.0/) y el digest registrado en `supply-chain/tools.lock.yaml`.
+
+El builder corrige sus dependencias con PCRE2 `10.42-1+deb12u2`, npm `12.2.0` y dos dependencias vendorizadas de npm (`brace-expansion` `5.0.11`, `undici` `6.28.1`). `scripts/install-dashboard-npm.mjs` verifica los tarballs por SHA-512 antes de instalar; los pines están en el lockfile. El target `dashboard-toolchain` permite escanear este toolchain por separado. El runtime recibe únicamente los assets compilados, sin Node/npm ni `node_modules` del frontend. Las cinco entradas High de desarrollo del proyecto (cadena Tailwind/braces) continúan pendientes de una fase de actualización; no se agregaron excepciones para el builder.
 
 ---
 

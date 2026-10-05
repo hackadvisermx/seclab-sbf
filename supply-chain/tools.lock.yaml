@@ -60,6 +60,26 @@ apt:
     zsh: 5.9-8ubuntu3
     zstd: 1.5.7+dfsg-3
 base_images:
+  - name: dashboard-node-builder
+    reference: docker.io/library/node:24.21.0-bookworm-slim
+    digest: sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+    platforms:
+      linux/amd64: sha256:5cbc7caba8c2c0f0bca675d1b61b9f2857e1cf1853c6164ee9dd409501a936e7
+      linux/arm64: sha256:24b8bc17702002d2ed0c1da9ad66c3ee507cc279d0856726662ff2b6fc35c149
+    source: https://hub.docker.com/_/node
+    apt_overrides:
+      libpcre2-8-0: 10.42-1+deb12u2
+    npm:
+      version: 12.2.0
+      tarball: https://registry.npmjs.org/npm/-/npm-12.2.0.tgz
+      sha512: ZsJjKpTnlmSXOLLXiU1xDCzC4Wlok4IwZmh/aw2KUuXytU7q6qMv/cUT7MoeSf95Slwuw/lRXYefGzGCspHPNQ==
+      vendored_overrides:
+        brace-expansion:
+          version: 5.0.11
+          sha512: awigjhi6cLTh90bdw6+QJ9CtmJmyYhEIi70iCbc8Rozn04Fw9FeQIBjv/E22FFGuCGx1bLJyUfB64x/szUSXUg==
+        undici:
+          version: 6.28.1
+          sha512: zWpdTVD54H48CIybL0rWQ3ukpb9d23wM7eH5RtfdmeP70cWHNjtfo7P4vZX+5CoDcO53J4Pu5uXp7lNfjc6DRA==
   - name: ubuntu
     reference: docker.io/library/ubuntu:26.04
     digest: sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78

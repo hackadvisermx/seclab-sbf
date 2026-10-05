@@ -20,7 +20,7 @@
       <div class="flex items-center space-x-2 text-xs font-mono">
         <button
           @click="showSshModal = true"
-          class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center space-x-1.5"
+          class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center space-x-1.5"
         >
           <span>🔑</span>
           <span>Acceso SSH (:2222)</span>
@@ -28,7 +28,7 @@
 
         <button
           @click="reloadIframe"
-          class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center space-x-1.5"
+          class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center space-x-1.5"
           title="Recargar frame de terminal"
         >
           <span>🔄</span>
@@ -39,7 +39,7 @@
           :href="terminalUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition-all flex items-center space-x-1.5"
+          class="px-3 py-1.5 rounded-sm bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition-all flex items-center space-x-1.5"
         >
           <span>↗</span>
           <span>Nueva Pestaña</span>
@@ -55,7 +55,7 @@
         v-for="c in quickCommands"
         :key="c.cmd"
         @click="copyCommand(c.cmd)"
-        class="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 transition-all flex items-center space-x-1.5 group"
+        class="px-2.5 py-1 rounded-sm bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 transition-all flex items-center space-x-1.5 group"
         :title="c.desc"
       >
         <span class="text-cyan-400 group-hover:scale-110 transition-transform">{{ c.icon }}</span>
@@ -71,7 +71,7 @@
     <div class="bg-cyan-950/30 border border-cyan-800/40 rounded-lg p-3 text-xs font-mono text-slate-300 flex flex-col md:flex-row md:items-center justify-between gap-2">
       <div class="flex flex-wrap items-center gap-2">
         <span class="text-cyan-400 font-bold">🔐 Credenciales Web:</span>
-        <span>Usuario: <code class="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded">tester</code></span>
+        <span>Usuario: <code class="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded-sm">tester</code></span>
         <span class="text-slate-500">•</span>
         <span>Contraseña: la configurada para el laboratorio</span>
       </div>
@@ -86,7 +86,7 @@
       <iframe
         ref="terminalFrame"
         :src="terminalUrl"
-        class="w-full h-[720px] rounded border-0 bg-black"
+        class="w-full h-[720px] rounded-sm border-0 bg-black"
         allow="clipboard-read; clipboard-write"
       ></iframe>
     </div>
@@ -94,7 +94,7 @@
     <!-- Modal de Credenciales y Conexión SSH -->
     <div
       v-if="showSshModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
     >
       <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-xl w-full p-6 shadow-2xl space-y-5">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -107,7 +107,7 @@
         <div class="space-y-4 text-xs font-mono">
           <div class="space-y-1">
             <span class="text-slate-400 font-bold block">1. SSH al Contenedor del Laboratorio (tester):</span>
-            <div class="p-2.5 bg-[#050811] rounded border border-slate-800 flex items-center justify-between">
+            <div class="p-2.5 bg-[#050811] rounded-sm border border-slate-800 flex items-center justify-between">
               <code class="text-cyan-300">ssh -p 2222 -i .secrets/ssh/id_ed25519 tester@localhost</code>
               <button @click="copyCommand('ssh -p 2222 -i .secrets/ssh/id_ed25519 tester@localhost')" class="text-slate-400 hover:text-white text-[11px]">Copiar</button>
             </div>
@@ -116,7 +116,7 @@
 
           <div class="space-y-1">
             <span class="text-slate-400 font-bold block">2. Web Terminal (ttyd) Autenticación HTTP:</span>
-            <div class="p-2.5 bg-[#050811] rounded border border-slate-800 space-y-1">
+            <div class="p-2.5 bg-[#050811] rounded-sm border border-slate-800 space-y-1">
               <div>Usuario: <code class="text-emerald-400">tester</code></div>
               <div>Password: <span class="text-slate-400">(Configurado en su archivo <code>.secrets/runtime/lab.env</code>)</span></div>
             </div>
@@ -124,7 +124,7 @@
 
           <div class="space-y-1">
             <span class="text-slate-400 font-bold block">3. Inyección en Memoria con API Vault:</span>
-            <div class="p-2.5 bg-[#050811] rounded border border-slate-800 flex items-center justify-between">
+            <div class="p-2.5 bg-[#050811] rounded-sm border border-slate-800 flex items-center justify-between">
               <code class="text-cyan-300">pt-vault run shodan myinfo</code>
               <button @click="copyCommand('pt-vault run shodan myinfo')" class="text-slate-400 hover:text-white text-[11px]">Copiar</button>
             </div>
@@ -134,7 +134,7 @@
         <div class="flex justify-end pt-2 border-t border-slate-800">
           <button
             @click="showSshModal = false"
-            class="px-4 py-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-mono"
+            class="px-4 py-1.5 rounded-sm bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-mono"
           >
             Cerrar
           </button>

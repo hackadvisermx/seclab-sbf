@@ -5,7 +5,7 @@
       <div>
         <h1 class="text-2xl font-mono font-bold text-white flex items-center space-x-3">
           <span>📁 Auditorías & Retos Técnicos</span>
-          <span class="text-xs px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-mono">
+          <span class="text-xs px-2 py-0.5 rounded-sm bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-mono">
             /workspace
           </span>
         </h1>
@@ -16,7 +16,7 @@
 
       <button
         @click="showModal = true"
-        class="px-4 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-semibold text-sm transition-all shadow-md shadow-cyan-500/20 flex items-center justify-center space-x-2"
+        class="px-4 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-semibold text-sm transition-all shadow-md shadow-cyan-500/20 flex items-center justify-center space-x-2"
       >
         <span>+</span>
         <span>Inicializar Auditoría (pt-eng)</span>
@@ -30,7 +30,7 @@
           v-for="f in ['all', 'engagement', 'reto']"
           :key="f"
           @click="currentFilter = f"
-          class="px-3 py-1 rounded text-xs font-mono uppercase tracking-wider transition-colors"
+          class="px-3 py-1 rounded-sm text-xs font-mono uppercase tracking-wider transition-colors"
           :class="currentFilter === f ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
         >
           {{ f === 'all' ? 'Todos' : (f === 'engagement' ? 'Auditorías' : 'Retos / CTFs') }}
@@ -42,7 +42,7 @@
           v-model="searchQuery"
           type="text"
           placeholder="Buscar por nombre, cliente..."
-          class="w-full bg-[#070b14] border border-[#1b253b] focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none"
+          class="w-full bg-[#070b14] border border-[#1b253b] focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-hidden"
         />
       </div>
     </div>
@@ -57,7 +57,7 @@
       <p class="text-slate-300 font-mono text-sm">No se encontraron proyectos con los filtros actuales.</p>
       <button
         @click="showModal = true"
-        class="px-4 py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-mono font-bold text-xs"
+        class="px-4 py-2 rounded-sm bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-mono font-bold text-xs"
       >
         Crear Nuevo Proyecto
       </button>
@@ -72,7 +72,7 @@
         <div>
           <div class="flex items-center justify-between">
             <span
-              class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider"
+              class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider"
               :class="item.type === 'reto' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'"
             >
               {{ item.type }}
@@ -89,11 +89,11 @@
           </p>
 
           <div class="mt-4 pt-3 border-t border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono text-slate-300">
-            <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">
+            <div class="bg-slate-900/60 p-2 rounded-sm border border-slate-800/80">
               <span class="text-slate-400 block text-[10px]">EVIDENCIAS</span>
               <span class="text-sm font-bold text-amber-300">{{ item.evidence_count }} hallazgos</span>
             </div>
-            <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">
+            <div class="bg-slate-900/60 p-2 rounded-sm border border-slate-800/80">
               <span class="text-slate-400 block text-[10px]">TERMINAL LOG</span>
               <span class="text-sm font-bold text-cyan-300">{{ item.terminal_log_lines }} líneas</span>
             </div>
@@ -108,7 +108,7 @@
             <DeleteProjectButton :project-id="item.id" :project-type="item.type" @deleted="removeProject" />
             <router-link
               :to="`/engagements/${item.type}/${item.id}`"
-              class="px-3 py-1.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-mono font-bold transition-all border border-slate-700 hover:border-cyan-400"
+              class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-mono font-bold transition-all border border-slate-700 hover:border-cyan-400"
             >
               Abrir Espacio &rarr;
             </router-link>
@@ -120,7 +120,7 @@
     <!-- Modal Inicializar Engagement -->
     <div
       v-if="showModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4"
     >
       <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-lg w-full p-6 shadow-2xl space-y-5">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -138,7 +138,7 @@
               type="text"
               required
               placeholder="acme-corp, reto-ciber, banco-xyz"
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-2 text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-hidden"
             />
             <p class="text-[10px] text-slate-500 mt-1 font-mono">Solo letras, números, puntos y guiones.</p>
           </div>
@@ -148,7 +148,7 @@
               <label class="block text-xs font-mono text-slate-300 mb-1">Tipo de Proyecto:</label>
               <select
                 v-model="newForm.type"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-2 text-sm font-mono text-slate-100 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-sm font-mono text-slate-100 focus:outline-hidden"
               >
                 <option value="engagement">Auditoría / Pentest</option>
                 <option value="reto">Reto / CTF</option>
@@ -160,7 +160,7 @@
                 v-model="newForm.domain"
                 type="text"
                 placeholder="acme.local, target.com"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-2 text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-hidden"
               />
             </div>
           </div>
@@ -171,11 +171,11 @@
               v-model="newForm.client"
               type="text"
               placeholder="Acme Corporation, HackTheBox, Bugcrowd"
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-2 text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-hidden"
             />
           </div>
 
-          <div v-if="createError" class="p-3 rounded bg-red-950/50 border border-red-500/40 text-red-300 text-xs font-mono">
+          <div v-if="createError" class="p-3 rounded-sm bg-red-950/50 border border-red-500/40 text-red-300 text-xs font-mono">
             {{ createError }}
           </div>
 
@@ -183,14 +183,14 @@
             <button
               type="button"
               @click="showModal = false"
-              class="px-4 py-2 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 font-mono text-xs"
+              class="px-4 py-2 rounded-sm bg-slate-800 text-slate-300 hover:bg-slate-700 font-mono text-xs"
             >
               Cancelar
             </button>
             <button
               type="submit"
               :disabled="isSubmitting"
-              class="px-5 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs disabled:opacity-50 transition-all shadow-md shadow-cyan-500/20"
+              class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs disabled:opacity-50 transition-all shadow-md shadow-cyan-500/20"
             >
               {{ isSubmitting ? 'Creando...' : 'Crear Proyecto' }}
             </button>

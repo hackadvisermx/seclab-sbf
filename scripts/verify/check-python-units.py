@@ -42,6 +42,7 @@ engagement_packer = load_module("engagement_packer", REPO_ROOT / "scripts" / "pt
 recon_pipeline = load_module("recon_pipeline", REPO_ROOT / "scripts" / "pt-recon-pipeline.py")
 audit_checklist = load_module("audit_checklist", REPO_ROOT / "scripts" / "pt-audit-checklist.py")
 audit_next = load_module("audit_next", REPO_ROOT / "scripts" / "pt-audit-next.py")
+guide_helper = load_module("guide_helper", REPO_ROOT / "scripts" / "pt-guide.py")
 
 
 class MockSocket:
@@ -535,6 +536,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             "pt-s3-ls()",
             "pt-fuzz-params()",
             "pt-recon()",
+            "pt-guide()",
         ]
         for helper in expected_helpers:
             self.assertIn(helper, content, f"Helper no encontrado en plugin: {helper}")
@@ -584,6 +586,10 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             'alias ptnext="pt-next"',
             'alias engnext="pt-eng next"',
             'alias next="pt-next"',
+            'alias ptguide="pt-guide"',
+            'alias guia="pt-guide"',
+            'alias guide="pt-guide"',
+            'alias engguide="pt-eng guide"',
         ]
         for alias in expected_aliases:
             self.assertIn(alias, content, f"Alias no encontrado en plugin: {alias}")
@@ -592,8 +598,10 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("_pt-recon-script()", content)
         self.assertIn("_pt-checklist-script()", content)
         self.assertIn("_pt-next-script()", content)
+        self.assertIn("_pt-guide-script()", content)
 
         # pt-help incluye mención a helpers
+        self.assertIn("pt-guide", content)
         self.assertIn("pt-next", content)
         self.assertIn("pt-checklist", content)
         self.assertIn("pt-context", content)
@@ -1470,6 +1478,83 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("alias ptnext=", plugin)
             self.assertIn("alias engnext=", plugin)
             self.assertIn("alias next=", plugin)
+
+    def test_interactive_help_system_and_operator_guide(self):
+        """Verifica el centro de ayuda, guía del operador (pt-guide) y la interfaz interactiva HTML."""
+        # 1. Comprobar resolución del archivo HTML de la guía
+        html_path = guide_helper.resolver_guia_html()
+        self.assertIsNotNone(html_path, "No se pudo resolver el archivo HTML de la guía")
+        self.assertTrue(html_path.is_file(), f"El archivo {html_path} no existe")
+
+        # 2. Validar contenido y secciones del archivo HTML
+        html_content = html_path.read_text(encoding="utf-8")
+        self.assertIn("SecLab-SBF", html_content)
+        self.assertIn("Auditoría Web / API", html_content)
+        self.assertIn("Reto CTF / Máquina", html_content)
+        self.assertIn("Orquestar con IA / Agentes", html_content)
+        self.assertIn("Pivoting & Redes", html_content)
+        self.assertIn("Scope Guard", html_content)
+        self.assertIn("pt-eng new", html_content)
+        self.assertIn("pt-recon", html_content)
+        self.assertIn("pt-next", html_content)
+        self.assertIn("pt-checklist", html_content)
+        self.assertIn("pt-finding", html_content)
+        self.assertIn("pt-report", html_content)
+        self.assertIn("pt-callback", html_content)
+        self.assertIn("HERRAMIENTAS", html_content)
+
+        # 3. Comprobar presencia de la guía en workspace-seed
+        seed_guia = REPO_ROOT / "workspace-seed" / "guia.html"
+        self.assertTrue(seed_guia.is_file(), "workspace-seed/guia.html no existe")
+        self.assertEqual(seed_guia.read_text(encoding="utf-8"), html_content)
+
+        # 4. Validar actualización en workspace-seed/README.md
+        seed_readme = (REPO_ROOT / "workspace-seed" / "README.md").read_text(encoding="utf-8")
+        self.assertIn("pt-guide", seed_readme)
+        self.assertIn("guia.html", seed_readme)
+        self.assertIn("pt-next", seed_readme)
+
+        # 5. Validar estructura de las 8 disciplinas en pt-guide.py
+        self.assertEqual(len(guide_helper.DISCIPLINAS), 8)
+        expected_keys = {
+            "recon-profiling",
+            "param-discovery",
+            "auth-matrix-audit",
+            "business-logic-audit",
+            "ssrf-injection-audit",
+            "client-side-spa-audit",
+            "api-security-audit",
+            "triage-gatekeeper",
+        }
+        actual_keys = {d["key"] for d in guide_helper.DISCIPLINAS}
+        self.assertEqual(expected_keys, actual_keys)
+
+        for disc in guide_helper.DISCIPLINAS:
+            self.assertIn("id", disc)
+            self.assertIn("name", disc)
+            self.assertIn("desc", disc)
+            self.assertIn("cmd", disc)
+            self.assertIn("tools", disc)
+            self.assertIn("artifacts", disc)
+            self.assertTrue(len(disc["tools"]) > 0)
+
+        # 6. Validar integración en Dockerfile
+        dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("COPY scripts/pt-guide.py /usr/local/bin/pt-guide", dockerfile)
+        self.assertIn("/usr/local/share/seclab/guide/index.html", dockerfile)
+        self.assertIn("/usr/local/bin/pt-guide", dockerfile)
+
+        # 7. Validar integración en plugin Zsh
+        plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
+        self.assertIn("_pt-guide-script()", plugin)
+        self.assertIn("_pt-guide-help()", plugin)
+        self.assertIn("pt-guide()", plugin)
+        self.assertIn("guide)", plugin)
+        self.assertIn('alias ptguide="pt-guide"', plugin)
+        self.assertIn('alias guia="pt-guide"', plugin)
+        self.assertIn('alias guide="pt-guide"', plugin)
+        self.assertIn('alias engguide="pt-eng guide"', plugin)
+        self.assertIn("pt-guide", plugin)
 
 
 def main():

@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecLab-SBF — Centro de Ayuda & Guía del Operador</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border-color: #30363d;
+    --text-primary: #e6edf3;
+    --text-muted: #8b949e;
+    --accent-blue: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-amber: #d29922;
+    --accent-purple: #bc8cff;
+    --accent-red: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+  }
+  header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 24px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  h1 {
+    font-size: 1.6rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-cyan { background: #1f6feb; color: #fff; }
+  .badge-green { background: #238636; color: #fff; }
+  .badge-purple { background: #6e40c9; color: #fff; }
+  .badge-amber { background: #9e6a03; color: #fff; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 30px 20px 80px; }
+
+  /* Misiones / Tabs */
+  .mission-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin-bottom: 30px;
+  }
+  .mission-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 18px 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    user-select: none;
+  }
+  .mission-card:hover {
+    border-color: var(--accent-blue);
+    transform: translateY(-2px);
+  }
+  .mission-card.active {
+    border-color: var(--accent-blue);
+    background: #1c2638;
+    box-shadow: 0 0 12px rgba(88, 166, 255, 0.25);
+  }
+  .mission-card h3 {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent-blue);
+  }
+  .mission-card p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  /* Cards generales */
+  .card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 22px 24px;
+    margin: 22px 0;
+  }
+  .card h2 {
+    margin-top: 0;
+    font-size: 1.35rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+    color: var(--accent-blue);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card h3 {
+    font-size: 1.1rem;
+    margin: 20px 0 10px;
+    color: #f0f6fc;
+  }
+
+  /* Command Generator */
+  .generator-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  @media (max-width: 768px) {
+    .generator-form { grid-template-columns: 1fr; }
+  }
+  input, select {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+  }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+  }
+  button.btn-primary {
+    background: #238636;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: background 0.15s;
+  }
+  button.btn-primary:hover { background: #2ea043; }
+
+  /* Steps timeline */
+  .step-container { margin: 20px 0; }
+  .step-item {
+    display: flex;
+    gap: 18px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .step-item:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    top: 36px;
+    left: 17px;
+    bottom: -16px;
+    width: 2px;
+    background: var(--border-color);
+  }
+  .step-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--accent-blue);
+    color: var(--accent-blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+  }
+  .step-num.done {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+    color: #fff;
+  }
+  .step-body { flex: 1; }
+  .step-title {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+    color: #f0f6fc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step-desc {
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    margin-bottom: 10px;
+  }
+
+  /* Code blocks con copiar */
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  code { background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+  pre {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    overflow-x: auto;
+    position: relative;
+    margin: 8px 0 14px;
+  }
+  pre code { background: none; padding: 0; }
+  button.copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background 0.15s;
+  }
+  button.copy-btn:hover { background: #30363d; }
+
+  /* Disciplines Grid */
+  .grid-disciplines {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .discipline-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .disc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .disc-title {
+    font-weight: 600;
+    color: var(--accent-purple);
+    font-size: 0.98rem;
+  }
+  .disc-tag {
+    font-size: 0.72rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+  }
+  .disc-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px; }
+  .disc-cmd { font-size: 0.85rem; background: #000; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-color); color: #58a6ff; }
+
+  /* Search box */
+  .search-box {
+    margin: 16px 0;
+    position: relative;
+  }
+  .search-input {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 1rem;
+    border-radius: 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+  }
+  .search-results {
+    margin-top: 14px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .tool-item {
+    padding: 12px 14px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .tool-info { flex: 1; }
+  .tool-name { font-weight: 600; color: var(--accent-blue); font-size: 0.95rem; }
+  .tool-cat { font-size: 0.75rem; color: var(--accent-amber); text-transform: uppercase; }
+  .tool-desc { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+
+  /* Alerts */
+  .alert-box {
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin: 16px 0;
+    font-size: 0.92rem;
+  }
+  .alert-info { background: #0c2d6b; border: 1px solid #1f6feb; }
+  .alert-warn { background: #2a1a05; border: 1px solid #9e6a03; }
+  .alert-success { background: #0e3015; border: 1px solid #238636; }
+
+  footer {
+    border-top: 1px solid var(--border-color);
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <h1>🛡️ SecLab-SBF <span style="font-weight: 300; font-size: 1.1rem; color: var(--text-muted);">| Guía del Operador</span></h1>
+    <div class="badges">
+      <span class="badge badge-cyan">98 Herramientas</span>
+      <span class="badge badge-purple">10 Agent Skills</span>
+      <span class="badge badge-green">8 Disciplinas</span>
+      <span class="badge badge-amber">Scope Guard Enforced</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- SELECCIONADOR DE MISIÓN -->
+  <section>
+    <h2 style="font-size: 1.25rem; margin-bottom: 12px; color: #f0f6fc;">¿Qué vas a realizar hoy? (Selecciona tu objetivo)</h2>
+    <div class="mission-selector">
+      <div class="mission-card active" onclick="seleccionarMision('engagement', this)">
+        <h3>🌐 Auditoría Web / API</h3>
+        <p>Engagement profesional con Scope Guard, 8 disciplinas y reporte ejecutivo.</p>
+      </div>
+      <div class="mission-card" onclick="seleccionarMision('ctf', this)">
+        <h3>🏁 Reto CTF / Máquina</h3>
+        <p>TryHackMe / HackTheBox, conexión VPN, pivoting y documentación rápida.</p>
+      </div>
+      <div class="mission-card" onclick="seleccionarMision('agent', this)">
+        <h3>🤖 Orquestar con IA / Agentes</h3>
+        <p>Alimentar a Claude, GPT o Gemini con prompts enriquecidos y contexto en vivo.</p>
+      </div>
+      <div class="mission-card" onclick="seleccionarMision('pivoting', this)">
+        <h3>🔀 Pivoting & Redes</h3>
+        <p>Túneles SOCKS5, reenvío de puertos y proxys controlados sobre <code>tun0</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- GENERADOR DINÁMICO DE COMANDOS -->
+  <section class="card" id="seccion-generador">
+    <h2>⚡ Generador Rápido de Plan de Auditoría</h2>
+    <p style="color: var(--text-muted); margin-top: -6px;">Ingresa el nombre del proyecto y el objetivo; el sistema armará tu secuencia de comandos exacta:</p>
+    
+    <div class="generator-form">
+      <div>
+        <label style="display:block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Nombre del Engagement / Reto:</label>
+        <input type="text" id="gen-nombre" placeholder="ej. acme-corp" value="acme-corp" style="width: 100%;">
+      </div>
+      <div>
+        <label style="display:block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Dominio / IP Objetivo:</label>
+        <input type="text" id="gen-target" placeholder="ej. app.acme.com" value="app.acme.com" style="width: 100%;">
+      </div>
+      <div style="display: flex; align-items: flex-end;">
+        <button class="btn-primary" onclick="generarComandos()">Generar Plan</button>
+      </div>
+    </div>
+
+    <div id="plan-generado" style="margin-top: 16px;">
+      <!-- Se inyecta con JS -->
+    </div>
+  </section>
+
+  <!-- FLUJO METODOLÓGICO PASO A PASO -->
+  <section class="card" id="seccion-flujo">
+    <h2>🗺️ Metodología Paso a Paso: De Inicio a Fin</h2>
+    <p style="color: var(--text-muted); margin-top: -6px;">Sigue este flujo secuencial estandarizado para asegurar cobertura del 100% y cero omisiones:</p>
+
+    <div class="step-container">
+
+      <!-- PASO 1 -->
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Inicialización y Definición de Alcance (Scope Guard)</div>
+          <div class="step-desc">
+            Crea la estructura del engagement. SecLab inicializa las carpetas <code>evidence/</code>, <code>recon/</code>, <code>notes/</code>, <code>scope/</code> y genera el archivo <code>scope/target.yaml</code>.
+          </div>
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code>pt-eng new mi-objetivo target.com
+cd /workspace/engagements/mi-objetivo
+# Valida que un objetivo o URL pertenezca al alcance permitido:
+pt-eng scope https://target.com/api</code></pre>
+          <div class="alert-box alert-info">
+            🔒 <strong>Scope Guard Activo:</strong> Cualquier herramienta del laboratorio consulta <code>target.yaml</code>. Intentar escanear destinos fuera de alcance bloqueará la ejecución para evitar ataques no autorizados.
+          </div>
+        </div>
+      </div>
+
+      <!-- PASO 2 -->
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Reconocimiento Automatizado &amp; Fuzzing de Parámetros</div>
+          <div class="step-desc">
+            Ejecuta la batería de enumeración pasiva y activa: subdominios (assetfinder, findomain), sondeo HTTP (httprobe), scraping de endpoints (gau) y parámetros ocultos con <code>x8</code>.
+          </div>
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Reconocimiento continuo con scope guard:
+pt-recon mi-objetivo
+
+# Fuzzing determinista de parámetros ocultos con x8:
+pt-fuzz-params https://target.com/api/v1/user</code></pre>
+        </div>
+      </div>
+
+      <!-- PASO 3 -->
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">El Asesor Táctico: ¿Qué hago ahora? (<code>pt-next</code>)</div>
+          <div class="step-desc">
+            En cualquier momento de la auditoría, <code>pt-next</code> analiza los artefactos existentes, notas y hallazgos registrados para decirte exactamente qué paso metodológico sigue.
+          </div>
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Recomienda el próximo paso táctico con comandos listos:
+pt-next
+
+# Muestra el mapa de ruta completo de las 8 disciplinas:
+pt-next --all
+
+# Genera un System Prompt enriquecido con el estado real para tu LLM / Agente:
+pt-next --prompt</code></pre>
+        </div>
+      </div>
+
+      <!-- PASO 4 -->
+      <div class="step-item">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Auditoría Específica por Disciplinas (Agent Security Skills)</div>
+          <div class="step-desc">
+            Aplica playbooks profesionales categorizados. Si pruebas SSRF o inyecciones fuera de banda (OOB), usa el receptor local <code>pt-callback</code>.
+          </div>
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Abre el selector interactivo fzf de playbooks de seguridad:
+pt-skills
+
+# En otra pestaña/panel tmux, inicia el receptor de interacciones OOB para SSRF:
+pt-callback listen 9001
+
+# Lanza payload con UUID único para rastrear la interacción:
+pt-callback trigger http://127.0.0.1:9001</code></pre>
+        </div>
+      </div>
+
+      <!-- PASO 5 -->
+      <div class="step-item">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Documentación Evidence-First de Hallazgos</div>
+          <div class="step-desc">
+            Todo hallazgo debe documentarse con evidencia reproducible, requests/responses HTTP sin alterar y scoring CVSS v3.1.
+          </div>
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Crea la plantilla estructurada del hallazgo:
+pt-finding new idor-panel-facturacion
+
+# Edita evidence/idor-panel-facturacion.md con nano o tu editor preferido
+# Luego valida la rigurosidad técnica del hallazgo:
+pt-finding lint</code></pre>
+        </div>
+      </div>
+
+      <!-- PASO 6 -->
+      <div class="step-item">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <div class="step-title">Evaluación de Cobertura y Checklist Metodológico</div>
+          <div class="step-desc">
+            Comprueba el porcentaje de avance en las 8 disciplinas metodológicas. Para poder cerrar el engagement se exige un mínimo de 50% de cobertura.
+          </div>
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Evalúa la cobertura en vivo:
+pt-checklist
+
+# Genera tabla en formato Markdown para adjuntar al informe:
+pt-checklist --markdown</code></pre>
+        </div>
+      </div>
+
+      <!-- PASO 7 -->
+      <div class="step-item">
+        <div class="step-num">7</div>
+        <div class="step-body">
+          <div class="step-title">Compilación de Reportes, Cierre y Empaquetado Seguro</div>
+          <div class="step-desc">
+            Compila el reporte final, pasa la compuerta de calidad pre-cierre y genera el tarball sanitizado con SHA-256 en <code>dist/</code>.
+          </div>
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Compila el reporte técnico y ejecutivo en Markdown:
+pt-report compile
+
+# 2. Verifica la compuerta de calidad antes de cerrar:
+pt-eng close
+
+# 3. Sanitiza tokens/claves y empaqueta reproduciblemente con SHA-256:
+pt-eng pack</code></pre>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- MATRIZ DE LAS 8 DISCIPLINAS METODOLÓGICAS -->
+  <section class="card">
+    <h2>🎯 Matriz de las 8 Disciplinas Metodológicas</h2>
+    <p style="color: var(--text-muted); margin-top: -6px;">SecLab estructura las pruebas en 8 áreas. Haz clic en los comandos para copiarlos:</p>
+    
+    <div class="grid-disciplines">
+
+      <div class="discipline-card">
+        <div>
+          <div class="disc-header">
+            <span class="disc-title">1. Recon &amp; Profiling</span>
+            <span class="disc-tag">Fase 1</span>
+          </div>
+          <div class="disc-desc">Descubrimiento de subdominios, tecnologías, certificados y superficie expuesta.</div>
+        </div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-recon [target]</div>
+      </div>
+
+      <div class="discipline-card">
+        <div>
+          <div class="disc-header">
+            <span class="disc-title">2. Param Discovery</span>
+            <span class="disc-tag">Fase 2</span>
+          </div>
+          <div class="disc-desc">Fuzzing de parámetros ocultos, scraping de URLs pasivas y paths en endpoints.</div>
+        </div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-fuzz-params [url]</div>
+      </div>
+
+      <div class="discipline-card">
+        <div>
+          <div class="disc-header">
+            <span class="disc-title">3. Auth &amp; Authorization</span>
+            <span class="disc-tag">Fase 3</span>
+          </div>
+          <div class="disc-desc">Matriz de roles, IDORs, bypass de autenticación, JWT y fallos de sesión.</div>
+        </div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-skills auth-matrix-audit</div>
+      </div>
+
+      <div class="discipline-card">
+        <div>
+          <div class="disc-header">
+            <span class="disc-title">4. Business Logic</span>
+            <span class="disc-tag">Fase 4</span>
+          </div>
+          <div class="disc-desc">Condiciones de carrera, alteración de precios, flujos de carrito y estado.</div>
+        </div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-skills business-logic-audit</div>
+      </div>
+
+      <div class="discipline-card">
+        <div>
+          <div class="disc-header">
+            <span class="disc-title">5. Inyecciones &amp; SSRF</span>
+            <span class="disc-tag">Fase 5</span>
+          </div>
+          <div class="disc-desc">SQLi, SSRF, SSTI, Command Injection con validación fuera de banda (OOB).</div>
+        </div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-callback listen 9001</div>
+      </div>
+
+      <div class="discipline-card">
+        <div>
+          <div class="disc-header">
+            <span class="disc-title">6. Client-Side SPA</span>
+            <span class="disc-tag">Fase 6</span>
+          </div>
+          <div class="disc-desc">DOM XSS, postMessage inseguros, fugas de secretos en bundles JS y CSP bypass.</div>
+        </div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-skills client-side-spa-audit</div>
+      </div>
+
+      <div class="discipline-card">
+        <div>
+          <div class="disc-header">
+            <span class="disc-title">7. API Security</span>
+            <span class="disc-tag">Fase 7</span>
+          </div>
+          <div class="disc-desc">Mass assignment, rate limiting, GraphQL introspection y OpenAPI testing.</div>
+        </div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-skills api-security-audit</div>
+      </div>
+
+      <div class="discipline-card">
+        <div>
+          <div class="disc-header">
+            <span class="disc-title">8. Triage &amp; Reporting</span>
+            <span class="disc-tag">Fase 8</span>
+          </div>
+          <div class="disc-desc">Descarte de falsos positivos, severidad CVSS v3.1 y compilación del informe.</div>
+        </div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-report compile</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- BUSCADOR INTERACTIVO DE HERRAMIENTAS -->
+  <section class="card">
+    <h2>🔍 Buscador Rápido de Herramientas y Comandos (98 Tools)</h2>
+    <p style="color: var(--text-muted); margin-top: -6px;">Escribe una herramienta o técnica (ej. <code>nmap</code>, <code>metasploit</code>, <code>x8</code>, <code>hashcat</code>, <code>proxy</code>):</p>
+    
+    <div class="search-box">
+      <input type="text" class="search-input" id="tool-search" placeholder="Buscar por nombre, categoría o descripción..." oninput="filtrarHerramientas(this.value)">
+      <div class="search-results" id="tool-results">
+        <!-- Render dinámico con JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- PIVOTING & VPN -->
+  <section class="card" id="seccion-pivoting">
+    <h2>🔀 Pivoting Seguro y Conexión VPN</h2>
+    <p style="color: var(--text-muted); margin-top: -6px;">Conexión a plataformas de pentest y túneles controlados con Route Guard perimetral:</p>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div>
+        <h3>Conexión VPN bajo demanda</h3>
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># TryHackMe:
+vpntry
+
+# HackTheBox:
+vpnhtb
+
+# Cliente corporativo:
+vpncli
+
+# Estado de la conexión tun0:
+vpn-status</code></pre>
+      </div>
+
+      <div>
+        <h3>Proxies y Túneles (Route Guard tun0)</h3>
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Proxy SOCKS5 en localhost:1080:
+pt-socks 1080
+
+# Reenvío de puerto TCP local:
+pt-forward 8080:10.10.10.50:80
+
+# Chisel / Ligolo integrados:
+chisel client --help
+ligolo-proxy -h</code></pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  SecLab-SBF · Sistema de Asistencia al Operador · 2026 · Diseñado con Zero External Dependencies
+</footer>
+
+<script>
+// Base de datos de herramientas frecuentes en SecLab
+const HERRAMIENTAS = [
+  { name: 'pt-eng', cat: 'orquestacion', desc: 'Gestiona ciclo de vida de engagements (new, status, scope, close, pack)', cmd: 'pt-eng new <nombre> [target]' },
+  { name: 'pt-next', cat: 'metodologia', desc: 'Recomendador táctico de próximo paso y generador de prompts para LLMs', cmd: 'pt-next --prompt' },
+  { name: 'pt-checklist', cat: 'auditoria', desc: 'Evaluador de cobertura metodológica en 8 disciplinas de seguridad', cmd: 'pt-checklist --markdown' },
+  { name: 'pt-scope', cat: 'seguridad', desc: 'Scope Guard estricto para validar que objetivos pertenezcan al alcance', cmd: 'pt-scope check target.yaml <url>' },
+  { name: 'pt-finding', cat: 'reportes', desc: 'Gestor de hallazgos con rigor Evidence-First y scoring CVSS v3.1', cmd: 'pt-finding new <slug>' },
+  { name: 'pt-report', cat: 'reportes', desc: 'Compilador determinista de reportes ejecutivos y técnicos en Markdown', cmd: 'pt-report compile' },
+  { name: 'pt-recon', cat: 'recon', desc: 'Pipeline automatizado de reconocimiento pasivo y activo con Scope Guard', cmd: 'pt-recon <dominio>' },
+  { name: 'pt-fuzz-params', cat: 'web', desc: 'Fuzzing determinista de parámetros ocultos en endpoints HTTP con x8', cmd: 'pt-fuzz-params <url>' },
+  { name: 'pt-callback', cat: 'inyecciones', desc: 'Servidor receptor de callbacks para validación OOB de SSRF y blind injection', cmd: 'pt-callback listen 9001' },
+  { name: 'pt-skills', cat: 'agentes', desc: 'Menú interactivo con fzf para consultar Agent Security Skills y prompts', cmd: 'pt-skills prompt' },
+  { name: 'pt-cheat', cat: 'ayuda', desc: 'Catálogo difuso (fzf) con cientos de comandos categorizados de pentest', cmd: 'pt-cheat [categoria]' },
+  { name: 'pt-log', cat: 'auditoria', desc: 'Captura y firma continua de sesión de terminal con tmux pipe-pane', cmd: 'pt-log start [eng]' },
+  { name: 'nmap / pt-nmp', cat: 'red', desc: 'Escaneo en 2 fases: descubrimiento rápido SYN y escaneo exhaustivo', cmd: 'pt-nmp <IP>' },
+  { name: 'msfconsole', cat: 'exploit', desc: 'Metasploit Framework con extensiones y base de datos local', cmd: 'msfconsole -q' },
+  { name: 'netexec (nxc)', cat: 'ad', desc: 'Suite de post-explotación y evaluación de Active Directory, SMB y LDAP', cmd: 'nxc smb <target> -u "" -p ""' },
+  { name: 'hashcat', cat: 'crack', desc: 'Cracking de contraseñas acelerado con OpenCL / PoCL', cmd: 'hashcat -m 1000 hashes.txt /usr/share/wordlists/rockyou.txt' },
+  { name: 'john', cat: 'crack', desc: 'John the Ripper con soporte Jumbo para múltiples formatos de hash', cmd: 'john --wordlist=/usr/share/wordlists/rockyou.txt hashes' },
+  { name: 'sqlmap', cat: 'web', desc: 'Detección y explotación automática de inyecciones SQL', cmd: 'sqlmap -u "<url>" --batch' },
+  { name: 'chisel / ligolo', cat: 'pivoting', desc: 'Túneles inversos y pivoting TCP/UDP sobre redes restringidas', cmd: 'pt-socks 1080' }
+];
+
+function generarComandos() {
+  const nombre = document.getElementById('gen-nombre').value.trim() || 'engagement-demo';
+  const target = document.getElementById('gen-target').value.trim() || 'target.com';
+
+  const html = `
+    <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
+      <div style="font-weight: 600; color: var(--accent-green); margin-bottom: 8px;">
+        ✅ Secuencia generada para "${nombre}" (${target}):
+      </div>
+      <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Crear engagement y verificar alcance
+pt-eng new ${nombre} ${target}
+cd /workspace/engagements/${nombre}
+pt-scope check target.yaml https://${target}
+
+# 2. Ejecutar reconocimiento con Scope Guard
+pt-recon ${nombre}
+
+# 3. Consultar recomendador táctico y generar prompt para IA
+pt-next --prompt
+
+# 4. Probar endpoints y registrar hallazgo
+pt-finding new idor-usuarios
+
+# 5. Evaluar cobertura y compilar reporte
+pt-checklist --markdown
+pt-report compile
+pt-eng close</code></pre>
+    </div>
+  `;
+  document.getElementById('plan-generado').innerHTML = html;
+}
+
+function filtrarHerramientas(q) {
+  const query = q.toLowerCase().trim();
+  const contenedor = document.getElementById('tool-results');
+  
+  if (!query) {
+    renderHerramientas(HERRAMIENTAS.slice(0, 6));
+    return;
+  }
+
+  const filtradas = HERRAMIENTAS.filter(t => 
+    t.name.toLowerCase().includes(query) ||
+    t.cat.toLowerCase().includes(query) ||
+    t.desc.toLowerCase().includes(query)
+  );
+
+  renderHerramientas(filtradas);
+}
+
+function renderHerramientas(lista) {
+  const contenedor = document.getElementById('tool-results');
+  if (lista.length === 0) {
+    contenedor.innerHTML = '<p style="color: var(--text-muted); padding: 10px;">No se encontraron herramientas con esa búsqueda.</p>';
+    return;
+  }
+
+  contenedor.innerHTML = lista.map(t => `
+    <div class="tool-item">
+      <div class="tool-info">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="tool-name">${t.name}</span>
+          <span class="tool-cat">${t.cat}</span>
+        </div>
+        <div class="tool-desc">${t.desc}</div>
+      </div>
+      <div>
+        <button class="copy-btn" style="position: static;" onclick="copiarTextoBoton('${t.cmd}', this)">${t.cmd}</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function seleccionarMision(mision, el) {
+  document.querySelectorAll('.mission-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+
+  const genNombre = document.getElementById('gen-nombre');
+  const genTarget = document.getElementById('gen-target');
+
+  if (mision === 'engagement') {
+    genNombre.value = 'auditoria-web';
+    genTarget.value = 'app.empresa.com';
+    generarComandos();
+  } else if (mision === 'ctf') {
+    genNombre.value = 'htb-maquina';
+    genTarget.value = '10.10.11.240';
+    document.getElementById('plan-generado').innerHTML = `
+      <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <div style="font-weight: 600; color: var(--accent-green); margin-bottom: 8px;">
+          ✅ Secuencia de Reto / CTF:
+        </div>
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Conectar VPN (TryHackMe o HackTheBox)
+vpnhtb   # o vpntry
+
+# 2. Iniciar logging firmado de auditoría
+pt-log start htb-maquina
+
+# 3. Escaneo rápido de puertos en dos fases
+pt-nmp 10.10.11.240
+
+# 4. Cheatsheet rápido si necesitas sintaxis
+pt-cheat nmap</code></pre>
+      </div>
+    `;
+  } else if (mision === 'agent') {
+    genNombre.value = 'audit-agent';
+    genTarget.value = 'api.empresa.com';
+    document.getElementById('plan-generado').innerHTML = `
+      <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <div style="font-weight: 600; color: var(--accent-purple); margin-bottom: 8px;">
+          🤖 Secuencia para Modelos de Lenguaje / Subagentes:
+        </div>
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Generar System Prompt contextualizado para tu LLM:
+pt-next --prompt
+
+# 2. Extraer contexto completo del engagement en Markdown o JSON:
+pt-context mi-objetivo --json
+
+# 3. Consultar plantilla de agente especializada:
+pt-skills prompt auth-agent</code></pre>
+      </div>
+    `;
+  } else if (mision === 'pivoting') {
+    document.getElementById('plan-generado').innerHTML = `
+      <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <div style="font-weight: 600; color: var(--accent-amber); margin-bottom: 8px;">
+          🔀 Secuencia de Pivoting & Túneles Seguros:
+        </div>
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Iniciar proxy SOCKS5 local sobre tun0
+pt-socks 1080
+
+# 2. Configurar proxychains para usar el túnel
+proxychains4 nmap -sT -Pn -p 22,80,445 10.10.10.100
+
+# 3. Servidor de staging de payloads (chisel, ligolo, winpeas)
+pt-serv-payloads web 8000</code></pre>
+      </div>
+    `;
+  }
+}
+
+function copiarTexto(btn) {
+  const code = btn.parentElement.querySelector('code').innerText;
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = btn.innerText;
+    btn.innerText = 'Copiado ✓';
+    btn.style.borderColor = 'var(--accent-green)';
+    setTimeout(() => {
+      btn.innerText = orig;
+      btn.style.borderColor = 'var(--border-color)';
+    }, 1500);
+  });
+}
+
+function copiarComandoTexto(el) {
+  const texto = el.innerText.trim();
+  navigator.clipboard.writeText(texto).then(() => {
+    const orig = el.innerText;
+    el.innerText = '¡Copiado al portapapeles!';
+    el.style.color = 'var(--accent-green)';
+    setTimeout(() => {
+      el.innerText = orig;
+      el.style.color = 'var(--accent-blue)';
+    }, 1500);
+  });
+}
+
+function copiarTextoBoton(texto, btn) {
+  navigator.clipboard.writeText(texto).then(() => {
+    const orig = btn.innerText;
+    btn.innerText = 'Copiado ✓';
+    setTimeout(() => { btn.innerText = orig; }, 1200);
+  });
+}
+
+// Inicializar al cargar
+document.addEventListener('DOMContentLoaded', () => {
+  generarComandos();
+  renderHerramientas(HERRAMIENTAS.slice(0, 6));
+});
+</script>
+
+</body>
+</html>

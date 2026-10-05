@@ -1751,6 +1751,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(recon_safety))
     build_inputs = load_module('build_inputs_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_build_inputs.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(build_inputs))
+    dashboard_backup = load_module('dashboard_backup_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_dashboard_backup.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(dashboard_backup))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

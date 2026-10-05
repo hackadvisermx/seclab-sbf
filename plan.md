@@ -1027,6 +1027,16 @@ pt-forward doctor
 - Ejecutar disaster recovery.
 - Hecho: `.github/workflows/security.yml` con secret scan, Trivy, Hadolint, ShellCheck sin exclusiones globales, Actionlint, un job de Terraform (formato, `validate` de los tres stacks y render del cloud-init) y otro que valida la jail de fail2ban, mas `make scan-image` como gate local de Critical/High, pruebas funcionales con `make smoke-test`, respaldos automatizados con verificación de checksum (`make workspace-backup`/`restore`), alertas operacionales por Webhook (`scripts/host/notify.sh`), runbook formal de Disaster Recovery en `docs/runbooks.md` y documentación de la fase en `docs/phase-10.md`.
 
+### Continuidad de mejoras del dashboard — relevo 2026-10-05
+
+El orden propuesto después de la revisión integral del Docker es:
+
+1. **Fase 89 integrada:** PR #109 mergeado a `bootstrap/baseline` (`e2da77e`), CI del PR y de baseline successful, confirmado el 2026-10-05. La aceptación visual del dashboard desplegado no se confirmó en este relevo; no confundir merge con validación de despliegue.
+2. **Fase 90: respaldo y restauración del estado completo del dashboard.** Implementada en `phase/90-dashboard-backup-restore`: contenedor detenido, workspace y bases SQLite/clave de bóveda, checksum/manifiesto, restauración en destinos vacíos y revocación de sesiones. Prueba de recuperación con fixtures Docker sin red; ver `docs/phase-90.md`. Pendiente revisión y aprobación del owner antes de merge.
+3. **Fase 91 propuesta: recuperación de proyectos eliminados.** Diseñar papelera y restauración para retos/auditorías conservando las reglas de rutas y bloqueo por jobs activos. Revisar el alcance antes de implementar; no está iniciada.
+
+El relevo operativo detallado vive en `docs/phase-89.md`, sección «Relevo de sesión». No aplicar el parche temporal antiguo sobre los avances de otra sesión. Mantener construcción local y publicación en Docker Hub; no añadir builds de imagen a CI ni usar GHCR. Las verificaciones de estas mejoras usan fixtures locales, sin repetir el reconocimiento de UAZ.
+
 ## 20. Criterios de aceptación
 
 - Local funciona en macOS Docker Desktop.

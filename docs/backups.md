@@ -10,6 +10,10 @@ en la nube era un volumen aparte del proveedor, y se quitó porque un disco de
 50 GB se factura aunque la VM esté apagada; y el 2026-10-01 se evaluó un volumen
 Docker con nombre en local y se descartó. Ver `docs/phase-8.md`.
 
+## Estado completo del dashboard (fase 90)
+
+`make dashboard-backup` copia conjuntamente workspace, `vault.db`, `recon-jobs.db` y `.vault.key`, con el contenedor detenido. `make dashboard-restore BACKUP=...` valida checksum/manifiesto y solo restaura sobre destinos vacíos; revoca sesiones. Estos archivos contienen secretos recuperables y deben permanecer en almacenamiento privado del operador. El backup del workspace descrito abajo no sustituye esta recuperación completa. Ver [procedimiento, pruebas y límites](phase-90.md).
+
 ## El workspace se mueve contigo (con `lab`)
 
 Si usas el atajo `lab`, el workspace no es el del repo sino la carpeta desde la

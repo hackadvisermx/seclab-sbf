@@ -22,6 +22,10 @@ def create_engagement(payload: EngagementCreate):
             eng_type=payload.type,
             domain=payload.domain,
             client=payload.client,
+            subtype=payload.subtype,
+            category=payload.category,
+            points=payload.points,
+            difficulty=payload.difficulty,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -33,9 +37,16 @@ def get_engagement_detail(eng_id: str, type: str = Query("engagement")):
     target_yaml = workspace_service.get_target_yaml(eng_id, type)
     notes = workspace_service.get_notes(eng_id, type)
     findings = workspace_service.list_findings(eng_id, type)
+    flags = workspace_service.get_flags(eng_id, type) if type == "reto" else {}
+    eng_meta = (target_yaml.get("engagement") or {}) if isinstance(target_yaml, dict) else {}
     return {
         "id": eng_id,
         "type": type,
+        "subtype": flags.get("subtype") or eng_meta.get("subtype", "machine" if type == "reto" else None),
+        "category": flags.get("category") or eng_meta.get("category"),
+        "points": flags.get("points") if flags.get("points") is not None else eng_meta.get("points"),
+        "difficulty": flags.get("difficulty") or eng_meta.get("difficulty"),
+        "is_solved": bool(flags.get("solved")),
         "target_yaml": target_yaml,
         "notes": notes,
         "findings_count": len(findings),

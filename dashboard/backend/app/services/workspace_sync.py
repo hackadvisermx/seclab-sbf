@@ -80,6 +80,10 @@ class WorkspaceSyncService:
                 # Metadatos desde target.yaml si existe
                 created_at = None
                 client_name = None
+                subtype = "machine" if eng_type == "reto" else None
+                category = None
+                points = None
+                difficulty = None
                 if target_yaml_path.exists():
                     try:
                         with open(target_yaml_path, "r") as yf:
@@ -87,6 +91,31 @@ class WorkspaceSyncService:
                             eng_meta = ydata.get("engagement", {})
                             created_at = eng_meta.get("created_at")
                             client_name = eng_meta.get("client")
+                            if eng_type == "reto":
+                                subtype = eng_meta.get("subtype", "machine")
+                                category = eng_meta.get("category")
+                                points = eng_meta.get("points")
+                                difficulty = eng_meta.get("difficulty")
+                    except Exception:
+                        pass
+
+                # Verificar si está resuelto o si flags.json tiene metadata complementaria
+                is_solved = False
+                flags_file = item / "flags.json"
+                if flags_file.exists():
+                    try:
+                        with open(flags_file, "r") as ff:
+                            fdata = json.load(ff) or {}
+                            if eng_type == "reto":
+                                subtype = fdata.get("subtype") or subtype
+                                category = fdata.get("category") or category
+                                if fdata.get("points") is not None:
+                                    points = fdata.get("points")
+                                difficulty = fdata.get("difficulty") or difficulty
+                                if subtype == "jeopardy":
+                                    is_solved = (fdata.get("flag", {}).get("status") == "captured") or bool(fdata.get("solved"))
+                                else:
+                                    is_solved = (fdata.get("root_flag", {}).get("status") == "captured") or bool(fdata.get("solved"))
                     except Exception:
                         pass
 
@@ -104,6 +133,11 @@ class WorkspaceSyncService:
                         terminal_log_lines=log_lines,
                         favorite=False,
                         archived=False,
+                        subtype=subtype,
+                        category=category,
+                        points=points,
+                        difficulty=difficulty,
+                        is_solved=is_solved,
                     )
                 )
         return results
@@ -120,6 +154,10 @@ class WorkspaceSyncService:
         eng_type: str = "engagement",
         domain: Optional[str] = None,
         client: Optional[str] = None,
+        subtype: Optional[str] = None,
+        category: Optional[str] = None,
+        points: Optional[int] = None,
+        difficulty: Optional[str] = None,
     ) -> EngagementSummary:
         """Crea la estructura de carpetas y siembra target.yaml, scope.txt y notes.md."""
         with self.trash.lock:
@@ -136,6 +174,8 @@ class WorkspaceSyncService:
             now_date = datetime.date.today().isoformat()
             sample_domain = domain or f"{clean_name}.local"
             sample_client = client or ("Plataforma CTF" if eng_type == "reto" else clean_name.capitalize())
+
+            clean_subtype = (subtype or "machine") if eng_type == "reto" else None
 
             target_yaml_data = {
                 "version": "1.0",
@@ -183,6 +223,30 @@ class WorkspaceSyncService:
                 },
             }
 
+            if eng_type == "reto":
+                target_yaml_data["engagement"]["subtype"] = clean_subtype
+                if category:
+                    target_yaml_data["engagement"]["category"] = category
+                if points is not None:
+                    target_yaml_data["engagement"]["points"] = points
+                if difficulty:
+                    target_yaml_data["engagement"]["difficulty"] = difficulty
+
+                # Sembrar flags.json inicial
+                initial_flags = {
+                    "subtype": clean_subtype,
+                    "category": category,
+                    "points": points or (100 if clean_subtype == "jeopardy" else None),
+                    "difficulty": difficulty or ("medium" if clean_subtype == "jeopardy" else None),
+                    "solved": False,
+                    "flag": {"value": "", "status": "pending", "captured_at": None, "notes": ""},
+                    "user_flag": {"value": "", "status": "pending", "captured_at": None, "hash": ""},
+                    "root_flag": {"value": "", "status": "pending", "captured_at": None, "hash": ""},
+                    "custom_flags": [],
+                }
+                with open(target_dir / "flags.json", "w", encoding="utf-8") as ff:
+                    json.dump(initial_flags, ff, indent=2, ensure_ascii=False)
+
             with open(target_dir / "target.yaml", "w", encoding="utf-8") as f:
                 yaml.dump(target_yaml_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
@@ -202,6 +266,11 @@ class WorkspaceSyncService:
                 has_notes=True,
                 evidence_count=0,
                 terminal_log_lines=0,
+                subtype=clean_subtype,
+                category=category,
+                points=points,
+                difficulty=difficulty,
+                is_solved=False,
             )
 
     def get_target_yaml(self, eng_id: str, eng_type: str = "engagement") -> Dict[str, Any]:
@@ -450,35 +519,106 @@ class WorkspaceSyncService:
         """Obtiene las banderas capturadas de un reto CTF."""
         target_dir = self._resolve_dir(eng_id, eng_type)
         flags_file = target_dir / "flags.json"
-        if flags_file.exists():
+        target_yaml_file = target_dir / "target.yaml"
+        target_meta = {}
+        if target_yaml_file.exists():
             try:
-                with open(flags_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                with open(target_yaml_file, "r", encoding="utf-8") as yf:
+                    target_meta = (yaml.safe_load(yf) or {}).get("engagement", {})
             except Exception:
                 pass
 
-        return {
+        data = {
+            "subtype": target_meta.get("subtype", "machine"),
+            "category": target_meta.get("category"),
+            "points": target_meta.get("points"),
+            "difficulty": target_meta.get("difficulty"),
+            "solved": False,
+            "flag": {"value": "", "status": "pending", "captured_at": None, "notes": ""},
             "user_flag": {"value": "", "status": "pending", "captured_at": None, "hash": ""},
             "root_flag": {"value": "", "status": "pending", "captured_at": None, "hash": ""},
             "custom_flags": [],
         }
 
+        if flags_file.exists():
+            try:
+                with open(flags_file, "r", encoding="utf-8") as f:
+                    file_data = json.load(f)
+                    if isinstance(file_data, dict):
+                        data.update(file_data)
+            except Exception:
+                pass
+
+        if not isinstance(data.get("flag"), dict):
+            data["flag"] = {"value": "", "status": "pending", "captured_at": None, "notes": ""}
+        if not data.get("category"):
+            data["category"] = target_meta.get("category")
+        if data.get("points") is None:
+            data["points"] = target_meta.get("points")
+        if not data.get("difficulty"):
+            data["difficulty"] = target_meta.get("difficulty")
+        if not data.get("subtype"):
+            data["subtype"] = target_meta.get("subtype", "machine")
+
+        if data.get("subtype") == "jeopardy":
+            data["solved"] = (data.get("flag", {}).get("status") == "captured") or bool(data.get("solved"))
+        else:
+            data["solved"] = (data.get("root_flag", {}).get("status") == "captured") or bool(data.get("solved"))
+
+        return data
+
     def save_flags(self, eng_id: str, flags_data: dict, eng_type: str = "reto") -> dict:
-        """Guarda el estado de banderas en flags.json."""
+        """Guarda el estado de banderas en flags.json y sincroniza metadatos en target.yaml."""
         target_dir = self._resolve_dir(eng_id, eng_type)
         target_dir.mkdir(parents=True, exist_ok=True)
         flags_file = target_dir / "flags.json"
 
         now_iso = datetime.datetime.now().isoformat()
-        if flags_data.get("user_flag", {}).get("value") and flags_data["user_flag"].get("status") == "captured":
-            if not flags_data["user_flag"].get("captured_at"):
-                flags_data["user_flag"]["captured_at"] = now_iso
-        if flags_data.get("root_flag", {}).get("value") and flags_data["root_flag"].get("status") == "captured":
-            if not flags_data["root_flag"].get("captured_at"):
-                flags_data["root_flag"]["captured_at"] = now_iso
+        flag_obj = flags_data.setdefault("flag", {})
+        if flag_obj.get("value") and flag_obj.get("status") == "captured":
+            if not flag_obj.get("captured_at"):
+                flag_obj["captured_at"] = now_iso
+        elif flag_obj.get("status") == "pending":
+            flag_obj["captured_at"] = None
+
+        user_flag = flags_data.setdefault("user_flag", {})
+        if user_flag.get("value") and user_flag.get("status") == "captured":
+            if not user_flag.get("captured_at"):
+                user_flag["captured_at"] = now_iso
+        elif user_flag.get("status") == "pending":
+            user_flag["captured_at"] = None
+
+        root_flag = flags_data.setdefault("root_flag", {})
+        if root_flag.get("value") and root_flag.get("status") == "captured":
+            if not root_flag.get("captured_at"):
+                root_flag["captured_at"] = now_iso
+        elif root_flag.get("status") == "pending":
+            root_flag["captured_at"] = None
+
+        if flags_data.get("subtype") == "jeopardy":
+            flags_data["solved"] = flag_obj.get("status") == "captured"
+        else:
+            flags_data["solved"] = root_flag.get("status") == "captured"
 
         with open(flags_file, "w", encoding="utf-8") as f:
             json.dump(flags_data, f, indent=2, ensure_ascii=False)
+
+        target_yaml_file = target_dir / "target.yaml"
+        if target_yaml_file.exists():
+            try:
+                with open(target_yaml_file, "r", encoding="utf-8") as yf:
+                    ydata = yaml.safe_load(yf) or {}
+                eng_meta = ydata.setdefault("engagement", {})
+                updated_meta = False
+                for field in ("category", "subtype", "difficulty", "points"):
+                    if field in flags_data and flags_data[field] is not None:
+                        eng_meta[field] = flags_data[field]
+                        updated_meta = True
+                if updated_meta:
+                    with open(target_yaml_file, "w", encoding="utf-8") as yf:
+                        yaml.dump(ydata, yf, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            except Exception:
+                pass
 
         return flags_data
 

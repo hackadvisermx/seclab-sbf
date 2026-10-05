@@ -5,6 +5,11 @@ version: "1.0"
 engagement:
   name: "example-engagement"
   type: "engagement" # engagement | reto
+  # Campos opcionales para retos CTF:
+  # subtype: "jeopardy" # jeopardy | machine
+  # category: "web" # web | crypto | pwn | reverse | forensics | misc | osint
+  # difficulty: "medium" # easy | medium | hard | insane
+  # points: 100
   created_at: "YYYY-MM-DD"
   auditor: "tester"
   client: "Organización / Plataforma Objetivo"

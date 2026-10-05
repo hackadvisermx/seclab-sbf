@@ -11,10 +11,23 @@
             {{ engType }}
           </span>
         </div>
-        <h1 class="text-2xl font-mono font-bold text-white flex items-center space-x-3">
+        <h1 class="text-2xl font-mono font-bold text-white flex items-center space-x-3 flex-wrap gap-2">
           <span>{{ engId }}</span>
           <span class="text-xs px-2 py-0.5 rounded-sm font-normal font-mono" :class="hasScope ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'">
             {{ hasScope ? 'Alcance Definido' : 'target.yaml pendiente' }}
+          </span>
+          <span v-if="engType === 'reto' && flagsData.subtype === 'jeopardy' && flagsData.category"
+            class="text-xs px-2 py-0.5 rounded-sm font-normal font-mono uppercase"
+            :class="getCategoryBadgeClass(flagsData.category)">
+            {{ flagsData.category }}
+          </span>
+          <span v-if="engType === 'reto' && flagsData.points"
+            class="text-xs px-2 py-0.5 rounded-sm font-normal font-mono bg-amber-500/10 text-amber-300 border border-amber-500/30">
+            {{ flagsData.points }} pts
+          </span>
+          <span v-if="engType === 'reto' && isProjectSolved"
+            class="text-xs px-2 py-0.5 rounded-sm font-normal font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+            ✓ RESUELTO
           </span>
         </h1>
       </div>
@@ -859,26 +872,115 @@
     <!-- TAB: BANDERAS CTF & BOTÍN (LOOT / CREDENCIALES) -->
     <div v-if="activeTab === 'flags' || activeTab === 'loot'" class="space-y-6">
       <!-- Sección Banderas CTF (Siempre visible en retos o si hay banderas) -->
-      <div class="tactical-card space-y-4 border-l-4 border-l-amber-500">
+      <div class="tactical-card space-y-4 border-l-4" :class="flagsData.subtype === 'jeopardy' ? 'border-l-cyan-500' : 'border-l-amber-500'">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
           <div class="flex items-center space-x-2">
             <span class="text-xl">🏆</span>
             <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider">
-              Control de Banderas CTF (Flags)
+              {{ flagsData.subtype === 'jeopardy' ? 'Bandera CTF Jeopardy & Metadatos' : 'Control de Banderas CTF (Flags)' }}
             </h2>
           </div>
           <button
             @click="saveFlagsAction"
             :disabled="isSavingFlags"
-            class="px-3 py-1 rounded-sm bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-mono font-bold"
+            class="px-3 py-1 rounded-sm text-xs font-mono font-bold transition-colors"
+            :class="flagsData.subtype === 'jeopardy' ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950' : 'bg-amber-500 hover:bg-amber-400 text-slate-950'"
           >
-            {{ isSavingFlags ? 'Guardando...' : 'Guardar Banderas' }}
+            {{ isSavingFlags ? 'Guardando...' : (flagsData.subtype === 'jeopardy' ? 'Guardar Bandera & Writeup' : 'Guardar Banderas') }}
           </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Modo CTF Jeopardy -->
+        <div v-if="flagsData.subtype === 'jeopardy'" class="space-y-4">
+          <div class="p-4 rounded-lg bg-[#050811] border" :class="flagsData.flag?.status === 'captured' ? 'border-emerald-500/50 shadow-md shadow-emerald-500/10' : 'border-slate-800'">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <span class="text-xs font-mono font-bold text-slate-300 flex items-center space-x-1.5">
+                <span>🚩</span>
+                <span>Bandera Obtenida (Flag)</span>
+              </span>
+              <button
+                @click="toggleFlagStatus('flag')"
+                type="button"
+                class="px-2.5 py-1 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer"
+                :class="flagsData.flag?.status === 'captured' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs shadow-emerald-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-slate-200'"
+              >
+                {{ flagsData.flag?.status === 'captured' ? '✓ CAPTURADA / RESUELTO' : '○ PENDIENTE' }}
+              </button>
+            </div>
+            <input
+              v-model="flagsData.flag.value"
+              type="text"
+              placeholder="flag{...}, CTF{...}, picoCTF{...}"
+              class="w-full bg-[#0b101d] border border-slate-800 focus:border-cyan-400 rounded-sm px-3 py-2 text-xs font-mono text-emerald-400 placeholder-slate-600 focus:outline-hidden"
+            />
+            <div v-if="flagsData.flag?.captured_at" class="text-[10px] font-mono text-slate-500 mt-1">
+              Capturada: {{ flagsData.flag.captured_at }}
+            </div>
+          </div>
+
+          <!-- Metadatos de la categoría, dificultad y puntuación -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-lg bg-[#050811] border border-slate-800">
+            <div>
+              <label class="block text-[11px] font-mono text-slate-400 mb-1">Categoría Técnica:</label>
+              <select
+                v-model="flagsData.category"
+                class="w-full bg-[#0b101d] border border-slate-700 focus:border-cyan-400 rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-hidden"
+              >
+                <option value="web">🌐 Web Exploitation</option>
+                <option value="crypto">🔐 Criptografía</option>
+                <option value="pwn">💥 Binary Exploitation (Pwn)</option>
+                <option value="reverse">⚙️ Reverse Engineering</option>
+                <option value="forensics">🔍 Forensics</option>
+                <option value="osint">🛰️ OSINT</option>
+                <option value="misc">📦 Misc</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-mono text-slate-400 mb-1">Dificultad:</label>
+              <select
+                v-model="flagsData.difficulty"
+                class="w-full bg-[#0b101d] border border-slate-700 focus:border-cyan-400 rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-hidden"
+              >
+                <option value="easy">Fácil</option>
+                <option value="medium">Media</option>
+                <option value="hard">Difícil</option>
+                <option value="insane">Insane</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-mono text-slate-400 mb-1">Puntos:</label>
+              <input
+                v-model.number="flagsData.points"
+                type="number"
+                min="0"
+                step="10"
+                class="w-full bg-[#0b101d] border border-slate-700 focus:border-cyan-400 rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-hidden"
+              />
+            </div>
+          </div>
+
+          <!-- Notas tácticas / Writeup del reto -->
+          <div class="p-4 rounded-lg bg-[#050811] border border-slate-800 space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-mono font-bold text-slate-300 flex items-center space-x-1.5">
+                <span>📝</span>
+                <span>Notas Tácticas & Procedimiento de Solución (Writeup)</span>
+              </label>
+              <span class="text-[10px] font-mono text-slate-500">Persiste en flags.json</span>
+            </div>
+            <textarea
+              v-model="flagsData.flag.notes"
+              rows="4"
+              placeholder="Documenta el payload, script en python utilizado, vulnerabilidad explotada o comando que reveló la flag..."
+              class="w-full bg-[#0b101d] border border-slate-800 focus:border-cyan-400 rounded-sm p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-hidden"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Modo CTF Máquina Tradicional (User / Root) -->
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <!-- User Flag -->
-          <div class="p-4 rounded-lg bg-[#050811] border" :class="flagsData.user_flag.status === 'captured' ? 'border-emerald-500/50 shadow-md shadow-emerald-500/10' : 'border-slate-800'">
+          <div class="p-4 rounded-lg bg-[#050811] border" :class="flagsData.user_flag?.status === 'captured' ? 'border-emerald-500/50 shadow-md shadow-emerald-500/10' : 'border-slate-800'">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-mono font-bold text-slate-300 flex items-center space-x-1.5">
                 <span>👤</span>
@@ -887,9 +989,9 @@
               <button
                 @click="toggleFlagStatus('user_flag')"
                 class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
-                :class="flagsData.user_flag.status === 'captured' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'"
+                :class="flagsData.user_flag?.status === 'captured' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'"
               >
-                {{ flagsData.user_flag.status === 'captured' ? '✓ CAPTURADA' : '○ PENDIENTE' }}
+                {{ flagsData.user_flag?.status === 'captured' ? '✓ CAPTURADA' : '○ PENDIENTE' }}
               </button>
             </div>
             <input
@@ -898,13 +1000,13 @@
               placeholder="THM{...}, HTB{...}, flag{...}"
               class="w-full bg-[#0b101d] border border-slate-800 focus:border-amber-400 rounded-sm px-3 py-2 text-xs font-mono text-emerald-400 placeholder-slate-600 focus:outline-hidden"
             />
-            <div v-if="flagsData.user_flag.captured_at" class="text-[10px] font-mono text-slate-500 mt-1">
+            <div v-if="flagsData.user_flag?.captured_at" class="text-[10px] font-mono text-slate-500 mt-1">
               Capturada: {{ flagsData.user_flag.captured_at }}
             </div>
           </div>
 
           <!-- Root Flag -->
-          <div class="p-4 rounded-lg bg-[#050811] border" :class="flagsData.root_flag.status === 'captured' ? 'border-purple-500/50 shadow-md shadow-purple-500/10' : 'border-slate-800'">
+          <div class="p-4 rounded-lg bg-[#050811] border" :class="flagsData.root_flag?.status === 'captured' ? 'border-purple-500/50 shadow-md shadow-purple-500/10' : 'border-slate-800'">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-mono font-bold text-slate-300 flex items-center space-x-1.5">
                 <span>⚡</span>
@@ -913,9 +1015,9 @@
               <button
                 @click="toggleFlagStatus('root_flag')"
                 class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
-                :class="flagsData.root_flag.status === 'captured' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'"
+                :class="flagsData.root_flag?.status === 'captured' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'"
               >
-                {{ flagsData.root_flag.status === 'captured' ? '✓ ROOT CAPTURADO' : '○ PENDIENTE' }}
+                {{ flagsData.root_flag?.status === 'captured' ? '✓ ROOT CAPTURADO' : '○ PENDIENTE' }}
               </button>
             </div>
             <input
@@ -924,7 +1026,7 @@
               placeholder="root{...}, HTB{root_...}"
               class="w-full bg-[#0b101d] border border-slate-800 focus:border-purple-400 rounded-sm px-3 py-2 text-xs font-mono text-purple-300 placeholder-slate-600 focus:outline-hidden"
             />
-            <div v-if="flagsData.root_flag.captured_at" class="text-[10px] font-mono text-slate-500 mt-1">
+            <div v-if="flagsData.root_flag?.captured_at" class="text-[10px] font-mono text-slate-500 mt-1">
               Capturada: {{ flagsData.root_flag.captured_at }}
             </div>
           </div>
@@ -1351,11 +1453,23 @@ const activeTab = ref(engType.value === 'reto' ? 'flags' : 'scope')
 
 // Banderas CTF & Botín (Loot)
 const flagsData = ref({
+  subtype: 'machine',
+  category: 'misc',
+  points: 100,
+  difficulty: 'medium',
+  flag: { value: '', status: 'pending', captured_at: null, notes: '' },
   user_flag: { value: '', status: 'pending', captured_at: null },
   root_flag: { value: '', status: 'pending', captured_at: null },
   custom_flags: [],
 })
 const isSavingFlags = ref(false)
+
+const isProjectSolved = computed(() => {
+  if (flagsData.value.subtype === 'jeopardy') {
+    return flagsData.value.flag?.status === 'captured'
+  }
+  return flagsData.value.root_flag?.status === 'captured'
+})
 
 const lootData = ref({ credentials: [], files: [] })
 const showCredModal = ref(false)
@@ -1401,6 +1515,9 @@ const selectedArtifact = ref(null)
 const selectedArtifactContent = ref('')
 
 const capturedFlagsCount = computed(() => {
+  if (flagsData.value.subtype === 'jeopardy') {
+    return flagsData.value.flag?.status === 'captured' ? 1 : 0
+  }
   let count = 0
   if (flagsData.value.user_flag?.status === 'captured') count++
   if (flagsData.value.root_flag?.status === 'captured') count++
@@ -1849,9 +1966,31 @@ function copyText(text) {
   alert('Copiado al portapapeles: ' + text)
 }
 
+function getCategoryBadgeClass(category) {
+  switch (category) {
+    case 'web': return 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+    case 'crypto': return 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+    case 'pwn': return 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+    case 'reverse': return 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+    case 'forensics': return 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+    case 'osint': return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+    case 'misc': default: return 'bg-slate-700 text-slate-300 border border-slate-600'
+  }
+}
+
 async function loadFlags() {
   try {
-    flagsData.value = await api.getFlags(engId.value, engType.value)
+    const data = await api.getFlags(engId.value, engType.value)
+    flagsData.value = {
+      subtype: data.subtype || 'machine',
+      category: data.category || 'misc',
+      points: data.points ?? 100,
+      difficulty: data.difficulty || 'medium',
+      flag: data.flag || { value: '', status: 'pending', captured_at: null, notes: '' },
+      user_flag: data.user_flag || { value: '', status: 'pending', captured_at: null },
+      root_flag: data.root_flag || { value: '', status: 'pending', captured_at: null },
+      custom_flags: data.custom_flags || [],
+    }
   } catch (err) {
     console.error('Error al cargar banderas:', err)
   }
@@ -1870,6 +2009,9 @@ async function saveFlagsAction() {
 }
 
 function toggleFlagStatus(flagType) {
+  if (!flagsData.value[flagType]) {
+    flagsData.value[flagType] = { status: 'pending', captured_at: null, value: '' }
+  }
   if (flagsData.value[flagType].status === 'captured') {
     flagsData.value[flagType].status = 'pending'
     flagsData.value[flagType].captured_at = null

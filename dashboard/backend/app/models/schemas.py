@@ -19,6 +19,11 @@ class EngagementSummary(BaseModel):
     terminal_log_lines: int = 0
     favorite: bool = False
     archived: bool = False
+    subtype: Optional[str] = "machine"  # "machine" | "jeopardy"
+    category: Optional[str] = None      # "web" | "crypto" | "pwn" | "reverse" | "forensics" | "misc" | "osint"
+    points: Optional[int] = None
+    difficulty: Optional[str] = None    # "easy" | "medium" | "hard" | "insane"
+    is_solved: bool = False
 
 
 class EngagementCreate(BaseModel):
@@ -27,6 +32,10 @@ class EngagementCreate(BaseModel):
     domain: Optional[str] = None
     client: Optional[str] = None
     description: Optional[str] = None
+    subtype: Optional[str] = "machine"  # "machine" | "jeopardy"
+    category: Optional[str] = None      # "web" | "crypto" | "pwn" | "reverse" | "forensics" | "misc" | "osint"
+    points: Optional[int] = None
+    difficulty: Optional[str] = None
 
 
 # ==============================================================================

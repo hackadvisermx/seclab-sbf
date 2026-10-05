@@ -238,3 +238,7 @@ make compose-refs-check
 ```
 
 La reparación del control VPN de la fase 81 se verificó localmente con 77 pruebas Python, `make verify`, el build nativo arm64, el gate `make scan-image` y un ciclo real de encendido/apagado desde los botones del navegador con TryHackMe. El perfil se obtiene del daemon como `tester`; al apagar, `tun0` puede permanecer presente sin mostrar una conexión activa. La ruta por defecto y el hash de `/etc/resolv.conf` permanecieron iguales durante el ciclo. Para pasar el gate fue necesario recompilar `gau` 2.2.4 desde su commit fijado con Go y dependencias parcheadas; se mantiene la política de excepciones de Trivy existente.
+
+## Respaldo y recuperación del estado
+
+La fase 90 añade `make dashboard-backup`, `make dashboard-restore BACKUP=...` y `make dashboard-backup-check`. Cubren workspace, SQLite y clave de bóveda con el laboratorio detenido; restauran solo en destinos vacíos y revocan sesiones. El archivo contiene secretos recuperables y se guarda localmente con permisos privados. Ver [operación y límites](phase-90.md).

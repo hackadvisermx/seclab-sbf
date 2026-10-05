@@ -199,7 +199,7 @@
               class="px-2 py-0.5 rounded-sm text-xs font-mono font-bold"
               :class="reconIsRunning ? 'bg-cyan-950 text-cyan-400 border border-cyan-500/50 animate-pulse' : 'bg-slate-800 text-slate-400'"
             >
-              {{ reconIsRunning ? '● EJECUTANDO' : reconStatus.job?.status === 'failed' ? 'FALLIDO' : reconStatus.job?.status === 'simulated' ? 'SIMULADO' : 'DETENIDO / LISTO' }}
+              {{ reconJobLabel }}
             </span>
           </div>
 
@@ -251,6 +251,15 @@
           </div>
 
           <!-- Mensaje / Feedback de Lanzamiento -->
+          <button v-if="reconIsRunning" @click="cancelReconPipeline"
+            :disabled="isCancellingRecon || reconStatus.job?.status === 'cancelling'"
+            class="mt-3 w-full rounded-sm border border-rose-500/50 bg-rose-950/50 px-4 py-2 text-sm font-mono text-rose-300 disabled:opacity-50">
+            {{ reconStatus.job?.status === 'cancelling' ? 'Cancelando reconocimiento...' : 'Cancelar reconocimiento' }}
+          </button>
+          <p v-if="reconStatus.job?.started_at" class="mt-2 text-xs text-slate-400 font-mono">
+            Inicio: {{ new Date(reconStatus.job.started_at).toLocaleString() }}
+            <span v-if="reconStatus.job?.finished_at"> · Fin: {{ new Date(reconStatus.job.finished_at).toLocaleString() }}</span>
+          </p>
           <div v-if="reconActionMsg" class="p-2.5 rounded-sm text-xs font-mono border" :class="reconActionSuccess ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-300' : 'bg-rose-950/40 border-rose-500/30 text-rose-300'">
             {{ reconActionMsg }}
           </div>
@@ -289,6 +298,11 @@
       <div v-if="reconStatus.job?.status === 'failed' || reconStatus.summary?.status === 'failed'" class="p-3 rounded-sm border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
         El reconocimiento falló. Consulta la consola para ver la causa. Las métricas pueden incluir archivos de ejecuciones anteriores; no confirman una ejecución completa.
         <p v-if="reconStatus.job?.error" class="mt-1">{{ reconStatus.job.error }}</p>
+      </div>
+      <div v-if="['interrupted', 'cancelled', 'cancelling'].includes(reconStatus.job?.status)"
+        class="p-3 rounded-sm border border-amber-500/40 bg-amber-950/30 text-amber-300 text-xs font-mono" role="status">
+        {{ reconStatus.job?.status === 'interrupted' ? 'Ejecución interrumpida por un reinicio. No se reanudó automáticamente.' : reconStatus.job?.status === 'cancelling' ? 'Cancelación en curso. Espera a que termine antes de iniciar otra ejecución.' : 'Reconocimiento cancelado.' }}
+        Los archivos previos se conservan y pueden contener resultados parciales; no confirman una ejecución completa.
       </div>
       <div v-if="reconStatus.job?.status === 'simulated'" class="p-3 rounded-sm border border-cyan-500/40 bg-cyan-950/30 text-cyan-300 text-xs font-mono" role="status">
         Simulación finalizada sin consultas de red. No se generaron resultados de reconocimiento. Las métricas muestran los archivos que ya existían.
@@ -1372,11 +1386,13 @@ const reconStage = ref('all')
 const reconDryRun = ref(false)
 const reconLogContent = ref('')
 const isStartingRecon = ref(false)
+const isCancellingRecon = ref(false)
 const reconActionMsg = ref('')
 const reconActionSuccess = ref(true)
 let reconPollTimer = null
 
-const reconIsRunning = computed(() => reconStatus.value.job?.status === 'running')
+const reconIsRunning = computed(() => ['running', 'cancelling'].includes(reconStatus.value.job?.status))
+const reconJobLabel = computed(() => ({ running: '● EJECUTANDO', cancelling: 'CANCELANDO', completed: 'COMPLETADO', failed: 'FALLIDO', simulated: 'SIMULADO', interrupted: 'INTERRUMPIDO', cancelled: 'CANCELADO' })[reconStatus.value.job?.status] || 'LISTO')
 
 // Artefactos del laboratorio (recon/, fuzzing/, loot/, etc.)
 const activeArtifactFolder = ref('recon')
@@ -1919,7 +1935,7 @@ async function loadReconStatus() {
   try {
     const res = await api.getReconStatus(engId.value, engType.value)
     reconStatus.value = res
-    if (res.job?.status === 'running') {
+    if (['running', 'cancelling'].includes(res.job?.status)) {
       startReconPolling()
     }
   } catch (err) {
@@ -1941,7 +1957,7 @@ function startReconPolling() {
   reconPollTimer = setInterval(async () => {
     await loadReconStatus()
     await loadReconLog()
-    if (reconStatus.value.job?.status !== 'running') {
+    if (!['running', 'cancelling'].includes(reconStatus.value.job?.status)) {
       stopReconPolling()
     }
   }, 3000)
@@ -1951,6 +1967,24 @@ function stopReconPolling() {
   if (reconPollTimer) {
     clearInterval(reconPollTimer)
     reconPollTimer = null
+  }
+}
+
+async function cancelReconPipeline() {
+  isCancellingRecon.value = true
+  reconActionMsg.value = ''
+  try {
+    const res = await api.cancelRecon(engId.value, engType.value)
+    reconActionSuccess.value = true
+    reconActionMsg.value = res.message
+    await loadReconStatus()
+    await loadReconLog()
+    startReconPolling()
+  } catch (err) {
+    reconActionSuccess.value = false
+    reconActionMsg.value = err.message || 'No se pudo cancelar el reconocimiento'
+  } finally {
+    isCancellingRecon.value = false
   }
 }
 

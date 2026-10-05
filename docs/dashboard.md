@@ -91,6 +91,20 @@ El job `static-analysis` también ejecuta auditoría, pruebas y build del fronte
 
 ---
 
+### Jobs de reconocimiento persistentes
+
+La fase 89 implementa la persistencia y control de ciclo de vida de los jobs de reconocimiento.
+
+El dashboard guarda el último job por tipo e ID de proyecto en `SECLAB_DATA_DIR/recon-jobs.db` (por defecto `/var/lib/seclab/dashboard/recon-jobs.db`, dentro del volumen `lab-state`). Conserva etapa, modo simulado, identificador de ejecución, inicio, fin, estado y error. Los logs y artefactos siguen en el workspace. Los reportes anteriores a esta fase no se convierten automáticamente en jobs históricos.
+
+El arranque obtiene un bloqueo exclusivo de `recon-jobs.db.lock` antes de marcar jobs `running`/`cancelling` pendientes como `interrupted`. No los reanuda ni utiliza PIDs almacenados para enviar señales. Solo se admite una instancia del dashboard para ese directorio de estado. El proceso del pipeline hereda el bloqueo mientras vive: un reinicio del dashboard no puede tomarlo si aún queda un pipeline de la instancia anterior.
+
+En Reconocimiento, **Cancelar reconocimiento** solicita `POST /api/v1/recon/{id}/cancel?type=engagement|reto`, protegido por la misma sesión que el resto de la API. El estado pasa por `cancelling` y termina en `cancelled` cuando el worker finaliza. Se envía TERM al grupo de procesos creado por ese job, con escalamiento a KILL tras dos segundos; no se señalan procesos a partir de datos persistidos. Durante `running`/`cancelling` no se permite iniciar otro job ni eliminar el proyecto. El cierre normal del dashboard también cancela y recoge sus workers. Una cancelación conserva archivos parciales y no implica que el reconocimiento haya terminado correctamente.
+
+Las regresiones en `dashboard/backend/tests/test_recon_lifecycle.py` verifican persistencia, recuperación sin relanzamiento, exclusión entre instancias, cancelación de descendientes, cierre, aislamiento por tipo y callbacks de ejecuciones anteriores.
+
+La suite en contenedor instalada `make dashboard-tests` pasa 37 pruebas (incluidas 12 pruebas de ciclo de vida y la integración instalada de auditoría). `make verify` valida 105 pruebas unitarias de seguridad y las cuatro pruebas y build frontend pasan limpiamente.
+
 ### Acceso del operador
 
 Al abrir `http://localhost:8080`, inicia sesión como **tester** con la contraseña configurada en `TTYD_PASSWORD`. Se puede definir una contraseña separada con `DASHBOARD_PASSWORD` en el archivo de secretos, sin valores por defecto. La sesión dura ocho horas; **Cerrar sesión** revoca el token y desconecta el streaming de logs. La cookie es HttpOnly y SameSite Strict, y usa Secure cuando se accede por HTTPS. Las descargas usan la misma sesión. Los tokens antiguos de localStorage dejan de funcionar.

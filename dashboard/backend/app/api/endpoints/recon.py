@@ -47,3 +47,11 @@ def get_recon_log(
     """Retorna la bitácora de ejecución más reciente del pipeline de reconocimiento."""
     content = recon_service.get_log(id, lines=lines, engagement_type=type)
     return {"engagement_id": id, "lines": lines, "content": content}
+
+
+@router.post("/{id}/cancel")
+def cancel_recon_pipeline(id: str, type: str = Query("engagement", pattern="^(engagement|reto)$")):
+    result = recon_service.cancel_pipeline(id, type)
+    if not result.get('success'):
+        raise HTTPException(status_code=result['code'], detail=result['error'])
+    return result

@@ -18,6 +18,7 @@ DATA_DIR = pathlib.Path(os.environ.get("SECLAB_DATA_DIR", str(DEFAULT_DATA_DIR))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 VAULT_DB_PATH = DATA_DIR / "vault.db"
 VAULT_KEY_PATH = DATA_DIR / ".vault.key"
+RECON_DB_PATH = DATA_DIR / "recon-jobs.db"
 
 # Red y Puerto
 HOST = os.environ.get("DASHBOARD_HOST", "0.0.0.0")

@@ -56,18 +56,19 @@ class TestDashboardProjectDeletion(unittest.TestCase):
         self.assertEqual((outside / "keep.txt").read_text(), "keep")
 
     def test_running_recon_blocks_deletion_and_types_are_isolated(self):
-        recon = self.recon_module.ReconService()
+        recon = self.recon_module.ReconService(self.root / "jobs.db")
         self.workspace.create_engagement("sample", "engagement")
         self.workspace.create_engagement("sample", "reto")
-        recon._jobs[("engagement", "sample")] = {"status": "running"}
-        recon._jobs[("reto", "sample")] = {"status": "completed"}
+        recon.store.begin(("engagement", "sample"), "all", False)
+        job = recon.store.begin(("reto", "sample"), "all", False)
+        recon.store.finish(("reto", "sample"), job["run_id"], "completed")
         with patch.object(self.workspace_module, "workspace_service", self.workspace):
             with self.assertRaises(RuntimeError):
                 recon.delete_engagement("sample", "engagement")
             self.assertTrue((self.workspace.ws_path / "engagements/sample").is_dir())
             recon.delete_engagement("sample", "reto")
-            self.assertNotIn(("reto", "sample"), recon._jobs)
-            self.assertIn(("engagement", "sample"), recon._jobs)
+            self.assertIsNone(recon.store.get(("reto", "sample")))
+            self.assertIsNotNone(recon.store.get(("engagement", "sample")))
 
     def test_delete_api_success_missing_invalid_and_running(self):
         from fastapi import FastAPI
@@ -75,17 +76,17 @@ class TestDashboardProjectDeletion(unittest.TestCase):
         from app.api.endpoints import engagements
         app = FastAPI()
         app.include_router(engagements.router)
-        recon = self.recon_module.ReconService()
+        recon = self.recon_module.ReconService(self.root / "jobs.db")
         self.workspace.create_engagement("sample", "reto")
         self.workspace.create_engagement("sample", "engagement")
         with patch.object(self.workspace_module, "workspace_service", self.workspace), \
              patch.object(engagements, "recon_service", recon), TestClient(app) as client:
             invalid = client.delete("/engagements/sample?type=unknown")
             self.assertEqual(invalid.status_code, 400)
-            recon._jobs[("reto", "sample")] = {"status": "running"}
+            job = recon.store.begin(("reto", "sample"), "all", False)
             self.assertEqual(client.delete("/engagements/sample?type=reto").status_code, 409)
             self.assertTrue((self.workspace.ws_path / "retos/sample").exists())
-            recon._jobs[("reto", "sample")]["status"] = "completed"
+            recon.store.finish(("reto", "sample"), job["run_id"], "completed")
             deleted = client.delete("/engagements/sample?type=reto")
             self.assertEqual(deleted.status_code, 200)
             self.assertEqual(deleted.json()["type"], "reto")

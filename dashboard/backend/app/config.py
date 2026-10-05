@@ -31,28 +31,29 @@ SKILLS_DIR = pathlib.Path("/workspace/skills") if pathlib.Path("/workspace/skill
 TEMPLATES_DIR = pathlib.Path("/workspace/templates") if pathlib.Path("/workspace/templates").exists() else REPO_ROOT / "workspace-seed" / "templates"
 
 # Seguridad y Autenticación
-SECRET_KEY = os.environ.get("SECLAB_SECRET_KEY", "seclab-tactical-dashboard-secret-key-default-2026")
-AUTH_ENABLED = os.environ.get("DASHBOARD_AUTH_ENABLED", "false").lower() in ("true", "1", "yes")
-
-# Intentar leer contraseña configurada en .env o secretos
-LAB_ENV_FILE = pathlib.Path("/run/secrets/lab.env")
+AUTH_ENABLED = True
+SESSION_SECONDS = 8 * 60 * 60
+LAB_ENV_FILE = pathlib.Path(os.environ.get("ENV_FILE_PATH", "/run/secrets/lab.env"))
 if not LAB_ENV_FILE.exists():
     LAB_ENV_FILE = REPO_ROOT / ".env"
 
-TESTER_PASSWORD = os.environ.get("TESTER_PASSWORD", "tester")
-if LAB_ENV_FILE.exists():
-    try:
-        for line in LAB_ENV_FILE.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("TESTER_PASSWORD="):
-                TESTER_PASSWORD = line.split("=", 1)[1].strip().strip("'\"")
-    except Exception:
-        pass
+def load_lab_settings(path: pathlib.Path) -> dict:
+    settings = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key not in settings and key in {"TTYD_PASSWORD", "DASHBOARD_PASSWORD", "DASHBOARD_CORS_ORIGINS", "DASHBOARD_ALLOWED_HOSTS"}:
+                settings[key] = value
+    return settings
 
-CORS_ORIGINS: List[str] = [
-    "http://localhost:5173", # Vite dev server
-    "http://127.0.0.1:5173",
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "*" # Permite Tailscale IP
-]
+
+lab_settings = load_lab_settings(LAB_ENV_FILE)
+TESTER_PASSWORD = os.environ.get("DASHBOARD_PASSWORD") or lab_settings.get("DASHBOARD_PASSWORD") or lab_settings.get("TTYD_PASSWORD", "")
+CORS_ORIGINS: List[str] = [value.strip() for value in os.environ.get(
+    "DASHBOARD_CORS_ORIGINS", lab_settings.get("DASHBOARD_CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080"),
+).split(",") if value.strip()]
+ALLOWED_HOSTS = [value.strip() for value in os.environ.get(
+    "DASHBOARD_ALLOWED_HOSTS", lab_settings.get("DASHBOARD_ALLOWED_HOSTS", "localhost,127.0.0.1"),
+).split(",") if value.strip()]
+if not CORS_ORIGINS or not ALLOWED_HOSTS or any("*" in value for value in CORS_ORIGINS + ALLOWED_HOSTS):
+    raise RuntimeError("El dashboard requiere orígenes y hosts explícitos.")

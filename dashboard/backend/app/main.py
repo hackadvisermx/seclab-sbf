@@ -1,11 +1,9 @@
-import os
-import pathlib
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-from app.config import CORS_ORIGINS, DASHBOARD_DIR
+from fastapi.responses import HTMLResponse, JSONResponse
+from app.config import CORS_ORIGINS, DASHBOARD_DIR, TESTER_PASSWORD, ALLOWED_HOSTS
 from app.core.database import init_db
 from app.api.router import api_router
 
@@ -15,6 +13,8 @@ init_db()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not TESTER_PASSWORD:
+        raise RuntimeError("Configura TTYD_PASSWORD en lab.env o DASHBOARD_PASSWORD.")
     init_db()
     yield
 
@@ -24,6 +24,7 @@ app = FastAPI(
     description="Backend unificado de gestión de auditorías, alcance, hallazgos y Hermes API Key Vault para SecLab-SBF.",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None, redoc_url=None, openapi_url=None,
 )
 
 # CORS Middleware
@@ -31,9 +32,30 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
+
+@app.middleware("http")
+async def protect_origin(request: Request, call_next):
+    origin = request.headers.get("origin")
+    if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin not in CORS_ORIGINS:
+        return JSONResponse({"detail": "Origen no permitido."}, status_code=403)
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+from app.core.workspace_paths import UnsafeWorkspacePath
+
+@app.exception_handler(UnsafeWorkspacePath)
+async def invalid_workspace_path(request: Request, error: UnsafeWorkspacePath):
+    return JSONResponse({"detail": str(error)}, status_code=400)
 
 # Enrutar API v1
 app.include_router(api_router)
@@ -48,7 +70,9 @@ if dist_dir.exists() and (dist_dir / "index.html").exists():
 
     @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def serve_spa(full_path: str):
-        potential_file = dist_dir / full_path
+        potential_file = (dist_dir / full_path).resolve()
+        if not potential_file.is_relative_to(dist_dir.resolve()):
+            return JSONResponse({"detail": "Ruta no permitida."}, status_code=400)
         if full_path and potential_file.is_file():
             from fastapi.responses import FileResponse
             return FileResponse(str(potential_file))
@@ -80,7 +104,7 @@ else:
                     <span class="badge">SQLite AES-256 Vault</span>
                     <span class="badge">Evidence-First</span>
                 </div>
-                <p><a href="/docs">Abrir Documentación Swagger OpenAPI (/docs)</a></p>
+                <p>La API requiere una sesión del operador.</p>
             </div>
         </body>
         </html>

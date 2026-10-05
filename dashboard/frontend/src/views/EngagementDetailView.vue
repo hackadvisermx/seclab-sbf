@@ -1308,7 +1308,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { marked } from 'marked'
+import { renderReport } from '../report-security'
 import { api } from '../api'
 import DeleteProjectButton from '../components/DeleteProjectButton.vue'
 
@@ -1494,9 +1494,9 @@ const reportCompiledDate = computed(() => {
 const renderedReportHtml = computed(() => {
   if (!reportContent.value) return '<p class="text-slate-500 font-mono">No hay informe compilado aún. Haz clic en "Compilar Reporte".</p>'
   try {
-    return marked.parse(reportContent.value)
+    return renderReport(reportContent.value)
   } catch (err) {
-    return `<pre class="text-red-400 font-mono">Error al renderizar markdown: ${err.message}</pre>`
+    return '<p class="text-red-400 font-mono">No se pudo mostrar el informe.</p>'
   }
 })
 

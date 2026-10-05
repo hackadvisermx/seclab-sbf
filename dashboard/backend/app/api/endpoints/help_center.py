@@ -1,4 +1,5 @@
 import pathlib
+import re
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 from app.config import CHEATSHEET_FILE, SKILLS_DIR
@@ -31,12 +32,12 @@ def get_cheatsheet():
 @router.get("/skills")
 def list_skills():
     """Lista las metodologías y playbooks de habilidades disponibles en skills/."""
-    if not SKILLS_DIR.exists():
+    if not SKILLS_DIR.exists() or SKILLS_DIR.is_symlink():
         return []
 
     skills = []
     for skill_path in sorted(SKILLS_DIR.iterdir()):
-        if skill_path.is_dir() and (skill_path / "SKILL.md").exists():
+        if not skill_path.is_symlink() and skill_path.is_dir() and (skill_path / "SKILL.md").is_file() and not (skill_path / "SKILL.md").is_symlink():
             skill_md = skill_path / "SKILL.md"
             title = skill_path.name
             description = ""
@@ -60,8 +61,11 @@ def list_skills():
 @router.get("/skills/{skill_id}")
 def get_skill_detail(skill_id: str):
     """Devuelve el contenido completo en Markdown del playbook solicitado."""
-    skill_file = SKILLS_DIR / skill_id / "SKILL.md"
-    if not skill_file.exists():
+    skill_dir = SKILLS_DIR / skill_id
+    skill_file = skill_dir / "SKILL.md"
+    if (not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", skill_id)
+            or SKILLS_DIR.is_symlink() or skill_dir.is_symlink() or skill_file.is_symlink()
+            or not skill_file.resolve().is_relative_to(SKILLS_DIR.resolve()) or not skill_file.is_file()):
         raise HTTPException(status_code=404, detail="Skill no encontrada")
     return {
         "id": skill_id,

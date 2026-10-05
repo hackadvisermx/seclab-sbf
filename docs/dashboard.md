@@ -7,7 +7,7 @@ Estación de control web unificada para la gestión operativa y técnica de audi
 ## 1. Principios de Diseño y Seguridad
 
 1. **Filesystem-First**:
-   El sistema de archivos `/workspace` (`target.yaml`, `evidence/*.md`, `terminal.log`, `notes.md`, `loot/`, `recon/`, `exports/`) es la **fuente de verdad inmutable y auditable**. El backend sincroniza y refleja este estado sin crear dependencias externas rígidas.
+   El sistema de archivos `/workspace` (`target.yaml`, `evidence/*.md`, `terminal.log`, `notes.md`, `loot/`, `recon/`, `exports/`) es la **fuente de verdad editable y auditable**. El backend sincroniza y refleja este estado sin crear dependencias externas rígidas.
 2. **Zero Plaintext Leakage**:
    Las claves API de reconocimiento y LLMs se almacenan cifradas en SQLite con **AES-256-GCM**. La inyección en herramientas de auditoría (`shodan`, `findomain`, `nuclei`, `x8`) se realiza estrictamente en memoria mediante `pt-vault run <comando>` o subprocesos controlados, sin escribir secretos en disco ni en el historial de comandos.
 3. **Evidence-First & Scope Guard**:
@@ -70,13 +70,26 @@ make dashboard-build
 # Ejecutar la suite completa de pruebas unitarias
 make python-units-check
 
-# Pruebas de eliminación y API con las dependencias de la imagen local
+# Pruebas de autenticación, WebSocket, archivos, claves y API
 make dashboard-tests
+
+# Pruebas de sanitización de reportes
+npm --prefix dashboard/frontend test
 ```
 
 El backend y el frontend compilado viven dentro de `seclab-sbf:full`. `make compose-up` también inicia el dashboard y publica sus puertos solo en loopback. `make dashboard-build` recompila el frontend; después se necesita `make build-full` y recrear el contenedor para aplicar cambios. La etiqueta `seclab.build-inputs` incluye las fuentes y el frontend compilado del dashboard, excluyendo datos del Vault y cachés de Python.
 
 ---
+
+### Acceso del operador
+
+Al abrir `http://localhost:8080`, inicia sesión como **tester** con la contraseña configurada en `TTYD_PASSWORD`. Se puede definir una contraseña separada con `DASHBOARD_PASSWORD` en el archivo de secretos, sin valores por defecto. La sesión dura ocho horas; **Cerrar sesión** revoca el token y desconecta el streaming de logs. La cookie es HttpOnly y SameSite Strict, y usa Secure cuando se accede por HTTPS. Las descargas usan la misma sesión. Los tokens antiguos de localStorage dejan de funcionar.
+
+La API, incluido el control VPN y la bóveda, responde 401 sin sesión. La entrada admite cinco intentos por minuto para el único operador. Los orígenes y hosts por defecto son localhost y 127.0.0.1 en el puerto 8080. Para un puerto distinto, configura `DASHBOARD_CORS_ORIGINS`; para un nombre privado, configura también `DASHBOARD_ALLOWED_HOSTS`, siempre sin comodines. El acceso remoto sigue pasando por un túnel del host sobre Tailscale. Estos ajustes no publican puertos.
+
+Los proyectos con enlaces simbólicos no aparecen en la lista y sus operaciones son rechazadas. Los hallazgos requieren identificadores de hasta 128 caracteres alfanuméricos, punto, guion o guion bajo, empezando por letra, número o guion. Crear un proyecto con un nombre existente conserva sus archivos y devuelve un error.
+
+La bóveda no regenera una clave inválida o ausente si ya contiene datos cifrados. Restaura la pareja `vault.db` y `.vault.key` desde un respaldo consistente; no borres la clave para intentar corregir un error. Esta protección y el login no aíslan la bóveda de herramientas que se ejecuten bajo el mismo usuario Unix `tester`.
 
 ## 4. Módulos y Capacidades Operativas
 

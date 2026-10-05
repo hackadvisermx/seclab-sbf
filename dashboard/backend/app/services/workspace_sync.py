@@ -7,6 +7,7 @@ import shutil
 import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
+from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
     FindingDetail,
@@ -38,22 +39,25 @@ class WorkspaceSyncService:
         (self.ws_path / "retos").mkdir(exist_ok=True)
 
     def _resolve_dir(self, eng_id: str, eng_type: str = "engagement") -> pathlib.Path:
-        sub_dir = "retos" if eng_type in ("reto", "retos") else "engagements"
-        return self.ws_path / sub_dir / eng_id
+        return project_directory(self.ws_path, eng_id, eng_type)
 
     def list_engagements(self) -> List[EngagementSummary]:
         """Escanea el workspace y lista todos los engagements y retos registrados."""
         results = []
         for cat in ("engagements", "retos"):
             cat_dir = self.ws_path / cat
-            if not cat_dir.exists():
+            if not cat_dir.exists() or cat_dir.is_symlink():
                 continue
             for item in sorted(cat_dir.iterdir()):
-                if not item.is_dir() or item.name.startswith((".", "_")):
+                if item.is_symlink() or not item.is_dir() or item.name.startswith((".", "_")):
                     continue
 
                 eng_id = item.name
                 eng_type = "reto" if cat == "retos" else "engagement"
+                try:
+                    self._resolve_dir(eng_id, eng_type)
+                except UnsafeWorkspacePath:
+                    continue
                 target_yaml_path = item / "target.yaml"
                 notes_path = item / "notes.md"
                 evidence_dir = item / "evidence"
@@ -129,7 +133,9 @@ class WorkspaceSyncService:
         """Crea la estructura de carpetas y siembra target.yaml, scope.txt y notes.md."""
         clean_name = re.sub(r"[^a-zA-Z0-9._-]", "", name)
         target_dir = self._resolve_dir(clean_name, eng_type)
-        target_dir.mkdir(parents=True, exist_ok=True)
+        if target_dir.exists():
+            raise ValueError("Ya existe un proyecto con ese nombre.")
+        target_dir.mkdir(parents=True, exist_ok=False)
 
         for folder in ("recon", "fuzzing", "evidence", "loot", "screenshots"):
             (target_dir / folder).mkdir(exist_ok=True)
@@ -261,6 +267,8 @@ class WorkspaceSyncService:
 
     def get_finding(self, eng_id: str, slug: str, eng_type: str = "engagement") -> Optional[FindingDetail]:
         """Retorna el detalle completo de un hallazgo."""
+        if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", slug):
+            raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
         file_path = self._resolve_dir(eng_id, eng_type) / "evidence" / f"{slug}.md"
         if not file_path.exists():
             return None
@@ -288,6 +296,8 @@ class WorkspaceSyncService:
 
     def save_finding(self, eng_id: str, finding_create: FindingCreate, eng_type: str = "engagement") -> FindingDetail:
         """Crea o actualiza una ficha en evidence/<slug>.md preservando el formato Evidence-First."""
+        if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", finding_create.slug):
+            raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
         ev_dir = self._resolve_dir(eng_id, eng_type) / "evidence"
         ev_dir.mkdir(parents=True, exist_ok=True)
         file_path = ev_dir / f"{finding_create.slug}.md"
@@ -334,6 +344,8 @@ class WorkspaceSyncService:
 
     def delete_finding(self, eng_id: str, slug: str, eng_type: str = "engagement") -> bool:
         """Elimina una ficha de hallazgo."""
+        if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", slug):
+            raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
         file_path = self._resolve_dir(eng_id, eng_type) / "evidence" / f"{slug}.md"
         if file_path.exists():
             file_path.unlink()
@@ -506,7 +518,7 @@ class WorkspaceSyncService:
         target_dir = self._resolve_dir(eng_id, eng_type).resolve()
         requested_path = (target_dir / rel_path).resolve()
 
-        if not str(requested_path).startswith(str(target_dir)) or not requested_path.is_file():
+        if not requested_path.is_relative_to(target_dir) or not requested_path.is_file():
             raise FileNotFoundError("Archivo de artefacto no encontrado o acceso denegado")
 
         size = requested_path.stat().st_size

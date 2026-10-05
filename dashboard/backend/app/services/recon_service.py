@@ -1,4 +1,5 @@
-import datetime
+import fcntl
+import signal
 import json
 import os
 import pathlib
@@ -6,11 +7,12 @@ import subprocess
 import sys
 import threading
 from typing import Any, Dict, List, Optional
-from app.config import SCRIPTS_DIR, WORKSPACE_DIR
+from app.config import SCRIPTS_DIR, WORKSPACE_DIR, RECON_DB_PATH
+from app.core.recon_jobs import ReconJobStore, ACTIVE_STATUSES
 from app.core.workspace_paths import project_directory
 
 class ReconService:
-    def __init__(self):
+    def __init__(self, db_path=None):
         self.py_bin = sys.executable
         if (SCRIPTS_DIR / "pt-recon-pipeline.py").exists():
             self.pipeline_script = SCRIPTS_DIR / "pt-recon-pipeline.py"
@@ -18,9 +20,60 @@ class ReconService:
             self.pipeline_script = pathlib.Path("/usr/local/bin/pt-recon-pipeline")
         else:
             self.pipeline_script = SCRIPTS_DIR / "pt-recon-pipeline.py"
-        # Estructura: { engagement_id: { "status": "running"|"completed"|"failed"|"idle", ... } }
-        self._jobs: Dict[tuple[str, str], Dict[str, Any]] = {}
+        self.store = ReconJobStore(RECON_DB_PATH if db_path is None else db_path)
         self._lock = threading.Lock()
+        self._processes = {}
+        self._threads = {}
+        self._lease = None
+        self._closing = False
+
+    def startup(self):
+        with self._lock:
+            if self._lease is not None:
+                return
+            fd = os.open(str(self.store.path) + '.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+            try:
+                os.fchmod(fd, 0o600)
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.store.recover()
+            except BaseException:
+                os.close(fd)
+                raise
+            self._lease = fd
+            self._closing = False
+
+    @staticmethod
+    def _stop_processes(processes):
+        # Callers hold _lock, so workers cannot reap/reuse the group leader's
+        # PID before escalation. Signal descendants even if the leader exited.
+        for proc in processes:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        if processes:
+            threading.Event().wait(2)
+        for proc in processes:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    def shutdown(self):
+        with self._lock:
+            self._closing = True
+            for key in self._threads:
+                self.store.request_cancel(key)
+            self._stop_processes(list(self._processes.values()))
+            threads = list(self._threads.values())
+        for thread in threads:
+            thread.join(timeout=5)
+        with self._lock:
+            if any(thread.is_alive() for thread in threads):
+                raise RuntimeError('No se pudo detener el reconocimiento durante el cierre.')
+            if self._lease is not None:
+                os.close(self._lease)
+                self._lease = None
 
     def get_target_dir(self, engagement_id: str, engagement_type: str = "engagement") -> Optional[pathlib.Path]:
         p = project_directory(WORKSPACE_DIR, engagement_id, engagement_type)
@@ -72,15 +125,10 @@ class ReconService:
             except Exception:
                 pass
 
-        # Comprobar trabajo en memoria
-        with self._lock:
-            job = self._jobs.get((engagement_type, engagement_id), {
-                "status": "idle",
-                "stage": None,
-                "dry_run": False,
-                "started_at": None,
-                "finished_at": None,
-            })
+        job = self.store.get((engagement_type, engagement_id)) or {
+            'status': 'idle', 'stage': None, 'dry_run': False,
+            'started_at': None, 'finished_at': None, 'error': None,
+        }
 
         # Últimas líneas de log
         recent_logs = []
@@ -136,104 +184,99 @@ class ReconService:
         if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
             return {"success": False, "error": "Etapa de reconocimiento no válida."}
         with self._lock:
+            if self._closing:
+                return {'success': False, 'error': 'El dashboard se está cerrando.'}
             target_dir = self.get_target_dir(engagement_id, engagement_type)
             if not target_dir:
-                return {"success": False, "error": f"Directorio no encontrado: {engagement_id}"}
+                return {'success': False, 'error': f'Directorio no encontrado: {engagement_id}'}
             job_key = (engagement_type, engagement_id)
-            existing = self._jobs.get(job_key)
-            if existing and existing.get("status") == "running":
-                return {
-                    "success": False,
-                    "error": "Ya hay una tarea de reconocimiento ejecutándose en este engagement.",
-                    "job": existing,
-                }
-
-            recon_dir = target_dir / "recon"
+            recon_dir = target_dir / 'recon'
             recon_dir.mkdir(parents=True, exist_ok=True)
-            log_path = recon_dir / "recon.log"
+            log_path = recon_dir / 'recon.log'
+            try:
+                job = self.store.begin(job_key, stage, dry_run)
+            except RuntimeError as error:
+                return {'success': False, 'error': str(error), 'job': self.store.get(job_key)}
+            thread = threading.Thread(target=self._execute_pipeline_worker,
+                args=(job_key, target_dir, stage, dry_run, log_path, job['run_id']), daemon=True)
+            self._threads[job_key] = thread
+            try:
+                thread.start()
+            except Exception as error:
+                self._threads.pop(job_key, None)
+                self.store.finish(job_key, job['run_id'], 'failed', str(error))
+                return {'success': False, 'error': 'No se pudo iniciar el reconocimiento.'}
+        return {'success': True, 'message': 'Reconocimiento iniciado.', 'job': job}
 
-            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            job_info = {
-                "status": "running",
-                "stage": stage,
-                "dry_run": dry_run,
-                "started_at": now_iso,
-                "finished_at": None,
-                "error": None,
-            }
-            self._jobs[job_key] = job_info
-
-        # Iniciar hilo de ejecución desacoplado
-        t = threading.Thread(
-            target=self._execute_pipeline_worker,
-            args=(job_key, target_dir, stage, dry_run, log_path),
-            daemon=True,
-        )
-        t.start()
-
-        return {
-            "success": True,
-            "message": f"Pipeline de reconocimiento iniciado (etapa: {stage}, dry_run: {dry_run})",
-            "job": job_info,
-        }
-
-    def delete_engagement(self, engagement_id: str, engagement_type: str = "engagement"):
-        from app.services.workspace_sync import workspace_service
-        job_key = (engagement_type, engagement_id)
+    def cancel_pipeline(self, engagement_id, engagement_type='engagement'):
         with self._lock:
-            if self._jobs.get(job_key, {}).get("status") == "running":
-                raise RuntimeError("El reconocimiento está en curso. Espera a que termine antes de eliminar el proyecto.")
+            if not self.get_target_dir(engagement_id, engagement_type):
+                return {'success': False, 'error': 'Proyecto no encontrado.', 'code': 404}
+            key = (engagement_type, engagement_id)
+            job = self.store.get(key)
+            if not job or job['status'] not in ACTIVE_STATUSES:
+                return {'success': False, 'error': 'No hay reconocimiento activo para cancelar.', 'code': 409}
+            self.store.request_cancel(key)
+            proc = self._processes.get(key)
+            if proc is not None:
+                self._stop_processes([proc])
+            return {'success': True, 'message': 'Cancelación solicitada.', 'job': self.store.get(key)}
+
+    def delete_engagement(self, engagement_id: str, engagement_type: str = 'engagement'):
+        from app.services.workspace_sync import workspace_service
+        key = (engagement_type, engagement_id)
+        with self._lock:
+            if (self.store.get(key) or {}).get('status') in ACTIVE_STATUSES:
+                raise RuntimeError('El reconocimiento está activo. Espera a que termine o cancélalo antes de eliminar el proyecto.')
             workspace_service.delete_engagement(engagement_id, engagement_type)
-            self._jobs.pop(job_key, None)
+            self.store.delete(key)
 
-    def _execute_pipeline_worker(
-        self,
-        job_key: tuple[str, str],
-        target_dir: pathlib.Path,
-        stage: str,
-        dry_run: bool,
-        log_path: pathlib.Path,
-    ):
-        """Worker en segundo plano que ejecuta pt-recon-pipeline.py y registra logs."""
-        cmd = [self.py_bin, str(self.pipeline_script), "run", str(target_dir), "--stage", stage]
+    def _execute_pipeline_worker(self, job_key, target_dir, stage, dry_run, log_path, run_id):
+        cmd = [self.py_bin, str(self.pipeline_script), 'run', str(target_dir), '--stage', stage]
         if dry_run:
-            cmd.append("--dry-run")
-
+            cmd.append('--dry-run')
+        proc = None
         try:
-            with open(log_path, "a", encoding="utf-8") as log_f:
-                ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                log_f.write(f"\n--- [SECLAB RECON LAUNCH: {ts} | Stage: {stage} | DryRun: {dry_run}] ---\n")
-                log_f.flush()
-
-                proc = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    universal_newlines=True,
-                )
-
+            with open(log_path, 'a', encoding='utf-8') as log_f:
+                with self._lock:
+                    job = self.store.get(job_key)
+                    if not job or job['run_id'] != run_id:
+                        return
+                    if job['status'] != 'running' or self._closing:
+                        self.store.finish(job_key, run_id, 'cancelled')
+                        return
+                    log_f.write(f'\n--- [SECLAB RECON LAUNCH: {run_id} | Stage: {stage} | DryRun: {dry_run}] ---\n')
+                    log_f.flush()
+                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, bufsize=1, start_new_session=True,
+                        pass_fds=(() if self._lease is None else (self._lease,)))
+                    self._processes[job_key] = proc
                 if proc.stdout:
                     with proc.stdout:
                         for line in proc.stdout:
                             log_f.write(line)
                             log_f.flush()
-
-                proc.wait()
-
+                with self._lock:
+                    proc.wait()
+                    job = self.store.get(job_key)
+                    cancelled = job and job['status'] == 'cancelling'
+                    status = 'cancelled' if cancelled else (('simulated' if dry_run else 'completed') if proc.returncode == 0 else 'failed')
+                    error = None if cancelled or proc.returncode == 0 else f'Código de salida: {proc.returncode}'
+                    self.store.finish(job_key, run_id, status, error)
+                    self._processes.pop(job_key, None)
+        except Exception as error:
             with self._lock:
-                status = ("simulated" if dry_run else "completed") if proc.returncode == 0 else "failed"
-                self._jobs[job_key]["status"] = status
-                self._jobs[job_key]["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                if proc.returncode != 0:
-                    self._jobs[job_key]["error"] = f"Código de salida: {proc.returncode}"
-
-        except Exception as e:
+                if proc is not None:
+                    self._stop_processes([proc])
+                    proc.wait()
+                    self._processes.pop(job_key, None)
+                job = self.store.get(job_key)
+                cancelled = job and job['status'] == 'cancelling'
+                self.store.finish(job_key, run_id, 'cancelled' if cancelled else 'failed', None if cancelled else str(error))
+        finally:
             with self._lock:
-                self._jobs[job_key]["status"] = "failed"
-                self._jobs[job_key]["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                self._jobs[job_key]["error"] = str(e)
+                if self._threads.get(job_key) is threading.current_thread():
+                    self._threads.pop(job_key, None)
 
 
 recon_service = ReconService()

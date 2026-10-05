@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.config import CORS_ORIGINS, DASHBOARD_DIR, TESTER_PASSWORD, ALLOWED_HOSTS
 from app.core.database import init_db
 from app.api.router import api_router
+from app.services.recon_service import recon_service
 
 
 # Asegurar inicialización inmediata de tablas
@@ -16,7 +17,11 @@ async def lifespan(app: FastAPI):
     if not TESTER_PASSWORD:
         raise RuntimeError("Configura TTYD_PASSWORD en lab.env o DASHBOARD_PASSWORD.")
     init_db()
-    yield
+    recon_service.startup()
+    try:
+        yield
+    finally:
+        recon_service.shutdown()
 
 
 app = FastAPI(

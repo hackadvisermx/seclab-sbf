@@ -27,26 +27,42 @@
     </div>
 
     <!-- Filtros y Búsqueda -->
-    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0d1322] border border-[#1b253b] p-3 rounded-lg">
-      <div class="flex items-center space-x-2 w-full sm:w-auto">
-        <button
-          v-for="f in ['all', 'engagement', 'reto']"
-          :key="f"
-          @click="currentFilter = f"
-          class="px-3 py-1 rounded-sm text-xs font-mono uppercase tracking-wider transition-colors"
-          :class="currentFilter === f ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
-        >
-          {{ f === 'all' ? 'Todos' : (f === 'engagement' ? 'Auditorías' : 'Retos / CTFs') }}
-        </button>
+    <div class="space-y-3 bg-[#0d1322] border border-[#1b253b] p-3 rounded-lg">
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center space-x-2 w-full sm:w-auto">
+          <button
+            v-for="f in ['all', 'engagement', 'reto']"
+            :key="f"
+            @click="currentFilter = f"
+            class="px-3 py-1 rounded-sm text-xs font-mono uppercase tracking-wider transition-colors"
+            :class="currentFilter === f ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
+          >
+            {{ f === 'all' ? 'Todos' : (f === 'engagement' ? 'Auditorías' : 'Retos / CTFs') }}
+          </button>
+        </div>
+
+        <div class="w-full sm:w-72">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Buscar por nombre, cliente, categoría..."
+            class="w-full bg-[#070b14] border border-[#1b253b] focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-hidden"
+          />
+        </div>
       </div>
 
-      <div class="w-full sm:w-72">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Buscar por nombre, cliente..."
-          class="w-full bg-[#070b14] border border-[#1b253b] focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-hidden"
-        />
+      <!-- Barra de Subcategorías CTF (visible en Retos o Todos) -->
+      <div v-if="currentFilter === 'reto' || currentFilter === 'all'" class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-800/60 text-[11px] font-mono">
+        <span class="text-slate-500 mr-1 text-[10px] uppercase">Categoría CTF:</span>
+        <button
+          v-for="cat in ctfCategories"
+          :key="cat.id"
+          @click="currentCategory = cat.id"
+          class="px-2 py-0.5 rounded-sm transition-all"
+          :class="currentCategory === cat.id ? 'bg-slate-700 text-cyan-300 font-bold border border-cyan-500/40' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800/80'"
+        >
+          {{ cat.label }}
+        </button>
       </div>
     </div>
 
@@ -73,13 +89,40 @@
         class="tactical-card flex flex-col justify-between group hover:border-cyan-500/50"
       >
         <div>
-          <div class="flex items-center justify-between">
-            <span
-              class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider"
-              :class="item.type === 'reto' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'"
-            >
-              {{ item.type }}
-            </span>
+          <div class="flex items-center justify-between flex-wrap gap-1.5">
+            <div class="flex items-center flex-wrap gap-1.5">
+              <span
+                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider"
+                :class="item.type === 'reto' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'"
+              >
+                {{ item.type }}
+              </span>
+              <span
+                v-if="item.type === 'reto' && item.subtype === 'jeopardy' && item.category"
+                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider"
+                :class="getCategoryBadgeClass(item.category)"
+              >
+                {{ item.category }}
+              </span>
+              <span
+                v-else-if="item.type === 'reto' && item.subtype === 'machine'"
+                class="px-1.5 py-0.5 rounded-sm text-[10px] font-mono bg-teal-500/10 text-teal-300 border border-teal-500/30"
+              >
+                MÁQUINA
+              </span>
+              <span
+                v-if="item.type === 'reto' && item.points"
+                class="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30"
+              >
+                {{ item.points }} pts
+              </span>
+              <span
+                v-if="item.type === 'reto' && item.is_solved"
+                class="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+              >
+                ✓ RESUELTO
+              </span>
+            </div>
             <span class="text-xs font-mono text-slate-500">{{ item.created_at }}</span>
           </div>
 
@@ -87,7 +130,7 @@
             {{ item.name }}
           </h3>
           <p class="text-xs text-slate-400 mt-1 flex items-center space-x-1 font-mono">
-            <span>Cliente/Objetivo:</span>
+            <span>{{ item.type === 'reto' ? 'Evento / Plataforma:' : 'Cliente / Organización:' }}</span>
             <span class="text-slate-200 font-medium">{{ item.client_or_platform }}</span>
           </p>
 
@@ -158,22 +201,77 @@
               </select>
             </div>
             <div>
-              <label class="block text-xs font-mono text-slate-300 mb-1">Dominio / Host Inicial:</label>
+              <label class="block text-xs font-mono text-slate-300 mb-1">{{ newForm.type === 'reto' && newForm.subtype === 'jeopardy' ? 'Host / Enlace del Reto:' : 'Dominio / Host Inicial:' }}</label>
               <input
                 v-model="newForm.domain"
                 type="text"
-                placeholder="acme.local, target.com"
+                :placeholder="newForm.type === 'reto' && newForm.subtype === 'jeopardy' ? 'ctf.target.org:1337, http://...' : 'acme.local, target.com'"
                 class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-hidden"
               />
             </div>
           </div>
 
+          <!-- Opciones Específicas para Reto / CTF -->
+          <div v-if="newForm.type === 'reto'" class="space-y-3 p-3 bg-slate-900/60 rounded-md border border-slate-800">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-mono text-amber-300 mb-1">Formato de Reto:</label>
+                <select
+                  v-model="newForm.subtype"
+                  class="w-full bg-[#070b14] border border-slate-700 focus:border-amber-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
+                >
+                  <option value="jeopardy">CTF Jeopardy (Web, Crypto, Pwn...)</option>
+                  <option value="machine">Máquina / Boot2Root (HTB, THM...)</option>
+                </select>
+              </div>
+              <div v-if="newForm.subtype === 'jeopardy'">
+                <label class="block text-xs font-mono text-amber-300 mb-1">Categoría Técnica:</label>
+                <select
+                  v-model="newForm.category"
+                  class="w-full bg-[#070b14] border border-slate-700 focus:border-amber-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
+                >
+                  <option value="web">🌐 Web Exploitation</option>
+                  <option value="crypto">🔐 Criptografía</option>
+                  <option value="pwn">💥 Binary Exploitation (Pwn)</option>
+                  <option value="reverse">🔍 Ingeniería Inversa</option>
+                  <option value="forensics">🔬 Forense / DFIR</option>
+                  <option value="misc">🧩 Misceláneos (Misc)</option>
+                  <option value="osint">👁️ OSINT</option>
+                </select>
+              </div>
+            </div>
+
+            <div v-if="newForm.subtype === 'jeopardy'" class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-mono text-slate-400 mb-1">Puntos CTF:</label>
+                <input
+                  v-model.number="newForm.points"
+                  type="number"
+                  placeholder="100, 250, 500"
+                  class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 placeholder-slate-600 focus:outline-hidden"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-mono text-slate-400 mb-1">Dificultad:</label>
+                <select
+                  v-model="newForm.difficulty"
+                  class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
+                >
+                  <option value="easy">Fácil</option>
+                  <option value="medium">Media</option>
+                  <option value="hard">Difícil</option>
+                  <option value="insane">Insane</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <div>
-            <label class="block text-xs font-mono text-slate-300 mb-1">Cliente u Organización Objetivo:</label>
+            <label class="block text-xs font-mono text-slate-300 mb-1">{{ newForm.type === 'reto' ? 'Evento / Torneo / Plataforma CTF:' : 'Cliente u Organización Objetivo:' }}</label>
             <input
               v-model="newForm.client"
               type="text"
-              placeholder="Acme Corporation, HackTheBox, Bugcrowd"
+              :placeholder="newForm.type === 'reto' ? 'DiceCTF 2026, PicoCTF, HackTheBox' : 'Acme Corporation, Bugcrowd'"
               class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-hidden"
             />
           </div>
@@ -215,7 +313,32 @@ function removeProject(project) {
 }
 const isLoading = ref(true)
 const currentFilter = ref('all')
+const currentCategory = ref('all')
 const searchQuery = ref('')
+
+const ctfCategories = [
+  { id: 'all', label: 'Todas las Cat.' },
+  { id: 'web', label: '🌐 Web' },
+  { id: 'crypto', label: '🔐 Crypto' },
+  { id: 'pwn', label: '💥 Pwn' },
+  { id: 'reverse', label: '🔍 Reversing' },
+  { id: 'forensics', label: '🔬 Forensics' },
+  { id: 'misc', label: '🧩 Misc' },
+  { id: 'osint', label: '👁️ OSINT' },
+  { id: 'machine', label: '💻 Máquinas' },
+]
+
+function getCategoryBadgeClass(category) {
+  switch (category) {
+    case 'web': return 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+    case 'crypto': return 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+    case 'pwn': return 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+    case 'reverse': return 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+    case 'forensics': return 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+    case 'osint': return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+    case 'misc': default: return 'bg-slate-700 text-slate-300 border border-slate-600'
+  }
+}
 
 const showModal = ref(false)
 const isSubmitting = ref(false)
@@ -225,15 +348,32 @@ const newForm = ref({
   type: 'engagement',
   domain: '',
   client: '',
+  subtype: 'jeopardy',
+  category: 'web',
+  points: 100,
+  difficulty: 'medium',
 })
 
 const filteredEngagements = computed(() => {
   return engagements.value.filter(item => {
     const matchesFilter = currentFilter.value === 'all' || item.type === currentFilter.value
-    const matchesSearch = !searchQuery.value.trim() ||
-      item.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      (item.client_or_platform && item.client_or_platform.toLowerCase().includes(searchQuery.value.toLowerCase()))
-    return matchesFilter && matchesSearch
+
+    let matchesCategory = true
+    if (currentCategory.value !== 'all') {
+      if (currentCategory.value === 'machine') {
+        matchesCategory = item.type === 'reto' && (item.subtype === 'machine' || !item.subtype)
+      } else {
+        matchesCategory = item.type === 'reto' && item.category === currentCategory.value
+      }
+    }
+
+    const query = searchQuery.value.toLowerCase().trim()
+    const matchesSearch = !query ||
+      item.name.toLowerCase().includes(query) ||
+      (item.client_or_platform && item.client_or_platform.toLowerCase().includes(query)) ||
+      (item.category && item.category.toLowerCase().includes(query))
+
+    return matchesFilter && matchesCategory && matchesSearch
   })
 })
 
@@ -255,7 +395,16 @@ async function submitCreate() {
   try {
     await api.createEngagement(newForm.value)
     showModal.value = false
-    newForm.value = { name: '', type: 'engagement', domain: '', client: '' }
+    newForm.value = {
+      name: '',
+      type: 'engagement',
+      domain: '',
+      client: '',
+      subtype: 'jeopardy',
+      category: 'web',
+      points: 100,
+      difficulty: 'medium',
+    }
     await loadEngagements()
   } catch (err) {
     createError.value = err.message

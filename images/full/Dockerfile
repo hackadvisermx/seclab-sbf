@@ -78,7 +78,7 @@ WORKDIR /build/dashboard
 COPY dashboard/frontend/package.json dashboard/frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY dashboard/frontend/ ./
-RUN npm test && npm run build
+RUN npm run audit && npm test && npm run build
 
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS fzf-builder
 ARG FZF_VERSION=0.74.4

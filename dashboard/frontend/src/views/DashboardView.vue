@@ -5,7 +5,7 @@
       <div>
         <h1 class="text-2xl font-mono font-bold text-white flex items-center space-x-3">
           <span>🛡️ Centro de Mando Táctico</span>
-          <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono">
+          <span class="text-xs px-2 py-0.5 rounded-sm bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono">
             ESTACIÓN ACTIVA
           </span>
         </h1>
@@ -17,14 +17,14 @@
       <div class="flex items-center space-x-3">
         <router-link
           to="/engagements"
-          class="px-4 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-semibold text-sm transition-all shadow-md shadow-cyan-500/20 flex items-center space-x-2"
+          class="px-4 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-semibold text-sm transition-all shadow-md shadow-cyan-500/20 flex items-center space-x-2"
         >
           <span>+</span>
           <span>Nueva Auditoría</span>
         </router-link>
         <router-link
           to="/vault"
-          class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-mono text-sm transition-all flex items-center space-x-2"
+          class="px-4 py-2 rounded-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-mono text-sm transition-all flex items-center space-x-2"
         >
           <span>🔑</span>
           <span>API Vault</span>
@@ -80,7 +80,7 @@
     </div>
 
     <!-- Verificador Rápido de Alcance (Scope Guard) -->
-    <div class="tactical-card bg-gradient-to-r from-[#0d1322] to-[#0f172a]">
+    <div class="tactical-card bg-linear-to-r from-[#0d1322] to-[#0f172a]">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div>
           <h2 class="text-base font-mono font-bold text-white flex items-center space-x-2">
@@ -95,7 +95,7 @@
           <span class="text-xs font-mono text-slate-400">Contexto:</span>
           <select
             v-model="selectedEngId"
-            class="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
+            class="bg-slate-900 border border-slate-700 rounded-sm px-2.5 py-1 text-xs font-mono text-cyan-300 focus:outline-hidden focus:border-cyan-500"
           >
             <option v-for="e in engagements" :key="e.id" :value="e.id">
               {{ e.name }} ({{ e.type }})
@@ -110,20 +110,20 @@
             v-model="targetInput"
             type="text"
             placeholder="Ejemplo: target.local, 192.168.1.10, api.subdominio.com"
-            class="w-full bg-[#070b14] border border-[#1b253b] focus:border-cyan-400 rounded px-4 py-2 text-sm font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+            class="w-full bg-[#070b14] border border-[#1b253b] focus:border-cyan-400 rounded-sm px-4 py-2 text-sm font-mono text-slate-100 placeholder-slate-500 focus:outline-hidden focus:ring-1 focus:ring-cyan-400"
           />
         </div>
         <button
           type="submit"
           :disabled="isCheckingScope || !targetInput.trim()"
-          class="w-full sm:w-auto px-5 py-2 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-mono font-semibold text-sm transition-all shadow-md shadow-cyan-600/20 whitespace-nowrap"
+          class="w-full sm:w-auto px-5 py-2 rounded-sm bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-mono font-semibold text-sm transition-all shadow-md shadow-cyan-600/20 whitespace-nowrap"
         >
           {{ isCheckingScope ? 'Verificando...' : 'Verificar Alcance' }}
         </button>
       </form>
 
       <!-- Resultado de Scope Check -->
-      <div v-if="scopeResult" class="mt-4 p-3 rounded border text-xs font-mono" :class="scopeResultClass">
+      <div v-if="scopeResult" class="mt-4 p-3 rounded-sm border text-xs font-mono" :class="scopeResultClass">
         <div class="flex items-center space-x-2 font-bold text-sm">
           <span>{{ scopeResult.allowed ? '✅ OBJETIVO AUTORIZADO' : '🚫 ACCIÓN BLOQUEADA' }}</span>
           <span class="text-xs opacity-75">({{ scopeResult.status }})</span>
@@ -151,7 +151,7 @@
 
         <div v-else-if="engagements.length === 0" class="text-center py-8 text-slate-400 font-mono text-xs space-y-2">
           <p>No se encontraron auditorías ni retos activos en /workspace.</p>
-          <router-link to="/engagements" class="inline-block px-3 py-1.5 rounded bg-cyan-600 text-black font-semibold text-xs">
+          <router-link to="/engagements" class="inline-block px-3 py-1.5 rounded-sm bg-cyan-600 text-black font-semibold text-xs">
             Crear Primer Engagement
           </router-link>
         </div>
@@ -160,7 +160,7 @@
           <div
             v-for="item in engagements.slice(0, 5)"
             :key="item.id"
-            class="py-3 flex items-center justify-between hover:bg-slate-800/20 px-2 rounded transition-colors"
+            class="py-3 flex items-center justify-between hover:bg-slate-800/20 px-2 rounded-sm transition-colors"
           >
             <div class="flex items-center space-x-3">
               <span class="text-xl">{{ item.type === 'reto' ? '🚩' : '🎯' }}</span>
@@ -172,7 +172,7 @@
                   {{ item.name }}
                 </router-link>
                 <div class="flex items-center space-x-2 text-[11px] text-slate-400 font-mono mt-0.5">
-                  <span class="px-1.5 py-0.2 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                  <span class="px-1.5 py-0.2 rounded-sm bg-slate-800 border border-slate-700 text-slate-300">
                     {{ item.type }}
                   </span>
                   <span>{{ item.client_or_platform }}</span>
@@ -189,7 +189,7 @@
               </div>
               <router-link
                 :to="`/engagements/${item.type}/${item.id}`"
-                class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs"
+                class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs"
               >
                 Abrir
               </router-link>
@@ -222,27 +222,27 @@
 
         <!-- Conexiones de Red -->
         <div class="space-y-2 text-xs font-mono">
-          <div class="p-2.5 rounded bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div class="p-2.5 rounded-sm bg-slate-900/80 border border-slate-800 flex items-center justify-between">
             <span class="text-slate-400">VPN Activa (tun0):</span>
             <span
-              class="px-2 py-0.5 rounded text-[11px] font-bold"
+              class="px-2 py-0.5 rounded-sm text-[11px] font-bold"
               :class="telemetry.vpn?.connected ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'"
             >
               {{ telemetry.vpn?.connected ? telemetry.vpn.ip : 'DESCONECTADO' }}
             </span>
           </div>
 
-          <div class="p-2.5 rounded bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div class="p-2.5 rounded-sm bg-slate-900/80 border border-slate-800 flex items-center justify-between">
             <span class="text-slate-400">Tailscale Nodo:</span>
             <span
-              class="px-2 py-0.5 rounded text-[11px] font-bold"
+              class="px-2 py-0.5 rounded-sm text-[11px] font-bold"
               :class="telemetry.tailscale?.online ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'bg-slate-800 text-slate-400'"
             >
               {{ telemetry.tailscale?.online ? telemetry.tailscale.ip : 'HOST-ONLY' }}
             </span>
           </div>
 
-          <div class="p-2.5 rounded bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div class="p-2.5 rounded-sm bg-slate-900/80 border border-slate-800 flex items-center justify-between">
             <span class="text-slate-400">Sesiones tmux:</span>
             <span class="text-slate-200">
               {{ telemetry.tmux_sessions?.length > 0 ? telemetry.tmux_sessions.join(', ') : 'Ninguna activa' }}
@@ -254,16 +254,16 @@
         <div class="pt-2 border-t border-slate-800 space-y-2">
           <span class="text-[11px] font-mono text-slate-400 uppercase">Comandos Tácticos en Terminal:</span>
           <div class="grid grid-cols-2 gap-2 text-xs font-mono">
-            <div class="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+            <div class="p-1.5 rounded-sm bg-slate-900 border border-slate-800 text-slate-300">
               <code>pt-help</code>
             </div>
-            <div class="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+            <div class="p-1.5 rounded-sm bg-slate-900 border border-slate-800 text-slate-300">
               <code>pt-cheat</code>
             </div>
-            <div class="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+            <div class="p-1.5 rounded-sm bg-slate-900 border border-slate-800 text-slate-300">
               <code>pt-scope show</code>
             </div>
-            <div class="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+            <div class="p-1.5 rounded-sm bg-slate-900 border border-slate-800 text-slate-300">
               <code>pt-report build</code>
             </div>
           </div>

@@ -7,13 +7,13 @@
           <router-link to="/engagements" class="hover:text-cyan-400">&larr; Auditorías</router-link>
           <span>/</span>
           <span class="text-cyan-400">{{ engId }}</span>
-          <span class="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-slate-300 uppercase">
+          <span class="px-1.5 py-0.2 rounded-sm bg-slate-800 text-[10px] text-slate-300 uppercase">
             {{ engType }}
           </span>
         </div>
         <h1 class="text-2xl font-mono font-bold text-white flex items-center space-x-3">
           <span>{{ engId }}</span>
-          <span class="text-xs px-2 py-0.5 rounded font-normal font-mono" :class="hasScope ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'">
+          <span class="text-xs px-2 py-0.5 rounded-sm font-normal font-mono" :class="hasScope ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'">
             {{ hasScope ? 'Alcance Definido' : 'target.yaml pendiente' }}
           </span>
         </h1>
@@ -25,7 +25,7 @@
         <button
           @click="compileReportAction"
           :disabled="isCompiling"
-          class="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-bold transition-all shadow-sm flex items-center space-x-1"
+          class="px-3 py-1.5 rounded-sm bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-bold transition-all shadow-xs flex items-center space-x-1"
         >
           <span>📄</span>
           <span>{{ isCompiling ? 'Compilando...' : 'Compilar Reporte' }}</span>
@@ -34,7 +34,7 @@
         <button
           @click="packEngagementAction"
           :disabled="isPacking"
-          class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center space-x-1 cursor-pointer"
+          class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center space-x-1 cursor-pointer"
         >
           <span>📦</span>
           <span>{{ isPacking ? 'Empaquetando...' : 'Empaquetar y Descargar (.tar.gz)' }}</span>
@@ -73,7 +73,7 @@
             <button
               @click="saveScopeConfig"
               :disabled="isSavingScope"
-              class="px-3 py-1 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold"
+              class="px-3 py-1 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold"
             >
               {{ isSavingScope ? 'Guardando...' : 'Guardar Alcance' }}
             </button>
@@ -90,7 +90,7 @@
                 <textarea
                   v-model="inScopeDomainsText"
                   rows="4"
-                  class="w-full bg-[#070b14] border border-slate-800 focus:border-cyan-400 rounded p-2 text-slate-200 font-mono text-xs focus:outline-none"
+                  class="w-full bg-[#070b14] border border-slate-800 focus:border-cyan-400 rounded-sm p-2 text-slate-200 font-mono text-xs focus:outline-hidden"
                   placeholder="target.local&#10;*.target.local"
                 ></textarea>
               </div>
@@ -99,7 +99,7 @@
                 <textarea
                   v-model="inScopeIpsText"
                   rows="4"
-                  class="w-full bg-[#070b14] border border-slate-800 focus:border-cyan-400 rounded p-2 text-slate-200 font-mono text-xs focus:outline-none"
+                  class="w-full bg-[#070b14] border border-slate-800 focus:border-cyan-400 rounded-sm p-2 text-slate-200 font-mono text-xs focus:outline-hidden"
                   placeholder="192.168.1.10&#10;10.0.0.0/24"
                 ></textarea>
               </div>
@@ -117,7 +117,7 @@
                 <textarea
                   v-model="outScopeDomainsText"
                   rows="3"
-                  class="w-full bg-[#070b14] border border-slate-800 focus:border-red-400 rounded p-2 text-slate-200 font-mono text-xs focus:outline-none"
+                  class="w-full bg-[#070b14] border border-slate-800 focus:border-red-400 rounded-sm p-2 text-slate-200 font-mono text-xs focus:outline-hidden"
                   placeholder="payments.target.local&#10;status.target.local"
                 ></textarea>
               </div>
@@ -126,7 +126,7 @@
                 <textarea
                   v-model="outScopeNotesText"
                   rows="3"
-                  class="w-full bg-[#070b14] border border-slate-800 focus:border-red-400 rounded p-2 text-slate-200 font-mono text-xs focus:outline-none"
+                  class="w-full bg-[#070b14] border border-slate-800 focus:border-red-400 rounded-sm p-2 text-slate-200 font-mono text-xs focus:outline-hidden"
                   placeholder="Prohibido pruebas de denegación de servicio&#10;Terceros fuera de alcance"
                 ></textarea>
               </div>
@@ -145,17 +145,17 @@
                 v-model="scopeTestInput"
                 type="text"
                 placeholder="host.target.local"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
               <button
                 @click="testScope"
-                class="w-full py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-mono font-bold text-xs"
+                class="w-full py-1.5 rounded-sm bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-mono font-bold text-xs"
               >
                 Ejecutar Scope Guard
               </button>
             </div>
 
-            <div v-if="scopeTestResult" class="p-3 rounded border text-xs font-mono" :class="scopeTestResult.allowed ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' : 'bg-red-950/40 border-red-500/40 text-red-300'">
+            <div v-if="scopeTestResult" class="p-3 rounded-sm border text-xs font-mono" :class="scopeTestResult.allowed ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' : 'bg-red-950/40 border-red-500/40 text-red-300'">
               <div class="font-bold">{{ scopeTestResult.status }}</div>
               <div class="mt-1">{{ scopeTestResult.reason }}</div>
             </div>
@@ -196,7 +196,7 @@
               <p class="text-xs text-slate-400">Automatización pasiva y activa asistida por Scope Guard (pt-recon-pipeline)</p>
             </div>
             <span
-              class="px-2 py-0.5 rounded text-xs font-mono font-bold"
+              class="px-2 py-0.5 rounded-sm text-xs font-mono font-bold"
               :class="reconIsRunning ? 'bg-cyan-950 text-cyan-400 border border-cyan-500/50 animate-pulse' : 'bg-slate-800 text-slate-400'"
             >
               {{ reconIsRunning ? '● EJECUTANDO' : reconStatus.job?.status === 'failed' ? 'FALLIDO' : reconStatus.job?.status === 'simulated' ? 'SIMULADO' : 'DETENIDO / LISTO' }}
@@ -210,7 +210,7 @@
               <select
                 v-model="reconStage"
                 :disabled="reconIsRunning"
-                class="w-full bg-[#070b14] border border-slate-800 focus:border-cyan-400 rounded p-2 text-slate-200 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-800 focus:border-cyan-400 rounded-sm p-2 text-slate-200 focus:outline-hidden"
               >
                 <option value="all">Completo (Todas las etapas)</option>
                 <option value="subdomains">1. Subdominios (subfinder, assetfinder, findomain)</option>
@@ -228,7 +228,7 @@
                   id="recon-dry-run"
                   v-model="reconDryRun"
                   :disabled="reconIsRunning"
-                  class="rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-500"
+                  class="rounded-sm bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-500"
                 />
                 <label for="recon-dry-run" class="text-slate-300 cursor-pointer">
                   Modo Dry-Run (Simulación)
@@ -240,8 +240,8 @@
               <button
                 @click="triggerReconPipeline"
                 :disabled="reconIsRunning || isStartingRecon"
-                class="w-full py-2 px-3 rounded font-mono font-bold text-xs transition-all flex items-center justify-center space-x-2 shadow-lg cursor-pointer"
-                :class="reconIsRunning ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 shadow-cyan-500/20'"
+                class="w-full py-2 px-3 rounded-sm font-mono font-bold text-xs transition-all flex items-center justify-center space-x-2 shadow-lg cursor-pointer"
+                :class="reconIsRunning ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 shadow-cyan-500/20'"
               >
                 <span v-if="reconIsRunning" class="animate-spin">⚙️</span>
                 <span v-else>🚀</span>
@@ -251,7 +251,7 @@
           </div>
 
           <!-- Mensaje / Feedback de Lanzamiento -->
-          <div v-if="reconActionMsg" class="p-2.5 rounded text-xs font-mono border" :class="reconActionSuccess ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-300' : 'bg-rose-950/40 border-rose-500/30 text-rose-300'">
+          <div v-if="reconActionMsg" class="p-2.5 rounded-sm text-xs font-mono border" :class="reconActionSuccess ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-300' : 'bg-rose-950/40 border-rose-500/30 text-rose-300'">
             {{ reconActionMsg }}
           </div>
         </div>
@@ -272,10 +272,10 @@
             {{ reconStatus.summary.operational_limits.max_parallel_threads }} tareas;
             máximo {{ reconStatus.summary.operational_limits.max_probe_targets }} destinos.
           </p>
-          <div class="space-y-1.5 text-xs font-mono bg-[#070b14] p-3 rounded border border-slate-800">
+          <div class="space-y-1.5 text-xs font-mono bg-[#070b14] p-3 rounded-sm border border-slate-800">
             <div class="text-slate-400 text-[10px] uppercase">Dominios Autorizados:</div>
             <div v-if="reconStatus.configured_domains && reconStatus.configured_domains.length" class="flex flex-wrap gap-1">
-              <span v-for="d in reconStatus.configured_domains" :key="d" class="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[11px]">
+              <span v-for="d in reconStatus.configured_domains" :key="d" class="px-2 py-0.5 rounded-sm bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[11px]">
                 {{ d }}
               </span>
             </div>
@@ -286,11 +286,11 @@
         </div>
       </div>
 
-      <div v-if="reconStatus.job?.status === 'failed' || reconStatus.summary?.status === 'failed'" class="p-3 rounded border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
+      <div v-if="reconStatus.job?.status === 'failed' || reconStatus.summary?.status === 'failed'" class="p-3 rounded-sm border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
         El reconocimiento falló. Consulta la consola para ver la causa. Las métricas pueden incluir archivos de ejecuciones anteriores; no confirman una ejecución completa.
         <p v-if="reconStatus.job?.error" class="mt-1">{{ reconStatus.job.error }}</p>
       </div>
-      <div v-if="reconStatus.job?.status === 'simulated'" class="p-3 rounded border border-cyan-500/40 bg-cyan-950/30 text-cyan-300 text-xs font-mono" role="status">
+      <div v-if="reconStatus.job?.status === 'simulated'" class="p-3 rounded-sm border border-cyan-500/40 bg-cyan-950/30 text-cyan-300 text-xs font-mono" role="status">
         Simulación finalizada sin consultas de red. No se generaron resultados de reconocimiento. Las métricas muestran los archivos que ya existían.
       </div>
 
@@ -338,10 +338,10 @@
           <div
             v-for="(count, pat) in reconStatus.summary.gf_patterns"
             :key="pat"
-            class="px-2.5 py-1 rounded bg-[#070b14] border border-slate-800 flex items-center space-x-2"
+            class="px-2.5 py-1 rounded-sm bg-[#070b14] border border-slate-800 flex items-center space-x-2"
           >
             <span class="font-bold text-slate-300 uppercase">{{ pat }}</span>
-            <span class="px-1.5 py-0.2 rounded text-[10px] font-bold" :class="count > 0 ? 'bg-amber-950 text-amber-400 border border-amber-500/40' : 'bg-slate-800 text-slate-400'">
+            <span class="px-1.5 py-0.2 rounded-sm text-[10px] font-bold" :class="count > 0 ? 'bg-amber-950 text-amber-400 border border-amber-500/40' : 'bg-slate-800 text-slate-400'">
               {{ count }}
             </span>
           </div>
@@ -359,7 +359,7 @@
             <div class="flex items-center space-x-2">
               <button
                 @click="loadReconLog"
-                class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 cursor-pointer"
+                class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 cursor-pointer"
               >
                 Actualizar Log
               </button>
@@ -384,7 +384,7 @@
             <div
               v-for="(item, idx) in reconStatus.discarded_out_of_scope"
               :key="idx"
-              class="p-2 rounded bg-[#070b14] border border-rose-950/60 space-y-1"
+              class="p-2 rounded-sm bg-[#070b14] border border-rose-950/60 space-y-1"
             >
               <div class="text-rose-300 font-bold break-all">{{ item.target }}</div>
               <div class="text-[10px] text-slate-400">{{ item.reason }}</div>
@@ -409,7 +409,7 @@
 
         <button
           @click="openNewFindingModal"
-          class="px-4 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs shadow-md shadow-cyan-500/20"
+          class="px-4 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs shadow-md shadow-cyan-500/20"
         >
           + Nueva Ficha (pt-finding new)
         </button>
@@ -420,7 +420,7 @@
         <p class="text-slate-300 font-mono text-sm">No hay vulnerabilidades registradas aún en evidence/.</p>
         <button
           @click="openNewFindingModal"
-          class="px-3 py-1.5 rounded bg-cyan-600 text-slate-950 font-bold text-xs font-mono"
+          class="px-3 py-1.5 rounded-sm bg-cyan-600 text-slate-950 font-bold text-xs font-mono"
         >
           Crear Primer Hallazgo
         </button>
@@ -435,7 +435,7 @@
           <div>
             <div class="flex items-center justify-between">
               <span
-                class="px-2 py-0.5 rounded text-[10px] font-mono font-bold"
+                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold"
                 :class="getSeverityClass(f.frontmatter?.severity)"
               >
                 {{ f.frontmatter?.severity || 'MEDIUM' }}
@@ -451,7 +451,7 @@
               <span v-if="f.frontmatter?.cwe" class="ml-2 text-slate-500">({{ f.frontmatter.cwe }})</span>
             </p>
 
-            <div class="mt-3 text-xs text-slate-300 font-sans line-clamp-3 bg-slate-900/50 p-2.5 rounded border border-slate-800">
+            <div class="mt-3 text-xs text-slate-300 font-sans line-clamp-3 bg-slate-900/50 p-2.5 rounded-sm border border-slate-800">
               {{ f.body }}
             </div>
           </div>
@@ -461,13 +461,13 @@
             <div class="flex items-center space-x-2">
               <button
                 @click="editFinding(f)"
-                class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400"
+                class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400"
               >
                 Editar
               </button>
               <button
                 @click="deleteFindingAction(f.slug)"
-                class="px-2 py-1 rounded bg-red-950/40 hover:bg-red-900/60 text-red-400"
+                class="px-2 py-1 rounded-sm bg-red-950/40 hover:bg-red-900/60 text-red-400"
               >
                 Eliminar
               </button>
@@ -489,7 +489,7 @@
 
         <button
           @click="loadLogs"
-          class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-mono border border-slate-700"
+          class="px-3 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-mono border border-slate-700"
         >
           Refrescar Log
         </button>
@@ -518,14 +518,14 @@
             <div
               v-for="area in checklistData.areas"
               :key="area.id"
-              class="p-3 rounded bg-slate-900/60 border border-slate-800 flex items-center justify-between"
+              class="p-3 rounded-sm bg-slate-900/60 border border-slate-800 flex items-center justify-between"
             >
               <div>
                 <span class="font-mono font-bold text-xs text-slate-200 block">{{ area.name }}</span>
                 <span class="text-[11px] font-mono text-slate-400">{{ area.skill }}</span>
               </div>
               <span
-                class="px-2 py-0.5 rounded text-[10px] font-mono font-bold"
+                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold"
                 :class="area.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'"
               >
                 {{ area.status }}
@@ -542,16 +542,16 @@
           <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
             🧠 Asistente Táctico (pt-next)
           </h2>
-          <div class="p-3 rounded bg-slate-950 border border-cyan-500/30 text-xs font-mono text-cyan-300">
+          <div class="p-3 rounded-sm bg-slate-950 border border-cyan-500/30 text-xs font-mono text-cyan-300">
             {{ nextStepData.recommendation || 'Analizando estado del proyecto...' }}
           </div>
           <button
             @click="loadNextStepPrompt"
-            class="w-full py-2 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs font-mono font-bold"
+            class="w-full py-2 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs font-mono font-bold"
           >
             Generar Prompt Táctico para Agente
           </button>
-          <div v-if="agentPrompt" class="p-2.5 rounded bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto">
+          <div v-if="agentPrompt" class="p-2.5 rounded-sm bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto">
             <pre class="whitespace-pre-wrap">{{ agentPrompt }}</pre>
           </div>
         </div>
@@ -575,7 +575,7 @@
             <!-- Selector de Agente / Especialidad -->
             <select
               v-model="selectedAgent"
-              class="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-cyan-300 focus:outline-none"
+              class="bg-slate-900 border border-slate-700 rounded-sm px-2.5 py-1 text-cyan-300 focus:outline-hidden"
             >
               <option value="triage-agent">Triaje & Calidad (Gatekeeper)</option>
               <option value="recon-agent">Reconocimiento & Perfilado</option>
@@ -587,7 +587,7 @@
             </select>
 
             <!-- Selector de Perfil LLM -->
-            <div class="flex rounded bg-slate-900 border border-slate-800 p-0.5">
+            <div class="flex rounded-sm bg-slate-900 border border-slate-800 p-0.5">
               <button
                 v-for="p in [
                   { id: 'quick', label: 'Flash' },
@@ -596,7 +596,7 @@
                 ]"
                 :key="p.id"
                 @click="copilotProfile = p.id"
-                class="px-2 py-0.5 rounded text-[11px] font-semibold"
+                class="px-2 py-0.5 rounded-sm text-[11px] font-semibold"
                 :class="copilotProfile === p.id ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400'"
               >
                 {{ p.label }}
@@ -606,7 +606,7 @@
             <!-- Botón Inspeccionar Contexto -->
             <button
               @click="openContextInspection"
-              class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px]"
+              class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px]"
             >
               Ver Contexto pt-context
             </button>
@@ -668,7 +668,7 @@
             v-model="copilotInput"
             type="text"
             placeholder="Pregunta al copiloto sobre el alcance, metodología, o redacción de hallazgos..."
-            class="flex-1 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-lg px-4 py-2.5 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none"
+            class="flex-1 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-lg px-4 py-2.5 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-hidden"
             :disabled="isCopilotThinking"
           />
           <button
@@ -684,7 +684,7 @@
       <!-- Modal Inspección de Contexto pt-context -->
       <div
         v-if="showContextModal"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
       >
         <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-3xl w-full p-6 shadow-2xl space-y-4 my-8 max-h-[85vh] overflow-y-auto">
           <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -693,13 +693,13 @@
             </h2>
             <button @click="showContextModal = false" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
           </div>
-          <div class="bg-[#050811] p-4 rounded border border-slate-800 text-xs font-mono text-slate-300 max-h-[500px] overflow-y-auto">
+          <div class="bg-[#050811] p-4 rounded-sm border border-slate-800 text-xs font-mono text-slate-300 max-h-[500px] overflow-y-auto">
             <pre class="whitespace-pre-wrap">{{ injectedContextText }}</pre>
           </div>
           <div class="flex justify-end">
             <button
               @click="showContextModal = false"
-              class="px-4 py-1.5 rounded bg-slate-800 text-slate-300 text-xs font-mono"
+              class="px-4 py-1.5 rounded-sm bg-slate-800 text-slate-300 text-xs font-mono"
             >
               Cerrar
             </button>
@@ -715,7 +715,7 @@
         <button
           @click="saveNotes"
           :disabled="isSavingNotes"
-          class="px-3 py-1.5 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs"
+          class="px-3 py-1.5 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs"
         >
           {{ isSavingNotes ? 'Guardando...' : 'Guardar Notas' }}
         </button>
@@ -723,7 +723,7 @@
       <textarea
         v-model="notesContent"
         rows="20"
-        class="w-full bg-[#070b14] border border-[#1b253b] focus:border-cyan-400 rounded-lg p-4 font-mono text-xs text-slate-200 focus:outline-none"
+        class="w-full bg-[#070b14] border border-[#1b253b] focus:border-cyan-400 rounded-lg p-4 font-mono text-xs text-slate-200 focus:outline-hidden"
       ></textarea>
     </div>
 
@@ -735,7 +735,7 @@
           <span class="text-slate-400">Modo:</span>
           <button
             @click="reportViewMode = 'executive'"
-            class="px-3 py-1.5 rounded transition-colors flex items-center space-x-1.5"
+            class="px-3 py-1.5 rounded-sm transition-colors flex items-center space-x-1.5"
             :class="reportViewMode === 'executive' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-bold' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'"
           >
             <span>👔</span>
@@ -743,7 +743,7 @@
           </button>
           <button
             @click="reportViewMode = 'markdown'"
-            class="px-3 py-1.5 rounded transition-colors flex items-center space-x-1.5"
+            class="px-3 py-1.5 rounded-sm transition-colors flex items-center space-x-1.5"
             :class="reportViewMode === 'markdown' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-bold' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'"
           >
             <span>📝</span>
@@ -755,14 +755,14 @@
           <button
             @click="compileReportAction"
             :disabled="isCompiling"
-            class="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-bold transition-all shadow-sm flex items-center space-x-1"
+            class="px-3 py-1.5 rounded-sm bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-bold transition-all shadow-xs flex items-center space-x-1"
           >
             <span>🔄</span>
             <span>{{ isCompiling ? 'Compilando...' : 'Recompilar' }}</span>
           </button>
           <button
             @click="printReport"
-            class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-sm flex items-center space-x-1"
+            class="px-3 py-1.5 rounded-sm bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-xs flex items-center space-x-1"
             title="Exportar a PDF o Imprimir Informe"
           >
             <span>🖨️</span>
@@ -770,7 +770,7 @@
           </button>
           <button
             @click="downloadReportMarkdown"
-            class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center space-x-1"
+            class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center space-x-1"
             title="Descargar archivo REPORT.md"
           >
             <span>💾</span>
@@ -805,23 +805,23 @@
 
           <!-- Matriz de Severidades (KPI Badges) -->
           <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
-            <div class="bg-purple-950/30 border border-purple-500/40 print:bg-purple-50 print:border-purple-300 rounded p-3 text-center">
+            <div class="bg-purple-950/30 border border-purple-500/40 print:bg-purple-50 print:border-purple-300 rounded-sm p-3 text-center">
               <span class="text-[10px] uppercase font-mono tracking-wider text-purple-400 print:text-purple-800 block font-bold">Crítica</span>
               <span class="text-2xl font-mono font-bold text-purple-300 print:text-purple-900">{{ reportStats.critical }}</span>
             </div>
-            <div class="bg-red-950/30 border border-red-500/40 print:bg-red-50 print:border-red-300 rounded p-3 text-center">
+            <div class="bg-red-950/30 border border-red-500/40 print:bg-red-50 print:border-red-300 rounded-sm p-3 text-center">
               <span class="text-[10px] uppercase font-mono tracking-wider text-red-400 print:text-red-800 block font-bold">Alta</span>
               <span class="text-2xl font-mono font-bold text-red-300 print:text-red-900">{{ reportStats.high }}</span>
             </div>
-            <div class="bg-amber-950/30 border border-amber-500/40 print:bg-amber-50 print:border-amber-300 rounded p-3 text-center">
+            <div class="bg-amber-950/30 border border-amber-500/40 print:bg-amber-50 print:border-amber-300 rounded-sm p-3 text-center">
               <span class="text-[10px] uppercase font-mono tracking-wider text-amber-400 print:text-amber-800 block font-bold">Media</span>
               <span class="text-2xl font-mono font-bold text-amber-300 print:text-amber-900">{{ reportStats.medium }}</span>
             </div>
-            <div class="bg-blue-950/30 border border-blue-500/40 print:bg-blue-50 print:border-blue-300 rounded p-3 text-center">
+            <div class="bg-blue-950/30 border border-blue-500/40 print:bg-blue-50 print:border-blue-300 rounded-sm p-3 text-center">
               <span class="text-[10px] uppercase font-mono tracking-wider text-blue-400 print:text-blue-800 block font-bold">Baja</span>
               <span class="text-2xl font-mono font-bold text-blue-300 print:text-blue-900">{{ reportStats.low }}</span>
             </div>
-            <div class="bg-cyan-950/30 border border-cyan-500/40 print:bg-cyan-50 print:border-cyan-300 rounded p-3 text-center">
+            <div class="bg-cyan-950/30 border border-cyan-500/40 print:bg-cyan-50 print:border-cyan-300 rounded-sm p-3 text-center">
               <span class="text-[10px] uppercase font-mono tracking-wider text-cyan-400 print:text-cyan-800 block font-bold">Informativa</span>
               <span class="text-2xl font-mono font-bold text-cyan-300 print:text-cyan-900">{{ reportStats.info }}</span>
             </div>
@@ -856,7 +856,7 @@
           <button
             @click="saveFlagsAction"
             :disabled="isSavingFlags"
-            class="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-mono font-bold"
+            class="px-3 py-1 rounded-sm bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-mono font-bold"
           >
             {{ isSavingFlags ? 'Guardando...' : 'Guardar Banderas' }}
           </button>
@@ -872,7 +872,7 @@
               </span>
               <button
                 @click="toggleFlagStatus('user_flag')"
-                class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
+                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
                 :class="flagsData.user_flag.status === 'captured' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'"
               >
                 {{ flagsData.user_flag.status === 'captured' ? '✓ CAPTURADA' : '○ PENDIENTE' }}
@@ -882,7 +882,7 @@
               v-model="flagsData.user_flag.value"
               type="text"
               placeholder="THM{...}, HTB{...}, flag{...}"
-              class="w-full bg-[#0b101d] border border-slate-800 focus:border-amber-400 rounded px-3 py-2 text-xs font-mono text-emerald-400 placeholder-slate-600 focus:outline-none"
+              class="w-full bg-[#0b101d] border border-slate-800 focus:border-amber-400 rounded-sm px-3 py-2 text-xs font-mono text-emerald-400 placeholder-slate-600 focus:outline-hidden"
             />
             <div v-if="flagsData.user_flag.captured_at" class="text-[10px] font-mono text-slate-500 mt-1">
               Capturada: {{ flagsData.user_flag.captured_at }}
@@ -898,7 +898,7 @@
               </span>
               <button
                 @click="toggleFlagStatus('root_flag')"
-                class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
+                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all"
                 :class="flagsData.root_flag.status === 'captured' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'"
               >
                 {{ flagsData.root_flag.status === 'captured' ? '✓ ROOT CAPTURADO' : '○ PENDIENTE' }}
@@ -908,7 +908,7 @@
               v-model="flagsData.root_flag.value"
               type="text"
               placeholder="root{...}, HTB{root_...}"
-              class="w-full bg-[#0b101d] border border-slate-800 focus:border-purple-400 rounded px-3 py-2 text-xs font-mono text-purple-300 placeholder-slate-600 focus:outline-none"
+              class="w-full bg-[#0b101d] border border-slate-800 focus:border-purple-400 rounded-sm px-3 py-2 text-xs font-mono text-purple-300 placeholder-slate-600 focus:outline-hidden"
             />
             <div v-if="flagsData.root_flag.captured_at" class="text-[10px] font-mono text-slate-500 mt-1">
               Capturada: {{ flagsData.root_flag.captured_at }}
@@ -928,7 +928,7 @@
           </div>
           <button
             @click="showCredModal = true"
-            class="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs font-mono flex items-center space-x-1"
+            class="px-3 py-1.5 rounded-sm bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs font-mono flex items-center space-x-1"
           >
             <span>+</span>
             <span>Registrar Credencial</span>
@@ -954,7 +954,7 @@
             <tbody class="divide-y divide-slate-800/60">
               <tr v-for="c in lootData.credentials" :key="c.id" class="hover:bg-slate-900/40">
                 <td class="p-2.5">
-                  <span class="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
+                  <span class="px-1.5 py-0.5 rounded-sm text-[10px] uppercase font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
                     {{ c.service || 'HTTP' }}
                   </span>
                 </td>
@@ -962,7 +962,7 @@
                 <td class="p-2.5 text-white font-bold">{{ c.username || '-' }}</td>
                 <td class="p-2.5">
                   <div class="flex items-center space-x-1">
-                    <code class="bg-[#050811] px-2 py-0.5 rounded text-amber-300 border border-slate-800">{{ c.password || c.hash || '-' }}</code>
+                    <code class="bg-[#050811] px-2 py-0.5 rounded-sm text-amber-300 border border-slate-800">{{ c.password || c.hash || '-' }}</code>
                     <button @click="copyText(c.password || c.hash)" class="text-slate-500 hover:text-cyan-400 text-[10px]">📋</button>
                   </div>
                 </td>
@@ -982,7 +982,7 @@
           <span>📦 Archivos de Volcado en /loot</span>
         </h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 font-mono text-xs">
-          <div v-for="f in lootData.files" :key="f.name" class="p-2.5 bg-[#050811] rounded border border-slate-800 flex items-center justify-between">
+          <div v-for="f in lootData.files" :key="f.name" class="p-2.5 bg-[#050811] rounded-sm border border-slate-800 flex items-center justify-between">
             <span class="text-slate-300 truncate">{{ f.name }}</span>
             <span class="text-[10px] text-slate-500">{{ (f.size / 1024).toFixed(1) }} KB</span>
           </div>
@@ -1007,7 +1007,7 @@
               v-for="folder in ['recon', 'fuzzing', 'loot', 'screenshots', 'exports', 'evidence']"
               :key="folder"
               @click="selectArtifactFolder(folder)"
-              class="px-2.5 py-1 rounded transition-colors uppercase tracking-wider text-[11px]"
+              class="px-2.5 py-1 rounded-sm transition-colors uppercase tracking-wider text-[11px]"
               :class="activeArtifactFolder === folder ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400 hover:text-white'"
             >
               {{ folder }}/
@@ -1018,7 +1018,7 @@
         <!-- Lista de Archivos y Previsualizador -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <!-- Columna Archivos -->
-          <div class="bg-[#050811] border border-slate-800 rounded p-2 max-h-[500px] overflow-y-auto space-y-1 font-mono text-xs">
+          <div class="bg-[#050811] border border-slate-800 rounded-sm p-2 max-h-[500px] overflow-y-auto space-y-1 font-mono text-xs">
             <div v-if="artifactFiles.length === 0" class="text-center py-10 text-slate-600">
               No hay archivos generados en {{ activeArtifactFolder }}/
             </div>
@@ -1026,7 +1026,7 @@
               v-for="file in artifactFiles"
               :key="file.rel_path"
               @click="loadArtifactPreview(file)"
-              class="w-full text-left p-2 rounded flex items-center justify-between transition-colors"
+              class="w-full text-left p-2 rounded-sm flex items-center justify-between transition-colors"
               :class="selectedArtifact?.rel_path === file.rel_path ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-500/40' : 'hover:bg-slate-900 text-slate-300'"
             >
               <span class="truncate">{{ file.name }}</span>
@@ -1035,7 +1035,7 @@
           </div>
 
           <!-- Columna Previsualizador -->
-          <div class="lg:col-span-2 bg-[#050811] border border-slate-800 rounded p-4 max-h-[500px] overflow-y-auto font-mono text-xs">
+          <div class="lg:col-span-2 bg-[#050811] border border-slate-800 rounded-sm p-4 max-h-[500px] overflow-y-auto font-mono text-xs">
             <div v-if="!selectedArtifact" class="text-center py-20 text-slate-600">
               Selecciona un archivo de la lista para previsualizar su contenido.
             </div>
@@ -1044,7 +1044,7 @@
                 <span class="text-cyan-400 font-bold">{{ selectedArtifact.rel_path }}</span>
                 <button
                   @click="copyText(selectedArtifactContent)"
-                  class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
+                  class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
                 >
                   Copiar Contenido
                 </button>
@@ -1059,7 +1059,7 @@
     <!-- MODAL REGISTRAR CREDENCIAL DE BOTÍN -->
     <div
       v-if="showCredModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
     >
       <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-md w-full p-6 shadow-2xl space-y-4">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -1073,7 +1073,7 @@
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-slate-400 block mb-1">Servicio:</label>
-              <select v-model="credForm.service" class="w-full bg-[#070b14] border border-slate-700 rounded p-1.5 text-slate-200">
+              <select v-model="credForm.service" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1.5 text-slate-200">
                 <option value="SSH">SSH (:22)</option>
                 <option value="HTTP">HTTP/Web</option>
                 <option value="SMB">SMB (:445)</option>
@@ -1091,7 +1091,7 @@
                 v-model="credForm.host"
                 type="text"
                 placeholder="10.10.10.42"
-                class="w-full bg-[#070b14] border border-slate-700 rounded px-2.5 py-1.5 text-slate-100"
+                class="w-full bg-[#070b14] border border-slate-700 rounded-sm px-2.5 py-1.5 text-slate-100"
               />
             </div>
           </div>
@@ -1103,7 +1103,7 @@
                 v-model="credForm.username"
                 type="text"
                 placeholder="admin, root, user"
-                class="w-full bg-[#070b14] border border-slate-700 rounded px-2.5 py-1.5 text-slate-100"
+                class="w-full bg-[#070b14] border border-slate-700 rounded-sm px-2.5 py-1.5 text-slate-100"
               />
             </div>
             <div>
@@ -1112,7 +1112,7 @@
                 v-model="credForm.port"
                 type="number"
                 placeholder="22"
-                class="w-full bg-[#070b14] border border-slate-700 rounded px-2.5 py-1.5 text-slate-100"
+                class="w-full bg-[#070b14] border border-slate-700 rounded-sm px-2.5 py-1.5 text-slate-100"
               />
             </div>
           </div>
@@ -1124,7 +1124,7 @@
               type="text"
               required
               placeholder="P@ssw0rd123! o $6$hash..."
-              class="w-full bg-[#070b14] border border-slate-700 rounded px-2.5 py-1.5 text-amber-300 font-bold"
+              class="w-full bg-[#070b14] border border-slate-700 rounded-sm px-2.5 py-1.5 text-amber-300 font-bold"
             />
           </div>
 
@@ -1134,7 +1134,7 @@
               v-model="credForm.notes"
               type="text"
               placeholder="Encontrado en config.php o crackeado con john"
-              class="w-full bg-[#070b14] border border-slate-700 rounded px-2.5 py-1.5 text-slate-300"
+              class="w-full bg-[#070b14] border border-slate-700 rounded-sm px-2.5 py-1.5 text-slate-300"
             />
           </div>
 
@@ -1142,13 +1142,13 @@
             <button
               type="button"
               @click="showCredModal = false"
-              class="px-3 py-1.5 rounded bg-slate-800 text-slate-400 hover:text-white"
+              class="px-3 py-1.5 rounded-sm bg-slate-800 text-slate-400 hover:text-white"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              class="px-4 py-1.5 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold"
+              class="px-4 py-1.5 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold"
             >
               Guardar Credencial
             </button>
@@ -1160,7 +1160,7 @@
     <!-- MODAL CREAR / EDITAR HALLAZGO CON CVSS CALCULATOR -->
     <div
       v-if="showFindingModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
     >
       <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-2xl w-full p-6 shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -1179,7 +1179,7 @@
                 type="text"
                 required
                 placeholder="idor-user-profile, sqli-login"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
             </div>
             <div>
@@ -1188,7 +1188,7 @@
                 v-model="findingForm.asset"
                 type="text"
                 placeholder="api.target.local/v1/profile"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
             </div>
           </div>
@@ -1200,12 +1200,12 @@
               type="text"
               required
               placeholder="Insecure Direct Object Reference (IDOR) en Actualización de Cuenta"
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
             />
           </div>
 
           <!-- Calculadora CVSS 3.1 Interactiva -->
-          <div class="p-3 rounded bg-slate-900/80 border border-slate-800 space-y-3">
+          <div class="p-3 rounded-sm bg-slate-900/80 border border-slate-800 space-y-3">
             <div class="flex items-center justify-between">
               <span class="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">Calculadora CVSS 3.1</span>
               <span class="text-xs font-mono font-bold" :class="getSeverityClass(findingForm.severity)">
@@ -1216,7 +1216,7 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
               <div>
                 <label class="text-slate-400 block mb-0.5">Attack Vector (AV):</label>
-                <select v-model="cvssMetrics.AV" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded p-1 text-slate-200">
+                <select v-model="cvssMetrics.AV" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
                   <option value="N">Network (N)</option>
                   <option value="A">Adjacent (A)</option>
                   <option value="L">Local (L)</option>
@@ -1225,14 +1225,14 @@
               </div>
               <div>
                 <label class="text-slate-400 block mb-0.5">Attack Complexity (AC):</label>
-                <select v-model="cvssMetrics.AC" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded p-1 text-slate-200">
+                <select v-model="cvssMetrics.AC" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
                   <option value="L">Low (L)</option>
                   <option value="H">High (H)</option>
                 </select>
               </div>
               <div>
                 <label class="text-slate-400 block mb-0.5">Privileges Req (PR):</label>
-                <select v-model="cvssMetrics.PR" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded p-1 text-slate-200">
+                <select v-model="cvssMetrics.PR" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
                   <option value="N">None (N)</option>
                   <option value="L">Low (L)</option>
                   <option value="H">High (H)</option>
@@ -1240,7 +1240,7 @@
               </div>
               <div>
                 <label class="text-slate-400 block mb-0.5">User Interaction (UI):</label>
-                <select v-model="cvssMetrics.UI" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded p-1 text-slate-200">
+                <select v-model="cvssMetrics.UI" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
                   <option value="N">None (N)</option>
                   <option value="R">Required (R)</option>
                 </select>
@@ -1254,7 +1254,7 @@
             <textarea
               v-model="findingForm.description"
               rows="3"
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               placeholder="Explicación detallada del fallo y cómo fue detectado..."
             ></textarea>
           </div>
@@ -1264,7 +1264,7 @@
             <textarea
               v-model="findingForm.steps_to_reproduce"
               rows="3"
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               placeholder="1. Realizar petición POST con token de usuario A&#10;2. Modificar id a usuario B..."
             ></textarea>
           </div>
@@ -1275,7 +1275,7 @@
               <textarea
                 v-model="findingForm.http_request"
                 rows="4"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
                 placeholder="GET /api/user/102 HTTP/1.1&#10;Host: target.local..."
               ></textarea>
             </div>
@@ -1284,7 +1284,7 @@
               <textarea
                 v-model="findingForm.http_response"
                 rows="4"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
                 placeholder="HTTP/1.1 200 OK&#10;Content-Type: application/json..."
               ></textarea>
             </div>
@@ -1296,7 +1296,7 @@
               v-model="findingForm.remediation"
               type="text"
               placeholder="Implementar validación de control de acceso a nivel de objeto (BOLA/IDOR)..."
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
             />
           </div>
 
@@ -1304,13 +1304,13 @@
             <button
               type="button"
               @click="showFindingModal = false"
-              class="px-4 py-2 rounded bg-slate-800 text-slate-300 text-xs font-mono"
+              class="px-4 py-2 rounded-sm bg-slate-800 text-slate-300 text-xs font-mono"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              class="px-5 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono"
+              class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono"
             >
               Guardar Ficha
             </button>

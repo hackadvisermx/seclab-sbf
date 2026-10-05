@@ -5,10 +5,10 @@
       <div>
         <h1 class="text-2xl font-mono font-bold text-white flex items-center space-x-3">
           <span>⚡ SecLab API Key Vault & Tactical Proxy</span>
-          <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono">
+          <span class="text-xs px-2 py-0.5 rounded-sm bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono">
             AES-256-GCM
           </span>
-          <span class="text-xs px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-mono">
+          <span class="text-xs px-2 py-0.5 rounded-sm bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-mono">
             FASE 2 ACTIVA
           </span>
         </h1>
@@ -20,7 +20,7 @@
       <div class="flex items-center space-x-3">
         <button
           @click="openAddModal"
-          class="px-4 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-sm transition-all shadow-md shadow-cyan-500/20 flex items-center justify-center space-x-2"
+          class="px-4 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-sm transition-all shadow-md shadow-cyan-500/20 flex items-center justify-center space-x-2"
         >
           <span>+</span>
           <span>Configurar Nueva Llave</span>
@@ -58,7 +58,7 @@
         <span class="text-base">🚀</span>
         <span>
           <strong>Tools Bridge Activo:</strong> Inyecta tus claves directamente en terminal sin tocar disco ejecutando:
-          <code class="bg-black/60 px-2 py-0.5 rounded text-cyan-300">pt-vault run &lt;comando&gt;</code>
+          <code class="bg-black/60 px-2 py-0.5 rounded-sm text-cyan-300">pt-vault run &lt;comando&gt;</code>
         </span>
       </div>
       <span class="text-[11px] text-slate-400 whitespace-nowrap">Ej: pt-vault run shodan myinfo</span>
@@ -70,7 +70,7 @@
         v-for="cat in ['all', 'recon', 'llm', 'platform']"
         :key="cat"
         @click="selectedCategory = cat"
-        class="px-3 py-1.5 rounded transition-colors uppercase tracking-wider"
+        class="px-3 py-1.5 rounded-sm transition-colors uppercase tracking-wider"
         :class="selectedCategory === cat ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white bg-slate-800/40'"
       >
         {{ cat === 'all' ? 'Todos' : (cat === 'recon' ? 'Recon & OSINT' : (cat === 'llm' ? 'Modelos AI / LLMs' : 'Plataformas')) }}
@@ -87,7 +87,7 @@
       <p class="text-slate-300 font-mono text-sm">No hay API keys configuradas en esta categoría.</p>
       <button
         @click="openAddModal"
-        class="px-4 py-2 rounded bg-cyan-600 text-slate-950 font-bold text-xs font-mono"
+        class="px-4 py-2 rounded-sm bg-cyan-600 text-slate-950 font-bold text-xs font-mono"
       >
         Agregar Clave al Vault
       </button>
@@ -112,7 +112,7 @@
 
             <!-- Badge de Estado de Salud -->
             <span
-              class="px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center space-x-1"
+              class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold flex items-center space-x-1"
               :class="getStatusBadgeClass(k.status)"
             >
               <span class="w-1.5 h-1.5 rounded-full" :class="getStatusDotClass(k.status)"></span>
@@ -121,9 +121,9 @@
           </div>
 
           <!-- Clave Enmascarada -->
-          <div class="mt-4 p-2.5 rounded bg-slate-950/80 border border-slate-800 font-mono text-xs flex items-center justify-between">
+          <div class="mt-4 p-2.5 rounded-sm bg-slate-950/80 border border-slate-800 font-mono text-xs flex items-center justify-between">
             <span class="text-slate-300">{{ k.masked_key }}</span>
-            <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">cifrada</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-sm bg-slate-800 text-slate-400">cifrada</span>
           </div>
 
           <!-- Mensaje de Estado / Detalles -->
@@ -142,7 +142,7 @@
           <button
             @click="testKey(k.provider)"
             :disabled="testingProviders[k.provider]"
-            class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 disabled:opacity-50 transition-colors flex items-center space-x-1"
+            class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 disabled:opacity-50 transition-colors flex items-center space-x-1"
           >
             <span>⚡</span>
             <span>{{ testingProviders[k.provider] ? 'Probando...' : 'Probar Salud' }}</span>
@@ -159,7 +159,7 @@
     </div>
 
     <!-- Tester del Proxy Unificado con Selector de Perfiles (Fase 2) -->
-    <div class="tactical-card bg-gradient-to-r from-[#0d1322] to-[#11192e] space-y-4">
+    <div class="tactical-card bg-linear-to-r from-[#0d1322] to-[#11192e] space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-2">
         <div>
           <h2 class="text-sm font-mono font-bold text-white flex items-center space-x-2">
@@ -173,7 +173,7 @@
         <!-- Selector de Perfiles -->
         <div class="flex items-center space-x-2 text-xs font-mono">
           <span class="text-slate-400">Perfil:</span>
-          <div class="flex rounded bg-slate-900 border border-slate-800 p-0.5">
+          <div class="flex rounded-sm bg-slate-900 border border-slate-800 p-0.5">
             <button
               v-for="p in [
                 { id: 'quick', label: 'Rápido (Flash)' },
@@ -182,7 +182,7 @@
               ]"
               :key="p.id"
               @click="selectedProfile = p.id"
-              class="px-2.5 py-1 rounded text-[11px] font-semibold transition-colors"
+              class="px-2.5 py-1 rounded-sm text-[11px] font-semibold transition-colors"
               :class="selectedProfile === p.id ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'"
             >
               {{ p.label }}
@@ -197,13 +197,13 @@
           <textarea
             v-model="proxyPromptInput"
             rows="3"
-            class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded p-2 text-xs font-mono text-slate-100 focus:outline-none"
+            class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm p-2 text-xs font-mono text-slate-100 focus:outline-hidden"
             placeholder="Analiza brevemente el propósito del principio Evidence-First en auditorías..."
           ></textarea>
           <button
             @click="runProxyTest"
             :disabled="isTestingProxy || !proxyPromptInput.trim()"
-            class="mt-2 px-4 py-2 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-bold text-xs font-mono transition-all shadow-md shadow-cyan-600/20"
+            class="mt-2 px-4 py-2 rounded-sm bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-bold text-xs font-mono transition-all shadow-md shadow-cyan-600/20"
           >
             {{ isTestingProxy ? 'Consultando Proxy...' : 'Ejecutar Consulta con Failover' }}
           </button>
@@ -211,7 +211,7 @@
 
         <div>
           <label class="block text-xs font-mono text-slate-300 mb-1">Respuesta Upstream del Proxy:</label>
-          <div class="h-32 bg-[#050811] border border-slate-800 rounded p-3 text-xs font-mono text-slate-200 overflow-y-auto">
+          <div class="h-32 bg-[#050811] border border-slate-800 rounded-sm p-3 text-xs font-mono text-slate-200 overflow-y-auto">
             <span v-if="!proxyResponse && !isTestingProxy" class="text-slate-500">
               Esperando consulta...
             </span>
@@ -267,7 +267,7 @@
               <td class="py-2 text-slate-400 truncate max-w-[150px]">{{ h.model }}</td>
               <td class="py-2">
                 <span
-                  class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                  class="px-1.5 py-0.5 rounded-sm text-[10px] font-bold"
                   :class="h.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' : (h.status === 'fallback' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400')"
                 >
                   {{ h.status }}
@@ -284,7 +284,7 @@
     <!-- Modal Agregar / Configurar API Key -->
     <div
       v-if="showModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
     >
       <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -300,7 +300,7 @@
             <select
               v-model="keyForm.provider"
               @change="onProviderSelect"
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-xs font-mono text-slate-100 focus:outline-hidden"
             >
               <optgroup label="Reconocimiento & OSINT">
                 <option value="shodan">Shodan (Search & Host API)</option>
@@ -327,7 +327,7 @@
               v-model="keyForm.label"
               type="text"
               required
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
             />
           </div>
 
@@ -338,7 +338,7 @@
               type="password"
               required
               placeholder="sk-..., token_..., key_..."
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
             />
             <p class="text-[10px] text-slate-500 mt-1 font-mono">
               Se cifra localmente con AES-256-GCM antes de guardarse en SQLite.
@@ -352,7 +352,7 @@
                 v-model="keyForm.base_url"
                 type="text"
                 placeholder="http://localhost:11434/v1"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
             </div>
             <div>
@@ -361,7 +361,7 @@
                 v-model="keyForm.model_name"
                 type="text"
                 placeholder="llama3:latest, mistral"
-                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
             </div>
           </div>
@@ -370,13 +370,13 @@
             <button
               type="button"
               @click="showModal = false"
-              class="px-4 py-2 rounded bg-slate-800 text-slate-300 text-xs font-mono"
+              class="px-4 py-2 rounded-sm bg-slate-800 text-slate-300 text-xs font-mono"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              class="px-5 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono shadow-md shadow-cyan-500/20"
+              class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono shadow-md shadow-cyan-500/20"
             >
               Guardar Llave Cifrada
             </button>

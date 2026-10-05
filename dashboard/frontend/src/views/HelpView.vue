@@ -12,10 +12,10 @@
       </div>
 
       <div class="flex items-center space-x-2 text-xs font-mono">
-        <span class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">
+        <span class="px-2.5 py-1 rounded-sm bg-slate-800 text-slate-300 border border-slate-700">
           Shell: ZSH / TMUX
         </span>
-        <span class="px-2.5 py-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
+        <span class="px-2.5 py-1 rounded-sm bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
           Usuario: tester
         </span>
       </div>
@@ -27,7 +27,7 @@
         v-for="t in ['access', 'cheatsheet', 'skills']"
         :key="t"
         @click="activeTab = t"
-        class="px-4 py-2 rounded font-semibold transition-colors uppercase tracking-wider"
+        class="px-4 py-2 rounded-sm font-semibold transition-colors uppercase tracking-wider"
         :class="activeTab === t ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white bg-slate-800/40'"
       >
         {{ t === 'access' ? 'Datos de Acceso & Red' : (t === 'cheatsheet' ? 'Catálogo pt-cheat (48 comandos)' : 'Playbooks de Habilidades (skills/)') }}
@@ -43,7 +43,7 @@
             <span>🔌 Puertos y Servicios Internos</span>
           </h2>
           <div class="space-y-3 text-xs font-mono">
-            <div class="p-3 rounded bg-slate-900/80 border border-slate-800 space-y-1">
+            <div class="p-3 rounded-sm bg-slate-900/80 border border-slate-800 space-y-1">
               <div class="flex items-center justify-between font-bold">
                 <span class="text-cyan-400">Web Terminal (ttyd)</span>
                 <span class="text-slate-300">:7681</span>
@@ -52,7 +52,7 @@
               <div class="text-[10px] text-slate-500">Acceso: http://localhost:7681 o http://[TAILSCALE_IP]:7681</div>
             </div>
 
-            <div class="p-3 rounded bg-slate-900/80 border border-slate-800 space-y-1">
+            <div class="p-3 rounded-sm bg-slate-900/80 border border-slate-800 space-y-1">
               <div class="flex items-center justify-between font-bold">
                 <span class="text-cyan-400">Tactical Dashboard & Hermes</span>
                 <span class="text-slate-300">:8080</span>
@@ -61,7 +61,7 @@
               <div class="text-[10px] text-slate-500">Acceso: http://localhost:8080 o http://[TAILSCALE_IP]:8080</div>
             </div>
 
-            <div class="p-3 rounded bg-slate-900/80 border border-slate-800 space-y-1">
+            <div class="p-3 rounded-sm bg-slate-900/80 border border-slate-800 space-y-1">
               <div class="flex items-center justify-between font-bold">
                 <span class="text-cyan-400">SSH Laboratorio (tester)</span>
                 <span class="text-slate-300">:2222</span>
@@ -70,7 +70,7 @@
               <div class="text-[10px] text-slate-500">Comando: make lab-ssh-cloud o make lab-ssh-az</div>
             </div>
 
-            <div class="p-3 rounded bg-slate-900/80 border border-slate-800 space-y-1">
+            <div class="p-3 rounded-sm bg-slate-900/80 border border-slate-800 space-y-1">
               <div class="flex items-center justify-between font-bold">
                 <span class="text-cyan-400">SSH Host (ubuntu)</span>
                 <span class="text-slate-300">:22</span>
@@ -91,36 +91,36 @@
           </p>
 
           <div class="space-y-2 text-xs font-mono">
-            <div class="p-2.5 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
+            <div class="p-2.5 rounded-sm bg-slate-950 border border-slate-800 flex items-center justify-between">
               <div>
                 <span class="text-emerald-400 font-bold block">vpntry</span>
                 <span class="text-[11px] text-slate-400">Conecta TryHackMe (tryhackme.ovpn)</span>
               </div>
-              <button @click="copyText('vpntry')" class="px-2 py-1 rounded bg-slate-800 text-cyan-400 text-[10px]">Copiar</button>
+              <button @click="copyText('vpntry')" class="px-2 py-1 rounded-sm bg-slate-800 text-cyan-400 text-[10px]">Copiar</button>
             </div>
 
-            <div class="p-2.5 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
+            <div class="p-2.5 rounded-sm bg-slate-950 border border-slate-800 flex items-center justify-between">
               <div>
                 <span class="text-emerald-400 font-bold block">vpnhtb</span>
                 <span class="text-[11px] text-slate-400">Conecta HackTheBox (hackthebox.ovpn)</span>
               </div>
-              <button @click="copyText('vpnhtb')" class="px-2 py-1 rounded bg-slate-800 text-cyan-400 text-[10px]">Copiar</button>
+              <button @click="copyText('vpnhtb')" class="px-2 py-1 rounded-sm bg-slate-800 text-cyan-400 text-[10px]">Copiar</button>
             </div>
 
-            <div class="p-2.5 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
+            <div class="p-2.5 rounded-sm bg-slate-950 border border-slate-800 flex items-center justify-between">
               <div>
                 <span class="text-emerald-400 font-bold block">vpncli</span>
                 <span class="text-[11px] text-slate-400">Conecta VPN de Cliente (client.ovpn)</span>
               </div>
-              <button @click="copyText('vpncli')" class="px-2 py-1 rounded bg-slate-800 text-cyan-400 text-[10px]">Copiar</button>
+              <button @click="copyText('vpncli')" class="px-2 py-1 rounded-sm bg-slate-800 text-cyan-400 text-[10px]">Copiar</button>
             </div>
 
-            <div class="p-2.5 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
+            <div class="p-2.5 rounded-sm bg-slate-950 border border-slate-800 flex items-center justify-between">
               <div>
                 <span class="text-red-400 font-bold block">vpn-down</span>
                 <span class="text-[11px] text-slate-400">Desconecta el túnel y limpia las rutas de tun0</span>
               </div>
-              <button @click="copyText('vpn-down')" class="px-2 py-1 rounded bg-slate-800 text-cyan-400 text-[10px]">Copiar</button>
+              <button @click="copyText('vpn-down')" class="px-2 py-1 rounded-sm bg-slate-800 text-cyan-400 text-[10px]">Copiar</button>
             </div>
           </div>
         </div>
@@ -134,7 +134,7 @@
           v-model="cheatQuery"
           type="text"
           placeholder="Buscar comandos (ej: pivoting, kerberoast, ligolo, hashcat)..."
-          class="w-full sm:w-96 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded px-3 py-1.5 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none"
+          class="w-full sm:w-96 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-hidden"
         />
         <span class="text-xs font-mono text-slate-400">Mostrando {{ filteredCheats.length }} comandos</span>
       </div>
@@ -147,20 +147,20 @@
         >
           <div class="space-y-1 max-w-2xl">
             <div class="flex items-center space-x-2">
-              <span class="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-mono font-bold uppercase">
+              <span class="px-1.5 py-0.5 rounded-sm bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-mono font-bold uppercase">
                 {{ c.category }}
               </span>
               <h4 class="font-mono font-bold text-white text-sm">{{ c.title }}</h4>
             </div>
             <p class="text-xs text-slate-400 font-sans">{{ c.description }}</p>
-            <div class="mt-2 bg-[#050811] border border-slate-800 p-2 rounded font-mono text-xs text-emerald-400 overflow-x-auto">
+            <div class="mt-2 bg-[#050811] border border-slate-800 p-2 rounded-sm font-mono text-xs text-emerald-400 overflow-x-auto">
               <code>{{ c.command }}</code>
             </div>
           </div>
 
           <button
             @click="copyText(c.command)"
-            class="self-start md:self-center px-3 py-1.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-cyan-400 border border-slate-700 text-xs font-mono font-semibold transition-colors whitespace-nowrap"
+            class="self-start md:self-center px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-cyan-400 border border-slate-700 text-xs font-mono font-semibold transition-colors whitespace-nowrap"
           >
             Copiar Comando
           </button>
@@ -178,7 +178,7 @@
             v-for="s in skills"
             :key="s.id"
             @click="selectSkill(s.id)"
-            class="w-full text-left p-2.5 rounded font-mono text-xs transition-colors flex items-center justify-between"
+            class="w-full text-left p-2.5 rounded-sm font-mono text-xs transition-colors flex items-center justify-between"
             :class="selectedSkillId === s.id ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/40' : 'text-slate-300 hover:bg-slate-800/60'"
           >
             <span class="truncate font-semibold">{{ s.id }}</span>

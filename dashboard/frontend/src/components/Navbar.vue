@@ -1,16 +1,16 @@
 <template>
   <header class="bg-[#0b101d] border-b border-[#1b253b] sticky top-0 z-50 px-6 py-3">
-    <div class="max-w-7xl mx-auto flex items-center justify-between">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
       <!-- Logo y Brand -->
       <div class="flex items-center space-x-6">
         <router-link to="/" class="flex items-center space-x-3 group">
-          <div class="w-9 h-9 rounded bg-[#131d31] border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-mono font-bold shadow-lg shadow-cyan-500/10 group-hover:border-cyan-400 transition-colors">
+          <div class="w-9 h-9 rounded-sm bg-[#131d31] border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-mono font-bold shadow-lg shadow-cyan-500/10 group-hover:border-cyan-400 transition-colors">
             ⚡
           </div>
           <div>
             <span class="font-mono font-bold text-lg tracking-wider text-slate-100 flex items-center space-x-2">
               <span>SECLAB</span>
-              <span class="text-xs px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-400">TACTICAL</span>
+              <span class="text-xs px-1.5 py-0.5 rounded-sm bg-cyan-950/80 border border-cyan-500/30 text-cyan-400">TACTICAL</span>
             </span>
             <p class="text-[10px] font-mono text-slate-400">AUDIT SUITE & KEY VAULT</p>
           </div>
@@ -20,21 +20,21 @@
         <nav class="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-800">
           <router-link
             to="/"
-            class="px-3 py-1.5 rounded text-sm font-medium transition-all"
+            class="px-3 py-1.5 rounded-sm text-sm font-medium transition-all"
             :class="$route.path === '/' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'"
           >
             Dashboard
           </router-link>
           <router-link
             to="/engagements"
-            class="px-3 py-1.5 rounded text-sm font-medium transition-all"
+            class="px-3 py-1.5 rounded-sm text-sm font-medium transition-all"
             :class="$route.path.startsWith('/engagements') ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'"
           >
             Auditorías & Retos
           </router-link>
           <router-link
             to="/terminal"
-            class="px-3 py-1.5 rounded text-sm font-medium transition-all flex items-center space-x-1.5"
+            class="px-3 py-1.5 rounded-sm text-sm font-medium transition-all flex items-center space-x-1.5"
             :class="$route.path === '/terminal' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'"
           >
             <span>💻</span>
@@ -42,7 +42,7 @@
           </router-link>
           <router-link
             to="/vault"
-            class="px-3 py-1.5 rounded text-sm font-medium transition-all flex items-center space-x-1.5"
+            class="px-3 py-1.5 rounded-sm text-sm font-medium transition-all flex items-center space-x-1.5"
             :class="$route.path === '/vault' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'"
           >
             <span>API Vault</span>
@@ -50,7 +50,7 @@
           </router-link>
           <router-link
             to="/help"
-            class="px-3 py-1.5 rounded text-sm font-medium transition-all"
+            class="px-3 py-1.5 rounded-sm text-sm font-medium transition-all"
             :class="$route.path === '/help' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'"
           >
             Ayuda & Acceso
@@ -64,7 +64,7 @@
         <div class="relative">
           <button
             @click="vpnDropdownOpen = !vpnDropdownOpen"
-            class="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-[#0d1322] border transition-all cursor-pointer focus:outline-none"
+            class="flex items-center space-x-1.5 px-2.5 py-1 rounded-sm bg-[#0d1322] border transition-all cursor-pointer focus:outline-hidden"
             :class="vpnBadgeClasses"
             title="Haz clic para gestionar la conexión VPN táctica"
           >
@@ -76,7 +76,7 @@
           <!-- Dropdown Táctico VPN -->
           <div
             v-if="vpnDropdownOpen"
-            class="absolute right-0 mt-2 w-84 rounded-lg bg-[#0e1628] border border-cyan-500/40 shadow-2xl p-4 z-50 text-slate-200 font-mono space-y-3"
+            class="absolute left-0 sm:left-auto sm:right-0 mt-2 w-84 max-w-[calc(100vw-3rem)] rounded-lg bg-[#0e1628] border border-cyan-500/40 shadow-2xl p-4 z-50 text-slate-200 font-mono space-y-3"
           >
             <!-- Header con Switch Estado -->
             <div class="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -86,7 +86,7 @@
               </span>
               <div class="flex items-center space-x-2">
                 <span
-                  class="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold"
+                  class="px-1.5 py-0.5 rounded-sm text-[10px] uppercase font-bold"
                   :class="telemetry.vpn?.connected ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'"
                 >
                   {{ telemetry.vpn?.connecting ? 'CONECTANDO' : (telemetry.vpn?.connected ? 'ENCENDIDO' : 'APAGADO') }}
@@ -94,7 +94,7 @@
                 <button
                   @click="vpnActive ? handleDisconnectVpn() : handleConnectWithSelected()"
                   :disabled="vpnLoading"
-                  class="px-2 py-0.5 rounded border text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                  class="px-2 py-0.5 rounded-sm border text-[10px] font-bold cursor-pointer disabled:opacity-50"
                   :class="vpnActive ? 'bg-rose-950/80 hover:bg-rose-900 border-rose-500/50 text-rose-300' : 'bg-emerald-950/80 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300'"
                   :title="vpnActive ? 'Apagar túnel VPN' : 'Encender el perfil seleccionado'"
                 >
@@ -104,7 +104,7 @@
             </div>
 
             <!-- Detalles de Red -->
-            <div class="space-y-1 text-[11px] bg-slate-900/80 p-2.5 rounded border border-slate-800">
+            <div class="space-y-1 text-[11px] bg-slate-900/80 p-2.5 rounded-sm border border-slate-800">
               <div class="flex justify-between">
                 <span class="text-slate-400">Perfil Activo:</span>
                 <span class="font-bold text-cyan-300 capitalize">{{ telemetry.vpn?.profile || 'Ninguno' }}</span>
@@ -126,24 +126,24 @@
                 <button
                   type="button"
                   @click="selectedProfile = 'tryhackme'"
-                  class="px-2 py-1.5 rounded text-[10px] font-bold border transition-all text-center cursor-pointer"
-                  :class="selectedProfile === 'tryhackme' ? 'bg-emerald-950 border-emerald-400 text-emerald-300 shadow-sm' : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'"
+                  class="px-2 py-1.5 rounded-sm text-[10px] font-bold border transition-all text-center cursor-pointer"
+                  :class="selectedProfile === 'tryhackme' ? 'bg-emerald-950 border-emerald-400 text-emerald-300 shadow-xs' : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'"
                 >
                   TryHackMe
                 </button>
                 <button
                   type="button"
                   @click="selectedProfile = 'hackthebox'"
-                  class="px-2 py-1.5 rounded text-[10px] font-bold border transition-all text-center cursor-pointer"
-                  :class="selectedProfile === 'hackthebox' ? 'bg-amber-950 border-amber-400 text-amber-300 shadow-sm' : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'"
+                  class="px-2 py-1.5 rounded-sm text-[10px] font-bold border transition-all text-center cursor-pointer"
+                  :class="selectedProfile === 'hackthebox' ? 'bg-amber-950 border-amber-400 text-amber-300 shadow-xs' : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'"
                 >
                   HackTheBox
                 </button>
                 <button
                   type="button"
                   @click="selectedProfile = 'client'"
-                  class="px-2 py-1.5 rounded text-[10px] font-bold border transition-all text-center cursor-pointer"
-                  :class="selectedProfile === 'client' ? 'bg-blue-950 border-blue-400 text-blue-300 shadow-sm' : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'"
+                  class="px-2 py-1.5 rounded-sm text-[10px] font-bold border transition-all text-center cursor-pointer"
+                  :class="selectedProfile === 'client' ? 'bg-blue-950 border-blue-400 text-blue-300 shadow-xs' : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'"
                 >
                   Cliente
                 </button>
@@ -164,14 +164,14 @@
               </div>
 
               <!-- Formulario de Credenciales Expandible -->
-              <div v-if="showAuthInputs" class="space-y-2 bg-[#070b14] p-2.5 rounded border border-slate-800 text-xs">
+              <div v-if="showAuthInputs" class="space-y-2 bg-[#070b14] p-2.5 rounded-sm border border-slate-800 text-xs">
                 <div>
                   <label class="text-[10px] text-slate-400 block mb-0.5">Usuario:</label>
                   <input
                     v-model="vpnUsername"
                     type="text"
                     placeholder="ej. vpn_user"
-                    class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-400 focus:outline-none"
+                    class="w-full bg-slate-900 border border-slate-700 rounded-sm px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-400 focus:outline-hidden"
                   />
                 </div>
                 <div>
@@ -180,7 +180,7 @@
                     v-model="vpnPassword"
                     type="password"
                     placeholder="••••••••"
-                    class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-400 focus:outline-none"
+                    class="w-full bg-slate-900 border border-slate-700 rounded-sm px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-400 focus:outline-hidden"
                   />
                 </div>
                 <div class="flex items-center justify-between pt-1">
@@ -188,7 +188,7 @@
                     <input
                       v-model="vpnSaveInVault"
                       type="checkbox"
-                      class="rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-0"
+                      class="rounded-sm bg-slate-900 border-slate-700 text-cyan-500 focus:ring-0"
                     />
                     <span>Guardar en Vault (AES-256)</span>
                   </label>
@@ -205,7 +205,7 @@
             </div>
 
             <!-- Mensaje de Feedback -->
-            <div v-if="vpnMessage" class="p-2 rounded text-[11px] border" :class="vpnMsgSuccess ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' : 'bg-rose-950/60 border-rose-500/40 text-rose-300'">
+            <div v-if="vpnMessage" class="p-2 rounded-sm text-[11px] border" :class="vpnMsgSuccess ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' : 'bg-rose-950/60 border-rose-500/40 text-rose-300'">
               {{ vpnMessage }}
             </div>
 
@@ -214,7 +214,7 @@
               <button
                 @click="handleConnectWithSelected"
                 :disabled="vpnLoading || (vpnActive && telemetry.vpn?.profile === selectedProfile)"
-                class="w-full py-2 px-3 rounded font-mono font-bold text-xs transition-all flex items-center justify-center space-x-1.5 shadow-md cursor-pointer disabled:opacity-50"
+                class="w-full py-2 px-3 rounded-sm font-mono font-bold text-xs transition-all flex items-center justify-center space-x-1.5 shadow-md cursor-pointer disabled:opacity-50"
                 :class="telemetry.vpn?.connected ? 'bg-cyan-600 hover:bg-cyan-500 text-slate-950' : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'"
               >
                 <span>{{ vpnLoading ? '⏳' : '⚡' }}</span>
@@ -225,7 +225,7 @@
                 v-if="vpnActive"
                 @click="handleDisconnectVpn"
                 :disabled="vpnLoading"
-                class="w-full py-1.5 px-3 rounded bg-rose-950/70 hover:bg-rose-900 border border-rose-600/50 text-rose-300 text-xs font-bold transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+                class="w-full py-1.5 px-3 rounded-sm bg-rose-950/70 hover:bg-rose-900 border border-rose-600/50 text-rose-300 text-xs font-bold transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50 cursor-pointer"
               >
                 <span>⏹</span>
                 <span>Apagar VPN</span>
@@ -241,7 +241,7 @@
 
         <!-- Tailscale Status -->
         <div
-          class="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded bg-[#0d1322] border"
+          class="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-sm bg-[#0d1322] border"
           :class="telemetry.tailscale?.online ? 'border-cyan-500/40 text-cyan-400' : 'border-slate-800 text-slate-400'"
           title="Malla privada Tailscale"
         >
@@ -253,7 +253,7 @@
         <a
           href="http://localhost:7681"
           target="_blank"
-          class="flex items-center space-x-1 px-3 py-1 rounded bg-slate-800 hover:bg-cyan-950/80 border border-slate-700 hover:border-cyan-500/40 text-slate-200 hover:text-cyan-300 transition-colors shadow-sm"
+          class="flex items-center space-x-1 px-3 py-1 rounded-sm bg-slate-800 hover:bg-cyan-950/80 border border-slate-700 hover:border-cyan-500/40 text-slate-200 hover:text-cyan-300 transition-colors shadow-xs"
           title="Abrir terminal autenticada en el puerto 7681 (ttyd)"
         >
           <span>>_</span>

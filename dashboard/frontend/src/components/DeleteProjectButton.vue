@@ -2,13 +2,13 @@
   <button
     type="button"
     @click="openDialog"
-    class="px-3 py-1.5 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-xs font-mono font-bold transition-colors"
+    class="px-3 py-1.5 rounded-sm bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-xs font-mono font-bold transition-colors"
     :aria-label="`Eliminar ${projectType === 'reto' ? 'reto' : 'auditoría'} ${projectId}`"
   >
     Eliminar
   </button>
   <Teleport to="body">
-    <div v-if="showDialog" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @keydown.esc="closeDialog">
+    <div v-if="showDialog" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xs p-4" @keydown.esc="closeDialog">
       <div role="dialog" aria-modal="true" aria-labelledby="delete-project-title" aria-describedby="delete-project-description" class="bg-[#0d1322] border border-rose-500/40 rounded-lg max-w-md w-full p-6 space-y-4 shadow-2xl">
         <h2 id="delete-project-title" class="text-lg font-mono font-bold text-white">
           Eliminar {{ projectType === 'reto' ? 'reto' : 'auditoría' }}
@@ -18,8 +18,8 @@
         </p>
         <p v-if="error" role="alert" class="text-sm text-rose-300">{{ error }}</p>
         <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
-          <button ref="cancelButton" type="button" @click="closeDialog" :disabled="isDeleting" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono disabled:opacity-50">Cancelar</button>
-          <button type="button" @click="deleteProject" :disabled="isDeleting" class="px-4 py-2 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold disabled:opacity-50">
+          <button ref="cancelButton" type="button" @click="closeDialog" :disabled="isDeleting" class="px-4 py-2 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono disabled:opacity-50">Cancelar</button>
+          <button type="button" @click="deleteProject" :disabled="isDeleting" class="px-4 py-2 rounded-sm bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold disabled:opacity-50">
             {{ isDeleting ? 'Eliminando…' : 'Eliminar definitivamente' }}
           </button>
         </div>

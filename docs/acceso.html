@@ -143,9 +143,9 @@ sudo nft list table inet seclab_host</code></pre>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>ssh -i .secrets/ssh/seclab_ed25519 -p 2222 tester@100.111.178.40</code></pre>
   </div>
 
-  <h2>4. Acceso Web a la Terminal (ttyd)</h2>
+  <h2>4. Acceso Web a la Terminal (ttyd) y Guía Interactiva</h2>
   <div class="card">
-    <h3>Terminal en el Navegador</h3>
+    <h3>A. Terminal en el Navegador (ttyd, puerto 7681)</h3>
     <p>Acceso interactivo HTTP sobre la red segura de Tailscale (no requiere túnel local):</p>
     <p>👉 <a href="http://100.111.178.40:7681" target="_blank" rel="noopener noreferrer"><strong>http://100.111.178.40:7681</strong></a></p>
     <table>
@@ -154,6 +154,10 @@ sudo nft list table inet seclab_host</code></pre>
       <tr><td>Contraseña</td><td>Valor de <code>TTYD_PASSWORD</code> en tu <code>.env</code></td></tr>
       <tr><td>Persistencia</td><td>Sesión tmux activa (el cierre de ventana no mata procesos)</td></tr>
     </table>
+
+    <h3>B. Guía Interactiva Visual del Operador (puerto 8888)</h3>
+    <p>Servidor web embebido para explorar la guía interactiva, generador de planes y buscador de 98 herramientas. Para iniciarla dentro del contenedor ejecuta <code>pt-guide --web</code> y abre:</p>
+    <p>👉 <a href="http://100.111.178.40:8888" target="_blank" rel="noopener noreferrer"><strong>http://100.111.178.40:8888</strong></a></p>
   </div>
 
   <h2>5. Directorio de Trabajo (/workspace)</h2>
@@ -162,6 +166,7 @@ sudo nft list table inet seclab_host</code></pre>
     <ul>
       <li><strong>En el host</strong>: <code>/opt/seclab-sbf/workspace</code></li>
       <li><strong>Dentro del contenedor</strong>: <code>/workspace</code> (pertenece a <code>tester:tester</code>)</li>
+      <li><strong>Guía interactiva local</strong>: <code>/workspace/guia.html</code> (sembrada automáticamente para consulta directa).</li>
       <li><strong>Respaldo bajo demanda</strong>: Ejecuta <code>make workspace-backup</code> desde tu máquina para generar un tarball reproducible con SHA-256.</li>
     </ul>
   </div>
@@ -170,7 +175,17 @@ sudo nft list table inet seclab_host</code></pre>
   <div class="card">
     <p>Una vez conectado al laboratorio (por SSH en puerto 2222 o Web Terminal en 7681 como usuario <code>tester</code>), dispones de un entorno con 98 herramientas, orquestación de auditorías con Scope Guard integrado, y un ecosistema de agentes/skills para LLMs:</p>
 
-    <h3>A. Orquestación del Ciclo de Vida del Engagement (<code>pt-eng</code>)</h3>
+    <h3>A. Centro de Ayuda Interactivo y Asistente del Operador (<code>pt-guide</code>)</h3>
+    <p>Asistente táctico integrado en terminal y servidor web para abrir la guía interactiva visual:</p>
+    <ul>
+      <li><code>pt-guide</code> <em>(aliases: <code>guia</code>, <code>guide</code>, <code>ptguide</code>)</em>: Menú interactivo en terminal con selección de misiones (Web/API, CTF, Agentes, Pivoting) y comandos sugeridos.</li>
+      <li><code>pt-guide --web</code> <em>(o <code>pt-guide -w</code>)</em>: Inicia el servidor HTTP local en el puerto <code>8888</code> para abrir la <strong>Guía Interactiva Visual</strong> (con generador dinámico de planes, selector de misiones y buscador reactivo de 98 herramientas).</li>
+      <li><code>pt-guide --wizard &lt;nombre&gt; &lt;target&gt;</code>: Genera de inmediato la secuencia secuencial de comandos adaptada a tu objetivo.</li>
+      <li><code>pt-guide --discipline &lt;1-8&gt;</code>: Consulta playbooks, comandos y artefactos esperados de una disciplina específica.</li>
+      <li><code>/workspace/guia.html</code>: Archivo HTML visual accesible directamente en el workspace compartido.</li>
+    </ul>
+
+    <h3>B. Orquestación del Ciclo de Vida del Engagement (<code>pt-eng</code>)</h3>
     <p>Control de proyectos, estructura estándar y calidad metodológica:</p>
     <ul>
       <li><code>pt-eng new &lt;nombre&gt; [dominio]</code>: Inicializa un engagement con carpetas estandarizadas (<code>evidence/</code>, <code>notes/</code>, <code>recon/</code>, <code>scope/</code>) y genera <code>target.yaml</code> con la plantilla de alcance.</li>
@@ -180,7 +195,7 @@ sudo nft list table inet seclab_host</code></pre>
       <li><code>pt-eng pack</code>: Sanitiza credenciales/tokens, empaqueta el engagement en <code>.tar.gz</code> reproducible con manifiesto SHA-256 en <code>dist/</code>.</li>
     </ul>
 
-    <h3>B. Recomendador Metodológico y Generador de Prompts (<code>pt-next</code>)</h3>
+    <h3>C. Recomendador Metodológico y Generador de Prompts (<code>pt-next</code>)</h3>
     <p>Guía interactiva que analiza el progreso del engagement y asesora tácticamente a operadores y modelos de IA:</p>
     <ul>
       <li><code>pt-next</code> <em>(alias: <code>engnext</code>, <code>next</code>)</em>: Determina la fase actual y recomienda el siguiente paso metodológico con comandos de terminal sugeridos.</li>
@@ -189,13 +204,13 @@ sudo nft list table inet seclab_host</code></pre>
       <li><code>pt-next --json</code>: Salida estructurada machine-readable para pipelines y automatizaciones.</li>
     </ul>
 
-    <h3>C. Matriz de Cobertura y Checklist de Seguridad (<code>pt-checklist</code>)</h3>
+    <h3>D. Matriz de Cobertura y Checklist de Seguridad (<code>pt-checklist</code>)</h3>
     <p>Evaluador determinista de cobertura metodológica en 8 áreas clave (Recon, Auth, API, Business Logic, SSRF, Client SPA, Parameter Discovery, Triage):</p>
     <pre><button class="copy" onclick="copiar(this)">copiar</button><code>pt-checklist             # Evalúa el engagement activo en la terminal
 pt-checklist --markdown  # Genera reporte tabular de cobertura en Markdown
 pt-checklist --strict    # Compuerta CI/CD: falla con código 1 si cobertura &lt; 50%</code></pre>
 
-    <h3>D. Hallazgos Evidence-First y Reportes (<code>pt-finding</code>, <code>pt-report</code>)</h3>
+    <h3>E. Hallazgos Evidence-First y Reportes (<code>pt-finding</code>, <code>pt-report</code>)</h3>
     <p>Documentación técnica rigurosa con scoring CVSS v3.1 y compilación automatizada de reportes ejecutivos:</p>
     <ul>
       <li><code>pt-finding new &lt;slug&gt;</code>: Crea una plantilla de hallazgo en <code>evidence/&lt;slug&gt;.md</code> siguiendo el estándar Evidence-First.</li>
@@ -203,7 +218,7 @@ pt-checklist --strict    # Compuerta CI/CD: falla con código 1 si cobertura &lt
       <li><code>pt-report compile</code>: Compila un reporte ejecutivo y técnico consolidado en Markdown.</li>
     </ul>
 
-    <h3>E. Pipeline de Reconocimiento y Validación SSRF OOB (<code>pt-recon</code>, <code>pt-callback</code>)</h3>
+    <h3>F. Pipeline de Reconocimiento y Validación SSRF OOB (<code>pt-recon</code>, <code>pt-callback</code>)</h3>
     <ul>
       <li><code>pt-recon &lt;dominio&gt;</code>: Pipeline modular de reconocimiento (subdominios, sondeo HTTP, endpoints y parámetros con x8/gau) protegido por Scope Guard.</li>
       <li><code>pt-callback listen [puerto]</code>: Servidor local de captura de interacciones OOB para validación de SSRF e inyecciones ciegas.</li>
@@ -211,7 +226,7 @@ pt-checklist --strict    # Compuerta CI/CD: falla con código 1 si cobertura &lt
       <li><code>pt-fuzz-params &lt;url&gt;</code>: Descubrimiento determinista de parámetros ocultos mediante el motor <code>x8</code>.</li>
     </ul>
 
-    <h3>F. Agent Security Skills y Herramientas Rápidas (<code>pt-skills</code>, <code>pt-cheat</code>, <code>pt-log</code>)</h3>
+    <h3>G. Agent Security Skills y Herramientas Rápidas (<code>pt-skills</code>, <code>pt-cheat</code>, <code>pt-log</code>)</h3>
     <ul>
       <li><code>pt-skills</code>: Menú interactivo con <code>fzf</code> para inspeccionar las 10 Agent Security Skills y playbooks en <code>skills/</code>.</li>
       <li><code>pt-skills prompt</code>: Selector interactivo de plantillas de prompts optimizadas para agentes especializados (recon, auth, logic, injection, triage, report).</li>
@@ -220,7 +235,7 @@ pt-checklist --strict    # Compuerta CI/CD: falla con código 1 si cobertura &lt
       <li><code>pt-log start [nombre]</code>: Inicia la auditoría y firmado continuo de la sesión mediante <code>tmux pipe-pane</code>.</li>
     </ul>
 
-    <h3>G. Pivoting Seguro y Túneles VPN</h3>
+    <h3>H. Pivoting Seguro y Túneles VPN</h3>
     <ul>
       <li><code>vpntry</code>, <code>vpnhtb</code>, <code>vpncli</code>: Conecta bajo demanda perfiles de TryHackMe, HackTheBox o clientes corporativos.</li>
       <li><code>pt-socks &lt;puerto&gt;</code>, <code>pt-forward</code>, <code>pt-web</code>: Enrutamiento seguro restringido a la interfaz <code>tun0</code> con Route Guard perimetral.</li>

@@ -134,18 +134,20 @@ DOCKER_TAG ?= 26.04-$(DOCKER_ARCH)-$(BUILD_INPUTS)
 # La imagen base va al mismo repositorio, con sufijo aparte, porque el
 # Dockerfile de full hace FROM seclab-sbf:base y al reconstruir en otro host
 # tiene que encontrarla con ese nombre.
-DOCKER_BASE_TAG ?= base-$(DOCKER_ARCH)-$(BUILD_INPUTS)
+DOCKER_BASE_TAG ?= base-$(DOCKER_ARCH)-$(BASE_BUILD_INPUTS)
 DOCKER_BASE_IMAGE ?= $(DOCKER_REPO):$(DOCKER_BASE_TAG)
 DOCKER_IMAGE ?= $(DOCKER_REPO):$(DOCKER_TAG)
 
 
 build-base:
-	cd "$(ROOT)" && BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull $(BUILD_PLATFORM_ARG) --file images/base/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:base$(BUILD_TAG) --load .
+	@test -n "$(BASE_BUILD_INPUTS)"
+	cd "$(ROOT)" && BUILDKIT_PROGRESS=plain docker buildx build --progress=plain --pull $(BUILD_PLATFORM_ARG) --file images/base/Dockerfile --label seclab.build-inputs=$(BASE_BUILD_INPUTS) --tag seclab-sbf:base$(BUILD_TAG) --load .
 
 # Imagen unica del laboratorio. Antes habia light y full, con full haciendo
 # FROM light: la imagen final contenia las dos. Se fusionaron el 2026-09-29 y
 # base es lo unico que se construye antes.
 build-full: build-base
+	@test -n "$(BUILD_INPUTS)"
 	cd "$(ROOT)" && BUILDKIT_PROGRESS=plain docker buildx build $(BUILD_PLATFORM_ARG) --progress=plain --build-arg BASE_IMAGE=seclab-sbf:base$(BUILD_TAG) --file images/full/Dockerfile --label seclab.build-inputs=$(BUILD_INPUTS) --tag seclab-sbf:full$(BUILD_TAG) --load .
 
 env-init:
@@ -383,11 +385,8 @@ sbom:
 # Si no coinciden, el codigo cambio desde la ultima build y hay que
 # reconstruir. Sin esto, sincronizar el repo e invocar un target reutilizaba
 # en silencio la imagen anterior: con full son 4 GB de diferencia.
-# Se pasan a proposito todos los directorios que van en el contexto, para
-# errar hacia reconstruir de mas antes que hacia dejar una imagen vieja.
-BUILD_INPUT_DIRS = images scripts shell security supply-chain dashboard/backend/app dashboard/frontend/src dashboard/frontend/dist
-BUILD_INPUT_FILES = .tmux.conf dashboard/backend/requirements.txt dashboard/frontend/package.json dashboard/frontend/package-lock.json
-BUILD_INPUTS = $(shell { find $(BUILD_INPUT_DIRS) -type f ! -path '*/__pycache__/*' 2>/dev/null; echo $(BUILD_INPUT_FILES); } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | cut -c1-16)
+BASE_BUILD_INPUTS = $(shell python3 "$(ROOT)/scripts/build-inputs.py" base)
+BUILD_INPUTS = $(shell python3 "$(ROOT)/scripts/build-inputs.py" full)
 
 # Reconstruye la imagen local indicada. Lo usan ensure-image cuando falta o
 # cuando el codigo ha cambiado, para no repetir el case en dos sitios.
@@ -474,6 +473,10 @@ ensure-image:
 		*) printf 'IMAGE_SOURCE desconocida: %s (usa local|remote)\n' "$(IMAGE_SOURCE)" >&2; exit 2 ;; \
 	esac
 	@cd "$(ROOT)" && IMG="$(LAB_IMAGE_RESOLVED)"; \
+	if [ "$(IMAGE_SOURCE)" = "local" ]; then \
+		if [ "$$IMG" = "seclab-sbf:base" ]; then expected_inputs="$(BASE_BUILD_INPUTS)"; else expected_inputs="$(BUILD_INPUTS)"; fi; \
+		if [ -z "$$expected_inputs" ]; then printf 'no se pudieron verificar los insumos de la imagen\n' >&2; exit 1; fi; \
+	fi; \
 	if [ "$(IMAGE_SOURCE)" = "remote" ]; then \
 		if docker image inspect "$$IMG" >/dev/null 2>&1; then \
 			printf 'imagen remota ya presente: %s\n' "$$IMG"; \
@@ -488,19 +491,11 @@ ensure-image:
 		if [ -z "$$built_inputs" ] || [ "$$built_inputs" = "<no value>" ]; then \
 			printf 'imagen sin etiqueta de insumos, se reconstruye: %s\n' "$$IMG"; \
 			$(MAKE) rebuild-image; \
-		elif [ "$$built_inputs" != "$(BUILD_INPUTS)" ]; then \
-			printf 'el codigo cambio desde la build ($$built_inputs -> $(BUILD_INPUTS)), se reconstruye: %s\n' "$$IMG"; \
+		elif [ "$$built_inputs" != "$$expected_inputs" ]; then \
+			printf 'el codigo cambio desde la build ($$built_inputs -> $$expected_inputs), se reconstruye: %s\n' "$$IMG"; \
 			$(MAKE) rebuild-image; \
 		else \
 		printf 'imagen lista: %s\n' "$$IMG"; \
-		fi; \
-		if [ "$$IMG" = "seclab-sbf:full" ]; then \
-			base_id=$$(docker image inspect -f '{{.Id}}' "$(FULL_BASE)" 2>/dev/null || true); \
-			built_from=$$(docker image inspect -f '{{index .Config.Labels "seclab.base"}}' "$$IMG" 2>/dev/null || true); \
-			if [ -n "$$base_id" ] && [ "$$base_id" != "$$built_from" ]; then \
-				printf 'aviso: %s se construyo sobre una base anterior; se reconstruye.\n' "$$IMG"; \
-				$(MAKE) build-full; \
-			fi; \
 		fi; \
 	else \
 		printf 'imagen ausente, construyendo: %s\n' "$$IMG"; \

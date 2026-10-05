@@ -1749,6 +1749,8 @@ def main():
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
     recon_safety = load_module('recon_safety_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_recon_safety.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(recon_safety))
+    build_inputs = load_module('build_inputs_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_build_inputs.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(build_inputs))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

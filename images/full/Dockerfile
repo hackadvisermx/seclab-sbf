@@ -62,6 +62,23 @@ ARG ASSETFINDER_COMMIT=4e95d8701aae8cff1c27af2626eb22ba110ad583
 ARG HTTPROBE_VERSION=0.2
 ARG HTTPROBE_COMMIT=7e8abdb4096ab224f21616478b699b4dfda9d409
 ARG GAU_COMMIT=5d4e1270e632732756fe98717520c43c86e8bd18
+ARG NODE_BUILDER=docker.io/library/node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+
+FROM --platform=$BUILDPLATFORM ${NODE_BUILDER} AS dashboard-toolchain
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libpcre2-8-0=10.42-1+deb12u2 \
+ && rm -rf /var/lib/apt/lists/*
+COPY scripts/install-dashboard-npm.mjs /tmp/install-dashboard-npm.mjs
+RUN node /tmp/install-dashboard-npm.mjs \
+ && rm /tmp/install-dashboard-npm.mjs \
+ && test "$(npm --version)" = '12.2.0'
+
+FROM dashboard-toolchain AS dashboard-builder
+WORKDIR /build/dashboard
+COPY dashboard/frontend/package.json dashboard/frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY dashboard/frontend/ ./
+RUN npm test && npm run build
 
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS fzf-builder
 ARG FZF_VERSION=0.74.4
@@ -748,41 +765,6 @@ RUN chmod 0555 /usr/local/bin/install-shell \
     ZOXIDE_PLUGIN_COMMIT=09a18b4424b3f1033094ffd97da6d47585e38259 \
     /usr/local/bin/install-shell \
   && install -m 0644 -o tester -g tester /usr/local/share/seclab/zshrc /home/tester/.zshrc
-COPY security/ssh/sshd_config /etc/ssh/sshd_config.seclab
-
-COPY scripts/entrypoint/lab-entrypoint.sh /usr/local/bin/lab-entrypoint
-COPY scripts/entrypoint/ttyd-as-tester.sh /usr/local/bin/ttyd-as-tester
-COPY scripts/entrypoint/ttyd-as-tester-shell.sh /usr/local/bin/ttyd-as-tester-shell
-COPY scripts/vpn-manager.sh /usr/local/bin/vpn-manager
-COPY scripts/vpn-control.py /usr/local/bin/vpn-control
-COPY scripts/pt-vpn-ip.sh /usr/local/bin/pt-vpn-ip
-COPY scripts/proxy-control.py /usr/local/bin/pt-forward
-COPY scripts/health/lab-healthcheck.sh /usr/local/bin/lab-healthcheck
-COPY scripts/seclab_scope.py /usr/local/bin/seclab_scope.py
-COPY scripts/seclab_recon_probe.py /usr/local/bin/seclab_recon_probe.py
-COPY scripts/pt-scope-validator.py /usr/local/bin/pt-scope-validator
-COPY scripts/pt-report-compiler.py /usr/local/bin/pt-report-compiler
-COPY scripts/pt-agent-context.py /usr/local/bin/pt-agent-context
-COPY scripts/pt-engagement-packer.py /usr/local/bin/pt-engagement-packer
-COPY scripts/pt-recon-pipeline.py /usr/local/bin/pt-recon-pipeline
-COPY scripts/pt-audit-checklist.py /usr/local/bin/pt-audit-checklist
-COPY scripts/pt-audit-next.py /usr/local/bin/pt-next
-COPY scripts/pt-guide.py /usr/local/bin/pt-guide
-RUN install -d -m 0755 /usr/local/share/seclab/guide
-COPY workspace-seed/guia.html /usr/local/share/seclab/guide/index.html
-RUN ln -sf /usr/local/share/seclab/guide/index.html /usr/local/share/seclab/guide/guia.html \
-  && chmod -R 0555 /usr/local/share/seclab/guide \
-  && chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck /usr/local/bin/pt-scope-validator /usr/local/bin/pt-report-compiler /usr/local/bin/pt-agent-context /usr/local/bin/pt-engagement-packer /usr/local/bin/pt-recon-pipeline /usr/local/bin/pt-audit-checklist /usr/local/bin/pt-next /usr/local/bin/pt-guide
-
-# Workspace de tester. En local esto se monta como volumen con nombre, y un
-# volumen nuevo toma como dueño el directorio de la imagen: si /workspace
-# aqui fuera de root, el volumen naceria sin permiso de escritura para
-# tester y no se podria documentar nada. De ahi el chown, que no es cosmetico.
-# En el host cloud esto se sustituye por un bind mount de la carpeta del
-# disco, que ya viene con el dueño correcto.
-COPY workspace-seed/ /workspace/
-RUN chown -R tester:tester /workspace && chmod 0755 /workspace
-
 LABEL org.opencontainers.image.source="https://github.com/hackadvisermx/seclab-sbf" \
       org.opencontainers.image.title="seclab-sbf full" \
       org.opencontainers.image.version="0.1.0-phase7"
@@ -882,8 +864,43 @@ RUN /opt/nxc/bin/pip install --no-cache-dir \
       "websockets==17.2" \
  && /opt/nxc/bin/python3 -c "import fastapi, uvicorn, pydantic, websockets; print('dashboard dependencies ok')"
 
+COPY security/ssh/sshd_config /etc/ssh/sshd_config.seclab
+
+COPY scripts/entrypoint/lab-entrypoint.sh /usr/local/bin/lab-entrypoint
+COPY scripts/entrypoint/ttyd-as-tester.sh /usr/local/bin/ttyd-as-tester
+COPY scripts/entrypoint/ttyd-as-tester-shell.sh /usr/local/bin/ttyd-as-tester-shell
+COPY scripts/vpn-manager.sh /usr/local/bin/vpn-manager
+COPY scripts/vpn-control.py /usr/local/bin/vpn-control
+COPY scripts/pt-vpn-ip.sh /usr/local/bin/pt-vpn-ip
+COPY scripts/proxy-control.py /usr/local/bin/pt-forward
+COPY scripts/health/lab-healthcheck.sh /usr/local/bin/lab-healthcheck
+COPY scripts/seclab_scope.py /usr/local/bin/seclab_scope.py
+COPY scripts/seclab_recon_probe.py /usr/local/bin/seclab_recon_probe.py
+COPY scripts/pt-scope-validator.py /usr/local/bin/pt-scope-validator
+COPY scripts/pt-report-compiler.py /usr/local/bin/pt-report-compiler
+COPY scripts/pt-agent-context.py /usr/local/bin/pt-agent-context
+COPY scripts/pt-engagement-packer.py /usr/local/bin/pt-engagement-packer
+COPY scripts/pt-recon-pipeline.py /usr/local/bin/pt-recon-pipeline
+COPY scripts/pt-audit-checklist.py /usr/local/bin/pt-audit-checklist
+COPY scripts/pt-audit-next.py /usr/local/bin/pt-next
+COPY scripts/pt-guide.py /usr/local/bin/pt-guide
+RUN install -d -m 0755 /usr/local/share/seclab/guide
+COPY workspace-seed/guia.html /usr/local/share/seclab/guide/index.html
+RUN ln -sf /usr/local/share/seclab/guide/index.html /usr/local/share/seclab/guide/guia.html \
+  && chmod -R 0555 /usr/local/share/seclab/guide \
+  && chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck /usr/local/bin/pt-scope-validator /usr/local/bin/pt-report-compiler /usr/local/bin/pt-agent-context /usr/local/bin/pt-engagement-packer /usr/local/bin/pt-recon-pipeline /usr/local/bin/pt-audit-checklist /usr/local/bin/pt-next /usr/local/bin/pt-guide
+
+# Workspace de tester. En local esto se monta como volumen con nombre, y un
+# volumen nuevo toma como dueño el directorio de la imagen: si /workspace
+# aqui fuera de root, el volumen naceria sin permiso de escritura para
+# tester y no se podria documentar nada. De ahi el chown, que no es cosmetico.
+# En el host cloud esto se sustituye por un bind mount de la carpeta del
+# disco, que ya viene con el dueño correcto.
+COPY workspace-seed/ /workspace/
+RUN chown -R tester:tester /workspace && chmod 0755 /workspace
+
 COPY dashboard/backend /usr/local/share/seclab/dashboard/backend
-COPY dashboard/frontend/dist /usr/local/share/seclab/dashboard/frontend/dist
+COPY --from=dashboard-builder /build/dashboard/dist /usr/local/share/seclab/dashboard/frontend/dist
 COPY scripts/dashboard-service.sh /usr/local/bin/dashboard-service
 COPY scripts/pt-vault-bridge.py /usr/local/bin/pt-vault-bridge
 RUN chmod 0555 /usr/local/bin/dashboard-service /usr/local/bin/pt-vault-bridge \

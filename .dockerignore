@@ -18,6 +18,7 @@ AGENTS.md
 supply-chain
 dashboard/.venv
 dashboard/frontend/node_modules
+dashboard/frontend/dist
 dashboard/backend/data
 dashboard/*.pid
 
@@ -26,3 +27,7 @@ backups
 tmp
 .env.*
 !.env.example
+**/.env
+**/.env.*
+**/.secrets
+**/__pycache__

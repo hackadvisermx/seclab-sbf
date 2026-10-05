@@ -67,6 +67,20 @@
       </span>
     </div>
 
+    <!-- Banner de Autenticación y Estado ttyd -->
+    <div class="bg-cyan-950/30 border border-cyan-800/40 rounded-lg p-3 text-xs font-mono text-slate-300 flex flex-col md:flex-row md:items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-cyan-400 font-bold">🔐 Credenciales Web:</span>
+        <span>Usuario: <code class="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded">tester</code></span>
+        <span class="text-slate-500">•</span>
+        <span>Password: <code class="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded">tester</code> <span class="text-slate-500 text-[10px]">(o según .secrets/runtime/lab.env)</span></span>
+      </div>
+      <div class="text-[11px] text-slate-400">
+        Si el navegador restringe autenticación en marcos, pulse
+        <a :href="terminalUrl" target="_blank" rel="noopener noreferrer" class="text-cyan-400 underline hover:text-cyan-300 font-bold">↗ Nueva Pestaña</a> para iniciar sesión.
+      </div>
+    </div>
+
     <!-- Contenedor del Iframe ttyd -->
     <div class="tactical-card p-1 bg-[#050811] border-cyan-500/30 overflow-hidden relative rounded-lg">
       <iframe

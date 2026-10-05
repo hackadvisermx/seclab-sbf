@@ -105,7 +105,19 @@ if [[ ! -d "$SCRIPT_DIR/frontend/dist" ]]; then
     fi
 fi
 
-# 3. Lanzar servidor uvicorn
+# 3. Asegurar puertos loopback para ttyd (7681) y SSH (2222) si docker está activo
+if command -v docker >/dev/null 2>&1; then
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'seclab-sbf-lab-1'; then
+        if ! curl -s -I -m 1 http://127.0.0.1:7681 >/dev/null 2>&1; then
+            printf '[+] Habilitando puertos loopback para ttyd (7681) y SSH (2222)...\n'
+            mkdir -p "$REPO_ROOT/tmp"
+            printf 'services:\n  lab:\n    ports:\n      - "127.0.0.1:2222:2222"\n      - "127.0.0.1:7681:7681"\n' > "$REPO_ROOT/tmp/compose.ssh.yaml"
+            (cd "$REPO_ROOT" && docker compose -f compose.yaml -f compose.local.yaml -f tmp/compose.ssh.yaml up -d lab >/dev/null 2>&1 || true)
+        fi
+    fi
+fi
+
+# 4. Lanzar servidor uvicorn
 printf '\n\033[36m==================================================================\033[0m\n'
 printf '\033[36m⚡ SECLAB TACTICAL DASHBOARD & API KEY VAULT\033[0m\n'
 printf '   Puerto:      http://%s:%s\n' "$DASHBOARD_HOST" "$DASHBOARD_PORT"

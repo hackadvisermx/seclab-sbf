@@ -20,7 +20,8 @@
       </div>
 
       <!-- Acciones de Cabecera -->
-      <div class="flex items-center space-x-3 text-xs font-mono">
+      <div class="flex flex-wrap items-center gap-3 text-xs font-mono">
+        <DeleteProjectButton :project-id="engId" :project-type="engType" @deleted="router.push('/engagements')" />
         <button
           @click="compileReportAction"
           :disabled="isCompiling"
@@ -1306,11 +1307,13 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import { api } from '../api'
+import DeleteProjectButton from '../components/DeleteProjectButton.vue'
 
 const route = useRoute()
+const router = useRouter()
 const engId = computed(() => route.params.id)
 const engType = computed(() => route.params.type || 'engagement')
 

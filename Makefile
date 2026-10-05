@@ -796,6 +796,10 @@ DASHBOARD_PORT ?= 8080
 dashboard-build:
 	@cd "$(ROOT)/dashboard/frontend" && npm install && npm run build
 
+.PHONY: dashboard-tests
+dashboard-tests: ensure-image
+	@cd "$(ROOT)" && docker run --rm --network none --entrypoint /opt/nxc/bin/python3 -e PYTHONPATH=/usr/local/share/seclab/dashboard/backend -v "$(ROOT)/dashboard/backend/tests:/tests:ro" "$(LAB_IMAGE_RESOLVED)" -m unittest discover -s /tests -v
+
 dashboard: dashboard-up
 
 dashboard-up:

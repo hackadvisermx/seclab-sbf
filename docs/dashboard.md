@@ -69,6 +69,9 @@ make dashboard-build
 
 # Ejecutar la suite completa de pruebas unitarias
 make python-units-check
+
+# Pruebas de eliminación y API con las dependencias de la imagen local
+make dashboard-tests
 ```
 
 El backend y el frontend compilado viven dentro de `seclab-sbf:full`. `make compose-up` también inicia el dashboard y publica sus puertos solo en loopback. `make dashboard-build` recompila el frontend; después se necesita `make build-full` y recrear el contenedor para aplicar cambios. La etiqueta `seclab.build-inputs` incluye las fuentes y el frontend compilado del dashboard, excluyendo datos del Vault y cachés de Python.
@@ -76,6 +79,8 @@ El backend y el frontend compilado viven dentro de `seclab-sbf:full`. `make comp
 ---
 
 ## 4. Módulos y Capacidades Operativas
+
+La lista de auditorías y retos y la cabecera de cada proyecto incluyen **Eliminar**. La confirmación muestra el nombre del proyecto y avisa que se borrará su carpeta completa, incluidas notas, evidencias, botín, reportes y archivos, sin recuperación desde el dashboard. **Cancelar** conserva el proyecto. Tras eliminar, la tarjeta desaparece de la lista o se vuelve a la lista desde el detalle. Si el reconocimiento está en curso, se debe esperar a que termine. Un reto y una auditoría con el mismo nombre se eliminan de forma independiente.
 
 ### 4.1. Control Táctico de VPN (Encendido, Apagado y Credenciales)
 

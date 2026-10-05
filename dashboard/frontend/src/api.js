@@ -30,6 +30,7 @@ export const api = {
   // Engagements
   getEngagements: () => request('/engagements'),
   createEngagement: (data) => request('/engagements', { method: 'POST', body: JSON.stringify(data) }),
+  deleteEngagement: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}?type=${encodeURIComponent(type)}`, { method: 'DELETE' }),
   getEngagementDetail: (id, type = 'engagement') => request(`/engagements/${id}?type=${type}`),
   updateNotes: (id, content, type = 'engagement') => request(`/engagements/${id}/notes?type=${type}`, { method: 'PUT', body: JSON.stringify({ content }) }),
 

@@ -2,6 +2,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import EngagementSummary, EngagementCreate
 from app.services.workspace_sync import workspace_service
+from app.services.recon_service import recon_service
 
 router = APIRouter(prefix="/engagements", tags=["Engagements & Retos"])
 
@@ -47,3 +48,18 @@ def update_notes(eng_id: str, payload: dict, type: str = Query("engagement")):
     content = payload.get("content", "")
     workspace_service.save_notes(eng_id, content, type)
     return {"status": "ok", "message": "Notas actualizadas exitosamente"}
+
+
+@router.delete("/{eng_id}")
+def delete_engagement(eng_id: str, type: str = Query("engagement")):
+    try:
+        recon_service.delete_engagement(eng_id, type)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    except OSError:
+        raise HTTPException(status_code=500, detail="No se pudo eliminar el proyecto. Revisa los permisos de sus archivos.")
+    return {"status": "ok", "id": eng_id, "type": type}

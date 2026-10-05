@@ -66,7 +66,7 @@
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
       <div
         v-for="item in filteredEngagements"
-        :key="item.id"
+        :key="`${item.type}/${item.id}`"
         class="tactical-card flex flex-col justify-between group hover:border-cyan-500/50"
       >
         <div>
@@ -100,16 +100,19 @@
           </div>
         </div>
 
-        <div class="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-          <span class="text-[11px] font-mono text-slate-500 truncate max-w-[150px]">
+        <div class="mt-5 pt-3 border-t border-slate-800/80 flex flex-wrap gap-2 items-center justify-between">
+          <span class="text-[11px] font-mono text-slate-500 truncate">
             {{ item.has_target_yaml ? 'target.yaml ✓' : 'sin scope' }}
           </span>
-          <router-link
-            :to="`/engagements/${item.type}/${item.id}`"
-            class="px-3 py-1.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-mono font-bold transition-all border border-slate-700 hover:border-cyan-400"
-          >
-            Abrir Espacio &rarr;
-          </router-link>
+          <div class="flex items-center gap-2">
+            <DeleteProjectButton :project-id="item.id" :project-type="item.type" @deleted="removeProject" />
+            <router-link
+              :to="`/engagements/${item.type}/${item.id}`"
+              class="px-3 py-1.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-mono font-bold transition-all border border-slate-700 hover:border-cyan-400"
+            >
+              Abrir Espacio &rarr;
+            </router-link>
+          </div>
         </div>
       </div>
     </div>
@@ -201,8 +204,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '../api'
+import DeleteProjectButton from '../components/DeleteProjectButton.vue'
 
 const engagements = ref([])
+function removeProject(project) {
+  engagements.value = engagements.value.filter(item => item.id !== project.id || item.type !== project.type)
+}
 const isLoading = ref(true)
 const currentFilter = ref('all')
 const searchQuery = ref('')

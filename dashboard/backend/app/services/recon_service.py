@@ -228,8 +228,19 @@ class ReconService:
         with self._lock:
             if (self.store.get(key) or {}).get('status') in ACTIVE_STATUSES:
                 raise RuntimeError('El reconocimiento está activo. Espera a que termine o cancélalo antes de eliminar el proyecto.')
-            workspace_service.delete_engagement(engagement_id, engagement_type)
+            entry = workspace_service.delete_engagement(engagement_id, engagement_type)
             self.store.delete(key)
+            return entry
+
+    def restore_engagement(self, entry_id, engagement_id, engagement_type='engagement'):
+        from app.services.workspace_sync import workspace_service
+        key = (engagement_type, engagement_id)
+        with self._lock:
+            if (self.store.get(key) or {}).get('status') in ACTIVE_STATUSES:
+                raise RuntimeError('El reconocimiento está activo. Espera a que termine o cancélalo antes de restaurar el proyecto.')
+            entry = workspace_service.restore_engagement(entry_id, engagement_id, engagement_type)
+            self.store.delete(key)
+            return entry
 
     def _execute_pipeline_worker(self, job_key, target_dir, stage, dry_run, log_path, run_id):
         cmd = [self.py_bin, str(self.pipeline_script), 'run', str(target_dir), '--stage', stage]

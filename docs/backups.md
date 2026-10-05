@@ -12,7 +12,7 @@ Docker con nombre en local y se descartó. Ver `docs/phase-8.md`.
 
 ## Estado completo del dashboard (fase 90)
 
-`make dashboard-backup` copia conjuntamente workspace, `vault.db`, `recon-jobs.db` y `.vault.key`, con el contenedor detenido. `make dashboard-restore BACKUP=...` valida checksum/manifiesto y solo restaura sobre destinos vacíos; revoca sesiones. Estos archivos contienen secretos recuperables y deben permanecer en almacenamiento privado del operador. El backup del workspace descrito abajo no sustituye esta recuperación completa. Ver [procedimiento, pruebas y límites](phase-90.md).
+`make dashboard-backup` copia conjuntamente workspace, `vault.db`, `recon-jobs.db` y `.vault.key`, con el contenedor detenido. `make dashboard-restore BACKUP=...` valida checksum/manifiesto y solo restaura sobre destinos vacíos; revoca sesiones. Estos archivos contienen secretos recuperables y deben permanecer en almacenamiento privado del operador. La papelera de proyectos de fase 91 vive en `.seclab-trash` dentro del workspace y también queda incluida; la prueba de recuperación verifica sus notas. El backup del workspace descrito abajo no sustituye esta recuperación completa. Ver [procedimiento, pruebas y límites](phase-90.md).
 
 ## El workspace se mueve contigo (con `lab`)
 

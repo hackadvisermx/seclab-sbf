@@ -22,4 +22,3 @@ def project_directory(workspace_path: pathlib.Path, eng_id: str, eng_type: str =
         if any((pathlib.Path(directory) / name).is_symlink() for name in folders + files):
             raise UnsafeWorkspacePath("El dashboard no admite enlaces simbólicos dentro del proyecto.")
     return target
-

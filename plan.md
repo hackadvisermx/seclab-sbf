@@ -1032,8 +1032,8 @@ pt-forward doctor
 El orden propuesto después de la revisión integral del Docker es:
 
 1. **Fase 89 integrada:** PR #109 mergeado a `bootstrap/baseline` (`e2da77e`), CI del PR y de baseline successful, confirmado el 2026-10-05. La aceptación visual del dashboard desplegado no se confirmó en este relevo; no confundir merge con validación de despliegue.
-2. **Fase 90: respaldo y restauración del estado completo del dashboard.** Implementada en `phase/90-dashboard-backup-restore`: contenedor detenido, workspace y bases SQLite/clave de bóveda, checksum/manifiesto, restauración en destinos vacíos y revocación de sesiones. Prueba de recuperación con fixtures Docker sin red; ver `docs/phase-90.md`. Pendiente revisión y aprobación del owner antes de merge.
-3. **Fase 91 propuesta: recuperación de proyectos eliminados.** Diseñar papelera y restauración para retos/auditorías conservando las reglas de rutas y bloqueo por jobs activos. Revisar el alcance antes de implementar; no está iniciada.
+2. **Fase 90 integrada:** PR #110 mergeado con aprobación del owner a `bootstrap/baseline` (`b532078`). Respaldo conjunto de workspace y SQLite/clave de bóveda con laboratorio detenido, checksum/manifiesto, restauración en destinos vacíos y revocación de sesiones; fixtures Docker sin red. Ver `docs/phase-90.md`; despliegue y recuperación cloud pendientes.
+3. **Fase 91: recuperación de proyectos eliminados.** Implementada en `phase/91-project-trash-restore`: papelera persistente en el workspace, copias por tipo/ID/fecha, restauración sin reemplazo, API autenticada y vista del dashboard. Mantiene validación de rutas y bloqueo por reconocimiento running/cancelling; sin purga ni caducidad automática. Ver `docs/phase-91.md`. Pendiente revisión y aprobación del owner antes de merge.
 
 El relevo operativo detallado vive en `docs/phase-89.md`, sección «Relevo de sesión». No aplicar el parche temporal antiguo sobre los avances de otra sesión. Mantener construcción local y publicación en Docker Hub; no añadir builds de imagen a CI ni usar GHCR. Las verificaciones de estas mejoras usan fixtures locales, sin repetir el reconocimiento de UAZ.
 

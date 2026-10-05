@@ -14,6 +14,8 @@
         </p>
       </div>
 
+      <div class="flex flex-wrap gap-3">
+      <router-link to="/trash" class="px-4 py-2 rounded-sm border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 font-mono text-sm">Papelera</router-link>
       <button
         @click="showModal = true"
         class="px-4 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-semibold text-sm transition-all shadow-md shadow-cyan-500/20 flex items-center justify-center space-x-2"
@@ -21,6 +23,7 @@
         <span>+</span>
         <span>Inicializar Auditoría (pt-eng)</span>
       </button>
+      </div>
     </div>
 
     <!-- Filtros y Búsqueda -->

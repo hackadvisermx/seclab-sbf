@@ -58,6 +58,10 @@ store.begin(('reto', 'demo'), 'all', False)
 Path(str(RECON_DB_PATH) + '.lock').touch(mode=0o600)
 Path('/workspace/retos/demo').mkdir(parents=True)
 Path('/workspace/retos/demo/evidence.md').write_text('fixture evidence')
+from app.services.workspace_sync import workspace_service
+workspace_service.create_engagement('deleted-fixture', 'reto')
+workspace_service.save_notes('deleted-fixture', 'recover from backup', 'reto')
+workspace_service.delete_engagement('deleted-fixture', 'reto')
 '''
             command('docker', 'run', '--rm', '--network=none', '--volumes-from', containers[0],
                     *env, '--entrypoint=/opt/nxc/bin/python3', image, '-c', seed)
@@ -85,7 +89,12 @@ assert store.get(('reto','demo'))['status'] == 'interrupted'
 assert Path('/workspace/retos/demo/evidence.md').read_text() == 'fixture evidence'
 assert VAULT_KEY_PATH.stat().st_mode & 0o777 == 0o600
 assert VAULT_KEY_PATH.stat().st_uid == 1000
-print('dashboard_backup_integration=ok vault/settings/workspace/jobs/sessions/permisos')
+from app.services.workspace_sync import workspace_service
+entries = workspace_service.trash.list_entries()
+assert len(entries) == 1 and entries[0]['project_id'] == 'deleted-fixture'
+workspace_service.restore_engagement(entries[0]['entry_id'], 'deleted-fixture', 'reto')
+assert workspace_service.get_notes('deleted-fixture', 'reto') == 'recover from backup'
+print('dashboard_backup_integration=ok vault/settings/workspace/jobs/sessions/permisos/papelera')
 '''
             print(command('docker', 'run', '--rm', '--network=none', '--read-only', '--cap-drop=ALL',
                           '--user=1000:1000', '--volumes-from', containers[1], *env,

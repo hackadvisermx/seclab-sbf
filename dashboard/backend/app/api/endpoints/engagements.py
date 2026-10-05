@@ -53,7 +53,7 @@ def update_notes(eng_id: str, payload: dict, type: str = Query("engagement")):
 @router.delete("/{eng_id}")
 def delete_engagement(eng_id: str, type: str = Query("engagement")):
     try:
-        recon_service.delete_engagement(eng_id, type)
+        entry = recon_service.delete_engagement(eng_id, type)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
     except FileNotFoundError as error:
@@ -61,5 +61,5 @@ def delete_engagement(eng_id: str, type: str = Query("engagement")):
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error))
     except OSError:
-        raise HTTPException(status_code=500, detail="No se pudo eliminar el proyecto. Revisa los permisos de sus archivos.")
-    return {"status": "ok", "id": eng_id, "type": type}
+        raise HTTPException(status_code=500, detail="No se pudo mover el proyecto a la papelera. Revisa los permisos de sus archivos.")
+    return {"status": "ok", "id": eng_id, "type": type, "trash_entry": entry}

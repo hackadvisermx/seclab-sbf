@@ -7,11 +7,15 @@ class UnsafeWorkspacePath(ValueError):
     pass
 
 
-def project_directory(workspace_path: pathlib.Path, eng_id: str, eng_type: str = "engagement") -> pathlib.Path:
+def validate_project_identity(eng_id: str, eng_type: str):
     if eng_type not in {"engagement", "reto"}:
         raise UnsafeWorkspacePath("Tipo de proyecto no válido.")
     if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", eng_id):
         raise UnsafeWorkspacePath("Identificador de proyecto no válido.")
+
+
+def project_directory(workspace_path: pathlib.Path, eng_id: str, eng_type: str = "engagement") -> pathlib.Path:
+    validate_project_identity(eng_id, eng_type)
     category = workspace_path / ("retos" if eng_type == "reto" else "engagements")
     target = category / eng_id
     if category.is_symlink() or target.is_symlink():

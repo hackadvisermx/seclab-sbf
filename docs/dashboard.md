@@ -242,3 +242,7 @@ La reparación del control VPN de la fase 81 se verificó localmente con 77 prue
 ## Respaldo y recuperación del estado
 
 La fase 90 añade `make dashboard-backup`, `make dashboard-restore BACKUP=...` y `make dashboard-backup-check`. Cubren workspace, SQLite y clave de bóveda con el laboratorio detenido; restauran solo en destinos vacíos y revocan sesiones. El archivo contiene secretos recuperables y se guarda localmente con permisos privados. Ver [operación y límites](phase-90.md).
+
+## Papelera y recuperación de proyectos
+
+Eliminar un reto o auditoría desde el dashboard mueve su carpeta completa a la papelera. La lista de proyectos ofrece acceso a **Papelera**, con restauración por versión y fecha. Un nombre/tipo ocupado o reconocimiento activo impiden restaurar y conservan la copia. No hay purga automática; el respaldo de fase 90 incluye estas copias. Ver [API, operación y límites](phase-91.md).

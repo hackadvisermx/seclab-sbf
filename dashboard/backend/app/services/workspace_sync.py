@@ -1,12 +1,11 @@
 import datetime
 import json
-import os
 import pathlib
 import re
-import shutil
 import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
+from app.core.project_trash import ProjectTrash
 from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
@@ -34,6 +33,7 @@ def _parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
 class WorkspaceSyncService:
     def __init__(self, workspace_path: pathlib.Path = WORKSPACE_DIR):
         self.ws_path = workspace_path
+        self.trash = ProjectTrash(workspace_path)
         self.ws_path.mkdir(parents=True, exist_ok=True)
         (self.ws_path / "engagements").mkdir(exist_ok=True)
         (self.ws_path / "retos").mkdir(exist_ok=True)
@@ -108,20 +108,11 @@ class WorkspaceSyncService:
                 )
         return results
 
-    def delete_engagement(self, eng_id: str, eng_type: str = "engagement") -> None:
-        if eng_type not in {"engagement", "reto"}:
-            raise ValueError("Tipo de proyecto no válido.")
-        if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]*", eng_id):
-            raise ValueError("Identificador de proyecto no válido.")
-        category = self.ws_path / ("retos" if eng_type == "reto" else "engagements")
-        target = category / eng_id
-        if category.is_symlink() or target.is_symlink():
-            raise ValueError("No se pueden eliminar proyectos mediante enlaces simbólicos.")
-        if target.resolve().parent != category.resolve() or category.resolve().parent != self.ws_path.resolve():
-            raise ValueError("El proyecto debe estar dentro del workspace.")
-        if not target.is_dir():
-            raise FileNotFoundError("Proyecto no encontrado.")
-        shutil.rmtree(target)
+    def delete_engagement(self, eng_id: str, eng_type: str = "engagement") -> dict:
+        return self.trash.move(eng_id, eng_type)
+
+    def restore_engagement(self, entry_id: str, eng_id: str, eng_type: str = "engagement") -> dict:
+        return self.trash.restore(entry_id, eng_id, eng_type)
 
     def create_engagement(
         self,
@@ -131,86 +122,87 @@ class WorkspaceSyncService:
         client: Optional[str] = None,
     ) -> EngagementSummary:
         """Crea la estructura de carpetas y siembra target.yaml, scope.txt y notes.md."""
-        clean_name = re.sub(r"[^a-zA-Z0-9._-]", "", name)
-        target_dir = self._resolve_dir(clean_name, eng_type)
-        if target_dir.exists():
-            raise ValueError("Ya existe un proyecto con ese nombre.")
-        target_dir.mkdir(parents=True, exist_ok=False)
+        with self.trash.lock:
+            clean_name = re.sub(r"[^a-zA-Z0-9._-]", "", name)
+            target_dir = self._resolve_dir(clean_name, eng_type)
+            if target_dir.exists():
+                raise ValueError("Ya existe un proyecto con ese nombre.")
+            target_dir.mkdir(parents=True, exist_ok=False)
 
-        for folder in ("recon", "fuzzing", "evidence", "loot", "screenshots"):
-            (target_dir / folder).mkdir(exist_ok=True)
+            for folder in ("recon", "fuzzing", "evidence", "loot", "screenshots"):
+                (target_dir / folder).mkdir(exist_ok=True)
 
-        # Sembrar target.yaml
-        now_date = datetime.date.today().isoformat()
-        sample_domain = domain or f"{clean_name}.local"
-        sample_client = client or ("Plataforma CTF" if eng_type == "reto" else clean_name.capitalize())
+            # Sembrar target.yaml
+            now_date = datetime.date.today().isoformat()
+            sample_domain = domain or f"{clean_name}.local"
+            sample_client = client or ("Plataforma CTF" if eng_type == "reto" else clean_name.capitalize())
 
-        target_yaml_data = {
-            "version": "1.0",
-            "engagement": {
-                "name": clean_name,
-                "type": eng_type,
-                "created_at": now_date,
-                "auditor": "tester",
-                "client": sample_client,
-                "tos_reference": "Autorización expresa / Reglas de Laboratorio",
-                "emergency_contact": "security@local.internal",
-            },
-            "network": {
-                "vpn_profile": "none",
-                "assigned_ip": "",
-                "gateway_dns": "",
-            },
-            "scope": {
-                "in_scope": {
-                    "domains": [sample_domain, f"*.{sample_domain}"],
-                    "ips": [],
-                    "cidrs": [],
-                    "endpoints": [f"https://{sample_domain}/api"],
+            target_yaml_data = {
+                "version": "1.0",
+                "engagement": {
+                    "name": clean_name,
+                    "type": eng_type,
+                    "created_at": now_date,
+                    "auditor": "tester",
+                    "client": sample_client,
+                    "tos_reference": "Autorización expresa / Reglas de Laboratorio",
+                    "emergency_contact": "security@local.internal",
                 },
-                "out_of_scope": {
-                    "domains": [f"status.{sample_domain}"],
-                    "ips": [],
-                    "cidrs": [],
-                    "notes": ["Sistemas de terceros y pasarelas fuera de alcance"],
+                "network": {
+                    "vpn_profile": "none",
+                    "assigned_ip": "",
+                    "gateway_dns": "",
                 },
-            },
-            "operational_limits": {
-                "max_requests_per_second": 1,
-                "max_parallel_threads": 1,
-                "max_probe_targets": 1000,
-                "probe_timeout_seconds": 8,
-                "dos_testing": False,
-                "social_engineering": False,
-                "brute_force_account_lockout_safe": True,
-            },
-            "reporting": {
-                "cvss_version": "3.1",
-                "format": "markdown",
-                "language": "es",
-            },
-        }
+                "scope": {
+                    "in_scope": {
+                        "domains": [sample_domain, f"*.{sample_domain}"],
+                        "ips": [],
+                        "cidrs": [],
+                        "endpoints": [f"https://{sample_domain}/api"],
+                    },
+                    "out_of_scope": {
+                        "domains": [f"status.{sample_domain}"],
+                        "ips": [],
+                        "cidrs": [],
+                        "notes": ["Sistemas de terceros y pasarelas fuera de alcance"],
+                    },
+                },
+                "operational_limits": {
+                    "max_requests_per_second": 1,
+                    "max_parallel_threads": 1,
+                    "max_probe_targets": 1000,
+                    "probe_timeout_seconds": 8,
+                    "dos_testing": False,
+                    "social_engineering": False,
+                    "brute_force_account_lockout_safe": True,
+                },
+                "reporting": {
+                    "cvss_version": "3.1",
+                    "format": "markdown",
+                    "language": "es",
+                },
+            }
 
-        with open(target_dir / "target.yaml", "w", encoding="utf-8") as f:
-            yaml.dump(target_yaml_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            with open(target_dir / "target.yaml", "w", encoding="utf-8") as f:
+                yaml.dump(target_yaml_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
-        # Sembrar notes.md
-        notes_content = f"# Bitácora de Auditoría: {clean_name}\n\n- Fecha: {now_date}\n- Objetivo: {sample_domain}\n\n## Objetivos y Tácticas\n- [ ] Reconocimiento inicial\n- [ ] Identificación de endpoints y servicios\n- [ ] Análisis de vulnerabilidades y matriz de autorización\n"
-        with open(target_dir / "notes.md", "w", encoding="utf-8") as f:
-            f.write(notes_content)
+            # Sembrar notes.md
+            notes_content = f"# Bitácora de Auditoría: {clean_name}\n\n- Fecha: {now_date}\n- Objetivo: {sample_domain}\n\n## Objetivos y Tácticas\n- [ ] Reconocimiento inicial\n- [ ] Identificación de endpoints y servicios\n- [ ] Análisis de vulnerabilidades y matriz de autorización\n"
+            with open(target_dir / "notes.md", "w", encoding="utf-8") as f:
+                f.write(notes_content)
 
-        return EngagementSummary(
-            id=clean_name,
-            name=clean_name,
-            type=eng_type,
-            path=str(target_dir),
-            created_at=now_date,
-            client_or_platform=sample_client,
-            has_target_yaml=True,
-            has_notes=True,
-            evidence_count=0,
-            terminal_log_lines=0,
-        )
+            return EngagementSummary(
+                id=clean_name,
+                name=clean_name,
+                type=eng_type,
+                path=str(target_dir),
+                created_at=now_date,
+                client_or_platform=sample_client,
+                has_target_yaml=True,
+                has_notes=True,
+                evidence_count=0,
+                terminal_log_lines=0,
+            )
 
     def get_target_yaml(self, eng_id: str, eng_type: str = "engagement") -> Dict[str, Any]:
         """Lee y devuelve el contenido estructurado de target.yaml."""

@@ -14,13 +14,13 @@
           Eliminar {{ projectType === 'reto' ? 'reto' : 'auditoría' }}
         </h2>
         <p id="delete-project-description" class="text-sm text-slate-300">
-          Se eliminará <strong class="text-white break-all">{{ projectId }}</strong> junto con sus notas, evidencias, botín, reportes y archivos. Esta acción no se puede deshacer.
+          Se moverá <strong class="text-white break-all">{{ projectId }}</strong> a la papelera junto con sus notas, evidencias, botín, reportes y archivos. Podrás restaurarlo desde la papelera.
         </p>
         <p v-if="error" role="alert" class="text-sm text-rose-300">{{ error }}</p>
         <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
           <button ref="cancelButton" type="button" @click="closeDialog" :disabled="isDeleting" class="px-4 py-2 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono disabled:opacity-50">Cancelar</button>
           <button type="button" @click="deleteProject" :disabled="isDeleting" class="px-4 py-2 rounded-sm bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold disabled:opacity-50">
-            {{ isDeleting ? 'Eliminando…' : 'Eliminar definitivamente' }}
+            {{ isDeleting ? 'Moviendo…' : 'Mover a la papelera' }}
           </button>
         </div>
       </div>

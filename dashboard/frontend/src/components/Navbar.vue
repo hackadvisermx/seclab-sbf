@@ -257,8 +257,20 @@
           title="Abrir terminal autenticada en el puerto 7681 (ttyd)"
         >
           <span>>_</span>
-          <span>Terminal Web</span>
+          <span class="hidden sm:inline">Terminal Web</span>
         </a>
+
+        <!-- Selector Modo Oscuro / Claro -->
+        <button
+          @click="toggleTheme"
+          type="button"
+          class="flex items-center space-x-1 px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-cyan-500/40 text-slate-200 hover:text-cyan-300 transition-colors shadow-xs cursor-pointer focus:outline-hidden"
+          :title="theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+          :aria-label="theme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'"
+        >
+          <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
+          <span class="hidden md:inline text-[11px] font-bold">{{ theme === 'dark' ? 'Claro' : 'Oscuro' }}</span>
+        </button>
       </div>
     </div>
   </header>
@@ -267,6 +279,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '../api'
+import { useTheme } from '../theme'
+
+const { theme, toggleTheme } = useTheme()
 
 const telemetry = ref({
   vpn: { connected: false, ip: null, profile: 'none', interface: 'tun0' },

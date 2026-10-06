@@ -35,3 +35,10 @@ test('genera variantes responsive, foco accesible, impresión y utilidades de fo
   assert.match(declaration('.rounded-sm', 'border-radius'), /radius-sm/)
   assert.match(declaration('.shadow-xs', '--tw-shadow'), /0 1px 2px/)
 })
+
+test('compila las reglas del modo claro táctico para html.light', () => {
+  assert.equal(declaration('html.light body', 'background-color'), '#f8fafc')
+  assert.equal(declaration('html.light body', 'color'), '#0f172a')
+  assert.match(declaration('html.light .tactical-card', 'background-color'), /#ffffff/)
+  assert.match(declaration('html.light .tactical-card', 'border-color'), /#e2e8f0/)
+})

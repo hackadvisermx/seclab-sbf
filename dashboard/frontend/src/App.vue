@@ -7,7 +7,17 @@
       </div>
       <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8"><router-view /></main>
     </template>
-    <main v-else class="flex-1 flex items-center justify-center px-6">
+    <main v-else class="flex-1 flex flex-col items-center justify-center px-6 relative">
+      <div class="absolute top-4 right-6">
+        <button
+          @click="toggleTheme"
+          type="button"
+          class="flex items-center space-x-1 px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-mono cursor-pointer"
+          :title="theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+        >
+          <span>{{ theme === 'dark' ? '☀️ Modo Claro' : '🌙 Modo Oscuro' }}</span>
+        </button>
+      </div>
       <form v-if="!checking" class="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 p-8" @submit.prevent="login">
         <h1 class="text-2xl font-bold text-cyan-300 mb-2">SecLab Dashboard</h1>
         <p class="text-sm text-slate-400 mb-6">Accede como tester con la contraseña del laboratorio.</p>
@@ -28,6 +38,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import Navbar from './components/Navbar.vue'
 import { api } from './api'
+import { useTheme } from './theme'
+
+const { theme, toggleTheme } = useTheme()
 const authenticated = ref(false)
 const checking = ref(true)
 const busy = ref(false)

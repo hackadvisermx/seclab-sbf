@@ -143,6 +143,7 @@ class ApiKeyCreate(BaseModel):
 
 
 class ApiKeyUpdate(BaseModel):
+    provider: Optional[str] = None
     label: Optional[str] = None
     api_key: Optional[str] = None  # Si es null, no se actualiza la clave existente
     base_url: Optional[str] = None

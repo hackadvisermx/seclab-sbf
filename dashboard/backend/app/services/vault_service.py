@@ -157,8 +157,11 @@ class VaultService:
 
     def update_key(self, provider: str, update: ApiKeyUpdate) -> Optional[ApiKeyResponse]:
         """Actualiza parcialmente una clave existente."""
+        current_prov = provider.lower().strip()
+        target_prov = (update.provider.lower().strip() if update.provider else current_prov)
+
         conn = get_db_connection()
-        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider.lower().strip(),)).fetchone()
+        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (current_prov,)).fetchone()
         if not row:
             conn.close()
             return None
@@ -175,22 +178,35 @@ class VaultService:
 
         status = row["status"]
         status_message = row["status_message"]
-        if (update.api_key and update.api_key.strip()) or update.base_url is not None or update.model_name is not None:
+        if (update.api_key and update.api_key.strip()) or update.base_url is not None or update.model_name is not None or (target_prov != current_prov):
             status = "untested"
             status_message = "Configuración actualizada; pendiente de verificación"
 
-        with conn:
-            conn.execute(
-                """
-                UPDATE api_keys SET
-                    label = ?, base_url = ?, model_name = ?, is_active = ?,
-                    encrypted_key = ?, status = ?, status_message = ?, updated_at = ?
-                WHERE provider = ?
-                """,
-                (label, base_url, model_name, is_active, encrypted, status, status_message, now_ts, provider.lower().strip()),
-            )
-        conn.close()
-        return self.get_response_by_provider(provider.lower().strip())
+        try:
+            with conn:
+                if target_prov != current_prov:
+                    existing = conn.execute("SELECT 1 FROM api_keys WHERE provider = ?", (target_prov,)).fetchone()
+                    if existing:
+                        # No cerrar conn aqui: seguimos dentro de "with conn",
+                        # que hace rollback al salir por excepcion. Cerrarla
+                        # antes haria que ese rollback fallara con
+                        # sqlite3.ProgrammingError, enmascarando este ValueError.
+                        raise ValueError("Ya existe una clave para el proveedor elegido")
+                    conn.execute("UPDATE api_keys SET provider = ? WHERE provider = ?", (target_prov, current_prov))
+                    current_prov = target_prov
+
+                conn.execute(
+                    """
+                    UPDATE api_keys SET
+                        label = ?, base_url = ?, model_name = ?, is_active = ?,
+                        encrypted_key = ?, status = ?, status_message = ?, updated_at = ?
+                    WHERE provider = ?
+                    """,
+                    (label, base_url, model_name, is_active, encrypted, status, status_message, now_ts, current_prov),
+                )
+        finally:
+            conn.close()
+        return self.get_response_by_provider(current_prov)
 
     def delete_key(self, provider: str) -> bool:
         """Elimina una clave del vault."""

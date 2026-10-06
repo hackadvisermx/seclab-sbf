@@ -60,6 +60,8 @@ class CopilotChatRequest(BaseModel):
     type: str = "engagement"
     agent_id: str = "triage-agent"
     profile: Optional[str] = "quick"  # quick, deep, local
+    provider: Optional[str] = None
+    model: Optional[str] = None
     messages: List[ChatMessage]
 
 
@@ -114,12 +116,15 @@ async def copilot_chat(payload: CopilotChatRequest):
 
     proxy_req = ChatCompletionRequest(
         messages=augmented_messages,
+        provider=payload.provider,
+        model=payload.model,
         temperature=0.2,
         max_tokens=2500,
     )
 
     try:
-        return await proxy_service.chat_completion(proxy_req, profile=payload.profile)
+        profile_arg = None if (payload.provider or payload.model) else payload.profile
+        return await proxy_service.chat_completion(proxy_req, profile=profile_arg)
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:

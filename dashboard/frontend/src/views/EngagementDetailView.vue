@@ -622,22 +622,29 @@
               <option value="general">Copiloto General</option>
             </select>
 
-            <!-- Selector de Perfil LLM -->
-            <div class="flex rounded-sm bg-slate-900 border border-slate-800 p-0.5">
-              <button
-                v-for="p in [
-                  { id: 'quick', label: 'Flash' },
-                  { id: 'deep', label: 'Sonnet/4o' },
-                  { id: 'local', label: 'Local' }
-                ]"
-                :key="p.id"
-                @click="copilotProfile = p.id"
-                class="px-2 py-0.5 rounded-sm text-[11px] font-semibold"
-                :class="copilotProfile === p.id ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400'"
-              >
-                {{ p.label }}
-              </button>
-            </div>
+            <!-- Selector de Modelo Inicial / Perfil LLM -->
+            <select
+              v-model="copilotSelectedModel"
+              @change="onCopilotModelChange"
+              class="bg-slate-900 border border-slate-700 rounded-sm px-2.5 py-1 text-cyan-300 focus:outline-hidden font-mono text-xs"
+              title="Modelo o perfil inicial para la auditoría"
+            >
+              <optgroup label="🔀 Modelos OpenRouter">
+                <option value="openrouter:anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (OpenRouter)</option>
+                <option value="openrouter:deepseek/deepseek-chat">DeepSeek V3 (OpenRouter)</option>
+                <option value="openrouter:deepseek/deepseek-r1">DeepSeek R1 (OpenRouter)</option>
+                <option value="openrouter:meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (OpenRouter)</option>
+                <option value="openrouter:meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B Free (OpenRouter)</option>
+                <option value="openrouter:openai/gpt-4o">GPT-4o (OpenRouter)</option>
+                <option value="openrouter:openai/gpt-4o-mini">GPT-4o Mini (OpenRouter)</option>
+                <option value="openrouter:google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Free (OpenRouter)</option>
+              </optgroup>
+              <optgroup label="⚡ Perfiles Tácticos">
+                <option value="profile:quick">Flash / Mini (Rápido)</option>
+                <option value="profile:deep">Sonnet / GPT-4o (Profundo)</option>
+                <option value="profile:local">Local / Ollama</option>
+              </optgroup>
+            </select>
 
             <!-- Botón Inspeccionar Contexto -->
             <button
@@ -1949,11 +1956,34 @@ async function packEngagementAction() {
 // ==============================================================================
 const selectedAgent = ref('triage-agent')
 const copilotProfile = ref('quick')
+const copilotSelectedModel = ref('openrouter:anthropic/claude-3.5-sonnet')
 const copilotMessages = ref([])
 const copilotInput = ref('')
 const isCopilotThinking = ref(false)
 const showContextModal = ref(false)
 const injectedContextText = ref('')
+
+function initCopilotModel() {
+  if (typeof localStorage !== 'undefined') {
+    const engModel = localStorage.getItem(`seclab_copilot_model_${engId.value}`)
+    if (engModel) {
+      copilotSelectedModel.value = engModel
+      return
+    }
+    const defaultAuditModel = localStorage.getItem('seclab_default_audit_model')
+    if (defaultAuditModel) {
+      copilotSelectedModel.value = defaultAuditModel
+      return
+    }
+  }
+}
+
+function onCopilotModelChange() {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(`seclab_copilot_model_${engId.value}`, copilotSelectedModel.value)
+    localStorage.setItem('seclab_default_audit_model', copilotSelectedModel.value)
+  }
+}
 
 async function openContextInspection() {
   showContextModal.value = true
@@ -1980,14 +2010,34 @@ async function sendCopilotMessage() {
   isCopilotThinking.value = true
 
   try {
-    const history = copilotMessages.value.map(m => ({ role: m.role, content: m.content }))
-    const res = await api.sendCopilotChat({
+    let reqProvider = null
+    let reqModel = null
+    let reqProfile = null
+
+    if (copilotSelectedModel.value.startsWith('openrouter:')) {
+      reqProvider = 'openrouter'
+      reqModel = copilotSelectedModel.value.slice(11)
+    } else if (copilotSelectedModel.value.startsWith('profile:')) {
+      reqProfile = copilotSelectedModel.value.slice(8)
+    } else if (copilotSelectedModel.value.includes(':')) {
+      const [p, m] = copilotSelectedModel.value.split(':', 2)
+      reqProvider = p
+      reqModel = m
+    } else {
+      reqProfile = copilotSelectedModel.value
+    }
+
+    const payload = {
       engagement_id: engId.value,
       type: engType.value,
       agent_id: selectedAgent.value,
-      profile: copilotProfile.value,
-      messages: history,
-    })
+      messages: copilotMessages.value.map(m => ({ role: m.role, content: m.content })),
+    }
+    if (reqProvider) payload.provider = reqProvider
+    if (reqModel) payload.model = reqModel
+    if (reqProfile) payload.profile = reqProfile
+
+    const res = await api.sendCopilotChat(payload)
 
     copilotMessages.value.push({
       role: 'assistant',
@@ -2200,6 +2250,7 @@ async function triggerReconPipeline() {
 }
 
 onMounted(() => {
+  initCopilotModel()
   loadScope()
   loadFindings()
   loadLogs()

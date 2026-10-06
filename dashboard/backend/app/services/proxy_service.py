@@ -9,12 +9,14 @@ from app.models.schemas import ChatCompletionRequest, ChatCompletionResponse
 
 PROFILE_DEFAULTS = {
     "quick": [
+        ("openrouter", "deepseek/deepseek-chat"),
         ("gemini", "gemini-2.0-flash"),
         ("openai", "gpt-4o-mini"),
         ("anthropic", "claude-3-5-haiku-20241022"),
         ("custom_llm", "llama3:latest"),
     ],
     "deep": [
+        ("openrouter", "anthropic/claude-3.5-sonnet"),
         ("anthropic", "claude-3-5-sonnet-20241022"),
         ("openai", "gpt-4o"),
         ("gemini", "gemini-1.5-pro"),
@@ -71,16 +73,29 @@ class ProxyService:
         start_time = time.time()
 
         async with httpx.AsyncClient(timeout=45.0) as client:
-            # 1. OPENAI o COMPATIBLE
-            if provider in ("openai", "custom_llm", "local"):
-                url = (base_url or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
-                used_model = model or ("gpt-4o-mini" if provider == "openai" else "local-model")
+            # 1. OPENAI o COMPATIBLE (incluyendo OPENROUTER)
+            if provider in ("openai", "custom_llm", "local", "openrouter"):
+                if provider == "openrouter":
+                    url = (base_url or "https://openrouter.ai/api/v1").rstrip("/") + "/chat/completions"
+                    used_model = model or "anthropic/claude-3.5-sonnet"
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "HTTP-Referer": "http://localhost:8080",
+                        "X-Title": "SecLab Tactical Dashboard",
+                    }
+                else:
+                    url = (base_url or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
+                    used_model = model or ("gpt-4o-mini" if provider == "openai" else "local-model")
+                    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
                 payload = {
                     "model": used_model,
                     "messages": [{"role": m.role, "content": m.content} for m in req.messages],
                     "temperature": req.temperature,
                 }
-                headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+                if req.max_tokens:
+                    payload["max_tokens"] = req.max_tokens
+
                 res = await client.post(url, json=payload, headers=headers)
                 if res.status_code != 200:
                     raise RuntimeError(f"Error {res.status_code} desde {provider}: {res.text}")
@@ -166,18 +181,34 @@ class ProxyService:
         """Enruta consultas con failover dinámico entre proveedores activos del Vault."""
         candidates = []
 
-        # 1. Si se solicita un perfil específico (quick, deep, local)
-        if profile and profile in PROFILE_DEFAULTS:
+        # 1. Si se solicitó un proveedor específico
+        if req.provider:
+            candidates.append((req.provider, req.model))
+
+        # 2. Si se solicitó un modelo específico sin proveedor explícito
+        elif req.model:
+            # Si el modelo tiene formato "vendor/model" (común en OpenRouter), enrutar preferentemente a OpenRouter si está activo
+            if "/" in req.model:
+                openrouter_entry = vault_service.get_key_entry("openrouter")
+                if openrouter_entry and openrouter_entry.get("is_active"):
+                    candidates.append(("openrouter", req.model))
+
+            # Si aún no hay candidato, asociar el modelo a los proveedores LLM activos
+            if not candidates:
+                all_keys = vault_service.list_keys()
+                llm_keys = [k for k in all_keys if k.service_type == "llm" and k.is_active]
+                for k in llm_keys:
+                    candidates.append((k.provider, req.model or k.model_name))
+
+        # 3. Si se solicita un perfil específico (quick, deep, local)
+        elif profile and profile in PROFILE_DEFAULTS:
             for prov, mod in PROFILE_DEFAULTS[profile]:
                 entry = vault_service.get_key_entry(prov)
                 if entry and entry.get("is_active"):
-                    candidates.append((prov, mod))
+                    effective_model = entry.get("model_name") or mod
+                    candidates.append((prov, effective_model))
 
-        # 2. Si se solicitó un proveedor específico
-        elif req.provider:
-            candidates.append((req.provider, req.model))
-
-        # 3. Fallback: listar todos los proveedores LLM activos
+        # 4. Fallback: listar todos los proveedores LLM activos
         if not candidates:
             all_keys = vault_service.list_keys()
             llm_keys = [k for k in all_keys if k.service_type == "llm" and k.is_active]

@@ -297,7 +297,29 @@ class VaultService:
                         status = "error"
                         message = f"Gemini código {res.status_code}"
 
-                # 8. CUSTOM LLM / HERMES PROXY LOCAL
+                # 8. OPENROUTER
+                elif provider == "openrouter":
+                    url = (base_url or "https://openrouter.ai/api/v1").rstrip("/") + "/auth/key"
+                    res = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+                    if res.status_code == 200:
+                        data = res.json().get("data", {})
+                        status = "online"
+                        limit_val = data.get("limit")
+                        limit_str = f"${limit_val:.2f}" if (isinstance(limit_val, (int, float)) and limit_val is not None) else "Sin límite"
+                        usage_val = data.get("usage", 0)
+                        message = f"OpenRouter activo. Uso: ${usage_val:.4f}, Límite: {limit_str}"
+                        details = data
+                    elif res.status_code == 401:
+                        status = "error"
+                        message = "API key de OpenRouter inválida o revocada (401)"
+                    elif res.status_code == 429:
+                        status = "rate_limited"
+                        message = "OpenRouter cuota excedida o rate-limited (429)"
+                    else:
+                        status = "error"
+                        message = f"OpenRouter código {res.status_code}"
+
+                # 9. CUSTOM LLM / HERMES PROXY LOCAL
                 elif provider in ("custom_llm", "hermes_local"):
                     url = (base_url or "http://localhost:11434").rstrip("/") + "/v1/models"
                     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}

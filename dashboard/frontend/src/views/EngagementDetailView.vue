@@ -1465,6 +1465,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { renderReport } from '../report-security'
+import { splitIpsAndCidrs } from '../scope-utils'
 import { api } from '../api'
 import DeleteProjectButton from '../components/DeleteProjectButton.vue'
 
@@ -1752,19 +1753,24 @@ async function loadScope() {
 async function saveScopeConfig() {
   isSavingScope.value = true
   try {
+    const { ips: inScopeIps, cidrs: inScopeCidrs } = splitIpsAndCidrs(inScopeIpsText.value)
+    // No hay campo en el formulario para endpoints ni para IPs/CIDRs excluidos:
+    // se conservan los valores ya cargados en vez de pisarlos con [].
+    const existingInScope = scopeData.value.scope?.in_scope || {}
+    const existingOutScope = scopeData.value.scope?.out_of_scope || {}
     const payload = {
       ...scopeData.value,
       scope: {
         in_scope: {
           domains: inScopeDomainsText.value.split('\n').map(s => s.trim()).filter(Boolean),
-          ips: inScopeIpsText.value.split('\n').map(s => s.trim()).filter(Boolean),
-          cidrs: [],
-          endpoints: [],
+          ips: inScopeIps,
+          cidrs: inScopeCidrs,
+          endpoints: existingInScope.endpoints || [],
         },
         out_of_scope: {
           domains: outScopeDomainsText.value.split('\n').map(s => s.trim()).filter(Boolean),
-          ips: [],
-          cidrs: [],
+          ips: existingOutScope.ips || [],
+          cidrs: existingOutScope.cidrs || [],
           notes: outScopeNotesText.value.split('\n').map(s => s.trim()).filter(Boolean),
         }
       }

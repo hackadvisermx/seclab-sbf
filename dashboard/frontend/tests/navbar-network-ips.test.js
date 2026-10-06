@@ -101,3 +101,95 @@ test('Navbar muestra la IP de VPN asignada y control de copiado cuando está con
     cleanup()
   }
 })
+
+test('El dropdown de VPN se abre al pulsar el trigger y se cierra con el botón ✕', async () => {
+  const mockApi = {
+    getTelemetry: async () => ({
+      local_ip: '172.20.0.2',
+      vpn: { connected: false, ip: null, profile: 'none', interface: 'tun0' },
+      tailscale: { online: false, ip: null },
+    }),
+    getSavedVpnCredentials: async () => ({}),
+  }
+
+  const { root, cleanup } = await mountNavbar(mockApi)
+  try {
+    // Al inicio el panel no está visible
+    assert.equal(root.querySelectorAll('[aria-label="Cerrar panel VPN"]').length, 0)
+
+    // Pulsar el trigger del dropdown
+    const trigger = root.querySelector('button[title*="gestionar la conexión VPN"]')
+    assert.ok(trigger)
+    trigger.click()
+    await flush()
+
+    // El panel está abierto y contiene el botón ✕
+    const closeBtn = root.querySelector('button[aria-label="Cerrar panel VPN"]')
+    assert.ok(closeBtn, 'Debe mostrarse el botón ✕ para cerrar el panel')
+
+    // Pulsar el botón ✕
+    closeBtn.click()
+    await flush()
+
+    // El panel debe haberse cerrado
+    assert.equal(root.querySelectorAll('[aria-label="Cerrar panel VPN"]').length, 0)
+  } finally {
+    cleanup()
+  }
+})
+
+test('El dropdown de VPN se cierra al hacer clic en el backdrop exterior', async () => {
+  const mockApi = {
+    getTelemetry: async () => ({
+      local_ip: '172.20.0.2',
+      vpn: { connected: false, ip: null, profile: 'none', interface: 'tun0' },
+      tailscale: { online: false, ip: null },
+    }),
+    getSavedVpnCredentials: async () => ({}),
+  }
+
+  const { root, cleanup } = await mountNavbar(mockApi)
+  try {
+    const trigger = root.querySelector('button[title*="gestionar la conexión VPN"]')
+    trigger.click()
+    await flush()
+
+    const backdrop = root.querySelector('.fixed.inset-0')
+    assert.ok(backdrop, 'Debe existir un backdrop al abrir el dropdown')
+
+    backdrop.click()
+    await flush()
+
+    assert.equal(root.querySelectorAll('.fixed.inset-0').length, 0, 'El dropdown debe cerrarse al hacer clic en el backdrop')
+  } finally {
+    cleanup()
+  }
+})
+
+test('El dropdown de VPN se cierra al pulsar la tecla Escape', async () => {
+  const mockApi = {
+    getTelemetry: async () => ({
+      local_ip: '172.20.0.2',
+      vpn: { connected: false, ip: null, profile: 'none', interface: 'tun0' },
+      tailscale: { online: false, ip: null },
+    }),
+    getSavedVpnCredentials: async () => ({}),
+  }
+
+  const { root, cleanup } = await mountNavbar(mockApi)
+  try {
+    const trigger = root.querySelector('button[title*="gestionar la conexión VPN"]')
+    trigger.click()
+    await flush()
+
+    assert.ok(root.querySelector('[aria-label="Cerrar panel VPN"]'))
+
+    // Simular evento Escape en window
+    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }))
+    await flush()
+
+    assert.equal(root.querySelectorAll('[aria-label="Cerrar panel VPN"]').length, 0, 'El dropdown debe cerrarse con la tecla Escape')
+  } finally {
+    cleanup()
+  }
+})

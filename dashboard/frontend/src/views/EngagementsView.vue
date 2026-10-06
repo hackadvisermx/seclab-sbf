@@ -304,7 +304,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../api'
+
+const router = useRouter()
 import DeleteProjectButton from '../components/DeleteProjectButton.vue'
 
 const engagements = ref([])
@@ -393,7 +396,7 @@ async function submitCreate() {
   isSubmitting.value = true
   createError.value = ''
   try {
-    await api.createEngagement(newForm.value)
+    const created = await api.createEngagement(newForm.value)
     showModal.value = false
     newForm.value = {
       name: '',
@@ -405,7 +408,9 @@ async function submitCreate() {
       points: 100,
       difficulty: 'medium',
     }
-    await loadEngagements()
+    // Llevar directo al detalle (pestaña Alcance) en vez de volver a la
+    // lista: es el siguiente paso natural tras crear un proyecto.
+    router.push(`/engagements/${created.type}/${created.id}`)
   } catch (err) {
     createError.value = err.message
   } finally {

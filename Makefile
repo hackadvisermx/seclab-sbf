@@ -207,7 +207,9 @@ workspace-dir:
 		chmod 755 "$(WORKSPACE_DIR)"; \
 		printf '%s\n' "workspace creado y sembrado desde workspace-seed/ en $(WORKSPACE_DIR)"; \
 	else \
-		printf '%s\n' "workspace ya existe con contenido: no se toca ($(WORKSPACE_DIR))"; \
+		if [ ! -d "$(WORKSPACE_DIR)/skills" ]; then cp -R workspace-seed/skills "$(WORKSPACE_DIR)/"; fi; \
+		if [ ! -d "$(WORKSPACE_DIR)/templates" ]; then cp -R workspace-seed/templates "$(WORKSPACE_DIR)/"; fi; \
+		printf '%s\n' "workspace ya existe con contenido: asegurado skills y templates ($(WORKSPACE_DIR))"; \
 	fi
 
 compose-config: ensure-env vpn-require-dir workspace-dir

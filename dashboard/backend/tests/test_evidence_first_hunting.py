@@ -149,3 +149,28 @@ class TestEvidenceFirstHunting(unittest.TestCase):
         self.assertEqual(loaded["engagement"]["access_mode"], "rich")
         self.assertEqual(len(loaded["engagement"]["identities"]), 2)
         self.assertEqual(loaded["engagement"]["identities"][0]["id"], "tester_a")
+
+    def test_help_cheatsheet_endpoint_loads_all_commands(self):
+        from app.api.endpoints import help_center
+        items = help_center.get_cheatsheet()
+        self.assertGreaterEqual(len(items), 48)
+        first = items[0]
+        self.assertIn("category", first)
+        self.assertIn("title", first)
+        self.assertIn("command", first)
+        self.assertIn("description", first)
+
+    def test_help_skills_endpoint_loads_playbooks(self):
+        from app.api.endpoints import help_center
+        skills = help_center.list_skills()
+        self.assertGreaterEqual(len(skills), 10)
+        first = skills[0]
+        self.assertIn("id", first)
+        self.assertIn("title", first)
+        self.assertIn("description", first)
+        self.assertTrue(first["title"].startswith("Skill:"))
+
+        # Validar detalle de una skill
+        detail = help_center.get_skill_detail(first["id"])
+        self.assertEqual(detail["id"], first["id"])
+        self.assertIn("## 1. Propósito", detail["content"])

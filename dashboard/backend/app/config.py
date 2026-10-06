@@ -27,9 +27,52 @@ PORT = int(os.environ.get("DASHBOARD_PORT", "8080"))
 # Rutas de herramientas del laboratorio
 SCRIPTS_DIR = pathlib.Path("/usr/local/bin") if pathlib.Path("/usr/local/bin/pt-scope-validator").exists() else REPO_ROOT / "scripts"
 SHELL_DIR = REPO_ROOT / "shell"
-CHEATSHEET_FILE = pathlib.Path("/home/tester/.oh-my-zsh/custom/plugins/pentest-lab/cheatsheet.tsv") if pathlib.Path("/home/tester/.oh-my-zsh/custom/plugins/pentest-lab/cheatsheet.tsv").exists() else SHELL_DIR / "pentest-lab" / "cheatsheet.tsv"
-SKILLS_DIR = pathlib.Path("/workspace/skills") if pathlib.Path("/workspace/skills").exists() else REPO_ROOT / "skills"
-TEMPLATES_DIR = pathlib.Path("/workspace/templates") if pathlib.Path("/workspace/templates").exists() else REPO_ROOT / "workspace-seed" / "templates"
+
+
+def _resolve_cheatsheet_file() -> pathlib.Path:
+    candidates = [
+        pathlib.Path("/usr/local/share/seclab/pentest-lab/cheatsheet.tsv"),
+        pathlib.Path("/opt/seclab/oh-my-zsh/custom/plugins/pentest-lab/cheatsheet.tsv"),
+        pathlib.Path("/home/tester/.oh-my-zsh/custom/plugins/pentest-lab/cheatsheet.tsv"),
+        SHELL_DIR / "pentest-lab" / "cheatsheet.tsv",
+        REPO_ROOT / "shell" / "pentest-lab" / "cheatsheet.tsv",
+    ]
+    for c in candidates:
+        if c.is_file() and not c.is_symlink():
+            return c
+    return candidates[0]
+
+
+def _resolve_skills_dir() -> pathlib.Path:
+    candidates = [
+        WORKSPACE_DIR / "skills",
+        pathlib.Path("/workspace/skills"),
+        pathlib.Path("/usr/local/share/seclab/skills"),
+        REPO_ROOT / "skills",
+        REPO_ROOT / "workspace-seed" / "skills",
+    ]
+    for c in candidates:
+        if c.is_dir() and not c.is_symlink():
+            return c
+    return candidates[0]
+
+
+def _resolve_templates_dir() -> pathlib.Path:
+    candidates = [
+        WORKSPACE_DIR / "templates",
+        pathlib.Path("/workspace/templates"),
+        pathlib.Path("/usr/local/share/seclab/templates"),
+        REPO_ROOT / "workspace-seed" / "templates",
+    ]
+    for c in candidates:
+        if c.is_dir() and not c.is_symlink():
+            return c
+    return candidates[0]
+
+
+CHEATSHEET_FILE = _resolve_cheatsheet_file()
+SKILLS_DIR = _resolve_skills_dir()
+TEMPLATES_DIR = _resolve_templates_dir()
 
 # Seguridad y Autenticación
 AUTH_ENABLED = True

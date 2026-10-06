@@ -223,6 +223,13 @@
         <!-- Conexiones de Red -->
         <div class="space-y-2 text-xs font-mono">
           <div class="p-2.5 rounded-sm bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+            <span class="text-slate-400">IP Local (LAN/Docker):</span>
+            <span class="px-2 py-0.5 rounded-sm text-[11px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+              {{ telemetry.local_ip || '127.0.0.1' }}
+            </span>
+          </div>
+
+          <div class="p-2.5 rounded-sm bg-slate-900/80 border border-slate-800 flex items-center justify-between">
             <span class="text-slate-400">VPN Activa (tun0):</span>
             <span
               class="px-2 py-0.5 rounded-sm text-[11px] font-bold"

@@ -59,9 +59,23 @@
       </div>
 
       <!-- Telemetría & Accesos Rápidos -->
-      <div class="flex items-center space-x-3 text-xs font-mono relative">
+      <div class="flex items-center space-x-2 text-xs font-mono relative">
+        <!-- Chip IP Local -->
+        <button
+          @click="copyLocalIp"
+          type="button"
+          class="flex items-center space-x-1.5 px-2.5 py-1 rounded-sm bg-[#0d1322] border border-cyan-500/30 hover:border-cyan-400/60 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer group focus:outline-hidden"
+          title="IP Local del laboratorio (LAN / Docker) - Clic para copiar"
+        >
+          <span class="w-2 h-2 rounded-full bg-cyan-400 group-hover:scale-125 transition-transform"></span>
+          <span class="text-[10px] text-slate-400 uppercase font-semibold"><span class="hidden sm:inline">IP </span>LOCAL:</span>
+          <span class="font-bold font-mono text-cyan-300">{{ localIpDisplay }}</span>
+          <span v-if="copiedLocal" class="text-[10px] text-emerald-400 font-bold ml-0.5">✓</span>
+          <span v-else class="text-[10px] text-slate-500 opacity-60 group-hover:opacity-100 ml-0.5">📋</span>
+        </button>
+
         <!-- VPN Status Widget & Dropdown Trigger -->
-        <div class="relative">
+        <div class="relative flex items-center">
           <button
             @click="vpnDropdownOpen = !vpnDropdownOpen"
             class="flex items-center space-x-1.5 px-2.5 py-1 rounded-sm bg-[#0d1322] border transition-all cursor-pointer focus:outline-hidden"
@@ -69,8 +83,29 @@
             title="Haz clic para gestionar la conexión VPN táctica"
           >
             <span class="w-2 h-2 rounded-full" :class="vpnIndicatorClasses"></span>
-            <span>{{ vpnBadgeText }}</span>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold"><span class="hidden sm:inline">IP </span>VPN:</span>
+            <span class="font-bold font-mono" :class="telemetry.vpn?.connected ? 'text-emerald-300' : 'text-slate-400'">
+              {{ vpnIpDisplay }}
+            </span>
+            <span
+              v-if="telemetry.vpn?.connected && shortProfile"
+              class="text-[9px] px-1 py-0.2 rounded-xs bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 uppercase hidden md:inline ml-0.5"
+            >
+              {{ shortProfile }}
+            </span>
             <span class="text-[10px] text-slate-500 ml-0.5">▼</span>
+          </button>
+
+          <!-- Botón Copiar IP VPN si está conectada -->
+          <button
+            v-if="telemetry.vpn?.connected && telemetry.vpn?.ip"
+            @click.stop="copyVpnIp"
+            type="button"
+            class="ml-1 p-1 rounded-sm bg-[#0d1322] border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 transition-colors cursor-pointer focus:outline-hidden"
+            :title="`Copiar IP de VPN: ${telemetry.vpn.ip}`"
+          >
+            <span v-if="copiedVpn" class="text-[10px] text-emerald-300 font-bold">✓</span>
+            <span v-else class="text-[10px]">📋</span>
           </button>
 
           <!-- Dropdown Táctico VPN -->
@@ -113,9 +148,20 @@
                 <span class="text-slate-400">Interfaz:</span>
                 <span>{{ telemetry.vpn?.interface || 'tun0' }}</span>
               </div>
-              <div class="flex justify-between">
+              <div class="flex items-center justify-between">
                 <span class="text-slate-400">IP Asignada:</span>
-                <span class="text-emerald-400 font-bold">{{ telemetry.vpn?.ip || 'Sin asignar' }}</span>
+                <div class="flex items-center space-x-1.5">
+                  <span class="text-emerald-400 font-bold">{{ telemetry.vpn?.ip || 'Sin asignar' }}</span>
+                  <button
+                    v-if="telemetry.vpn?.connected && telemetry.vpn?.ip"
+                    @click.stop="copyVpnIp"
+                    type="button"
+                    class="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-950 border border-emerald-500/40 text-emerald-300 hover:border-emerald-300 cursor-pointer"
+                    title="Copiar IP asignada"
+                  >
+                    {{ copiedVpn ? '¡Copiada!' : 'Copiar' }}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -291,8 +337,78 @@ function notifyTerminalTabOpened() {
 }
 
 const telemetry = ref({
+  local_ip: null,
   vpn: { connected: false, ip: null, profile: 'none', interface: 'tun0' },
   tailscale: { online: false, ip: null, installed: false },
+})
+
+const copiedLocal = ref(false)
+const copiedVpn = ref(false)
+
+async function copyToClipboard(text, type = 'local') {
+  if (!text) return
+  let success = false
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      success = true
+    }
+  } catch {
+    // fallback
+  }
+  if (!success && typeof document !== 'undefined') {
+    try {
+      const el = document.createElement('textarea')
+      el.value = text
+      el.setAttribute('readonly', '')
+      el.style.position = 'absolute'
+      el.style.left = '-9999px'
+      document.body.appendChild(el)
+      el.select()
+      success = document.execCommand('copy')
+      document.body.removeChild(el)
+    } catch {
+      success = false
+    }
+  }
+  if (success) {
+    if (type === 'local') {
+      copiedLocal.value = true
+      setTimeout(() => { copiedLocal.value = false }, 2000)
+    } else if (type === 'vpn') {
+      copiedVpn.value = true
+      setTimeout(() => { copiedVpn.value = false }, 2000)
+    }
+  }
+}
+
+function copyLocalIp() {
+  copyToClipboard(telemetry.value.local_ip || '127.0.0.1', 'local')
+}
+
+function copyVpnIp() {
+  if (telemetry.value.vpn?.ip) {
+    copyToClipboard(telemetry.value.vpn.ip, 'vpn')
+  }
+}
+
+const localIpDisplay = computed(() => {
+  return telemetry.value.local_ip || '127.0.0.1'
+})
+
+const shortProfile = computed(() => {
+  const p = (telemetry.value.vpn?.profile || '').toLowerCase()
+  if (p.includes('try') || p.includes('thm')) return 'THM'
+  if (p.includes('htb') || p.includes('hack')) return 'HTB'
+  if (p.includes('client') || p.includes('cli')) return 'CLI'
+  return p ? p.toUpperCase() : ''
+})
+
+const vpnIpDisplay = computed(() => {
+  const v = telemetry.value.vpn
+  if (v?.connecting) return 'Conectando…'
+  if (!v || !v.connected) return 'Desconectada'
+  return v.ip || 'tun0'
 })
 
 const vpnDropdownOpen = ref(false)

@@ -70,9 +70,25 @@ def _resolve_templates_dir() -> pathlib.Path:
     return candidates[0]
 
 
+def _resolve_guide_html_file() -> pathlib.Path:
+    candidates = [
+        WORKSPACE_DIR / "guia.html",
+        pathlib.Path("/workspace/guia.html"),
+        pathlib.Path("/usr/local/share/seclab/guide/index.html"),
+        pathlib.Path("/usr/local/share/seclab/guide/guia.html"),
+        REPO_ROOT / "docs" / "guia-laboratorio.html",
+        REPO_ROOT / "workspace-seed" / "guia.html",
+    ]
+    for c in candidates:
+        if c.is_file() and not c.is_symlink():
+            return c
+    return candidates[0]
+
+
 CHEATSHEET_FILE = _resolve_cheatsheet_file()
 SKILLS_DIR = _resolve_skills_dir()
 TEMPLATES_DIR = _resolve_templates_dir()
+GUIDE_HTML_FILE = _resolve_guide_html_file()
 
 # Seguridad y Autenticación
 AUTH_ENABLED = True

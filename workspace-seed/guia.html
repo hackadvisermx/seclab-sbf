@@ -18,6 +18,7 @@
     --accent-amber: #d29922;
     --accent-purple: #bc8cff;
     --accent-red: #f85149;
+    --accent-cyan: #39c5bb;
   }
   * { box-sizing: border-box; }
   body {
@@ -71,7 +72,7 @@
   /* Misiones / Tabs */
   .mission-selector {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 14px;
     margin-bottom: 30px;
   }
@@ -79,7 +80,7 @@
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    padding: 18px 20px;
+    padding: 16px 18px;
     cursor: pointer;
     transition: all 0.2s ease;
     position: relative;
@@ -96,7 +97,7 @@
   }
   .mission-card h3 {
     margin: 0 0 6px;
-    font-size: 1.05rem;
+    font-size: 1.02rem;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -104,7 +105,7 @@
   }
   .mission-card p {
     margin: 0;
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     color: var(--text-muted);
   }
 
@@ -282,7 +283,7 @@
     color: var(--text-muted);
   }
   .disc-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px; }
-  .disc-cmd { font-size: 0.85rem; background: #000; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-color); color: #58a6ff; }
+  .disc-cmd { font-size: 0.85rem; background: #000; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-color); color: #58a6ff; cursor: pointer; }
 
   /* Search box */
   .search-box {
@@ -300,7 +301,7 @@
   }
   .search-results {
     margin-top: 14px;
-    max-height: 400px;
+    max-height: 480px;
     overflow-y: auto;
   }
   .tool-item {
@@ -345,10 +346,11 @@
   <div class="header-inner">
     <h1>🛡️ SecLab-SBF <span style="font-weight: 300; font-size: 1.1rem; color: var(--text-muted);">| Guía del Operador</span></h1>
     <div class="badges">
-      <span class="badge badge-cyan">98 Herramientas</span>
+      <span class="badge badge-cyan">100+ Herramientas</span>
       <span class="badge badge-purple">10 Agent Skills</span>
       <span class="badge badge-green">8 Disciplinas</span>
-      <span class="badge badge-amber">Scope Guard Enforced</span>
+      <span class="badge badge-amber">Scope Guard &amp; BDT</span>
+      <span class="badge" style="background: #238636; color: #fff;">Evidence-First</span>
     </div>
   </div>
 </header>
@@ -361,19 +363,23 @@
     <div class="mission-selector">
       <div class="mission-card active" onclick="seleccionarMision('engagement', this)">
         <h3>🌐 Auditoría Web / API</h3>
-        <p>Engagement profesional con Scope Guard, 8 disciplinas y reporte ejecutivo.</p>
+        <p>Engagement profesional con Scope Guard, 8 disciplinas, BDT y compuertas de evidencia.</p>
       </div>
       <div class="mission-card" onclick="seleccionarMision('ctf', this)">
         <h3>🏁 Reto CTF / Máquina</h3>
-        <p>TryHackMe / HackTheBox, conexión VPN, pivoting y documentación rápida.</p>
+        <p>Retos Jeopardy por categorías (web, crypto, pwn, rev) o Máquinas HTB/THM con VPN.</p>
       </div>
       <div class="mission-card" onclick="seleccionarMision('agent', this)">
         <h3>🤖 Orquestar con IA / Agentes</h3>
-        <p>Alimentar a Claude, GPT o Gemini con prompts enriquecidos y contexto en vivo.</p>
+        <p>Hermes Vault (AES-256-GCM), Copiloto táctico, subagentes enriquecidos y pt-context.</p>
       </div>
       <div class="mission-card" onclick="seleccionarMision('pivoting', this)">
         <h3>🔀 Pivoting & Redes</h3>
-        <p>Túneles SOCKS5, reenvío de puertos y proxys controlados sobre <code>tun0</code>.</p>
+        <p>Túneles SOCKS5, reenvío de puertos, Ligolo/Chisel y proxys controlados sobre tun0.</p>
+      </div>
+      <div class="mission-card" onclick="seleccionarMision('dashboard', this)">
+        <h3>💻 Centro de Mando Web</h3>
+        <p>Dashboard :8080, Terminal Web :7681 multi-tab, telemetría IP y papelera .seclab-trash.</p>
       </div>
     </div>
   </section>
@@ -405,7 +411,7 @@
   <!-- FLUJO METODOLÓGICO PASO A PASO -->
   <section class="card" id="seccion-flujo">
     <h2>🗺️ Metodología Paso a Paso: De Inicio a Fin</h2>
-    <p style="color: var(--text-muted); margin-top: -6px;">Sigue este flujo secuencial estandarizado para asegurar cobertura del 100% y cero omisiones:</p>
+    <p style="color: var(--text-muted); margin-top: -6px;">Sigue este flujo secuencial estandarizado para asegurar cobertura del 100%, rigor Evidence-First y cero omisiones:</p>
 
     <div class="step-container">
 
@@ -415,7 +421,7 @@
         <div class="step-body">
           <div class="step-title">Inicialización y Definición de Alcance (Scope Guard)</div>
           <div class="step-desc">
-            Crea la estructura del engagement. SecLab inicializa las carpetas <code>evidence/</code>, <code>recon/</code>, <code>notes/</code>, <code>scope/</code> y genera el archivo <code>scope/target.yaml</code>.
+            Crea la estructura del engagement. SecLab inicializa las carpetas <code>evidence/</code>, <code>recon/</code>, <code>notes/</code>, <code>scope/</code> y genera el archivo <code>scope/target.yaml</code> con reglas estrictas de dominios, CIDRs y exclusiones.
           </div>
           <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code>pt-eng new mi-objetivo target.com
 cd /workspace/engagements/mi-objetivo
@@ -485,15 +491,65 @@ pt-callback trigger http://127.0.0.1:9001</code></pre>
       <div class="step-item">
         <div class="step-num">5</div>
         <div class="step-body">
-          <div class="step-title">Documentación Evidence-First de Hallazgos</div>
+          <div class="step-title">Documentación Evidence-First &amp; Compuertas de Calidad Bug Bounty</div>
           <div class="step-desc">
-            Todo hallazgo debe documentarse con evidencia reproducible, requests/responses HTTP sin alterar y scoring CVSS v3.1.
+            Todo hallazgo debe documentarse con evidencia reproducible, requests/responses HTTP sin alterar y scoring CVSS v3.1. SecLab incorpora compuertas estrictas para descartar falsos positivos y acotar pruebas:
+          </div>
+          <div class="grid-disciplines" style="margin-bottom: 14px;">
+            <div class="discipline-card" style="border-left: 3px solid var(--accent-amber);">
+              <div>
+                <div class="disc-header">
+                  <span class="disc-title" style="color: var(--accent-amber);">1. Credential Gate</span>
+                  <span class="disc-tag">Paso 2b / Paso 6</span>
+                </div>
+                <div class="disc-desc">
+                  Ante tokens o API keys expuestos, ejecutar llamada autenticada y contrastar obligatoriamente con un <strong>Control Negativo</strong> (petición sin token o con token alterado). Si ambas devuelven igual respuesta, se descarta como falso positivo.
+                </div>
+              </div>
+            </div>
+            <div class="discipline-card" style="border-left: 3px solid var(--accent-blue);">
+              <div>
+                <div class="disc-header">
+                  <span class="disc-title" style="color: var(--accent-blue);">2. Enrutamiento de Acceso</span>
+                  <span class="disc-tag">target.yaml</span>
+                </div>
+                <div class="disc-desc">
+                  <strong>RICH:</strong> 2+ cuentas activas &rarr; IDOR cruzado bidireccional (A accede a B y B a A).<br>
+                  <strong>PARTIAL:</strong> 1 cuenta &rarr; BFLA y mutación de estado propio.<br>
+                  <strong>UNAUTH:</strong> Sin cuentas &rarr; Superficie pre-auth y fugas en SPA.
+                </div>
+              </div>
+            </div>
+            <div class="discipline-card" style="border-left: 3px solid var(--accent-green);">
+              <div>
+                <div class="disc-header">
+                  <span class="disc-title" style="color: var(--accent-green);">3. Bounded Testing (BDT)</span>
+                  <span class="disc-tag">Regla Operativa</span>
+                </div>
+                <div class="disc-desc">
+                  Límite estricto de 1-3 peticiones de prueba por vector. Nunca manipular datos ni cuentas de terceros. Revertir inmediatamente cualquier mutación generada.
+                </div>
+              </div>
+            </div>
+            <div class="discipline-card" style="border-left: 3px solid var(--accent-purple);">
+              <div>
+                <div class="disc-header">
+                  <span class="disc-title" style="color: var(--accent-purple);">4. Ciclo Evidence-First</span>
+                  <span class="disc-tag">Estados</span>
+                </div>
+                <div class="disc-desc">
+                  <code>PROVEN</code>: Verificado con PoC reproducible e impacto demostrable.<br>
+                  <code>CANDIDATE</code>: Vector preliminar sin prueba concluyente.<br>
+                  <code>DISPROVED</code>: Descartado tras test de control negativo.<br>
+                  <code>MITIGATED</code>: Verificado como subsanado.
+                </div>
+              </div>
+            </div>
           </div>
           <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Crea la plantilla estructurada del hallazgo:
 pt-finding new idor-panel-facturacion
 
-# Edita evidence/idor-panel-facturacion.md con nano o tu editor preferido
-# Luego valida la rigurosidad técnica del hallazgo:
+# Edita evidence/idor-panel-facturacion.md y valida la rigurosidad técnica:
 pt-finding lint</code></pre>
         </div>
       </div>
@@ -571,7 +627,7 @@ pt-eng pack</code></pre>
             <span class="disc-title">3. Auth &amp; Authorization</span>
             <span class="disc-tag">Fase 3</span>
           </div>
-          <div class="disc-desc">Matriz de roles, IDORs, bypass de autenticación, JWT y fallos de sesión.</div>
+          <div class="disc-desc">Matriz de roles, IDORs cruzados, bypass de autenticación, JWT y fallos de sesión.</div>
         </div>
         <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-skills auth-matrix-audit</div>
       </div>
@@ -634,10 +690,50 @@ pt-eng pack</code></pre>
     </div>
   </section>
 
+  <!-- CENTRO DE MANDO WEB, HERMES VAULT & TELEMETRÍA -->
+  <section class="card" id="seccion-dashboard">
+    <h2>💻 Centro de Mando Web, Hermes API Vault &amp; Telemetría</h2>
+    <p style="color: var(--text-muted); margin-top: -6px;">SecLab proporciona un entorno gráfico táctico unificado y telemetría de red en tiempo real:</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
+        <h3 style="margin-top: 0; color: var(--accent-blue); font-size: 1rem;">🌐 Tactical Dashboard (:8080)</h3>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px;">
+          Centro de gestión gráfica autenticado para auditar engagements y retos CTF Jeopardy, editar notas, explorar hallazgos con calculadora CVSS v3.1 y lanzar pipelines de reconocimiento con Scope Guard.
+        </p>
+        <div style="font-size: 0.8rem; color: var(--accent-green);">URL: http://127.0.0.1:8080</div>
+      </div>
+
+      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
+        <h3 style="margin-top: 0; color: var(--accent-purple); font-size: 1rem;">🔑 Hermes API Key Vault (AES-256-GCM)</h3>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px;">
+          Bóveda criptográfica aislada en <code>vault.db</code> con derivación segura para almacenar API keys de LLMs (OpenAI, Anthropic, Gemini, Groq, Ollama). Los subagentes y CLI acceden mediante <code>pt-vault-bridge</code> sin exponer claves en texto plano.
+        </p>
+        <div style="font-size: 0.8rem; color: var(--accent-purple);">Comando: pt-vault-bridge get &lt;provider&gt;</div>
+      </div>
+
+      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
+        <h3 style="margin-top: 0; color: var(--accent-green); font-size: 1rem;">📡 Telemetría de Red &amp; Terminal Multi-Tab</h3>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px;">
+          La barra de navegación monitorea en vivo tu <strong>IP Local (LAN/Docker)</strong> y tu <strong>IP VPN (tun0)</strong> con copiado al portapapeles en 1 clic. La consola web en <code>:7681</code> admite pestañas concurrentes sincronizadas con la sesión tmux <code>pentest-lab</code> sin colisión de terminal.
+        </p>
+        <div style="font-size: 0.8rem; color: var(--accent-blue);">Terminal: http://127.0.0.1:7681</div>
+      </div>
+
+      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
+        <h3 style="margin-top: 0; color: var(--accent-amber); font-size: 1rem;">🗑️ Papelera Atómica (.seclab-trash)</h3>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px;">
+          Eliminación segura sin <code>rm -rf</code> destructivo. Los proyectos eliminados se mueven atómicamente con <code>renameat2</code> a <code>.seclab-trash</code>, permitiendo restauración instantánea con verificación de colisiones desde la vista "Papelera" del Dashboard.
+        </p>
+        <div style="font-size: 0.8rem; color: var(--accent-amber);">Ruta: /workspace/.seclab-trash</div>
+      </div>
+    </div>
+  </section>
+
   <!-- BUSCADOR INTERACTIVO DE HERRAMIENTAS -->
   <section class="card">
-    <h2>🔍 Buscador Rápido de Herramientas y Comandos (98 Tools)</h2>
-    <p style="color: var(--text-muted); margin-top: -6px;">Escribe una herramienta o técnica (ej. <code>nmap</code>, <code>metasploit</code>, <code>x8</code>, <code>hashcat</code>, <code>proxy</code>):</p>
+    <h2>🔍 Buscador Rápido de Herramientas y Comandos (100+ Tools)</h2>
+    <p style="color: var(--text-muted); margin-top: -6px;">Escribe una herramienta o técnica (ej. <code>nmap</code>, <code>gau</code>, <code>x8</code>, <code>ligolo</code>, <code>hashcat</code>, <code>gef</code>):</p>
     
     <div class="search-box">
       <input type="text" class="search-input" id="tool-search" placeholder="Buscar por nombre, categoría o descripción..." oninput="filtrarHerramientas(this.value)">
@@ -692,7 +788,8 @@ ligolo-proxy -h</code></pre>
 <script>
 // Base de datos de herramientas frecuentes en SecLab
 const HERRAMIENTAS = [
-  { name: 'pt-eng', cat: 'orquestacion', desc: 'Gestiona ciclo de vida de engagements (new, status, scope, close, pack)', cmd: 'pt-eng new <nombre> [target]' },
+  // CLI & Orquestación SecLab
+  { name: 'pt-eng', cat: 'orquestacion', desc: 'Gestiona ciclo de vida de auditorías (new, status, scope, close, pack)', cmd: 'pt-eng new <nombre> [target]' },
   { name: 'pt-next', cat: 'metodologia', desc: 'Recomendador táctico de próximo paso y generador de prompts para LLMs', cmd: 'pt-next --prompt' },
   { name: 'pt-checklist', cat: 'auditoria', desc: 'Evaluador de cobertura metodológica en 8 disciplinas de seguridad', cmd: 'pt-checklist --markdown' },
   { name: 'pt-scope', cat: 'seguridad', desc: 'Scope Guard estricto para validar que objetivos pertenezcan al alcance', cmd: 'pt-scope check target.yaml <url>' },
@@ -702,15 +799,49 @@ const HERRAMIENTAS = [
   { name: 'pt-fuzz-params', cat: 'web', desc: 'Fuzzing determinista de parámetros ocultos en endpoints HTTP con x8', cmd: 'pt-fuzz-params <url>' },
   { name: 'pt-callback', cat: 'inyecciones', desc: 'Servidor receptor de callbacks para validación OOB de SSRF y blind injection', cmd: 'pt-callback listen 9001' },
   { name: 'pt-skills', cat: 'agentes', desc: 'Menú interactivo con fzf para consultar Agent Security Skills y prompts', cmd: 'pt-skills prompt' },
-  { name: 'pt-cheat', cat: 'ayuda', desc: 'Catálogo difuso (fzf) con cientos de comandos categorizados de pentest', cmd: 'pt-cheat [categoria]' },
+  { name: 'pt-cheat', cat: 'ayuda', desc: 'Catálogo difuso (fzf) con 48+ comandos categorizados de pentest', cmd: 'pt-cheat [categoria]' },
   { name: 'pt-log', cat: 'auditoria', desc: 'Captura y firma continua de sesión de terminal con tmux pipe-pane', cmd: 'pt-log start [eng]' },
-  { name: 'nmap / pt-nmp', cat: 'red', desc: 'Escaneo en 2 fases: descubrimiento rápido SYN y escaneo exhaustivo', cmd: 'pt-nmp <IP>' },
-  { name: 'msfconsole', cat: 'exploit', desc: 'Metasploit Framework con extensiones y base de datos local', cmd: 'msfconsole -q' },
-  { name: 'netexec (nxc)', cat: 'ad', desc: 'Suite de post-explotación y evaluación de Active Directory, SMB y LDAP', cmd: 'nxc smb <target> -u "" -p ""' },
-  { name: 'hashcat', cat: 'crack', desc: 'Cracking de contraseñas acelerado con OpenCL / PoCL', cmd: 'hashcat -m 1000 hashes.txt /usr/share/wordlists/rockyou.txt' },
-  { name: 'john', cat: 'crack', desc: 'John the Ripper con soporte Jumbo para múltiples formatos de hash', cmd: 'john --wordlist=/usr/share/wordlists/rockyou.txt hashes' },
+  { name: 'pt-serv-payloads', cat: 'post-exploit', desc: 'Servidor HTTP local para descargar linpeas, winpeas, nc o socat', cmd: 'pt-serv-payloads web 8000' },
+  { name: 'pt-vault-bridge', cat: 'vault', desc: 'Puente seguro CLI para consultar llaves LLM del almacén cifrado Hermes', cmd: 'pt-vault-bridge get <provider>' },
+
+  // Reconocimiento & Web
+  { name: 'gau', cat: 'recon', desc: 'GetAllUrls: Recolección pasiva de URLs históricas desde AlienVault, Wayback y CommonCrawl', cmd: 'gau <dominio>' },
+  { name: 'findomain', cat: 'recon', desc: 'Enumeración ultrarrápida de subdominios con múltiples fuentes pasivas', cmd: 'findomain -t <dominio> -q' },
+  { name: 'assetfinder', cat: 'recon', desc: 'Descubrimiento de subdominios y activos asociados a un dominio raíz', cmd: 'assetfinder --subs-only <dominio>' },
+  { name: 'httprobe', cat: 'recon', desc: 'Sondeo masivo de servidores HTTP y HTTPS activos sobre lista de dominios', cmd: 'cat domains.txt | httprobe' },
+  { name: 'gf', cat: 'web', desc: 'Filtrado semántico con patrones RegEx para encontrar parámetros sensibles (ssrf, idor, sqli)', cmd: 'cat urls.txt | gf ssrf' },
+  { name: 'qsreplace', cat: 'web', desc: 'Reemplazo rápido de valores en Query Strings para pruebas masivas de inyección', cmd: 'cat urls.txt | qsreplace FUZZ' },
+  { name: 'x8', cat: 'web', desc: 'Fuzzer de parámetros ocultos de alta velocidad con detección de anomalías HTTP', cmd: 'x8 -u "<url>" -w /usr/share/seclab/wordlists/params.txt' },
+  { name: 'wpscan', cat: 'web', desc: 'Escaneo de vulnerabilidades, temas y plugins en sitios WordPress', cmd: 'wpscan --url <url> --enumerate u,vp' },
+  { name: 'nikto', cat: 'web', desc: 'Escaneo integral de servidores web, configuraciones inseguras y archivos obsoletos', cmd: 'nikto -h <url>' },
   { name: 'sqlmap', cat: 'web', desc: 'Detección y explotación automática de inyecciones SQL', cmd: 'sqlmap -u "<url>" --batch' },
-  { name: 'chisel / ligolo', cat: 'pivoting', desc: 'Túneles inversos y pivoting TCP/UDP sobre redes restringidas', cmd: 'pt-socks 1080' }
+
+  // Red, Explotación & Active Directory
+  { name: 'nmap / pt-nmp', cat: 'red', desc: 'Escaneo en 2 fases: descubrimiento rápido SYN y escaneo exhaustivo de versiones', cmd: 'pt-nmp <IP>' },
+  { name: 'msfconsole', cat: 'exploit', desc: 'Metasploit Framework con extensiones y base de datos PostgreSQL local', cmd: 'msfconsole -q' },
+  { name: 'netexec (nxc)', cat: 'ad', desc: 'Suite de post-explotación y evaluación de Active Directory, SMB, LDAP y WinRM', cmd: 'nxc smb <target> -u "" -p ""' },
+  { name: 'enum4linux-ng', cat: 'ad', desc: 'Herramienta de enumeración moderna para Windows, Samba y dominios AD', cmd: 'enum4linux-ng -A <target>' },
+  { name: 'bettercap', cat: 'red', desc: 'Marco modular para reconocimiento de red, MitM y manipulación de tráfico', cmd: 'bettercap -iface eth0' },
+  { name: 's3scanner', cat: 'cloud', desc: 'Herramienta de escaneo de buckets AWS S3 mal configurados o públicos', cmd: 's3scanner scan --bucket <nombre>' },
+
+  // Pivoting & Túneles
+  { name: 'pt-socks', cat: 'pivoting', desc: 'Proxy SOCKS5 local sobre interfaz VPN tun0 con Route Guard', cmd: 'pt-socks 1080' },
+  { name: 'pt-forward', cat: 'pivoting', desc: 'Reenvío de puertos TCP locales hacia destinos alcanzables en tun0', cmd: 'pt-forward 8080:<IP>:80' },
+  { name: 'chisel', cat: 'pivoting', desc: 'Túnel TCP/UDP rápido y seguro a través de HTTP/WebSockets', cmd: 'chisel client <host>:<port> R:socks' },
+  { name: 'ligolo-proxy', cat: 'pivoting', desc: 'Pivoting avanzado de capa 3 con interfaz TUN en el operador', cmd: 'ligolo-proxy -selfcert' },
+  { name: 'proxychains4', cat: 'pivoting', desc: 'Encadenador de proxies dinámico para forzar tráfico TCP por SOCKS5', cmd: 'proxychains4 nmap -sT -Pn <IP>' },
+
+  // Password Cracking & Cripto
+  { name: 'hashcat', cat: 'crack', desc: 'Cracking de contraseñas acelerado con OpenCL / PoCL multihilo', cmd: 'hashcat -m 1000 hashes.txt /usr/share/wordlists/rockyou.txt' },
+  { name: 'john', cat: 'crack', desc: 'John the Ripper con soporte Jumbo para múltiples formatos de hash y reglas', cmd: 'john --wordlist=/usr/share/wordlists/rockyou.txt hashes' },
+
+  // CTF, Forense, Reversing & Post-Explotación
+  { name: 'gdb-multiarch (GEF)', cat: 'pwn', desc: 'Depurador multiarquitectura con extensión GEF para explotación y heap analysis', cmd: 'gdb-multiarch -q ./binario' },
+  { name: 'pspy', cat: 'post-exploit', desc: 'Monitoreo de procesos en Linux sin privilegios de root para detectar cron jobs', cmd: 'pspy64' },
+  { name: 'linpeas / winpeas', cat: 'post-exploit', desc: 'Scripts de auditoría para escalada de privilegios en Linux y Windows', cmd: 'pt-serv-payloads web 8000' },
+  { name: 'zsteg', cat: 'forensics', desc: 'Detección de datos ocultos en imágenes PNG y BMP mediante esteganografía LSB', cmd: 'zsteg -a imagen.png' },
+  { name: 'exiftool', cat: 'forensics', desc: 'Lectura y edición de metadatos EXIF en imágenes, documentos y binarios', cmd: 'exiftool archivo.pdf' },
+  { name: 'hexedit', cat: 'reversing', desc: 'Visualizador y editor hexadecimal interactivo de archivos binarios', cmd: 'hexedit binario' }
 ];
 
 function generarComandos() {
@@ -733,7 +864,7 @@ pt-recon ${nombre}
 # 3. Consultar recomendador táctico y generar prompt para IA
 pt-next --prompt
 
-# 4. Probar endpoints y registrar hallazgo
+# 4. Probar endpoints respetando Bounded Testing (BDT) y registrar hallazgo
 pt-finding new idor-usuarios
 
 # 5. Evaluar cobertura y compilar reporte
@@ -750,7 +881,7 @@ function filtrarHerramientas(q) {
   const contenedor = document.getElementById('tool-results');
   
   if (!query) {
-    renderHerramientas(HERRAMIENTAS.slice(0, 6));
+    renderHerramientas(HERRAMIENTAS.slice(0, 8));
     return;
   }
 
@@ -803,18 +934,24 @@ function seleccionarMision(mision, el) {
     document.getElementById('plan-generado').innerHTML = `
       <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
         <div style="font-weight: 600; color: var(--accent-green); margin-bottom: 8px;">
-          ✅ Secuencia de Reto / CTF:
+          ✅ Secuencia de Reto CTF (Jeopardy o Máquina de Laboratorio):
         </div>
-        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Conectar VPN (TryHackMe o HackTheBox)
-vpnhtb   # o vpntry
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># CASO A: Reto CTF Jeopardy (creado en Dashboard > Retos o /workspace/retos/):
+# Categorías disponibles: web, crypto, pwn, reverse, forensics, misc, osint
+# Banderas con formato único: flag{...} o HTB{...} / THM{...}
+# Documentar writeup técnico directamente en el panel de solución.
 
-# 2. Iniciar logging firmado de auditoría
+# CASO B: Máquina de Laboratorio (TryHackMe / HackTheBox):
+# 1. Conectar VPN bajo demanda sobre tun0:
+vpnhtb   # o vpntry / vpncli
+
+# 2. Iniciar logging firmado de auditoría:
 pt-log start htb-maquina
 
-# 3. Escaneo rápido de puertos en dos fases
+# 3. Escaneo rápido de puertos en dos fases:
 pt-nmp 10.10.11.240
 
-# 4. Cheatsheet rápido si necesitas sintaxis
+# 4. Cheatsheet táctico si requieres sintaxis rápida:
 pt-cheat nmap</code></pre>
       </div>
     `;
@@ -824,15 +961,18 @@ pt-cheat nmap</code></pre>
     document.getElementById('plan-generado').innerHTML = `
       <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
         <div style="font-weight: 600; color: var(--accent-purple); margin-bottom: 8px;">
-          🤖 Secuencia para Modelos de Lenguaje / Subagentes:
+          🤖 Secuencia para Modelos de Lenguaje & Agentes (Hermes Vault):
         </div>
-        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Generar System Prompt contextualizado para tu LLM:
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Configurar LLMs en Hermes API Vault (Dashboard > Vault o pt-vault-bridge)
+# Proveedores: OpenAI, Anthropic, Gemini, Groq, Ollama (cifrado AES-256-GCM)
+
+# 2. Generar System Prompt contextualizado para tu LLM:
 pt-next --prompt
 
-# 2. Extraer contexto completo del engagement en Markdown o JSON:
+# 3. Extraer contexto completo del engagement en Markdown o JSON:
 pt-context mi-objetivo --json
 
-# 3. Consultar plantilla de agente especializada:
+# 4. Consultar plantilla de agente especializada:
 pt-skills prompt auth-agent</code></pre>
       </div>
     `;
@@ -842,14 +982,34 @@ pt-skills prompt auth-agent</code></pre>
         <div style="font-weight: 600; color: var(--accent-amber); margin-bottom: 8px;">
           🔀 Secuencia de Pivoting & Túneles Seguros:
         </div>
-        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Iniciar proxy SOCKS5 local sobre tun0
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Iniciar proxy SOCKS5 local sobre tun0 (con Route Guard)
 pt-socks 1080
 
-# 2. Configurar proxychains para usar el túnel
+# 2. Reenvío de puertos TCP hacia subredes alcanzables:
+pt-forward 8080:10.10.10.50:80
+
+# 3. Configurar proxychains para canalizar tráfico por SOCKS5
 proxychains4 nmap -sT -Pn -p 22,80,445 10.10.10.100
 
-# 3. Servidor de staging de payloads (chisel, ligolo, winpeas)
+# 4. Servidor de staging de payloads (chisel, ligolo, winpeas, nc)
 pt-serv-payloads web 8000</code></pre>
+      </div>
+    `;
+  } else if (mision === 'dashboard') {
+    document.getElementById('plan-generado').innerHTML = `
+      <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">
+          💻 Centro de Mando Web & Telemetría:
+        </div>
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Tactical Dashboard (interfaz gráfica de gestión)
+http://127.0.0.1:8080
+
+# 2. Terminal Web concurrente (multi-tab handoff sin colisión PTY)
+http://127.0.0.1:7681
+
+# 3. Monitoreo en tiempo real de IP Local y de IP VPN en la barra de navegación.
+
+# 4. Papelera Atómica (.seclab-trash): recuperación instantánea de proyectos.</code></pre>
       </div>
     `;
   }
@@ -892,7 +1052,7 @@ function copiarTextoBoton(texto, btn) {
 // Inicializar al cargar
 document.addEventListener('DOMContentLoaded', () => {
   generarComandos();
-  renderHerramientas(HERRAMIENTAS.slice(0, 6));
+  renderHerramientas(HERRAMIENTAS.slice(0, 8));
 });
 </script>
 

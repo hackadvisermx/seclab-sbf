@@ -7,7 +7,7 @@
           <span>📖 Centro de Ayuda, Tácticas & Datos de Acceso</span>
         </h1>
         <p class="text-slate-400 text-sm mt-1">
-          Comandos tácticos de terminal, catálogo interactivo pt-cheat, playbooks y datos de conectividad.
+          Guía interactiva del operador, comandos tácticos, catálogo pt-cheat, playbooks y datos de conectividad.
         </p>
       </div>
 
@@ -24,14 +24,119 @@
     <!-- Pestañas de Ayuda -->
     <div class="flex items-center space-x-2 border-b border-slate-800 pb-2 text-xs font-mono">
       <button
-        v-for="t in ['access', 'cheatsheet', 'skills']"
+        v-for="t in ['guide', 'access', 'cheatsheet', 'skills']"
         :key="t"
         @click="activeTab = t"
         class="px-4 py-2 rounded-sm font-semibold transition-colors uppercase tracking-wider"
         :class="activeTab === t ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white bg-slate-800/40'"
       >
-        {{ t === 'access' ? 'Datos de Acceso & Red' : (t === 'cheatsheet' ? 'Catálogo pt-cheat (48 comandos)' : 'Playbooks de Habilidades (skills/)') }}
+        {{ t === 'guide' ? 'Guía del Operador' : (t === 'access' ? 'Datos de Acceso & Red' : (t === 'cheatsheet' ? 'Catálogo pt-cheat (48 comandos)' : 'Playbooks de Habilidades (skills/)')) }}
       </button>
+    </div>
+
+    <!-- TAB 0: GUÍA DEL OPERADOR & MAPA TÁCTICO -->
+    <div v-if="activeTab === 'guide'" class="space-y-6">
+      <!-- Misiones Tácticas Resumen -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div class="tactical-card p-3.5 space-y-1.5 border-l-2 border-cyan-500 bg-slate-900/60">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <span class="text-cyan-400 font-bold">Misión 1</span>
+            <span class="text-[10px] text-slate-500">8 Disciplinas</span>
+          </div>
+          <h4 class="text-xs font-mono font-bold text-white">🌐 Auditoría Web / API</h4>
+          <p class="text-[11px] text-slate-400 font-sans leading-tight">
+            Scope Guard, BDT (1-3 reqs), Credential Gate y reportes ejecutivos.
+          </p>
+        </div>
+
+        <div class="tactical-card p-3.5 space-y-1.5 border-l-2 border-emerald-500 bg-slate-900/60">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <span class="text-emerald-400 font-bold">Misión 2</span>
+            <span class="text-[10px] text-slate-500">VPN / Flags</span>
+          </div>
+          <h4 class="text-xs font-mono font-bold text-white">🏁 Retos CTF & Máquinas</h4>
+          <p class="text-[11px] text-slate-400 font-sans leading-tight">
+            Jeopardy (web, crypto, pwn) o Máquinas HTB/THM con túnel VPN.
+          </p>
+        </div>
+
+        <div class="tactical-card p-3.5 space-y-1.5 border-l-2 border-purple-500 bg-slate-900/60">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <span class="text-purple-400 font-bold">Misión 3</span>
+            <span class="text-[10px] text-slate-500">AES-256-GCM</span>
+          </div>
+          <h4 class="text-xs font-mono font-bold text-white">🤖 Agentes IA & Hermes</h4>
+          <p class="text-[11px] text-slate-400 font-sans leading-tight">
+            OpenAI, Anthropic, Gemini, Groq con pt-vault-bridge y pt-context.
+          </p>
+        </div>
+
+        <div class="tactical-card p-3.5 space-y-1.5 border-l-2 border-amber-500 bg-slate-900/60">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <span class="text-amber-400 font-bold">Misión 4</span>
+            <span class="text-[10px] text-slate-500">Route Guard</span>
+          </div>
+          <h4 class="text-xs font-mono font-bold text-white">🔀 Pivoting & Redes</h4>
+          <p class="text-[11px] text-slate-400 font-sans leading-tight">
+            Túneles SOCKS5 (pt-socks), Ligolo, Chisel y staging de payloads.
+          </p>
+        </div>
+
+        <div class="tactical-card p-3.5 space-y-1.5 border-l-2 border-sky-500 bg-slate-900/60">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <span class="text-sky-400 font-bold">Misión 5</span>
+            <span class="text-[10px] text-slate-500">Web & Shell</span>
+          </div>
+          <h4 class="text-xs font-mono font-bold text-white">💻 Centro de Mando</h4>
+          <p class="text-[11px] text-slate-400 font-sans leading-tight">
+            Dashboard :8080, Terminal :7681 multi-tab y papelera .seclab-trash.
+          </p>
+        </div>
+      </div>
+
+      <!-- Visor Embebido de la Guía HTML -->
+      <div class="tactical-card p-0 overflow-hidden border border-slate-800 rounded-sm">
+        <div class="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <div class="flex items-center space-x-2.5">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-cyan-400 font-bold uppercase tracking-wider">
+              Guía del Operador & Mapa Táctico (Interactivo)
+            </span>
+            <span class="text-[11px] text-slate-500 hidden sm:inline">
+              /api/v1/help/guide
+            </span>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button
+              @click="reloadGuide"
+              class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-mono transition-colors flex items-center space-x-1"
+              title="Recargar marco de la guía"
+            >
+              <span>↻ Recargar</span>
+            </button>
+            <a
+              href="/api/v1/help/guide"
+              target="_blank"
+              rel="noopener"
+              class="px-3 py-1 rounded-sm bg-cyan-950 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 border border-cyan-500/40 text-[11px] font-mono font-semibold transition-colors flex items-center space-x-1"
+              title="Abrir guía en pantalla completa en una pestaña nueva"
+            >
+              <span>↗ Pantalla Completa</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="relative bg-[#0d1117] w-full min-h-[750px]">
+          <iframe
+            ref="guideFrameRef"
+            :src="guideUrl"
+            class="w-full h-[750px] border-none block"
+            title="Guía del Operador SecLab"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
+          ></iframe>
+        </div>
+      </div>
     </div>
 
     <!-- TAB 1: DATOS DE ACCESO & RED -->
@@ -202,12 +307,20 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '../api'
 
-const activeTab = ref('access')
+const activeTab = ref('guide')
+const guideUrl = ref('/api/v1/help/guide')
+const guideFrameRef = ref(null)
 const cheatsheet = ref([])
 const cheatQuery = ref('')
 const skills = ref([])
 const selectedSkillId = ref('')
 const skillContent = ref('Selecciona un playbook para ver las instrucciones y playbooks técnicos.')
+
+function reloadGuide() {
+  if (guideFrameRef.value) {
+    guideFrameRef.value.src = '/api/v1/help/guide?t=' + Date.now()
+  }
+}
 
 const filteredCheats = computed(() => {
   if (!cheatQuery.value.trim()) return cheatsheet.value

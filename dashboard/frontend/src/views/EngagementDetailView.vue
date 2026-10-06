@@ -282,6 +282,7 @@
         <div class="tactical-card space-y-3">
           <h3 class="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center space-x-1.5">
             <span>🛡️ Scope Guard Activo</span>
+            <HelpTooltip label="Scope Guard">Validador que compara cada objetivo contra el alcance autorizado de target.yaml antes de tocar la red. Es un cuaderno de reglas, no un firewall: el refuerzo real lo hace la política de red del host.</HelpTooltip>
           </h3>
           <p class="text-[11px] text-slate-400 font-mono">
             El sondeo valida alcance y DNS antes de conectar. No sigue redirecciones. Un dominio exacto no incluye subdominios; *.example.com no incluye example.com.
@@ -360,6 +361,7 @@
       <div v-if="reconStatus.summary?.gf_patterns && Object.keys(reconStatus.summary.gf_patterns).length" class="tactical-card space-y-3 font-mono">
         <h3 class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-1.5">
           <span>🎯 Patrones de Riesgo Detectados (gf)</span>
+          <HelpTooltip label="Patrones gf">Clasifica las URLs cosechadas por su forma (parámetros típicos de XSS, SQLi, SSRF, IDOR, redirect). Es una sospecha por patrón, no una vulnerabilidad confirmada: cada candidato aún requiere verificación manual.</HelpTooltip>
         </h3>
         <div class="flex flex-wrap gap-2 text-xs">
           <div
@@ -430,6 +432,7 @@
         <div>
           <h2 class="text-base font-mono font-bold text-white flex items-center space-x-2">
             <span>📋 Fichas de Hallazgo (Evidence-First)</span>
+            <HelpTooltip label="Evidence-First">Metodología del laboratorio: ningún hallazgo se reporta sin una prueba reproducible (petición/respuesta cruda) y, cuando aplica, un control negativo. Hasta entonces el hallazgo queda como CANDIDATE, no PROVEN.</HelpTooltip>
           </h2>
           <p class="text-xs text-slate-400">Almacenadas en /workspace/{{ engType === 'reto' ? 'retos' : 'engagements' }}/{{ engId }}/evidence/*.md</p>
         </div>
@@ -1310,7 +1313,10 @@
               />
             </div>
             <div>
-              <label class="block text-xs font-mono text-slate-300 mb-1">Estado de Evidencia:</label>
+              <label class="block text-xs font-mono text-slate-300 mb-1 flex items-center">
+                <span>Estado de Evidencia:</span>
+                <HelpTooltip label="Control Negativo y BDT">Control Negativo: repetir la petición sin la credencial/token para confirmar que de verdad está protegida (si también responde 200, no hay hallazgo). BDT (Bounded Non-Destructive Testing): sobre recursos ajenos, solo 1-3 lecturas no destructivas, nunca más.</HelpTooltip>
+              </label>
               <select
                 v-model="findingForm.status"
                 class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
@@ -1468,6 +1474,7 @@ import { renderReport } from '../report-security'
 import { splitIpsAndCidrs } from '../scope-utils'
 import { api } from '../api'
 import DeleteProjectButton from '../components/DeleteProjectButton.vue'
+import HelpTooltip from '../components/HelpTooltip.vue'
 
 const route = useRoute()
 const router = useRouter()

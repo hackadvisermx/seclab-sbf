@@ -109,6 +109,15 @@ def load_lab_settings(path: pathlib.Path) -> dict:
 
 lab_settings = load_lab_settings(LAB_ENV_FILE)
 TESTER_PASSWORD = os.environ.get("DASHBOARD_PASSWORD") or lab_settings.get("DASHBOARD_PASSWORD") or lab_settings.get("TTYD_PASSWORD", "")
+
+# Credenciales reales de ttyd (fase 114 / backlog A10): el proxy de terminal
+# las necesita para autenticarse contra ttyd en nombre del operador, sin
+# exponerlas nunca al navegador. TTYD_USER es siempre "tester": lo exige
+# scripts/entrypoint/lab-entrypoint.sh con "require_value" y una
+# comprobación de igualdad explícita.
+TTYD_USER = "tester"
+TTYD_PORT = int(os.environ.get("TTYD_PORT", "7681"))
+TTYD_PASSWORD = os.environ.get("TTYD_PASSWORD") or lab_settings.get("TTYD_PASSWORD", "")
 CORS_ORIGINS: List[str] = [value.strip() for value in os.environ.get(
     "DASHBOARD_CORS_ORIGINS", lab_settings.get("DASHBOARD_CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080"),
 ).split(",") if value.strip()]

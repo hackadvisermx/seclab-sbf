@@ -20,11 +20,12 @@ import http.server
 import json
 import os
 import pathlib
-import socket
+import shutil
 import socketserver
 import sys
+import tempfile
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # Colores ANSI respetando NO_COLOR y TERM=dumb
 NO_COLOR = bool(os.environ.get("NO_COLOR")) or os.environ.get("TERM") == "dumb"
@@ -38,15 +39,20 @@ C_MAGENTA = "" if NO_COLOR else "\033[35m"
 C_CYAN = "" if NO_COLOR else "\033[36m"
 C_GRAY = "" if NO_COLOR else "\033[90m"
 
-# Rutas estándar de búsqueda de la guía HTML
+# Rutas estándar de búsqueda de la guía HTML. La copia instalada en
+# /usr/local/share/seclab/guide/ (solo lectura, sin datos de engagements)
+# se prueba antes que /workspace/guia.html a propósito: iniciar_servidor_web()
+# aísla igualmente el archivo servido en cualquier caso (ver
+# preparar_directorio_servido), pero preferir la copia instalada evita
+# depender de esa segunda capa cuando ambas existen.
 GUIDE_HTML_CANDIDATES = [
-    pathlib.Path("/workspace/guia.html"),
     pathlib.Path("/usr/local/share/seclab/guide/index.html"),
     pathlib.Path("/usr/local/share/seclab/guide/guia.html"),
     pathlib.Path(__file__).resolve().parent.parent / "docs" / "guia-laboratorio.html",
     pathlib.Path(__file__).resolve().parent.parent / "workspace-seed" / "guia.html",
     pathlib.Path("docs/guia-laboratorio.html"),
     pathlib.Path("workspace-seed/guia.html"),
+    pathlib.Path("/workspace/guia.html"),
 ]
 
 DISCIPLINAS: List[Dict[str, Any]] = [
@@ -136,37 +142,31 @@ def resolver_guia_html() -> Optional[pathlib.Path]:
     return None
 
 
-def obtener_ip_servidor() -> str:
-    """Intenta determinar la IP de Tailscale o loopback para informar al usuario."""
-    # 1. Comprobar si hay tailscale
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # Conectar a una IP arbitraria externa no envía paquetes pero resuelve interfaz
-        s.connect(("100.100.100.100", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        if ip.startswith("100."):
-            return ip
-    except Exception:
-        pass
-    return "127.0.0.1"
+def preparar_directorio_servido(ruta_html: pathlib.Path) -> Tuple[str, str]:
+    """Copia el HTML de la guía a un directorio temporal propio y devuelve
+    (directorio, nombre_archivo).
+
+    http.server.SimpleHTTPRequestHandler sirve TODO el directorio que se le
+    indique. Si se apuntara directamente al directorio real de la guía
+    (p. ej. /workspace cuando guia.html vive en /workspace/guia.html) se
+    expondría también loot/ y evidence/ de cualquier engagement del
+    operador. Aislar una copia de solo el archivo en un directorio vacío
+    evita esa fuga sin importar en qué candidato se haya resuelto la guía.
+    """
+    directorio_aislado = tempfile.mkdtemp(prefix="seclab-guide-")
+    nombre_archivo = "guia.html"
+    shutil.copy2(ruta_html, pathlib.Path(directorio_aislado) / nombre_archivo)
+    return directorio_aislado, nombre_archivo
 
 
-def iniciar_servidor_web(puerto: int = 8888) -> int:
-    """Lanza un servidor HTTP local sirviendo el archivo HTML de la guía."""
-    ruta_html = resolver_guia_html()
-    if not ruta_html:
-        sys.stderr.write(
-            f"{C_RED}Error: no se encontró el archivo guia.html ni guia-laboratorio.html en las rutas estándar.{C_RESET}\n"
-        )
-        return 1
-
-    directorio = ruta_html.parent
-    nombre_archivo = ruta_html.name
+def construir_servidor(directorio: str, nombre_archivo: str, puerto: int) -> Tuple[Optional[socketserver.TCPServer], int]:
+    """Construye el TCPServer vinculado solo a loopback, probando puertos
+    sucesivos si el solicitado está ocupado. Devuelve (httpd, puerto_usado);
+    httpd es None si no se pudo vincular ningún puerto."""
 
     class CustomHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, directory=str(directorio), **kwargs)
+            super().__init__(*args, directory=directorio, **kwargs)
 
         def do_GET(self) -> None:
             if self.path in ("/", "/index.html", "/guia.html", "/guia"):
@@ -177,37 +177,52 @@ def iniciar_servidor_web(puerto: int = 8888) -> int:
             # Silenciar logs verbosos en la terminal
             sys.stdout.write(f"{C_GRAY}[HTTP] {args[0]} - {args[1]}{C_RESET}\n")
 
-    # Intentar vincular puerto
     puerto_actual = puerto
     max_intentos = 10
-    httpd = None
-
-    for i in range(max_intentos):
+    for _ in range(max_intentos):
         try:
-            httpd = socketserver.TCPServer(("0.0.0.0", puerto_actual), CustomHandler)
-            break
+            # Solo loopback del propio contenedor: nunca exponer este
+            # servidor en la red (Tailscale incluida). plan.md sección 2,
+            # exposición cero (ver docs/backlog-mejoras.md, acción A2).
+            httpd = socketserver.TCPServer(("127.0.0.1", puerto_actual), CustomHandler)
+            return httpd, puerto_actual
         except OSError:
             puerto_actual += 1
+    return None, puerto_actual
 
-    if not httpd:
-        sys.stderr.write(f"{C_RED}Error: no se pudo abrir ningún puerto entre {puerto} y {puerto_actual}.{C_RESET}\n")
+
+def iniciar_servidor_web(puerto: int = 8888) -> int:
+    """Lanza un servidor HTTP local, solo en loopback, sirviendo únicamente
+    el archivo HTML de la guía (nunca el directorio que lo contiene)."""
+    ruta_html = resolver_guia_html()
+    if not ruta_html:
+        sys.stderr.write(
+            f"{C_RED}Error: no se encontró el archivo guia.html ni guia-laboratorio.html en las rutas estándar.{C_RESET}\n"
+        )
         return 1
 
-    ip_anuncio = obtener_ip_servidor()
-    sys.stdout.write(f"\n{C_BOLD}{C_GREEN}=== Servidor de Ayuda Interactivo de SecLab-SBF Iniciado ==={C_RESET}\n")
-    sys.stdout.write(f"{C_CYAN}Archivo servido:{C_RESET} {ruta_html}\n")
-    sys.stdout.write(f"{C_BOLD}{C_YELLOW}Acceso Local:{C_RESET}    http://127.0.0.1:{puerto_actual}/\n")
-    if ip_anuncio != "127.0.0.1":
-        sys.stdout.write(f"{C_BOLD}{C_YELLOW}Acceso Tailnet:{C_RESET}  http://{ip_anuncio}:{puerto_actual}/\n")
-    sys.stdout.write(f"{C_GRAY}Presiona Ctrl+C para detener el servidor.{C_RESET}\n\n")
-
+    directorio_aislado, nombre_archivo = preparar_directorio_servido(ruta_html)
     try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        sys.stdout.write(f"\n{C_YELLOW}Servidor web detenido por el usuario.{C_RESET}\n")
+        httpd, puerto_actual = construir_servidor(directorio_aislado, nombre_archivo, puerto)
+        if not httpd:
+            sys.stderr.write(f"{C_RED}Error: no se pudo abrir ningún puerto entre {puerto} y {puerto_actual}.{C_RESET}\n")
+            return 1
+
+        sys.stdout.write(f"\n{C_BOLD}{C_GREEN}=== Servidor de Ayuda Interactivo de SecLab-SBF Iniciado ==={C_RESET}\n")
+        sys.stdout.write(f"{C_CYAN}Archivo servido:{C_RESET} {ruta_html} (copia aislada de solo lectura)\n")
+        sys.stdout.write(f"{C_BOLD}{C_YELLOW}Acceso:{C_RESET} http://127.0.0.1:{puerto_actual}/ (solo loopback de este contenedor)\n")
+        sys.stdout.write(f"{C_GRAY}Para verla desde tu navegador, abre un túnel, p. ej.: ssh -L {puerto_actual}:127.0.0.1:{puerto_actual} ...{C_RESET}\n")
+        sys.stdout.write(f"{C_GRAY}Presiona Ctrl+C para detener el servidor.{C_RESET}\n\n")
+
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            sys.stdout.write(f"\n{C_YELLOW}Servidor web detenido por el usuario.{C_RESET}\n")
+        finally:
+            httpd.server_close()
+        return 0
     finally:
-        httpd.server_close()
-    return 0
+        shutil.rmtree(directorio_aislado, ignore_errors=True)
 
 
 def imprimir_portada() -> None:

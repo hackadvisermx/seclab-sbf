@@ -139,14 +139,24 @@
 
         <!-- Botones de Acción -->
         <div class="pt-3 border-t border-slate-800 flex items-center justify-between text-xs font-mono">
-          <button
-            @click="testKey(k.provider)"
-            :disabled="testingProviders[k.provider]"
-            class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 disabled:opacity-50 transition-colors flex items-center space-x-1"
-          >
-            <span>⚡</span>
-            <span>{{ testingProviders[k.provider] ? 'Probando...' : 'Probar Salud' }}</span>
-          </button>
+          <div class="flex items-center space-x-2">
+            <button
+              @click="testKey(k.provider)"
+              :disabled="testingProviders[k.provider]"
+              class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 disabled:opacity-50 transition-colors flex items-center space-x-1"
+            >
+              <span>⚡</span>
+              <span>{{ testingProviders[k.provider] ? 'Probando...' : 'Probar Salud' }}</span>
+            </button>
+
+            <button
+              @click="openEditModal(k)"
+              class="px-2.5 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-400 border border-slate-700 transition-colors flex items-center space-x-1"
+            >
+              <span>✏️</span>
+              <span>Editar</span>
+            </button>
+          </div>
 
           <button
             @click="deleteKeyAction(k.provider)"
@@ -281,7 +291,7 @@
       </div>
     </div>
 
-    <!-- Modal Agregar / Configurar API Key -->
+    <!-- Modal Agregar / Configurar / Editar API Key -->
     <div
       v-if="showModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
@@ -289,18 +299,22 @@
       <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
           <h2 class="text-base font-mono font-bold text-white flex items-center space-x-2">
-            <span>🔑 Registrar API Key en Vault SecLab</span>
+            <span>{{ isEditing ? '✏️ Editar Configuración: ' + (keyForm.label || keyForm.provider) : '🔑 Registrar API Key en Vault SecLab' }}</span>
           </h2>
           <button @click="showModal = false" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
         </div>
 
         <form @submit.prevent="submitKey" class="space-y-4">
           <div>
-            <label class="block text-xs font-mono text-slate-300 mb-1">Proveedor / Servicio:</label>
+            <label class="block text-xs font-mono text-slate-300 mb-1">
+              Proveedor / Servicio:
+              <span v-if="isEditing" class="text-slate-500 font-normal ml-1">(Identificador de proveedor fijo)</span>
+            </label>
             <select
               v-model="keyForm.provider"
               @change="onProviderSelect"
-              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-xs font-mono text-slate-100 focus:outline-hidden"
+              :disabled="isEditing"
+              class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-xs font-mono text-slate-100 focus:outline-hidden disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <optgroup label="Reconocimiento & OSINT">
                 <option value="shodan">Shodan (Search & Host API)</option>
@@ -333,28 +347,34 @@
           </div>
 
           <div>
-            <label class="block text-xs font-mono text-slate-300 mb-1">API Key / Token Secreto:</label>
+            <label class="block text-xs font-mono text-slate-300 mb-1">
+              API Key / Token Secreto:
+              <span v-if="isEditing" class="text-slate-400 font-normal ml-1">(Opcional al editar)</span>
+            </label>
             <input
               v-model="keyForm.api_key"
               type="password"
-              required
-              placeholder="sk-..., token_..., key_..."
+              :required="!isEditing"
+              :placeholder="isEditing ? '(Dejar vacío para conservar clave actual cifrada)' : 'sk-..., token_..., key_...'"
               class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
             />
             <p class="text-[10px] text-slate-500 mt-1 font-mono">
-              Se cifra localmente con AES-256-GCM antes de guardarse en SQLite.
+              {{ isEditing ? 'Si ingresas un nuevo valor, se cifrará con AES-256-GCM reemplazando la clave previa.' : 'Se cifra localmente con AES-256-GCM antes de guardarse en SQLite.' }}
             </p>
           </div>
 
-          <div v-if="keyForm.provider === 'openrouter' || keyForm.provider === 'custom_llm'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div v-if="keyForm.provider === 'openrouter' || keyForm.provider === 'custom_llm' || keyForm.service_type === 'llm' || isEditing" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Base URL (Endpoint):</label>
               <input
                 v-model="keyForm.base_url"
                 type="text"
-                :placeholder="keyForm.provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'http://localhost:11434/v1'"
+                :placeholder="keyForm.provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : (keyForm.provider === 'custom_llm' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1')"
                 class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
+              <p class="text-[10px] text-slate-500 mt-1 font-mono">
+                Se limpian espacios y se normaliza el esquema http(s) automáticamente.
+              </p>
             </div>
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Modelo Inicial / Predeterminado:</label>
@@ -384,25 +404,37 @@
                 v-else
                 v-model="keyForm.model_name"
                 type="text"
-                placeholder="llama3:latest, mistral"
+                placeholder="llama3:latest, mistral, gpt-4o"
                 class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
             </div>
+          </div>
+
+          <div v-if="isEditing" class="flex items-center space-x-2 pt-1">
+            <input
+              id="key_is_active"
+              v-model="keyForm.is_active"
+              type="checkbox"
+              class="rounded-sm bg-slate-900 border-slate-700 text-cyan-500 focus:ring-0 focus:ring-offset-0"
+            />
+            <label for="key_is_active" class="text-xs font-mono text-slate-300 cursor-pointer">
+              Llave Activa en el Vault (Disponible para inferencia y herramientas)
+            </label>
           </div>
 
           <div class="pt-3 border-t border-slate-800 flex items-center justify-end space-x-3">
             <button
               type="button"
               @click="showModal = false"
-              class="px-4 py-2 rounded-sm bg-slate-800 text-slate-300 text-xs font-mono"
+              class="px-4 py-2 rounded-sm bg-slate-800 text-slate-300 text-xs font-mono hover:bg-slate-700 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono shadow-md shadow-cyan-500/20"
+              class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono shadow-md shadow-cyan-500/20 transition-all"
             >
-              Guardar Llave Cifrada
+              {{ isEditing ? 'Actualizar Configuración' : 'Guardar Llave Cifrada' }}
             </button>
           </div>
         </form>
@@ -426,6 +458,8 @@ const proxyHistory = ref([])
 const selectedProfile = ref('quick')
 
 const showModal = ref(false)
+const isEditing = ref(false)
+const editingProvider = ref(null)
 const keyForm = ref({
   provider: 'shodan',
   label: 'Shodan Search API',
@@ -433,6 +467,7 @@ const keyForm = ref({
   api_key: '',
   base_url: '',
   model_name: '',
+  is_active: true,
 })
 
 // Proxy Test
@@ -513,6 +548,8 @@ function onProviderSelect() {
 }
 
 function openAddModal() {
+  isEditing.value = false
+  editingProvider.value = null
   keyForm.value = {
     provider: 'shodan',
     label: 'Shodan API Key',
@@ -520,6 +557,22 @@ function openAddModal() {
     api_key: '',
     base_url: '',
     model_name: '',
+    is_active: true,
+  }
+  showModal.value = true
+}
+
+function openEditModal(k) {
+  isEditing.value = true
+  editingProvider.value = k.provider
+  keyForm.value = {
+    provider: k.provider,
+    label: k.label || '',
+    service_type: k.service_type || 'llm',
+    api_key: '',
+    base_url: k.base_url || '',
+    model_name: k.model_name || '',
+    is_active: k.is_active ?? true,
   }
   showModal.value = true
 }
@@ -553,7 +606,20 @@ async function loadProxyHistory() {
 
 async function submitKey() {
   try {
-    await api.upsertVaultKey(keyForm.value)
+    if (isEditing.value && editingProvider.value) {
+      const payload = {
+        label: keyForm.value.label,
+        base_url: keyForm.value.base_url,
+        model_name: keyForm.value.model_name,
+        is_active: keyForm.value.is_active,
+      }
+      if (keyForm.value.api_key && keyForm.value.api_key.trim()) {
+        payload.api_key = keyForm.value.api_key.trim()
+      }
+      await api.updateVaultKey(editingProvider.value, payload)
+    } else {
+      await api.upsertVaultKey(keyForm.value)
+    }
     showModal.value = false
     await loadKeys()
   } catch (err) {

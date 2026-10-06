@@ -3,7 +3,7 @@ import time
 from typing import Any, Dict, List, Optional
 import httpx
 from app.core.database import get_db_connection
-from app.services.vault_service import vault_service
+from app.services.vault_service import vault_service, normalize_endpoint_url
 from app.models.schemas import ChatCompletionRequest, ChatCompletionResponse
 
 
@@ -73,10 +73,15 @@ class ProxyService:
         start_time = time.time()
 
         async with httpx.AsyncClient(timeout=45.0) as client:
-            # 1. OPENAI o COMPATIBLE (incluyendo OPENROUTER)
+            # 1. OPENAI o COMPATIBLE (incluyendo OPENROUTER y CUSTOM_LLM hacia OpenRouter)
             if provider in ("openai", "custom_llm", "local", "openrouter"):
-                if provider == "openrouter":
-                    url = (base_url or "https://openrouter.ai/api/v1").rstrip("/") + "/chat/completions"
+                clean_base = normalize_endpoint_url(base_url)
+                is_openrouter = (provider == "openrouter") or ("openrouter.ai" in (clean_base or "").lower())
+                if is_openrouter:
+                    endpoint_base = clean_base or "https://openrouter.ai/api/v1"
+                    if "openrouter.ai" in endpoint_base.lower() and "/api/v1" not in endpoint_base:
+                        endpoint_base = endpoint_base.rstrip("/") + "/api/v1"
+                    url = endpoint_base if endpoint_base.endswith("/chat/completions") else f"{endpoint_base}/chat/completions"
                     used_model = model or "anthropic/claude-3.5-sonnet"
                     headers = {
                         "Authorization": f"Bearer {api_key}",
@@ -84,7 +89,8 @@ class ProxyService:
                         "X-Title": "SecLab Tactical Dashboard",
                     }
                 else:
-                    url = (base_url or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
+                    endpoint_base = clean_base or "https://api.openai.com/v1"
+                    url = endpoint_base if endpoint_base.endswith("/chat/completions") else f"{endpoint_base}/chat/completions"
                     used_model = model or ("gpt-4o-mini" if provider == "openai" else "local-model")
                     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
@@ -192,6 +198,10 @@ class ProxyService:
                 openrouter_entry = vault_service.get_key_entry("openrouter")
                 if openrouter_entry and openrouter_entry.get("is_active"):
                     candidates.append(("openrouter", req.model))
+                else:
+                    custom_entry = vault_service.get_key_entry("custom_llm")
+                    if custom_entry and custom_entry.get("is_active") and "openrouter.ai" in (custom_entry.get("base_url") or "").lower():
+                        candidates.append(("custom_llm", req.model))
 
             # Si aún no hay candidato, asociar el modelo a los proveedores LLM activos
             if not candidates:

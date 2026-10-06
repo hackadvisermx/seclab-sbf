@@ -7,6 +7,23 @@ from app.core.security import encrypt_secret, decrypt_secret, mask_secret
 from app.models.schemas import ApiKeyCreate, ApiKeyResponse, ApiKeyUpdate, HealthCheckResult
 
 
+def normalize_endpoint_url(url: Optional[str]) -> Optional[str]:
+    """Limpia y valida que la URL tenga protocolo http:// o https:// y sin espacios accidentales."""
+    if not url:
+        return None
+    cleaned = url.strip()
+    if not cleaned:
+        return None
+    # Si falta protocolo, agregar http:// para localhost/127.0.0.1 o https:// para dominios
+    if not (cleaned.startswith("http://") or cleaned.startswith("https://")):
+        if cleaned.startswith("localhost") or cleaned.startswith("127.0.0.1") or ":11434" in cleaned or ":8000" in cleaned:
+            cleaned = f"http://{cleaned}"
+        else:
+            cleaned = f"https://{cleaned}"
+    return cleaned.rstrip("/")
+
+
+
 class VaultService:
     def list_keys(self) -> List[ApiKeyResponse]:
         """Obtiene la lista de API keys configuradas con las claves enmascaradas."""
@@ -48,18 +65,21 @@ class VaultService:
     def get_key_entry(self, provider: str) -> Optional[Dict[str, Any]]:
         """Obtiene registro completo con la clave descifrada."""
         conn = get_db_connection()
-        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider,)).fetchone()
+        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider.lower().strip(),)).fetchone()
         conn.close()
         if not row:
             return None
         data = dict(row)
         data["api_key"] = decrypt_secret(row["encrypted_key"])
+        data["base_url"] = normalize_endpoint_url(data.get("base_url"))
         return data
 
     def upsert_key(self, key_create: ApiKeyCreate) -> ApiKeyResponse:
         """Crea o reemplaza una API key en el vault cifrado."""
         now_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        encrypted = encrypt_secret(key_create.api_key)
+        encrypted = encrypt_secret(key_create.api_key.strip() if key_create.api_key else "")
+        clean_base_url = normalize_endpoint_url(key_create.base_url)
+        clean_model = key_create.model_name.strip() if key_create.model_name else None
 
         conn = get_db_connection()
         with conn:
@@ -80,50 +100,56 @@ class VaultService:
                     updated_at = excluded.updated_at;
                 """,
                 (
-                    key_create.provider.lower(),
-                    key_create.label,
-                    key_create.service_type,
+                    key_create.provider.lower().strip(),
+                    key_create.label.strip(),
+                    key_create.service_type.strip(),
                     encrypted,
-                    key_create.base_url,
-                    key_create.model_name,
+                    clean_base_url,
+                    clean_model,
                     1 if key_create.is_active else 0,
                     now_ts,
                     now_ts,
                 ),
             )
         conn.close()
-        return self.get_response_by_provider(key_create.provider.lower())
+        return self.get_response_by_provider(key_create.provider.lower().strip())
 
     def update_key(self, provider: str, update: ApiKeyUpdate) -> Optional[ApiKeyResponse]:
         """Actualiza parcialmente una clave existente."""
         conn = get_db_connection()
-        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider.lower(),)).fetchone()
+        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider.lower().strip(),)).fetchone()
         if not row:
             conn.close()
             return None
 
         now_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        label = update.label if update.label is not None else row["label"]
-        base_url = update.base_url if update.base_url is not None else row["base_url"]
-        model_name = update.model_name if update.model_name is not None else row["model_name"]
+        label = (update.label.strip() if update.label.strip() else row["label"]) if update.label is not None else row["label"]
+        base_url = normalize_endpoint_url(update.base_url) if update.base_url is not None else normalize_endpoint_url(row["base_url"])
+        model_name = (update.model_name.strip() or None) if update.model_name is not None else row["model_name"]
         is_active = (1 if update.is_active else 0) if update.is_active is not None else row["is_active"]
 
         encrypted = row["encrypted_key"]
-        if update.api_key:
-            encrypted = encrypt_secret(update.api_key)
+        if update.api_key and update.api_key.strip():
+            encrypted = encrypt_secret(update.api_key.strip())
+
+        status = row["status"]
+        status_message = row["status_message"]
+        if (update.api_key and update.api_key.strip()) or update.base_url is not None or update.model_name is not None:
+            status = "untested"
+            status_message = "Configuración actualizada; pendiente de verificación"
 
         with conn:
             conn.execute(
                 """
                 UPDATE api_keys SET
                     label = ?, base_url = ?, model_name = ?, is_active = ?,
-                    encrypted_key = ?, updated_at = ?
+                    encrypted_key = ?, status = ?, status_message = ?, updated_at = ?
                 WHERE provider = ?
                 """,
-                (label, base_url, model_name, is_active, encrypted, now_ts, provider.lower()),
+                (label, base_url, model_name, is_active, encrypted, status, status_message, now_ts, provider.lower().strip()),
             )
         conn.close()
-        return self.get_response_by_provider(provider.lower())
+        return self.get_response_by_provider(provider.lower().strip())
 
     def delete_key(self, provider: str) -> bool:
         """Elimina una clave del vault."""
@@ -299,8 +325,16 @@ class VaultService:
 
                 # 8. OPENROUTER
                 elif provider == "openrouter":
-                    url = (base_url or "https://openrouter.ai/api/v1").rstrip("/") + "/auth/key"
-                    res = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+                    clean_base = normalize_endpoint_url(base_url) or "https://openrouter.ai/api/v1"
+                    if "openrouter.ai" in clean_base.lower() and "/api/v1" not in clean_base:
+                        clean_base = clean_base.rstrip("/") + "/api/v1"
+                    url = clean_base if clean_base.endswith("/auth/key") else f"{clean_base}/auth/key"
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "HTTP-Referer": "http://localhost:8080",
+                        "X-Title": "SecLab Tactical Dashboard",
+                    }
+                    res = await client.get(url, headers=headers)
                     if res.status_code == 200:
                         data = res.json().get("data", {})
                         status = "online"
@@ -321,15 +355,45 @@ class VaultService:
 
                 # 9. CUSTOM LLM / HERMES PROXY LOCAL
                 elif provider in ("custom_llm", "hermes_local"):
-                    url = (base_url or "http://localhost:11434").rstrip("/") + "/v1/models"
-                    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-                    res = await client.get(url, headers=headers)
-                    if res.status_code == 200:
-                        status = "online"
-                        message = f"Endpoint local {url} respondiendo OK"
+                    clean_base = normalize_endpoint_url(base_url) or "http://localhost:11434"
+                    # Si apunta a openrouter, usar el probe de OpenRouter
+                    if "openrouter.ai" in clean_base.lower():
+                        if "/api/v1" not in clean_base:
+                            clean_base = clean_base.rstrip("/") + "/api/v1"
+                        url = clean_base if clean_base.endswith("/auth/key") else f"{clean_base}/auth/key"
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "HTTP-Referer": "http://localhost:8080",
+                            "X-Title": "SecLab Tactical Dashboard",
+                        }
+                        res = await client.get(url, headers=headers)
+                        if res.status_code == 200:
+                            data = res.json().get("data", {})
+                            status = "online"
+                            usage_val = data.get("usage", 0)
+                            message = f"OpenRouter activo (vía custom_llm). Uso: ${usage_val:.4f}"
+                            details = data
+                        elif res.status_code == 401:
+                            status = "error"
+                            message = "API key de OpenRouter inválida (401)"
+                        elif res.status_code == 429:
+                            status = "rate_limited"
+                            message = "OpenRouter cuota excedida (429)"
+                        else:
+                            status = "error"
+                            message = f"OpenRouter código {res.status_code}"
                     else:
-                        status = "error"
-                        message = f"Endpoint {url} retornó código {res.status_code}"
+                        url = clean_base if clean_base.endswith("/models") else (
+                            f"{clean_base}/models" if clean_base.endswith("/v1") else f"{clean_base}/v1/models"
+                        )
+                        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+                        res = await client.get(url, headers=headers)
+                        if res.status_code == 200:
+                            status = "online"
+                            message = f"Endpoint local {url} respondiendo OK"
+                        else:
+                            status = "error"
+                            message = f"Endpoint {url} retornó código {res.status_code}"
 
                 # 9. HACKTHEBOX
                 elif provider == "hackthebox":

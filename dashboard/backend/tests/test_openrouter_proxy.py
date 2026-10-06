@@ -205,3 +205,101 @@ class TestOpenRouterProxy(unittest.TestCase):
                 self.assertEqual(called_req.provider, "openrouter")
                 self.assertEqual(called_req.model, "deepseek/deepseek-r1")
                 self.assertIsNone(called_profile)
+
+    def test_normalize_endpoint_url(self):
+        from app.services.vault_service import normalize_endpoint_url
+        self.assertIsNone(normalize_endpoint_url(None))
+        self.assertIsNone(normalize_endpoint_url("   "))
+        self.assertEqual(
+            normalize_endpoint_url("  https://openrouter.ai/api/v1  "),
+            "https://openrouter.ai/api/v1",
+        )
+        self.assertEqual(
+            normalize_endpoint_url("openrouter.ai/api/v1/"),
+            "https://openrouter.ai/api/v1",
+        )
+        self.assertEqual(
+            normalize_endpoint_url("localhost:11434/v1/"),
+            "http://localhost:11434/v1",
+        )
+        self.assertEqual(
+            normalize_endpoint_url("http://127.0.0.1:8000"),
+            "http://127.0.0.1:8000",
+        )
+
+    def test_custom_llm_pointing_to_openrouter_probes_auth_key(self):
+        from app.models.schemas import ApiKeyCreate
+        mock_token = "mock" + "-fixture-token"
+        self.vault_service.upsert_key(
+            ApiKeyCreate(
+                provider="custom_llm",
+                label="Custom OpenRouter Endpoint",
+                service_type="llm",
+                api_key=mock_token,
+                base_url="   https://openrouter.ai/api/v1   ",
+                model_name="anthropic/claude-3.5-sonnet",
+                is_active=True,
+            )
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "data": {
+                "label": "SecLab-Key",
+                "usage": 0.0125,
+            }
+        }
+
+        async def run_test():
+            with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+                mock_get.return_value = mock_resp
+                health = await self.vault_service.check_health("custom_llm")
+                self.assertEqual(health.provider, "custom_llm")
+                self.assertEqual(health.status, "online")
+                self.assertIn("vía custom_llm", health.message)
+                self.assertIn("0.0125", health.message)
+
+                # Verificar URL limpia enviada
+                call_args, call_kwargs = mock_get.call_args
+                url = call_args[0]
+                self.assertEqual(url, "https://openrouter.ai/api/v1/auth/key")
+                headers = call_kwargs["headers"]
+                self.assertEqual(headers["Authorization"], f"Bearer {mock_token}")
+                self.assertEqual(headers["HTTP-Referer"], "http://localhost:8080")
+
+        import asyncio
+        asyncio.run(run_test())
+
+    def test_vault_update_key_modifies_endpoint_and_model(self):
+        from app.models.schemas import ApiKeyCreate, ApiKeyUpdate
+        mock_token = "mock" + "-fixture-token"
+        self.vault_service.upsert_key(
+            ApiKeyCreate(
+                provider="custom_llm",
+                label="Antiguo Label",
+                service_type="llm",
+                api_key=mock_token,
+                base_url="http://localhost:11434",
+                model_name="mistral",
+                is_active=True,
+            )
+        )
+
+        # Actualizar base_url y model_name
+        updated = self.vault_service.update_key(
+            "custom_llm",
+            ApiKeyUpdate(
+                label="Open Router Actualizado",
+                base_url="  https://openrouter.ai/api/v1  ",
+                model_name="anthropic/claude-3.5-sonnet",
+                is_active=True,
+            )
+        )
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated.label, "Open Router Actualizado")
+        self.assertEqual(updated.base_url, "https://openrouter.ai/api/v1")
+        self.assertEqual(updated.model_name, "anthropic/claude-3.5-sonnet")
+        self.assertEqual(updated.status, "untested")
+        self.assertIn("pendiente de verificación", updated.status_message)
+

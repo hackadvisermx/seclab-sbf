@@ -1567,6 +1567,51 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn('alias engguide="pt-eng guide"', plugin)
         self.assertIn("pt-guide", plugin)
 
+    def test_guide_web_server_binds_loopback_only_and_isolates_served_directory(self):
+        """Fase 106 / backlog A2: pt-guide --web no debe exponer /workspace
+        completo ni escuchar fuera de loopback."""
+        import os
+        import shutil
+        import tempfile
+
+        # El candidato instalado en /usr/local/share/seclab/guide/ debe
+        # preferirse sobre /workspace/guia.html, que ahora queda como
+        # ultimo recurso.
+        self.assertEqual(
+            guide_helper.GUIDE_HTML_CANDIDATES[0],
+            pathlib.Path("/usr/local/share/seclab/guide/index.html"),
+        )
+        self.assertEqual(guide_helper.GUIDE_HTML_CANDIDATES[-1], pathlib.Path("/workspace/guia.html"))
+
+        # Reproduce el escenario del bug original: un "workspace" con la
+        # guia junto a datos de un engagement (loot/evidence).
+        with tempfile.TemporaryDirectory() as workspace:
+            workspace_path = pathlib.Path(workspace)
+            guia = workspace_path / "guia.html"
+            guia.write_text("<html>guia</html>", encoding="utf-8")
+            loot_dir = workspace_path / "loot"
+            loot_dir.mkdir()
+            (loot_dir / "credenciales.txt").write_text("secreto-fixture", encoding="utf-8")
+
+            directorio_aislado, nombre_archivo = guide_helper.preparar_directorio_servido(guia)
+            try:
+                # El directorio servido contiene UNICAMENTE la copia de la
+                # guia: nada de loot/ ni de ningun otro archivo del
+                # "workspace" original llega ahi.
+                self.assertEqual(os.listdir(directorio_aislado), [nombre_archivo])
+                self.assertFalse((pathlib.Path(directorio_aislado) / "loot").exists())
+
+                httpd, puerto = guide_helper.construir_servidor(directorio_aislado, nombre_archivo, 0)
+                try:
+                    self.assertIsNotNone(httpd, "No se pudo construir el servidor de prueba")
+                    # Solo loopback: nunca 0.0.0.0 ni otra interfaz.
+                    self.assertEqual(httpd.socket.getsockname()[0], "127.0.0.1")
+                finally:
+                    if httpd:
+                        httpd.server_close()
+            finally:
+                shutil.rmtree(directorio_aislado, ignore_errors=True)
+
 
 class TestSecLabDashboardAndVault(unittest.TestCase):
     """Verifica la integridad del Dashboard Táctico, API Key Vault y pt-vault-bridge."""

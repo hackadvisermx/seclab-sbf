@@ -198,6 +198,55 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(result['summary']['live_hosts_new_count'], 0)
         self.assertEqual(self.recon.joinpath('live_hosts_new.txt').read_text(), '')
 
+    def test_resume_skips_completed_stages_and_retries_only_the_failed_one(self):
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        engine = self.make_pipeline()
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.side_effect = OSError('fallo simulado de red')
+            result = engine.run_all('all')
+        self.assertEqual(result['summary']['status'], 'failed')
+        self.assertEqual(result['summary']['resumable_from'], 'probe')
+        self.assertEqual(result['stage_results']['subdomains']['status'], 'completed')
+        checkpoint = json.loads(self.recon.joinpath('.checkpoint.json').read_text())
+        self.assertEqual(checkpoint['failed_stage'], 'probe')
+        self.assertIn('subdomains', checkpoint['completed'])
+
+        engine2 = self.make_pipeline()
+        with patch.object(pipeline.ReconPipeline, 'run_subdomain_enumeration') as subdomains_action, \
+             patch.object(pipeline, 'ProbeClient') as client2:
+            client2.return_value.probe.return_value = [{'url': 'https://10.0.0.1', 'status': 'response', 'target': '10.0.0.1'}]
+            result2 = engine2.run_all('all', resume=True)
+        subdomains_action.assert_not_called()
+        self.assertEqual(result2['summary']['status'], 'completed')
+        self.assertIsNone(result2['summary']['resumable_from'])
+        self.assertEqual(result2['stage_results']['subdomains']['subdomains'], ['10.0.0.1'])
+        self.assertFalse(self.recon.joinpath('.checkpoint.json').exists())
+
+    def test_resume_without_a_checkpoint_behaves_like_a_fresh_run(self):
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        result = self.make_pipeline().run_all('all', resume=True)
+        self.assertEqual(result['summary']['status'], 'completed')
+        self.assertEqual(result['stage_results']['subdomains']['subdomains'], ['10.0.0.1'])
+
+    def test_manual_single_stage_run_invalidates_the_checkpoint(self):
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        engine = self.make_pipeline()
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.side_effect = OSError('fallo simulado')
+            engine.run_all('all')
+        self.assertTrue(self.recon.joinpath('.checkpoint.json').is_file())
+
+        engine2 = self.make_pipeline()
+        with patch.object(pipeline, 'ProbeClient') as client2:
+            client2.return_value.probe.return_value = []
+            engine2.run_all('probe')
+        self.assertFalse(self.recon.joinpath('.checkpoint.json').exists())
+
+    def test_resume_flag_requires_the_default_stage(self):
+        result = subprocess.run([sys.executable, str(SCRIPTS / 'pt-recon-pipeline.py'), 'run', str(self.root), '--stage', 'probe', '--resume'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('--resume', result.stderr)
+
     def test_dry_run_does_not_modify_files_or_invent_results(self):
         self.recon.joinpath('subdomains.txt').write_text('example.test\nevil.test\n')
         self.root.joinpath('terminal.log').write_text('unchanged')

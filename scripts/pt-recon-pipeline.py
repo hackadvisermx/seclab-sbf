@@ -281,10 +281,12 @@ class ReconPipeline:
 
     def generate_summary(self, results):
         failed = any(result.get('status') == 'failed' for result in results.values())
+        resumable_from = next((name for name, result in results.items() if result.get('status') == 'failed'), None)
         summary = {'engagement': self.engagement_dir.name,
                    'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                    'in_scope_domains': self.get_in_scope_domains(), 'stages_executed': list(results),
                    'status': 'failed' if failed else 'simulated' if self.dry_run else 'completed',
+                   'resumable_from': resumable_from,
                    'dry_run': self.dry_run, 'operational_limits': self.limits,
                    'stage_results': results, 'tools_available': {name: bool(path) for name, path in self.tools.items()},
                    'metrics_source': 'none' if self.dry_run else 'previous_artifacts' if failed else 'artifacts',
@@ -302,21 +304,53 @@ class ReconPipeline:
             self._write_lines('summary.json', [json.dumps(summary, indent=2, ensure_ascii=False)])
         return summary
 
-    def run_all(self, stage='all'):
+    def _load_checkpoint(self):
+        path = self.recon_dir / '.checkpoint.json'
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data.get('completed'), dict) else None
+
+    def run_all(self, stage='all', resume=False):
         if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
             raise ScopeError('Etapa de reconocimiento no válida.')
         self.prepare_directories()
         results = {}
+        checkpoint_path = self.recon_dir / '.checkpoint.json'
+        if stage == 'all' and resume and not self.dry_run:
+            checkpoint = self._load_checkpoint()
+            if checkpoint:
+                results.update(checkpoint['completed'])
+        elif stage != 'all' and not self.dry_run:
+            # Una etapa manual rompe el orden que asume la cadena automática;
+            # el checkpoint de "all" ya no es fiable para reanudar.
+            checkpoint_path.unlink(missing_ok=True)
+        failed_stage = None
         for name, action in (('subdomains', self.run_subdomain_enumeration), ('probe', self.run_live_probing),
                              ('urls', self.run_url_harvesting), ('patterns', self.run_pattern_classification)):
             if stage not in ('all', name):
+                continue
+            if name in results and results[name].get('status') != 'failed':
                 continue
             try:
                 results[name] = action()
             except (StageError, ScopeError, OSError) as error:
                 results[name] = {'stage': name, 'status': 'failed', 'error': str(error)}
+                failed_stage = name
                 break
         summary = self.generate_summary(results)
+        if stage == 'all' and not self.dry_run:
+            if failed_stage:
+                completed = {name: result for name, result in results.items() if result.get('status') != 'failed'}
+                self._write_lines('.checkpoint.json', [json.dumps(
+                    {'completed': completed, 'failed_stage': failed_stage,
+                     'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat()},
+                    ensure_ascii=False)])
+            else:
+                checkpoint_path.unlink(missing_ok=True)
         if not self.dry_run:
             record_audit_mark(self.engagement_dir, f"RECON PIPELINE: {summary['status']}; etapas: {', '.join(results)}")
         return {'summary': summary, 'stage_results': results, 'dry_run': self.dry_run}
@@ -324,6 +358,10 @@ class ReconPipeline:
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Ejecuta el pipeline de reconocimiento."""
+    if args.resume and args.stage != 'all':
+        sys.stderr.write("Error: --resume solo aplica a la cadena completa (--stage all, el valor por defecto).\n")
+        return 1
+
     eng_dir = resolve_engagement_dir(args.target)
     if not eng_dir:
         sys.stderr.write(f"Error: No se pudo localizar el directorio del engagement: {args.target or 'actual'}\n")
@@ -331,7 +369,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     try:
         pipeline = ReconPipeline(eng_dir, dry_run=args.dry_run)
-        res = pipeline.run_all(stage=args.stage)
+        res = pipeline.run_all(stage=args.stage, resume=args.resume)
     except (ScopeError, OSError) as error:
         sys.stderr.write(f"Error: {error}\n")
         return 1
@@ -362,6 +400,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     for result in res["stage_results"].values():
         if result.get("error"):
             print("  Error: " + result["error"])
+    if summary.get("resumable_from") and not args.dry_run:
+        print(f"  Para reintentar solo desde la etapa fallida: pt-recon run {eng_dir.name} --resume\n")
     return 1 if summary["status"] == "failed" else 0
 
 
@@ -401,6 +441,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         pats = [f"{k}={v}" for k, v in summary["gf_patterns"].items() if v > 0]
         if pats:
             print(f"  Patrones de riesgo gf:    {', '.join(pats)}")
+    if summary.get("resumable_from"):
+        print(f"  Pendiente de reanudar en: {summary['resumable_from']} (pt-recon run {eng_dir.name} --resume)")
     print()
     return 0
 
@@ -465,6 +507,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Etapa específica a ejecutar (por defecto: all).",
     )
     p_run.add_argument("--dry-run", action="store_true", help="Simula la ejecución sin emitir tráfico de red.")
+    p_run.add_argument(
+        "--resume",
+        action="store_true",
+        help="Con --stage all (por defecto): omite las etapas que ya completaron en el intento anterior y continúa desde la que falló.",
+    )
     p_run.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado.")
     p_run.set_defaults(func=cmd_run)
 

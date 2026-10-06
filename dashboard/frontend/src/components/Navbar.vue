@@ -108,12 +108,20 @@
             <span v-else class="text-[10px]">📋</span>
           </button>
 
+          <!-- Backdrop para cerrar al hacer clic afuera -->
+          <div
+            v-if="vpnDropdownOpen"
+            @click="vpnDropdownOpen = false"
+            class="fixed inset-0 z-40 bg-black/20"
+            aria-hidden="true"
+          ></div>
+
           <!-- Dropdown Táctico VPN -->
           <div
             v-if="vpnDropdownOpen"
-            class="absolute left-0 sm:left-auto sm:right-0 mt-2 w-84 max-w-[calc(100vw-3rem)] rounded-lg bg-[#0e1628] border border-cyan-500/40 shadow-2xl p-4 z-50 text-slate-200 font-mono space-y-3"
+            class="absolute top-full left-0 sm:left-auto sm:right-0 mt-1.5 w-84 max-w-[calc(100vw-3rem)] rounded-lg bg-[#0e1628] border border-cyan-500/40 shadow-2xl p-4 z-50 text-slate-200 font-mono space-y-3"
           >
-            <!-- Header con Switch Estado -->
+            <!-- Header con Switch Estado y Botón Cerrar -->
             <div class="flex items-center justify-between border-b border-slate-800 pb-2">
               <span class="font-bold text-xs uppercase tracking-wider text-cyan-400 flex items-center space-x-1.5">
                 <span>🛡️</span>
@@ -134,6 +142,15 @@
                   :title="vpnActive ? 'Apagar túnel VPN' : 'Encender el perfil seleccionado'"
                 >
                   {{ vpnLoading ? 'PROCESANDO…' : (vpnActive ? 'APAGAR' : 'ENCENDER') }}
+                </button>
+                <button
+                  @click="vpnDropdownOpen = false"
+                  type="button"
+                  class="p-0.5 px-1.5 rounded-sm text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer text-xs"
+                  title="Cerrar panel VPN (Esc)"
+                  aria-label="Cerrar panel VPN"
+                >
+                  ✕
                 </button>
               </div>
             </div>
@@ -279,8 +296,18 @@
             </div>
 
             <!-- Footer rápido -->
-            <div class="text-[10px] text-slate-500 text-center pt-1 border-t border-slate-800">
-              CLI: <code class="text-cyan-400">vpntry</code> | <code class="text-amber-400">vpnhtb</code> | <code class="text-blue-400">vpncli</code>
+            <div class="text-[10px] text-slate-500 flex items-center justify-between pt-1 border-t border-slate-800">
+              <div>
+                CLI: <code class="text-cyan-400">vpntry</code> | <code class="text-amber-400">vpnhtb</code> | <code class="text-blue-400">vpncli</code>
+              </div>
+              <button
+                @click="vpnDropdownOpen = false"
+                type="button"
+                class="text-[10px] text-slate-400 hover:text-cyan-300 hover:underline cursor-pointer"
+                title="Cerrar panel VPN (Esc)"
+              >
+                Cerrar (Esc)
+              </button>
             </div>
           </div>
         </div>
@@ -546,15 +573,27 @@ async function handleDisconnectVpn() {
   }
 }
 
+function handleGlobalKeydown(e) {
+  if (e.key === 'Escape' && vpnDropdownOpen.value) {
+    vpnDropdownOpen.value = false
+  }
+}
+
 onMounted(() => {
   loadTelemetry()
   loadSavedCredentials()
   timer = setInterval(() => {
     if (!vpnLoading.value) loadTelemetry()
   }, 2000)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', handleGlobalKeydown)
+  }
 })
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', handleGlobalKeydown)
+  }
 })
 </script>

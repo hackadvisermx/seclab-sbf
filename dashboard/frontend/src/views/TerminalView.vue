@@ -9,7 +9,7 @@
           <span class="text-slate-500">•</span>
           <span class="text-slate-400">Usuario: tester</span>
           <span class="text-slate-500">•</span>
-          <span class="text-slate-400">Puerto :7681</span>
+          <span class="text-slate-400">Sesión única con el dashboard</span>
         </div>
         <h1 class="text-xl font-mono font-bold text-white flex items-center space-x-2">
           <span>💻 Terminal Táctico Web</span>
@@ -87,17 +87,11 @@
       </span>
     </div>
 
-    <!-- Banner de Autenticación y Estado ttyd -->
+    <!-- Banner de Sesión Única -->
     <div class="bg-cyan-950/30 border border-cyan-800/40 rounded-lg p-3 text-xs font-mono text-slate-300 flex flex-col md:flex-row md:items-center justify-between gap-2">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-cyan-400 font-bold">🔐 Credenciales Web:</span>
-        <span>Usuario: <code class="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded-sm">tester</code></span>
-        <span class="text-slate-500">•</span>
-        <span>Contraseña: la configurada para el laboratorio</span>
-      </div>
-      <div class="text-[11px] text-slate-400">
-        Si el navegador restringe autenticación en marcos, pulse
-        <button @click="openInNewTab" class="text-cyan-400 underline hover:text-cyan-300 font-bold cursor-pointer">↗ Nueva Pestaña</button> para iniciar sesión.
+        <span class="text-cyan-400 font-bold">🔐 Sesión Única:</span>
+        <span>La terminal usa tu sesión del dashboard; no vuelve a pedir contraseña por separado.</span>
       </div>
     </div>
 
@@ -170,8 +164,10 @@
           </div>
 
           <div class="space-y-1">
-            <span class="text-slate-400 font-bold block">2. Web Terminal (ttyd) Autenticación HTTP:</span>
+            <span class="text-slate-400 font-bold block">2. Web Terminal (ttyd), solo si se accede sin pasar por el dashboard:</span>
             <div class="p-2.5 bg-[#050811] rounded-sm border border-slate-800 space-y-1">
+              <div>Desde este dashboard ya no hace falta: la terminal integrada usa tu sesión actual.</div>
+              <div>Si entras directo al puerto 7681 (p. ej. por un túnel externo), sí pide su propia autenticación HTTP:</div>
               <div>Usuario: <code class="text-emerald-400">tester</code></div>
               <div>Password: <span class="text-slate-400">(Configurado en su archivo <code>.secrets/runtime/lab.env</code>)</span></div>
             </div>
@@ -208,11 +204,12 @@ const terminalFrame = ref(null)
 const showSshModal = ref(false)
 const copiedText = ref('')
 
-const terminalUrl = computed(() => {
-  const protocol = window.location.protocol
-  const hostname = window.location.hostname || 'localhost'
-  return `${protocol}//${hostname}:7681`
-})
+// Fase 114 / backlog A10: mismo origen que el dashboard (en vez de
+// apuntar directo a :7681) para que el navegador reutilice la cookie de
+// sesión ya existente en vez de pedir la autenticación HTTP Basic propia
+// de ttyd por separado. El backend inyecta esa autenticación del lado
+// del servidor (ver dashboard/backend/app/api/endpoints/terminal_proxy.py).
+const terminalUrl = computed(() => `${window.location.origin}/api/v1/terminal/`)
 
 const quickCommands = [
   { cmd: 'vpntry', icon: '🛡️', desc: 'Conectar VPN TryHackMe' },

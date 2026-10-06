@@ -184,6 +184,8 @@ Las plantillas y los proyectos nuevos usan estos valores conservadores. Los proy
 
 Los fallos de herramientas (ausencia, timeout o salida distinta de cero) detienen las etapas siguientes, devuelven código CLI 1 y marcan el trabajo **FALLIDO**. No se usan stdout parcial ni respuestas ficticias. Los archivos anteriores de la etapa fallida se conservan y el resumen avisa `metrics_source: previous_artifacts`; una ejecución puede haber actualizado etapas anteriores. `recon/probe_observations.jsonl` conserva respuestas y fallos del sondeo; `probe_discarded.txt` conserva los candidatos rechazados por alcance. Consultar `pt-recon status` no escribe archivos.
 
+Cuando `pt-recon run` (sin `--stage`, es decir la cadena completa) falla a mitad de camino, guarda un checkpoint (`recon/.checkpoint.json`, no versionado) con las etapas que ya completaron. `summary.json` expone `resumable_from` con el nombre de la etapa que falló; `pt-recon run --resume` reanuda solo desde ahí, sin repetir las etapas ya completadas ni sus consultas de red. `--resume` exige la cadena completa (no combina con `--stage`); al completarse sin fallos, el checkpoint se borra, así que la siguiente corrida completa vuelve a ser desde cero. Correr una etapa individual manualmente (el flujo documentado antes de esta función) invalida el checkpoint existente, porque rompe el orden que la cadena automática asume.
+
 Las regresiones se ejecutan con `make python-units-check` (incluye `scripts/verify/test_recon_safety.py`); `make dashboard-tests` prueba el runner instalado dentro de la imagen, sin red.
 
 ### 4.4. Modo CTF, Banderas y Botín (Loot)

@@ -383,6 +383,47 @@
         </div>
       </div>
 
+      <!-- Tabla de Resultados del Sondeo por Host (backlog A13) -->
+      <div v-if="sortedProbeResults.length" class="tactical-card space-y-3 font-mono">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <span class="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+            <span>📊 Resultados del Sondeo por Host</span>
+            <HelpTooltip label="Resultados del sondeo">Una fila por cada intento HTTP/HTTPS que realizó pt-recon (recon/probe_observations.jsonl). El sondeo solo lee cabeceras, no el cuerpo de la respuesta: no hay título de página que mostrar, solo código HTTP, dirección IP y estado del intento. Antes había que descargar este archivo desde Artefactos para verlo.</HelpTooltip>
+          </span>
+          <span class="text-[10px] text-slate-500">{{ sortedProbeResults.length }} filas · clic en una columna para ordenar</span>
+        </div>
+        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+          <table class="w-full text-xs">
+            <thead class="sticky top-0 bg-[#0d1322]">
+              <tr class="text-left text-slate-400 border-b border-slate-800">
+                <th
+                  v-for="col in PROBE_COLUMNS"
+                  :key="col[0]"
+                  @click="toggleProbeSort(col[0])"
+                  class="py-1.5 pr-3 cursor-pointer select-none hover:text-slate-200 whitespace-nowrap"
+                >
+                  {{ col[1] }}
+                  <span v-if="probeSortKey === col[0]">{{ probeSortDir === 'asc' ? '▲' : '▼' }}</span>
+                </th>
+                <th class="py-1.5 pr-3">Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, idx) in sortedProbeResults" :key="idx" class="border-b border-slate-900/60">
+                <td class="py-1.5 pr-3 break-all text-slate-200">{{ row.host }}</td>
+                <td class="py-1.5 pr-3 text-slate-400">{{ row.scheme || '—' }}</td>
+                <td class="py-1.5 pr-3 text-slate-400">{{ row.address || '—' }}</td>
+                <td class="py-1.5 pr-3" :class="httpStatusClass(row.httpStatus)">{{ row.httpStatus ?? '—' }}</td>
+                <td class="py-1.5 pr-3">
+                  <span class="px-1.5 py-0.5 rounded-sm text-[10px] font-bold border" :class="probeStatusMeta(row.status).class">{{ probeStatusMeta(row.status).label }}</span>
+                </td>
+                <td class="py-1.5 pr-3 text-slate-500 break-all">{{ row.detail || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Consola de Ejecución en Vivo & Descartados por Scope Guard -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono">
         <!-- Terminal Log en Vivo -->
@@ -1478,6 +1519,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { renderReport } from '../report-security'
 import { splitIpsAndCidrs } from '../scope-utils'
+import { normalizeProbeResults, sortProbeResults } from '../recon-results'
 import { api } from '../api'
 import DeleteProjectButton from '../components/DeleteProjectButton.vue'
 import HelpTooltip from '../components/HelpTooltip.vue'
@@ -1535,10 +1577,49 @@ const reconStatus = ref({
   },
   configured_domains: [],
   discarded_out_of_scope: [],
+  probe_results: [],
 })
 const reconStage = ref('all')
 const reconDryRun = ref(false)
 const reconLogContent = ref('')
+const probeSortKey = ref('host')
+const probeSortDir = ref('asc')
+const sortedProbeResults = computed(() => {
+  const normalized = normalizeProbeResults(reconStatus.value.probe_results)
+  return sortProbeResults(normalized, probeSortKey.value, probeSortDir.value)
+})
+function toggleProbeSort(key) {
+  if (probeSortKey.value === key) {
+    probeSortDir.value = probeSortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    probeSortKey.value = key
+    probeSortDir.value = 'asc'
+  }
+}
+const PROBE_COLUMNS = [
+  ['host', 'Host'],
+  ['scheme', 'Esquema'],
+  ['address', 'Dirección IP'],
+  ['httpStatus', 'Código HTTP'],
+  ['status', 'Estado'],
+]
+const PROBE_STATUS_META = {
+  response: { label: 'Respondió', class: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50' },
+  tls_untrusted: { label: 'TLS no confiable', class: 'bg-amber-950/80 text-amber-300 border-amber-500/50' },
+  connection_error: { label: 'Error de conexión', class: 'bg-rose-950/80 text-rose-300 border-rose-500/50' },
+  dns_error: { label: 'Error de DNS', class: 'bg-rose-950/80 text-rose-300 border-rose-500/50' },
+  blocked: { label: 'Bloqueado (Scope Guard)', class: 'bg-rose-950/80 text-rose-300 border-rose-500/50' },
+}
+function probeStatusMeta(status) {
+  return PROBE_STATUS_META[status] || { label: status || 'Desconocido', class: 'bg-slate-800 text-slate-300 border-slate-700' }
+}
+function httpStatusClass(code) {
+  if (code == null) return 'text-slate-500'
+  if (code < 300) return 'text-emerald-400 font-bold'
+  if (code < 400) return 'text-cyan-400 font-bold'
+  if (code < 500) return 'text-amber-400 font-bold'
+  return 'text-rose-400 font-bold'
+}
 const isStartingRecon = ref(false)
 const isCancellingRecon = ref(false)
 const reconActionMsg = ref('')

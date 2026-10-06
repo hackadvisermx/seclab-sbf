@@ -91,6 +91,7 @@ class ReconService:
         summary_path = recon_dir / "summary.json"
         log_path = recon_dir / "recon.log"
         discarded_path = recon_dir / "out_of_scope_discarded.txt"
+        probe_observations_path = recon_dir / "probe_observations.jsonl"
 
         # Leer resumen estructurado si existe
         summary: Dict[str, Any] = {
@@ -127,6 +128,21 @@ class ReconService:
             except Exception:
                 pass
 
+        # Resultados crudos del sondeo HTTP/HTTPS (una fila por intento host+esquema)
+        probe_results: List[Dict[str, Any]] = []
+        if probe_observations_path.is_file():
+            try:
+                for line in probe_observations_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        probe_results.append(json.loads(line))
+                    except ValueError:
+                        continue
+            except Exception:
+                pass
+
         job = self.store.get((engagement_type, engagement_id)) or {
             'status': 'idle', 'stage': None, 'dry_run': False,
             'started_at': None, 'finished_at': None, 'error': None,
@@ -157,6 +173,7 @@ class ReconService:
             "summary": summary,
             "configured_domains": in_scope_domains,
             "discarded_out_of_scope": discarded_items,
+            "probe_results": probe_results,
             "recent_logs": recent_logs,
             "has_recon_data": summary_path.is_file() or (recon_dir / "subdomains.txt").is_file(),
         }

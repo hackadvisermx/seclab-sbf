@@ -182,6 +182,25 @@ while True: time.sleep(.1)
                 self.service.delete_engagement('fixture')
             delete.assert_not_called()
 
+    def test_get_status_exposes_parsed_probe_results_and_skips_corrupt_lines(self):
+        recon_dir = self.target / 'recon'
+        recon_dir.mkdir()
+        rows = [
+            '{"host": "a.example.test", "url": "https://a.example.test", "address": "10.0.0.1", "status": "response", "http_status": 200, "location": null}',
+            'esto no es json',
+            '{"host": "b.example.test", "status": "blocked", "reason": "Endpoint excluido del alcance."}',
+        ]
+        (recon_dir / 'probe_observations.jsonl').write_text('\n'.join(rows) + '\n')
+        status = self.service.get_status('fixture')
+        self.assertEqual(len(status['probe_results']), 2)
+        self.assertEqual(status['probe_results'][0]['host'], 'a.example.test')
+        self.assertEqual(status['probe_results'][0]['http_status'], 200)
+        self.assertEqual(status['probe_results'][1]['status'], 'blocked')
+
+    def test_get_status_without_probe_observations_returns_empty_list(self):
+        status = self.service.get_status('fixture')
+        self.assertEqual(status['probe_results'], [])
+
     def test_cancel_api_missing_idle_and_type_validation(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient

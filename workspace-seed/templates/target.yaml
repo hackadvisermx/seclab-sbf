@@ -15,6 +15,15 @@ engagement:
   client: "Organización / Plataforma Objetivo"
   tos_reference: "Contrato firmado / Reglas de Bug Bounty / TOS"
   emergency_contact: "security@example.com"
+  # Modo de acceso e identidades para pruebas Evidence-First (RICH / PARTIAL / UNAUTH):
+  access_mode: "unauth" # rich (2+ identidades cruzadas para BOLA/IDOR) | partial (1 identidad) | unauth (pre-auth)
+  # identities:
+  #   - id: "tester_a"
+  #     role: "standard_user"
+  #     description: "Propietario legítimo de recursos de prueba"
+  #   - id: "tester_b"
+  #     role: "cross_user"
+  #     description: "Usuario estándar para pruebas de acceso no autorizado"
 
 network:
   vpn_profile: "none" # tryhackme | hackthebox | client | none

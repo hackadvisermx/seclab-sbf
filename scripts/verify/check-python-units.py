@@ -778,6 +778,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("ips", target_data["scope"]["in_scope"])
         self.assertIn("cidrs", target_data["scope"]["in_scope"])
         self.assertIn("operational_limits", target_data)
+        self.assertEqual(target_data.get("engagement", {}).get("access_mode"), "unauth")
 
         # 2. Validar normalizacion y extraccion de objetivos
         self.assertEqual(scope_validator.normalize_target("https://api.example.com/v1/auth"), "api.example.com")
@@ -843,8 +844,18 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertEqual(parsed["severity"], "HIGH")
         self.assertEqual(parsed["cvss_score"], 6.5)
         self.assertEqual(parsed["cwe"], "CWE-639")
+        self.assertEqual(parsed["status"], "PROVEN")
+        self.assertTrue(parsed["has_negative_control"])
+        self.assertTrue(parsed["has_bounded_proof"])
         self.assertTrue(parsed["has_poc"])
         self.assertTrue(parsed["has_remediation"])
+
+        # Validar normalizacion de estados
+        self.assertEqual(report_compiler.normalize_status("confirmado"), "PROVEN")
+        self.assertEqual(report_compiler.normalize_status("candidate"), "CANDIDATE")
+        self.assertEqual(report_compiler.normalize_status("falso positivo"), "DISPROVED")
+        self.assertEqual(report_compiler.normalize_status("mitigado"), "MITIGATED")
+        self.assertEqual(report_compiler.normalize_status("borrador"), "DRAFT")
 
         # 2. Validar compilación y linting en un engagement simulado
         import tempfile, shutil

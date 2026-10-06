@@ -109,14 +109,23 @@ Su objetivo es detectar fallos estructurales de seguridad en capas de servicios:
    - Probar con cabecera vacía o firma nula.
    - Enviar payload original re-enviado tras ventana de expiración (validar Replay Protection).
 
+### Paso 6: Validación de Credenciales Expuestas (Credential-Validation Gate)
+Inspirado en la disciplina de **Fase 07 / 2b de mdpsec**: si se descubren claves API, tokens JWT o secretos expuestos en JavaScript, respuestas o endpoints:
+1. **Prueba de Liveness Mínima**: Realizar una única petición ligera para confirmar que el secreto es válido en el proveedor (e.g. `GET /v1/me` o endpoint de introspección).
+2. **Control Negativo Obligatorio**: Repetir la misma petición utilizando un secreto falsificado o revocado (`Bearer token_falso_invalido`).
+   - Si la petición con secreto falso devuelve `200 OK` idéntico, el endpoint **NO valida** la autenticación: descartar el hallazgo de secreto expuesto.
+   - Solo si el control negativo devuelve `401 Unauthorized` o `403 Forbidden` se confirma que la clave es activa y requerida.
+3. **Escalamiento Acotado de Autoridad**: Probar únicamente el alcance de permisos propios del token (listar capacidades o consultar metadatos). **PROHIBIDO** acceder, modificar o enumerar datos masivos de otros tenants.
+
 ---
 
 ## 4. Validación de Hallazgos y Criterio Evidence-First
 
 Para catalogar una anomalía como hallazgo confirmado:
 1. **Evidencia Completa**: Capturar request y response crudos incluyendo cabeceras y códigos HTTP.
-2. **Demostración de Persistencia**: No basta con que la API retorne `200 OK`; se debe comprobar que el cambio surtió efecto en la lógica de negocio (e.g., el usuario ahora puede realizar acciones de administrador).
-3. **Descartar Comportamientos Cosméticos**: Si la API acepta el JSON pero ignora silenciosamente los campos no autorizados sin modificar el estado real, registrarlo como seguro y no levantar falsa alarma.
+2. **Control Negativo Demostrado**: Documentar el resultado de la petición de control con valor inválido para certificar la existencia de la barrera de seguridad vulnerada.
+3. **Demostración de Persistencia**: No basta con que la API retorne `200 OK`; se debe comprobar que el cambio surtió efecto en la lógica de negocio (e.g., el usuario ahora puede realizar acciones de administrador).
+4. **Descartar Comportamientos Cosméticos**: Si la API acepta el JSON pero ignora silenciosamente los campos no autorizados sin modificar el estado real, registrarlo como seguro y no levantar falsa alarma.
 
 ---
 
@@ -130,4 +139,4 @@ Para catalogar una anomalía como hallazgo confirmado:
    ```bash
    pt-finding new api-mass-assignment --title "Mass Assignment en /v1/users/me permite elevación a administrador" --severity high
    ```
-3. Completar los pasos de reproducción y la respuesta HTTP cruda en `evidence/api-mass-assignment.md`.
+3. Completar los pasos de reproducción, el control negativo y la respuesta HTTP cruda en `evidence/api-mass-assignment.md`.

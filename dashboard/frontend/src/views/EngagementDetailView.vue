@@ -461,12 +461,21 @@
         >
           <div>
             <div class="flex items-center justify-between">
-              <span
-                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold"
-                :class="getSeverityClass(f.frontmatter?.severity)"
-              >
-                {{ f.frontmatter?.severity || 'MEDIUM' }}
-              </span>
+              <div class="flex items-center space-x-2">
+                <span
+                  class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold"
+                  :class="getSeverityClass(f.frontmatter?.severity)"
+                >
+                  {{ f.frontmatter?.severity || 'MEDIUM' }}
+                </span>
+                <span
+                  v-if="f.frontmatter?.status"
+                  class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold border"
+                  :class="getFindingStatusClass(f.frontmatter?.status)"
+                >
+                  {{ f.frontmatter?.status }}
+                </span>
+              </div>
               <span class="text-xs font-mono text-cyan-400 font-bold">
                 CVSS: {{ f.frontmatter?.cvss_score || 'N/A' }}
               </span>
@@ -1287,7 +1296,7 @@
         </div>
 
         <form @submit.prevent="submitFinding" class="space-y-4">
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Slug / Identificador:</label>
               <input
@@ -1297,6 +1306,19 @@
                 placeholder="idor-user-profile, sqli-login"
                 class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-slate-300 mb-1">Estado de Evidencia:</label>
+              <select
+                v-model="findingForm.status"
+                class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
+              >
+                <option value="PROVEN">PROVEN (Demostrado / Control Negativo)</option>
+                <option value="CANDIDATE">CANDIDATE (Hipótesis por confirmar)</option>
+                <option value="DISPROVED">DISPROVED (Falso positivo refutado)</option>
+                <option value="MITIGATED">MITIGATED (Mitigado)</option>
+                <option value="DRAFT">DRAFT (Borrador)</option>
+              </select>
             </div>
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Activo Afectado:</label>
@@ -1570,6 +1592,7 @@ const showFindingModal = ref(false)
 const findingForm = ref({
   slug: '',
   title: '',
+  status: 'PROVEN',
   severity: 'MEDIUM',
   cvss_score: 5.3,
   cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N',
@@ -1686,6 +1709,28 @@ function getSeverityClass(sev) {
   }
 }
 
+function getFindingStatusClass(status) {
+  switch (String(status || '').toUpperCase()) {
+    case 'PROVEN':
+    case 'VERIFIED':
+    case 'CONFIRMADO':
+      return 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+    case 'CANDIDATE':
+      return 'bg-amber-950/80 text-amber-300 border-amber-500/50'
+    case 'DISPROVED':
+    case 'FALSO_POSITIVO':
+      return 'bg-purple-950/80 text-purple-300 border-purple-500/50'
+    case 'MITIGATED':
+    case 'MITIGADO':
+      return 'bg-cyan-950/80 text-cyan-300 border-cyan-500/50'
+    case 'DRAFT':
+    case 'BORRADOR':
+      return 'bg-slate-800 text-slate-300 border-slate-700'
+    default:
+      return 'bg-slate-800 text-slate-300 border-slate-700'
+  }
+}
+
 async function loadScope() {
   try {
     const data = await api.getScope(engId.value, engType.value)
@@ -1754,6 +1799,7 @@ function openNewFindingModal() {
   findingForm.value = {
     slug: '',
     title: '',
+    status: 'PROVEN',
     severity: 'MEDIUM',
     cvss_score: 5.3,
     cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N',
@@ -1772,6 +1818,7 @@ function editFinding(f) {
   findingForm.value = {
     slug: f.slug,
     title: f.frontmatter?.title || '',
+    status: f.frontmatter?.status || 'PROVEN',
     severity: f.frontmatter?.severity || 'MEDIUM',
     cvss_score: f.frontmatter?.cvss_score || 5.0,
     cvss_vector: f.frontmatter?.cvss_vector || '',

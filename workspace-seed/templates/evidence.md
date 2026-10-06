@@ -6,7 +6,7 @@ cvss_v31: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N"
 cvss_score: 6.5
 cwe: "CWE-639"
 asset: "https://api.example.com/v1/users/1234/profile"
-status: "Confirmado" # Confirmado | Mitigado | Falso Positivo
+status: "PROVEN" # PROVEN (Confirmado) | CANDIDATE (Prerrequisito pendiente) | DISPROVED (Falsificado/Descartado) | MITIGATED (Corregido)
 auditor: "tester"
 date: "YYYY-MM-DD"
 audit_log: "terminal.log"
@@ -32,6 +32,20 @@ Pasos deterministas y mínimos para reproducir el comportamiento vulnerable:
      -H "Authorization: Bearer <TOKEN_USUARIO_A>"
    ```
 3. Observar la respuesta no autorizada con datos confidenciales.
+
+## 2b. Control Negativo (Negative Control)
+Petición de control para certificar que el backend valida activamente el secreto/recurso y descartar falsos positivos por endpoints abiertos o respuestas 200 genéricas:
+```bash
+# Ejemplo: Petición sin token o con token alterado devuelve 401/403
+curl -i -s -X GET https://api.example.com/v1/users/9999/profile \
+  -H "Authorization: Bearer <TOKEN_INVALIDO>"
+# Resultado esperado del control: HTTP 401 Unauthorized
+```
+
+## 2c. Verificación Acotada No Destructiva (Bounded Testing Standard)
+- **Alcance acotado**: Máximo 1 a 3 peticiones de confirmación determinista sobre objetos ajenos.
+- **Sin denegación de servicio**: Respeto al rate-limit del engagement sin estrés de recursos ni fuerza bruta masiva.
+- **Reversión de estado**: No se ejecutaron modificaciones irreversibles ni borrado de datos.
 
 ## 3. Petición y Respuesta Crudas (Raw HTTP Evidence)
 

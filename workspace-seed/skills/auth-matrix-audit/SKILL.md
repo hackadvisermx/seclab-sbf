@@ -27,18 +27,21 @@ Su objetivo es detectar de forma reproducible:
 
 ## 2. Precondiciones y Guardrails (Compuerta de Control de Acceso)
 
-1. **Cuentas de Prueba Autorizadas**:
-   - Se debe contar con al menos dos cuentas de prueba creadas explícitamente para la evaluación:
-     - **Usuario A (Víctima simulada)**: Propietario de los objetos y recursos de prueba.
-     - **Usuario B (Atacante simulado)**: Usuario con privilegios estándar sin acceso legítimo a los datos de A.
-     - *(Opcional)* **Usuario Admin**: Para contrastar permisos de funciones restringidas.
-   - **PROHIBIDO**: Probar con identificadores de cuentas reales o usuarios de producción.
-2. **Alcance y Trazabilidad**:
-   - Todo endpoint evaluado debe estar registrado en `/workspace/engagements/<engagement>/scope.txt`.
-   - Iniciar registro forense si no está activo: `pt-log start <engagement>`.
-3. **Comportamiento Esperado vs Anomalía**:
-   - `401 Unauthorized` / `403 Forbidden`: Comportamiento seguro esperado.
-   - `200 OK` devolviendo datos privados de Usuario A al solicitar con token de Usuario B: **Hallazgo Crítico/Alto (IDOR confirmado)**.
+### A. Modos de Acceso según Identidades Disponibles (`target.yaml` / Vault)
+Inspirado en la taxonomía de **Fases 01 y 02 de mdpsec**, el auditor debe derivar su carril de ejecución según las identidades disponibles:
+- **Modo RICH (2+ identidades activas)**: Ejecución bidireccional cruzada (Usuario A accede a recursos de B, y Usuario B intenta acceder a recursos de A) más contraste con privilegios administrativos.
+- **Modo PARTIAL (1 sola identidad)**: Auditoría de escalamiento vertical (privilegios administrativos) y mutaciones sobre el estado propio.
+- **Modo UNAUTH (0 identidades / público)**: Enfoque exclusivo en vectores pre-autenticación (rutas expuestas sin token, manipulación de cabeceras, DOM XSS, Cache Deception y bypasses de autenticación).
+
+### B. Estándar de Prueba Acotada No Destructiva (Bounded Non-Destructive Testing)
+1. **Objetos Propios Primero**: Demostrar siempre la vulnerabilidad entre cuentas de prueba controladas por el auditor (Usuario A y Usuario B).
+2. **Máximo 3 Verificaciones Acotadas**: Si se evalúa si un ID ajeno o predecible es accesible, realizar a lo sumo **1 a 3 peticiones mínimas de lectura** para confirmar la falta de control sin exfiltrar lotes masivos de datos (no bulk dumps).
+3. **Reversión Obligatoria**: Si la prueba involucró una mutación (PUT/PATCH), restaurar inmediatamente el estado original o registrarlo en el log de auditoría.
+4. **Prohibición de Denegación de Servicio y Bloqueos**: No alterar contraseñas de terceros ni forzar bloqueos de cuenta.
+
+### C. Comportamiento Esperado vs Anomalía
+- `401 Unauthorized` / `403 Forbidden`: Comportamiento seguro esperado.
+- `200 OK` devolviendo datos privados de Usuario A al solicitar con token de Usuario B: **Hallazgo Crítico/Alto (IDOR confirmado)**.
 
 ---
 
@@ -72,8 +75,13 @@ curl -isk -X GET "${TARGET_URL}" \
   > "${EVIDENCE_DIR}/test_idor_ord1001.txt"
 ```
 
-3. **Validación**:
-   - Si la respuesta contiene datos confidenciales del Usuario A (nombre, dirección, datos financieros) con código `200 OK`, el IDOR está confirmado.
+3. **Validación y Control Negativo**:
+   - **Control Negativo Obligatorio**: Repetir la petición sin token de autorización o con un token manipulado/expirado:
+     ```bash
+     curl -isk -X GET "${TARGET_URL}" -H "Authorization: Bearer <TOKEN_INVALIDO>"
+     ```
+     Debe retornar `401 Unauthorized`. Si retorna `200 OK` idéntico, el endpoint no requiere autenticación (es público), lo cual reclasifica el hallazgo a exposición no autenticada en vez de IDOR.
+   - Si la petición con token de Usuario B devuelve `200 OK` con datos confidenciales de Usuario A, y la petición con token inválido devuelve `401/403`, el **IDOR está formalmente confirmado**.
 
 ### Paso 3: Prueba de Elevación Vertical (BFLA)
 Intentar invocar rutas o métodos administrativos desde el contexto de Usuario B o usuario anónimo:

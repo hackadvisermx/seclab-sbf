@@ -38,10 +38,15 @@ flowchart TD
     F -- Sí --> Accept["HALLAZGO VALIDADO: Generar Evidencia & Marca de Log"]
 ```
 
-### Reglas Estrictas Anti-Alucinación:
+### Reglas Estrictas Anti-Alucinación y Ciclo de Estados:
 1. **No a la especulación**: Nunca reportar "podría ser vulnerable a..." sin haber reproducido una prueba de concepto mínima y no destructiva.
-2. **Cabeceras faltantes no son críticas**: La ausencia de cabeceras como `X-Frame-Options` o `Content-Security-Policy` por sí solas NO constituyen una vulnerabilidad crítica/alta a menos que exista un vector demostrable (e.g. clickjacking con impacto financiero/sesión).
-3. **Errores 500 no son RCE ni SQLi**: Un error 500 por entrada malformada suele ser una excepción no controlada, no una inyección. Se requiere prueba de alteración de sintaxis o extracción de datos.
+2. **Ciclo de Estados del Hallazgo (Inspirado en Fases 06 y 09 de mdpsec)**:
+   - `CANDIDATE`: La primitiva funciona pero existe un prerrequisito no resuelto (ejemplo: se identificó un parámetro vulnerable pero falta un identificador de víctima no predecible). Se mantiene en investigación sin inflar el reporte final.
+   - `PROVEN`: Hallazgo completamente demostrado, con petición reproductora y control negativo validado.
+   - `DISPROVED`: Se probó la hipótesis y se demostró que el servidor o WAF neutraliza el ataque de forma segura.
+   - `BLOCKED`: La prueba no pudo completarse por restricciones ambientales externas (CAPTCHA, WAF agresivo).
+3. **Cabeceras faltantes no son críticas**: La ausencia de cabeceras como `X-Frame-Options` o `Content-Security-Policy` por sí solas NO constituyen una vulnerabilidad crítica/alta a menos que exista un vector demostrable (e.g. clickjacking con impacto financiero/sesión).
+4. **Errores 500 no son RCE ni SQLi**: Un error 500 por entrada malformada suele ser una excepción no controlada, no una inyección. Se requiere prueba de alteración de sintaxis o extracción de datos.
 
 ---
 

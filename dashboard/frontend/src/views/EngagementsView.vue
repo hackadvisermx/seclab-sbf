@@ -16,6 +16,14 @@
 
       <div class="flex flex-wrap gap-3">
       <router-link to="/trash" class="px-4 py-2 rounded-sm border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 font-mono text-sm">Papelera</router-link>
+      <router-link
+        to="/wizard"
+        class="px-4 py-2 rounded-sm border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/40 font-mono text-sm flex items-center justify-center space-x-2"
+        title="Flujo guiado paso a paso: crear, definir alcance y lanzar el primer recon"
+      >
+        <span>🧭</span>
+        <span>Asistente Guiado</span>
+      </router-link>
       <button
         @click="showModal = true"
         class="px-4 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-semibold text-sm transition-all shadow-md shadow-cyan-500/20 flex items-center justify-center space-x-2"

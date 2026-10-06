@@ -1037,6 +1037,10 @@ El orden propuesto después de la revisión integral del Docker es:
 
 El relevo operativo detallado vive en `docs/phase-89.md`, sección «Relevo de sesión». No aplicar el parche temporal antiguo sobre los avances de otra sesión. Mantener construcción local y publicación en Docker Hub; no añadir builds de imagen a CI ni usar GHCR. Las verificaciones de estas mejoras usan fixtures locales, sin repetir el reconocimiento de UAZ.
 
+### Fase 103 — Reparación de OpenRouter y catálogo de cuenta
+
+Implementación en `phase/103-openrouter-model-catalog`: resolver claves legadas `custom_llm` por hostname exacto, consultar `/models/user` con la clave actual, mostrar el catálogo completo con búsqueda en Chat/configuración/Copiloto y guardar el modelo base en el Vault. La salud de la clave no garantiza disponibilidad del modelo ni saldo. Validación con fixtures sin red y consulta de lectura al catálogo real; sin prompts reales ni despliegue. Ver `docs/phase-103.md`; merge sujeto a aprobación del owner.
+
 ## 20. Criterios de aceptación
 
 - Local funciona en macOS Docker Desktop.

@@ -3,7 +3,7 @@ import time
 from typing import Any, Dict, List, Optional
 import httpx
 from app.core.database import get_db_connection
-from app.services.vault_service import vault_service, normalize_endpoint_url
+from app.services.vault_service import vault_service, normalize_endpoint_url, is_openrouter_url, openrouter_base_url
 from app.models.schemas import ChatCompletionRequest, ChatCompletionResponse
 
 
@@ -64,25 +64,26 @@ class ProxyService:
         model_override: Optional[str] = None,
     ) -> ChatCompletionResponse:
         entry = vault_service.get_key_entry(provider.lower())
-        if not entry or not entry.get("api_key"):
+        if not entry or not entry.get("api_key") or not entry.get("is_active"):
             raise ValueError(f"Proveedor '{provider}' no configurado o sin API key.")
 
         api_key = entry["api_key"]
         base_url = entry.get("base_url")
         model = model_override or req.model or entry.get("model_name")
         start_time = time.time()
+        is_openrouter = False
 
         async with httpx.AsyncClient(timeout=45.0) as client:
             # 1. OPENAI o COMPATIBLE (incluyendo OPENROUTER y CUSTOM_LLM hacia OpenRouter)
             if provider in ("openai", "custom_llm", "local", "openrouter"):
                 clean_base = normalize_endpoint_url(base_url)
-                is_openrouter = (provider == "openrouter") or ("openrouter.ai" in (clean_base or "").lower())
+                is_openrouter = (provider == "openrouter") or is_openrouter_url(clean_base)
                 if is_openrouter:
-                    endpoint_base = clean_base or "https://openrouter.ai/api/v1"
-                    if "openrouter.ai" in endpoint_base.lower() and "/api/v1" not in endpoint_base:
-                        endpoint_base = endpoint_base.rstrip("/") + "/api/v1"
-                    url = endpoint_base if endpoint_base.endswith("/chat/completions") else f"{endpoint_base}/chat/completions"
-                    used_model = model or "anthropic/claude-3.5-sonnet"
+                    endpoint_base = openrouter_base_url(clean_base)
+                    url = f"{endpoint_base}/chat/completions"
+                    used_model = model
+                    if not used_model or "/" not in used_model:
+                        raise ValueError("Elige un modelo del catálogo de OpenRouter y guárdalo como predeterminado")
                     headers = {
                         "Authorization": f"Bearer {api_key}",
                         "HTTP-Referer": "http://localhost:8080",
@@ -103,10 +104,23 @@ class ProxyService:
                     payload["max_tokens"] = req.max_tokens
 
                 res = await client.post(url, json=payload, headers=headers)
-                if res.status_code != 200:
-                    raise RuntimeError(f"Error {res.status_code} desde {provider}: {res.text}")
-                data = res.json()
-                content = data["choices"][0]["message"]["content"]
+                try:
+                    data = res.json()
+                    if not isinstance(data, dict):
+                        raise ValueError()
+                except ValueError:
+                    raise RuntimeError(f"{provider} (HTTP {res.status_code}): respuesta inválida del proveedor") from None
+                if res.status_code != 200 or data.get("error"):
+                    error = data.get("error") or {}
+                    message = str(error.get("message") if isinstance(error, dict) else error)
+                    message = (message or "La consulta fue rechazada").replace(api_key, "[redacted]")[:500]
+                    raise RuntimeError(f"{provider} (HTTP {res.status_code}): {message}")
+                try:
+                    content = data["choices"][0]["message"]["content"]
+                    if not isinstance(content, str) or not content.strip():
+                        raise ValueError()
+                except (KeyError, IndexError, TypeError, ValueError):
+                    raise RuntimeError(f"{provider}: respuesta sin contenido de texto") from None
                 usage = data.get("usage")
                 total_tokens = usage.get("total_tokens", 0) if usage else 0
 
@@ -172,7 +186,7 @@ class ProxyService:
 
         latency = int((time.time() - start_time) * 1000)
         return ChatCompletionResponse(
-            provider=provider,
+            provider="openrouter" if is_openrouter else provider,
             model=used_model,
             content=content,
             latency_ms=latency,
@@ -200,7 +214,7 @@ class ProxyService:
                     candidates.append(("openrouter", req.model))
                 else:
                     custom_entry = vault_service.get_key_entry("custom_llm")
-                    if custom_entry and custom_entry.get("is_active") and "openrouter.ai" in (custom_entry.get("base_url") or "").lower():
+                    if custom_entry and custom_entry.get("is_active") and is_openrouter_url(custom_entry.get("base_url")):
                         candidates.append(("custom_llm", req.model))
 
             # Si aún no hay candidato, asociar el modelo a los proveedores LLM activos
@@ -215,7 +229,7 @@ class ProxyService:
             for prov, mod in PROFILE_DEFAULTS[profile]:
                 entry = vault_service.get_key_entry(prov)
                 if entry and entry.get("is_active"):
-                    effective_model = entry.get("model_name") or mod
+                    effective_model = entry.get("model_name") or (None if prov == "openrouter" or is_openrouter_url(entry.get("base_url")) else mod)
                     candidates.append((prov, effective_model))
 
         # 4. Fallback: listar todos los proveedores LLM activos

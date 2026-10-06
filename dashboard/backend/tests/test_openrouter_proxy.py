@@ -303,3 +303,127 @@ class TestOpenRouterProxy(unittest.TestCase):
         self.assertEqual(updated.status, "untested")
         self.assertIn("pendiente de verificación", updated.status_message)
 
+    def test_openrouter_request_resolves_when_stored_under_custom_llm(self):
+        from app.models.schemas import ApiKeyCreate
+        mock_token = "mock" + "-fixture-token"
+        # La clave fue guardada como 'custom_llm' con base_url de openrouter
+        self.vault_service.upsert_key(
+            ApiKeyCreate(
+                provider="custom_llm",
+                label="Open Router",
+                service_type="llm",
+                api_key=mock_token,
+                base_url="https://openrouter.ai/api/v1",
+                model_name="anthropic/claude-3.5-sonnet",
+                is_active=True,
+            )
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "Respuesta vía OpenRouter interoperable"}}],
+            "usage": {"total_tokens": 55},
+        }
+
+        # La petición explícitamente solicita provider="openrouter" (como hace ChatView.vue)
+        req = ChatCompletionRequest(
+            messages=[ChatMessage(role="user", content="Hola")],
+            provider="openrouter",
+            model="anthropic/claude-3.5-sonnet",
+        )
+
+        async def run_test():
+            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+                mock_post.return_value = mock_resp
+                res = await self.proxy_service.chat_completion(req)
+                self.assertEqual(res.provider, "openrouter")
+                self.assertEqual(res.content, "Respuesta vía OpenRouter interoperable")
+
+                # Verificar llamada
+                call_args, call_kwargs = mock_post.call_args
+                url = call_args[0]
+                self.assertEqual(url, "https://openrouter.ai/api/v1/chat/completions")
+                headers = call_kwargs["headers"]
+                self.assertEqual(headers["Authorization"], f"Bearer {mock_token}")
+                self.assertEqual(headers["HTTP-Referer"], "http://localhost:8080")
+
+        import asyncio
+        asyncio.run(run_test())
+
+
+    def test_user_catalog_is_authenticated_complete_and_uses_saved_key(self):
+        import asyncio
+        from app.models.schemas import ApiKeyCreate
+        self.vault_service.upsert_key(ApiKeyCreate(provider="custom_llm", label="Router", service_type="llm", api_key="fixture-token", base_url=" https://openrouter.ai/api/v1/chat/completions ", model_name="vendor/new"))
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"data": [{"id": f"vendor/model-{i}", "name": f"Model {i}"} for i in range(150)]}
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response) as get:
+            result = asyncio.run(self.vault_service.list_models("openrouter"))
+        self.assertEqual(len(result["models"]), 150)
+        self.assertEqual(result["default_model"], "vendor/new")
+        self.assertEqual(get.call_args.args[0], "https://openrouter.ai/api/v1/models/user")
+        self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer fixture-token")
+        self.assertNotIn("fixture-token", str(result))
+        self.assertEqual(self.vault_service.list_keys()[0].provider, "custom_llm")
+
+    def test_catalog_preview_does_not_store_key_or_change_default(self):
+        import asyncio
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"data": [{"id": "vendor/new", "name": "Nuevo"}]}
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response):
+            result = asyncio.run(self.vault_service.list_models("openrouter", "fixture-preview"))
+        self.assertEqual(result["models"][0]["id"], "vendor/new")
+        self.assertEqual(self.vault_service.list_keys(), [])
+
+    def test_catalog_rejects_misleading_hosts_before_sending_key(self):
+        import asyncio
+        from app.services.vault_service import is_openrouter_url
+        for url in ("https://openrouter.ai.evil.example", "https://evil.example/openrouter.ai", "http://openrouter.ai", "https://user@openrouter.ai"):
+            with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as get:
+                with self.assertRaises(ValueError):
+                    asyncio.run(self.vault_service.list_models("openrouter", "fixture-token", url))
+                get.assert_not_called()
+        self.assertFalse(is_openrouter_url("https://evil.example/openrouter.ai"))
+
+    def test_catalog_denied_or_malformed_does_not_show_public_presets(self):
+        import asyncio
+        for status, data in ((403, {}), (200, {"data": "invalid"})):
+            response = MagicMock(status_code=status)
+            response.json.return_value = data
+            with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response):
+                with self.assertRaises(RuntimeError):
+                    asyncio.run(self.vault_service.list_models("openrouter", "fixture-token"))
+
+    def test_local_label_does_not_alias_to_router_and_inactive_key_is_rejected(self):
+        import asyncio
+        from app.models.schemas import ApiKeyCreate, ApiKeyUpdate
+        self.vault_service.upsert_key(ApiKeyCreate(provider="custom_llm", label="Open Router", service_type="llm", api_key="fixture-token", base_url="http://localhost:11434/v1"))
+        self.assertIsNone(self.vault_service.get_key_entry("openrouter"))
+        self.vault_service.update_key("custom_llm", ApiKeyUpdate(base_url="https://openrouter.ai/api/v1", is_active=False))
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+            with self.assertRaises(ValueError):
+                asyncio.run(self.proxy_service._dispatch_single_provider("openrouter", ChatCompletionRequest(messages=[ChatMessage(role="user", content="Hola")], model="vendor/new")))
+            post.assert_not_called()
+
+    def test_openrouter_profile_never_sends_ollama_model(self):
+        import asyncio
+        from app.models.schemas import ApiKeyCreate
+        self.vault_service.upsert_key(ApiKeyCreate(provider="custom_llm", label="Router", service_type="llm", api_key="fixture-token", base_url="https://openrouter.ai/api/v1", model_name="llama3:latest"))
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+            with self.assertRaisesRegex(RuntimeError, "catálogo"):
+                asyncio.run(self.proxy_service.chat_completion(ChatCompletionRequest(messages=[ChatMessage(role="user", content="Hola")]), profile="quick"))
+            post.assert_not_called()
+
+    def test_embedded_upstream_error_and_empty_reply_are_reported_without_key(self):
+        import asyncio
+        from app.models.schemas import ApiKeyCreate
+        self.vault_service.upsert_key(ApiKeyCreate(provider="openrouter", label="Router", service_type="llm", api_key="fixture-token", model_name="vendor/new"))
+        req = ChatCompletionRequest(messages=[ChatMessage(role="user", content="Hola")], provider="openrouter")
+        for data, expected in (({"error": {"message": "saldo insuficiente fixture-token"}}, "saldo insuficiente"), ({"choices": [{"message": {"content": None}}]}, "sin contenido")):
+            response = MagicMock(status_code=200)
+            response.json.return_value = data
+            with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=response):
+                with self.assertRaisesRegex(RuntimeError, expected) as exc:
+                    asyncio.run(self.proxy_service.chat_completion(req))
+            self.assertNotIn("fixture-token", str(exc.exception))

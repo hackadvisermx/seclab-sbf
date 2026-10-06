@@ -107,24 +107,11 @@
               v-if="selectedProvider === 'openrouter'"
               v-model="selectedOpenRouterPreset"
               @change="onOpenRouterPresetChange"
-              class="flex-1 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-white focus:outline-hidden"
+              class="flex-1 min-w-0 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-white focus:outline-hidden"
             >
-              <optgroup label="⚡ Recomendados OpenRouter">
-                <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (Razonamiento & Precisión)</option>
-                <option value="deepseek/deepseek-chat">DeepSeek V3 (Código & Tareas)</option>
-                <option value="deepseek/deepseek-r1">DeepSeek R1 (Razonamiento Profundo)</option>
-                <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (Open Weights)</option>
-                <option value="openai/gpt-4o">GPT-4o (Omnimodal)</option>
-                <option value="openai/gpt-4o-mini">GPT-4o Mini (Ultrarrápido)</option>
-              </optgroup>
-              <optgroup label="🆓 Modelos Gratuitos (Free Tier)">
-                <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B Free (:free)</option>
-                <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Free (:free)</option>
-              </optgroup>
-              <optgroup label="🔬 Especializados">
-                <option value="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B Instruct</option>
-                <option value="mistralai/mistral-large-2411">Mistral Large (2411)</option>
-              </optgroup>
+              <option value="">Elegir modelo</option>
+              <option v-for="model in filteredModels" :key="model.id" :value="model.id">{{ model.name }} — {{ model.id }}</option>
+              <option v-if="selectedOpenRouterPreset && selectedOpenRouterPreset !== 'custom' && !filteredModels.some(m => m.id === selectedOpenRouterPreset)" :value="selectedOpenRouterPreset">{{ selectedOpenRouterPreset }} (selección actual)</option>
               <option value="custom">✏️ Personalizado (Escribir Slug)</option>
             </select>
 
@@ -134,8 +121,14 @@
               v-model="customModelName"
               type="text"
               :placeholder="selectedProvider === 'openrouter' ? 'ej. deepseek/deepseek-r1' : 'ej. gpt-4o, claude-3-5-sonnet'"
-              class="flex-1 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-white focus:outline-hidden"
+              class="flex-1 min-w-0 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-white focus:outline-hidden"
             />
+          </div>
+          <div v-if="selectedProvider === 'openrouter'" class="mt-2 space-y-1">
+            <input v-model="modelSearch" aria-label="Buscar modelos" placeholder="Buscar por nombre o ID" class="w-full bg-[#070b14] border border-slate-700 px-2 py-1 text-sm" />
+            <button type="button" @click="loadModels" :disabled="modelsLoading" class="text-xs text-cyan-300">{{ modelsLoading ? 'Consultando…' : 'Actualizar catálogo' }}</button>
+            <p class="text-xs text-slate-400">{{ availableModels.length }} modelos de tu cuenta. El saldo, los límites y la disponibilidad se comprueban al consultar.</p>
+            <p v-if="modelsError" role="alert" class="text-xs text-red-400">{{ modelsError }}</p>
           </div>
         </div>
 
@@ -288,7 +281,7 @@
             @keydown.enter.exact.prevent="sendMessage"
             rows="2"
             placeholder="Escribe tu consulta al modelo... (Enter para enviar, Shift+Enter para salto de línea)"
-            class="flex-1 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-lg px-4 py-2.5 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-hidden resize-none"
+            class="flex-1 min-w-0 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-lg px-4 py-2.5 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-hidden resize-none"
             :disabled="isThinking"
           ></textarea>
           <button
@@ -320,13 +313,38 @@ const copiedIndex = ref(null)
 const notificationMsg = ref('')
 
 const selectedProvider = ref('openrouter')
-const selectedOpenRouterPreset = ref('anthropic/claude-3.5-sonnet')
+const selectedOpenRouterPreset = ref('')
 const customModelName = ref('')
 const selectedPersona = ref('red-team')
 const temperature = ref(0.2)
 
 const vaultKeys = ref([])
 const isLoadingKeys = ref(true)
+
+const availableModels = ref([])
+const modelSearch = ref('')
+const modelsLoading = ref(false)
+const modelsError = ref('')
+const filteredModels = computed(() => availableModels.value.filter(m => `${m.name} ${m.id}`.toLowerCase().includes(modelSearch.value.toLowerCase())))
+const openRouterKey = computed(() => vaultKeys.value.find(k => k.provider === 'openrouter' && k.is_active) || vaultKeys.value.find(k => k.provider === 'custom_llm' && k.is_active && isOpenRouter(k.base_url)))
+function isOpenRouter(url) {
+  try { return ['openrouter.ai', 'eu.openrouter.ai'].includes(new URL(url?.trim().includes('://') ? url.trim() : `https://${url?.trim()}`).hostname) } catch { return false }
+}
+async function loadModels() {
+  modelsLoading.value = true
+  modelsError.value = ''
+  try {
+    const catalog = await api.getProviderModels(openRouterKey.value?.provider || 'openrouter')
+    availableModels.value = catalog.models
+    const preferred = catalog.default_model
+    if (!availableModels.value.some(m => m.id === selectedOpenRouterPreset.value)) {
+      selectedOpenRouterPreset.value = availableModels.value.some(m => m.id === preferred) ? preferred : ''
+    }
+  } catch (err) {
+    availableModels.value = []
+    modelsError.value = err.message
+  } finally { modelsLoading.value = false }
+}
 
 const quickPrompts = [
   '¿Cómo validar un IDOR con control negativo según Evidence-First?',
@@ -346,7 +364,7 @@ const PERSONA_PROMPTS = {
 const effectiveModel = computed(() => {
   if (selectedProvider.value === 'openrouter') {
     if (selectedOpenRouterPreset.value === 'custom') {
-      return customModelName.value.trim() || 'anthropic/claude-3.5-sonnet'
+      return customModelName.value.trim()
     }
     return selectedOpenRouterPreset.value
   }
@@ -358,12 +376,14 @@ const effectiveModelDisplay = computed(() => {
 })
 
 const hasActiveKey = computed(() => {
-  return vaultKeys.value.some(k => k.service_type === 'llm' && k.is_active)
+  return selectedProvider.value === 'openrouter' ? !!openRouterKey.value : vaultKeys.value.some(k => k.provider === selectedProvider.value && k.service_type === 'llm' && k.is_active)
 })
 
 function onProviderChange() {
+  if (selectedProvider.value === 'custom_llm' && openRouterKey.value?.provider === 'custom_llm') selectedProvider.value = 'openrouter'
   if (selectedProvider.value === 'openrouter') {
-    selectedOpenRouterPreset.value = 'anthropic/claude-3.5-sonnet'
+    selectedOpenRouterPreset.value = openRouterKey.value?.model_name || ''
+    loadModels()
   } else if (selectedProvider.value === 'openai') {
     customModelName.value = 'gpt-4o'
   } else if (selectedProvider.value === 'anthropic') {
@@ -478,7 +498,12 @@ function sendQuickPrompt(prompt) {
 
 async function sendMessage() {
   if (!inputMessage.value.trim() || isThinking.value) return
+  if (!hasActiveKey.value || !effectiveModel.value) {
+    notificationMsg.value = 'Configura una clave activa y elige un modelo antes de enviar.'
+    return
+  }
 
+  isThinking.value = true
   const userText = inputMessage.value.trim()
   inputMessage.value = ''
   const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -491,7 +516,6 @@ async function sendMessage() {
 
   persistChat()
   await scrollToBottom()
-  isThinking.value = true
 
   try {
     // Construir historial de mensajes incluyendo instrucción de sistema
@@ -507,8 +531,8 @@ async function sendMessage() {
 
     const res = await api.proxyChat(
       payloadMessages,
-      selectedProvider.value,
-      effectiveModel.value,
+      selectedProvider.value === 'openrouter' ? (openRouterKey.value?.provider || 'openrouter') : selectedProvider.value,
+      effectiveModel.value || null,
       null,
       temperature.value
     )
@@ -547,6 +571,11 @@ onMounted(async () => {
   loadPreferences()
   try {
     vaultKeys.value = await api.getVaultKeys()
+    if (selectedProvider.value === 'custom_llm' && openRouterKey.value?.provider === 'custom_llm') selectedProvider.value = 'openrouter'
+    if (selectedProvider.value === 'openrouter' && openRouterKey.value) {
+      selectedOpenRouterPreset.value = openRouterKey.value.model_name || selectedOpenRouterPreset.value
+      await loadModels()
+    }
   } catch {
     vaultKeys.value = []
   } finally {

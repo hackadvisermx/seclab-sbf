@@ -378,27 +378,20 @@
             </div>
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Modelo Inicial / Predeterminado:</label>
-              <div v-if="keyForm.provider === 'openrouter'" class="space-y-1.5">
+              <div v-if="formIsOpenRouter" class="space-y-1.5">
                 <select
                   @change="keyForm.model_name = $event.target.value"
                   :value="keyForm.model_name"
                   class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-2 py-1 text-xs font-mono text-slate-100 focus:outline-hidden"
                 >
-                  <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (Recomendado)</option>
-                  <option value="deepseek/deepseek-chat">DeepSeek V3 (Código & Tareas)</option>
-                  <option value="deepseek/deepseek-r1">DeepSeek R1 (Razonamiento)</option>
-                  <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
-                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (:free)</option>
-                  <option value="openai/gpt-4o">GPT-4o Omnimodal</option>
-                  <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
-                  <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (:free)</option>
+                  <option value="">Elegir modelo base</option>
+                  <option v-for="model in filteredFormModels" :key="model.id" :value="model.id">{{ model.name }} — {{ model.id }}</option>
+                  <option v-if="keyForm.model_name && !filteredFormModels.some(m => m.id === keyForm.model_name)" :value="keyForm.model_name">{{ keyForm.model_name }} (selección actual)</option>
                 </select>
-                <input
-                  v-model="keyForm.model_name"
-                  type="text"
-                  placeholder="anthropic/claude-3.5-sonnet"
-                  class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
-                />
+                <input v-model="formModelSearch" aria-label="Buscar modelos" placeholder="Buscar por nombre o ID" class="w-full bg-[#070b14] border border-slate-700 px-2 py-1 text-xs" />
+                <button type="button" @click="loadFormModels" :disabled="formModelsLoading" class="text-xs text-cyan-300">{{ formModelsLoading ? 'Consultando…' : 'Consultar modelos con esta clave' }}</button>
+                <p class="text-xs text-slate-400">{{ formModels.length }} modelos. La consulta no guarda la clave. El modelo base se guarda al confirmar.</p>
+                <p v-if="formModelsError" role="alert" class="text-xs text-red-400">{{ formModelsError }}</p>
               </div>
               <input
                 v-else
@@ -444,7 +437,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '../api'
 
 const keys = ref([])
@@ -469,6 +462,35 @@ const keyForm = ref({
   model_name: '',
   is_active: true,
 })
+
+const formModels = ref([])
+const formModelSearch = ref('')
+const formModelsLoading = ref(false)
+const formModelsError = ref('')
+const formIsOpenRouter = computed(() => {
+  if (keyForm.value.provider === 'openrouter') return true
+  try { return keyForm.value.provider === 'custom_llm' && ['openrouter.ai', 'eu.openrouter.ai'].includes(new URL(keyForm.value.base_url.trim().includes('://') ? keyForm.value.base_url.trim() : `https://${keyForm.value.base_url.trim()}`).hostname) } catch { return false }
+})
+const filteredFormModels = computed(() => formModels.value.filter(m => `${m.name} ${m.id}`.toLowerCase().includes(formModelSearch.value.toLowerCase())))
+let modelRequest = 0
+watch(() => [keyForm.value.provider, keyForm.value.api_key, keyForm.value.base_url], () => {
+  modelRequest++
+  formModels.value = []
+  formModelsError.value = ''
+  formModelsLoading.value = false
+})
+async function loadFormModels() {
+  const currentRequest = ++modelRequest
+  formModelsLoading.value = true
+  formModelsError.value = ''
+  try {
+    const catalog = await api.previewProviderModels({ provider: keyForm.value.provider, base_url: keyForm.value.base_url || null, api_key: keyForm.value.api_key.trim() || null })
+    if (currentRequest !== modelRequest) return
+    formModels.value = catalog.models
+    if (!formModels.value.some(m => m.id === keyForm.value.model_name)) keyForm.value.model_name = catalog.default_model || ''
+  } catch (err) { if (currentRequest === modelRequest) formModelsError.value = err.message }
+  finally { if (currentRequest === modelRequest) formModelsLoading.value = false }
+}
 
 // Proxy Test
 const proxyPromptInput = ref('Resume en 2 viñetas los beneficios del aislamiento con Tailscale en un laboratorio de pentesting.')
@@ -543,7 +565,7 @@ function onProviderSelect() {
 
   if (p === 'openrouter') {
     keyForm.value.base_url = 'https://openrouter.ai/api/v1'
-    keyForm.value.model_name = 'anthropic/claude-3.5-sonnet'
+    keyForm.value.model_name = ''
   }
 }
 
@@ -606,6 +628,9 @@ async function loadProxyHistory() {
 
 async function submitKey() {
   try {
+    if (formIsOpenRouter.value && !formModels.value.some(m => m.id === keyForm.value.model_name)) {
+      throw new Error('Consulta el catálogo y elige un modelo base disponible antes de guardar')
+    }
     if (isEditing.value && editingProvider.value) {
       const payload = {
         label: keyForm.value.label,

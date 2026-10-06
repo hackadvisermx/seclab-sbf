@@ -43,9 +43,9 @@ def list_skills():
             description = ""
             try:
                 for line in skill_md.read_text(encoding="utf-8").splitlines():
-                    if line.startswith("# "):
+                    if line.startswith("# ") and title == skill_path.name:
                         title = line.replace("# ", "").strip()
-                    elif line.startswith("description:") or line.startswith("> "):
+                    elif (line.startswith("description:") or line.startswith("> ")) and not description:
                         description = line.replace("description:", "").replace("> ", "").strip()
             except Exception:
                 pass

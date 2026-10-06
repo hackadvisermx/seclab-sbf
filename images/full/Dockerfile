@@ -890,6 +890,10 @@ RUN ln -sf /usr/local/share/seclab/guide/index.html /usr/local/share/seclab/guid
   && chmod -R 0555 /usr/local/share/seclab/guide \
   && chmod 0555 /usr/local/bin/lab-entrypoint /usr/local/bin/ttyd-as-tester /usr/local/bin/ttyd-as-tester-shell /usr/local/bin/vpn-manager /usr/local/bin/vpn-control /usr/local/bin/pt-vpn-ip /usr/local/bin/pt-forward /usr/local/bin/lab-healthcheck /usr/local/bin/pt-scope-validator /usr/local/bin/pt-report-compiler /usr/local/bin/pt-agent-context /usr/local/bin/pt-engagement-packer /usr/local/bin/pt-recon-pipeline /usr/local/bin/pt-audit-checklist /usr/local/bin/pt-next /usr/local/bin/pt-guide
 
+COPY skills/ /usr/local/share/seclab/skills/
+COPY workspace-seed/templates/ /usr/local/share/seclab/templates/
+RUN chmod -R 0555 /usr/local/share/seclab/skills /usr/local/share/seclab/templates
+
 # Workspace de tester. En local esto se monta como volumen con nombre, y un
 # volumen nuevo toma como dueño el directorio de la imagen: si /workspace
 # aqui fuera de root, el volumen naceria sin permiso de escritura para

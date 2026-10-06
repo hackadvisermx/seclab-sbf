@@ -10,7 +10,7 @@ import sys
 BASE_FILES = ('images/base/Dockerfile', 'scripts/entrypoint/base-entrypoint.sh',
               'scripts/health/base-healthcheck.sh')
 FULL_DIRS = ('images', 'scripts', 'shell', 'security', 'supply-chain',
-             'workspace-seed', 'dashboard/backend', 'dashboard/frontend')
+             'skills', 'workspace-seed', 'dashboard/backend', 'dashboard/frontend')
 FULL_FILES = ('Makefile', '.dockerignore', '.tmux.conf')
 EXCLUDED_DIRS = {'__pycache__', 'node_modules', '.venv', '.git'}
 EXCLUDED_ROOTS = ('dashboard/frontend/dist', 'dashboard/backend/data')

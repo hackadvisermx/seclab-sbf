@@ -733,6 +733,14 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertTrue(seed_skill_md.is_file(), f"Skill no reflejada en workspace-seed: {skill_name}")
             self.assertEqual(content, seed_skill_md.read_text(encoding="utf-8"), f"Discrepancia de contenido en workspace-seed para {skill_name}")
 
+            if skill_name == "api-security-audit":
+                # Fase 111 / backlog A7: el default real de
+                # operational_limits.max_requests_per_second es 1 (ver
+                # scripts/seclab_recon_probe.py y
+                # workspace-seed/templates/target.yaml), no 20.
+                self.assertNotIn("<= 20 req/s", content, "La skill sigue citando el default erroneo de 20 req/s")
+                self.assertIn("<= 1 req/s", content, "La skill debe citar el default real (1 req/s)")
+
         # Validar existencia del helper interactivo pt-skills y selector de prompts en el plugin Zsh
         plugin_file = REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh"
         self.assertTrue(plugin_file.is_file())

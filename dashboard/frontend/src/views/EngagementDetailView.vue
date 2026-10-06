@@ -180,11 +180,11 @@
             </h3>
             <div class="flex justify-between py-1 border-b border-slate-800/60">
               <span class="text-slate-400">Peticiones / seg:</span>
-              <span class="text-cyan-300">{{ scopeData.operational_limits?.max_requests_per_second || 20 }} req/s</span>
+              <span class="text-cyan-300">{{ scopeData.operational_limits?.max_requests_per_second || 1 }} req/s</span>
             </div>
             <div class="flex justify-between py-1 border-b border-slate-800/60">
               <span class="text-slate-400">Hilos concurrentes:</span>
-              <span class="text-cyan-300">{{ scopeData.operational_limits?.max_parallel_threads || 5 }} threads</span>
+              <span class="text-cyan-300">{{ scopeData.operational_limits?.max_parallel_threads || 1 }} threads</span>
             </div>
             <div class="flex justify-between py-1">
               <span class="text-slate-400">DoS permitido:</span>

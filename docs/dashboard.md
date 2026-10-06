@@ -107,7 +107,7 @@ La suite en contenedor instalada `make dashboard-tests` pasa 37 pruebas (incluid
 
 ### Acceso del operador
 
-Al abrir `http://localhost:8080`, inicia sesión como **tester** con la contraseña configurada en `TTYD_PASSWORD`. Se puede definir una contraseña separada con `DASHBOARD_PASSWORD` en el archivo de secretos, sin valores por defecto. La sesión dura ocho horas; **Cerrar sesión** revoca el token y desconecta el streaming de logs. La cookie es HttpOnly y SameSite Strict, y usa Secure cuando se accede por HTTPS. Las descargas usan la misma sesión. Los tokens antiguos de localStorage dejan de funcionar.
+Al abrir `http://localhost:8080`, inicia sesión como **tester** con la contraseña configurada en `TTYD_PASSWORD`. Se puede definir una contraseña separada con `DASHBOARD_PASSWORD` en el archivo de secretos, sin valores por defecto. La sesión dura ocho horas; **Cerrar sesión** revoca el token, y toda petición posterior (incluida la actualización periódica de bitácoras) responde 401. La cookie es HttpOnly y SameSite Strict, y usa Secure cuando se accede por HTTPS. Las descargas usan la misma sesión. Los tokens antiguos de localStorage dejan de funcionar.
 
 La API, incluido el control VPN y la bóveda, responde 401 sin sesión. La entrada admite cinco intentos por minuto para el único operador. Los orígenes y hosts por defecto son localhost y 127.0.0.1 en el puerto 8080. Para un puerto distinto, configura `DASHBOARD_CORS_ORIGINS`; para un nombre privado, configura también `DASHBOARD_ALLOWED_HOSTS`, siempre sin comodines. El acceso remoto sigue pasando por un túnel del host sobre Tailscale. Estos ajustes no publican puertos.
 
@@ -117,7 +117,7 @@ La bóveda no regenera una clave inválida o ausente si ya contiene datos cifrad
 
 ## 4. Módulos y Capacidades Operativas
 
-La lista de auditorías y retos y la cabecera de cada proyecto incluyen **Eliminar**. La confirmación muestra el nombre del proyecto y avisa que se borrará su carpeta completa, incluidas notas, evidencias, botín, reportes y archivos, sin recuperación desde el dashboard. **Cancelar** conserva el proyecto. Tras eliminar, la tarjeta desaparece de la lista o se vuelve a la lista desde el detalle. Si el reconocimiento está en curso, se debe esperar a que termine. Un reto y una auditoría con el mismo nombre se eliminan de forma independiente.
+La lista de auditorías y retos y la cabecera de cada proyecto incluyen **Eliminar**. La confirmación muestra el nombre del proyecto y avisa que se moverá su carpeta completa, incluidas notas, evidencias, botín, reportes y archivos, a la papelera (ver [Papelera y recuperación de proyectos](#papelera-y-recuperación-de-proyectos) más abajo; no hay purga automática ni botón de borrado permanente en el dashboard). **Cancelar** conserva el proyecto. Tras eliminar, la tarjeta desaparece de la lista o se vuelve a la lista desde el detalle. Si el reconocimiento está en curso, se debe esperar a que termine. Un reto y una auditoría con el mismo nombre se eliminan de forma independiente.
 
 ### 4.1. Control Táctico de VPN (Encendido, Apagado y Credenciales)
 
@@ -159,7 +159,7 @@ Disponible en la pestaña **📡 Reconocimiento** de cada auditoría:
   - `urls`: Cosecha pasiva de URLs y endpoints JavaScript (`gau`).
   - `patterns`: Clasificación de parámetros y patrones de riesgo (`gf xss`, `sqli`, `ssrf`, `idor`).
 * **Modo Dry-Run**: Previsualiza el alcance y las etapas sin ejecutar herramientas ni emitir tráfico. El motor no modifica artefactos, `summary.json` ni `terminal.log`; el dashboard conserva únicamente la bitácora del lanzamiento. El estado es **SIMULADO** y las métricas existentes no se presentan como resultados nuevos.
-* **Consola en Vivo**: Streaming en tiempo real de `recon/recon.log`.
+* **Consola en Vivo**: Actualización periódica (sondeo REST cada 3 segundos vía `GET /api/v1/recon/{id}/log`, no WebSocket) de la bitácora del pipeline mientras el reconocimiento está en curso.
 * **Auditoría de Descartados**: Registro de cada objetivo bloqueado con su causa de exclusión.
 
 El validador `pt-scope` y el pipeline usan las mismas reglas en `seclab_scope.py`. Un dominio exacto autoriza solo ese nombre; `*.example.com` autoriza sus descendientes, pero no `example.com`. Para ambos, incluye las dos entradas. Las exclusiones tienen prioridad; los endpoints comparan esquema, host, puerto y límite de segmento de ruta. Un YAML inválido, duplicado o con claves de alcance desconocidas detiene el flujo. El sondeo de raíz requiere autorización del dominio o IP: una lista de endpoints aislados no autoriza explorar el resto del host.

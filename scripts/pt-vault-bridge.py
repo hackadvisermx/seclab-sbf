@@ -38,6 +38,7 @@ ENV_MAPPINGS = {
     "censys": ["CENSYS_API_KEY"],
     "virustotal": ["VT_API_KEY", "VIRUSTOTAL_API_KEY"],
     "chaos": ["CHAOS_KEY", "PDCP_API_KEY"],
+    "openrouter": ["OPENROUTER_API_KEY"],
     "openai": ["OPENAI_API_KEY"],
     "anthropic": ["ANTHROPIC_API_KEY"],
     "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],

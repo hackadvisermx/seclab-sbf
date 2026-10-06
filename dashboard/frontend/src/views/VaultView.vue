@@ -309,6 +309,7 @@
                 <option value="chaos">ProjectDiscovery / Chaos</option>
               </optgroup>
               <optgroup label="Modelos de Lenguaje (AI)">
+                <option value="openrouter">OpenRouter (100+ Modelos: Claude, DeepSeek, Llama)</option>
                 <option value="openai">OpenAI (GPT-4o / GPT-4o-mini)</option>
                 <option value="anthropic">Anthropic (Claude 3.5 Sonnet)</option>
                 <option value="gemini">Google Gemini (Gemini 2.0 Flash)</option>
@@ -345,19 +346,42 @@
             </p>
           </div>
 
-          <div v-if="keyForm.provider === 'custom_llm'" class="grid grid-cols-2 gap-3">
+          <div v-if="keyForm.provider === 'openrouter' || keyForm.provider === 'custom_llm'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Base URL (Endpoint):</label>
               <input
                 v-model="keyForm.base_url"
                 type="text"
-                placeholder="http://localhost:11434/v1"
+                :placeholder="keyForm.provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'http://localhost:11434/v1'"
                 class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
               />
             </div>
             <div>
-              <label class="block text-xs font-mono text-slate-300 mb-1">Nombre del Modelo:</label>
+              <label class="block text-xs font-mono text-slate-300 mb-1">Modelo Inicial / Predeterminado:</label>
+              <div v-if="keyForm.provider === 'openrouter'" class="space-y-1.5">
+                <select
+                  @change="keyForm.model_name = $event.target.value"
+                  :value="keyForm.model_name"
+                  class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-2 py-1 text-xs font-mono text-slate-100 focus:outline-hidden"
+                >
+                  <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (Recomendado)</option>
+                  <option value="deepseek/deepseek-chat">DeepSeek V3 (Código & Tareas)</option>
+                  <option value="deepseek/deepseek-r1">DeepSeek R1 (Razonamiento)</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (:free)</option>
+                  <option value="openai/gpt-4o">GPT-4o Omnimodal</option>
+                  <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+                  <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (:free)</option>
+                </select>
+                <input
+                  v-model="keyForm.model_name"
+                  type="text"
+                  placeholder="anthropic/claude-3.5-sonnet"
+                  class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
+                />
+              </div>
               <input
+                v-else
                 v-model="keyForm.model_name"
                 type="text"
                 placeholder="llama3:latest, mistral"
@@ -428,6 +452,7 @@ function getProviderIcon(provider) {
     case 'censys': return '🌐'
     case 'virustotal': return '🦠'
     case 'chaos': return '⚡'
+    case 'openrouter': return '🔀'
     case 'openai': return '🤖'
     case 'anthropic': return '🧠'
     case 'gemini': return '✨'
@@ -460,7 +485,7 @@ function onProviderSelect() {
   const p = keyForm.value.provider
   if (['shodan', 'censys', 'virustotal', 'chaos'].includes(p)) {
     keyForm.value.service_type = 'recon'
-  } else if (['openai', 'anthropic', 'gemini', 'custom_llm'].includes(p)) {
+  } else if (['openrouter', 'openai', 'anthropic', 'gemini', 'custom_llm'].includes(p)) {
     keyForm.value.service_type = 'llm'
   } else {
     keyForm.value.service_type = 'platform'
@@ -471,6 +496,7 @@ function onProviderSelect() {
     censys: 'Censys Search Token',
     virustotal: 'VirusTotal v3 Key',
     chaos: 'ProjectDiscovery Chaos Key',
+    openrouter: 'OpenRouter API Key',
     openai: 'OpenAI API Key',
     anthropic: 'Anthropic Claude Key',
     gemini: 'Google Gemini Key',
@@ -479,6 +505,11 @@ function onProviderSelect() {
     tryhackme: 'TryHackMe Key',
   }
   keyForm.value.label = defaultLabels[p] || p
+
+  if (p === 'openrouter') {
+    keyForm.value.base_url = 'https://openrouter.ai/api/v1'
+    keyForm.value.model_name = 'anthropic/claude-3.5-sonnet'
+  }
 }
 
 function openAddModal() {

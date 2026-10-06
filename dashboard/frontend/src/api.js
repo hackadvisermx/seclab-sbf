@@ -55,9 +55,12 @@ export const api = {
   testVaultKey: (provider) => request(`/vault/${provider}/test`, { method: 'POST' }),
 
   // Tactical Proxy Gateway
-  proxyChat: (messages, provider = null, model = null, profile = null) => {
+  proxyChat: (messages, provider = null, model = null, profile = null, temperature = 0.2) => {
     const qs = profile ? `?profile=${profile}` : ''
-    return request(`/proxy/ai/chat${qs}`, { method: 'POST', body: JSON.stringify({ messages, provider, model }) })
+    const payload = { messages, temperature }
+    if (provider) payload.provider = provider
+    if (model) payload.model = model
+    return request(`/proxy/ai/chat${qs}`, { method: 'POST', body: JSON.stringify(payload) })
   },
   getProxyStats: () => request('/proxy/stats'),
   getProxyHistory: (limit = 20) => request(`/proxy/history?limit=${limit}`),

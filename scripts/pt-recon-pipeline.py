@@ -17,8 +17,10 @@ import os
 import pathlib
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import urllib.request
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlsplit
 
@@ -122,6 +124,29 @@ def record_audit_mark(engagement_dir: pathlib.Path, mark_text: str) -> None:
                     f.write(mark_line)
         except Exception:
             pass
+
+
+def send_notification(title: str, message: str, level: str = 'info') -> None:
+    """Notificación opcional por webhook, apagada por defecto (reutiliza el patrón de
+    scripts/host/notify.sh pero para uso dentro del contenedor). Sin SECLAB_NOTIFY_WEBHOOK
+    no hace nada; con ella, un POST JSON compatible con Slack/Discord/webhook genérico.
+    Nunca bloquea ni interrumpe al llamador: cualquier fallo de red o configuración
+    se ignora en silencio, igual que notify.sh.
+    """
+    webhook = os.environ.get('SECLAB_NOTIFY_WEBHOOK', '').strip()
+    if not webhook:
+        return
+    try:
+        hostname = socket.gethostname()
+    except OSError:
+        hostname = 'seclab-lab'
+    text = f'*[{level}] {title}* ({hostname})\n{message}'
+    payload = json.dumps({'username': 'SecLab Alert', 'text': text, 'content': text}).encode('utf-8')
+    request = urllib.request.Request(webhook, data=payload, headers={'Content-Type': 'application/json'}, method='POST')
+    try:
+        urllib.request.urlopen(request, timeout=10).close()
+    except Exception:
+        pass
 
 
 class StageError(RuntimeError):
@@ -377,6 +402,12 @@ class ReconPipeline:
                 checkpoint_path.unlink(missing_ok=True)
         if not self.dry_run:
             record_audit_mark(self.engagement_dir, f"RECON PIPELINE: {summary['status']}; etapas: {', '.join(results)}")
+            send_notification(
+                f"Reconocimiento {summary['status']}: {self.engagement_dir.name}",
+                f"Etapa: {stage} | Subdominios: {summary['subdomains_count']} | "
+                f"Hosts vivos: {summary['live_hosts_count']} | URLs: {summary['urls_count']}",
+                level='error' if summary['status'] == 'failed' else 'info',
+            )
         return {'summary': summary, 'stage_results': results, 'dry_run': self.dry_run}
 
 

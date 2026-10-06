@@ -253,6 +253,7 @@
         <a
           href="http://localhost:7681"
           target="_blank"
+          @click="notifyTerminalTabOpened"
           class="flex items-center space-x-1 px-3 py-1 rounded-sm bg-slate-800 hover:bg-cyan-950/80 border border-slate-700 hover:border-cyan-500/40 text-slate-200 hover:text-cyan-300 transition-colors shadow-xs"
           title="Abrir terminal autenticada en el puerto 7681 (ttyd)"
         >
@@ -282,6 +283,12 @@ import { api } from '../api'
 import { useTheme } from '../theme'
 
 const { theme, toggleTheme } = useTheme()
+
+function notifyTerminalTabOpened() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('seclab-terminal-tab-opened'))
+  }
+}
 
 const telemetry = ref({
   vpn: { connected: false, ip: null, profile: 'none', interface: 'tun0' },

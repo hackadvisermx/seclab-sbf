@@ -13,4 +13,4 @@ export LOGNAME="$TTYD_USER"
 export SHELL=/usr/bin/zsh
 export SECLAB_TMUX=1
 
-exec /usr/bin/ttyd -d 3 -O -m 1 -w /workspace -i "$interface" -p "$port" -c "$TTYD_USER:$TTYD_PASSWORD" -W /usr/local/bin/ttyd-as-tester-shell
+exec /usr/bin/ttyd -d 3 -O -w /workspace -i "$interface" -p "$port" -c "$TTYD_USER:$TTYD_PASSWORD" -W /usr/local/bin/ttyd-as-tester-shell

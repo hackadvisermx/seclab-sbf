@@ -53,8 +53,19 @@ async function mountNavbar(api) {
   return { root, cleanup() { app.unmount(); root.remove() } }
 }
 
+const fixtureCatalog = {
+  models: [
+    { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
+    { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3' },
+    { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1' },
+    { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B' },
+    { id: 'fixture/new-model', name: 'Nuevo modelo accesible' },
+  ],
+  default_model: 'anthropic/claude-3.5-sonnet',
+}
+
 async function mountChatView(api) {
-  globalThis.fixtureChatApi = api
+  globalThis.fixtureChatApi = { getProviderModels: async () => fixtureCatalog, ...api }
   const source = await readFile(new URL('../src/views/ChatView.vue', import.meta.url), 'utf8')
   const { descriptor } = parse(source)
   const compiled = compileScript(descriptor, { id: 'ChatView.vue', inlineTemplate: true })
@@ -73,7 +84,7 @@ async function mountChatView(api) {
 }
 
 async function mountVaultView(api) {
-  globalThis.fixtureVaultApi = api
+  globalThis.fixtureVaultApi = { previewProviderModels: async () => fixtureCatalog, ...api }
   const source = await readFile(new URL('../src/views/VaultView.vue', import.meta.url), 'utf8')
   const { descriptor } = parse(source)
   const compiled = compileScript(descriptor, { id: 'VaultView.vue', inlineTemplate: true })
@@ -270,6 +281,9 @@ test('VaultView permite editar llave existente actualizando base_url y modelo vi
     urlInput.value = 'https://openrouter.ai/api/v1'
     urlInput.dispatchEvent(new Event('input'))
 
+    await flush()
+    Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Consultar modelos')).click()
+    await flush()
     // Enviar formulario
     const form = root.querySelector('form')
     form.dispatchEvent(new Event('submit'))
@@ -288,3 +302,69 @@ test('VaultView permite editar llave existente actualizando base_url y modelo vi
   }
 })
 
+
+
+test('Chat usa la clave custom_llm de OpenRouter y su catálogo sin presets fijos', async () => {
+  let call
+  localStorage.clear()
+  localStorage.setItem('seclab_chat_provider', 'custom_llm')
+  const { root, cleanup } = await mountChatView({
+    getVaultKeys: async () => [{ provider: 'custom_llm', service_type: 'llm', is_active: true, base_url: ' https://openrouter.ai/api/v1 ', model_name: 'fixture/new-model' }],
+    getProviderModels: async provider => { assert.equal(provider, 'custom_llm'); return { ...fixtureCatalog, default_model: 'fixture/new-model' } },
+    proxyChat: async (messages, provider, model) => { call = { provider, model }; return { content: 'Respuesta', model } },
+  })
+  try {
+    assert.match(root.querySelectorAll('select')[1].textContent, /Nuevo modelo accesible/)
+    assert.equal(root.querySelectorAll('select')[1].value, 'fixture/new-model')
+    const input = root.querySelector('textarea')
+    input.value = 'Hola'
+    input.dispatchEvent(new Event('input'))
+    await flush()
+    input.dispatchEvent(new browser.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flush()
+    assert.deepEqual(call, { provider: 'custom_llm', model: 'fixture/new-model' })
+  } finally { cleanup(); localStorage.clear() }
+})
+
+test('Vault consulta catálogo antes de guardar clave y persiste modelo seleccionado', async () => {
+  let saved
+  let preview
+  const { root, cleanup } = await mountVaultView({
+    getVaultKeys: async () => [], getProxyStats: async () => ({}), getProxyHistory: async () => [],
+    previewProviderModels: async payload => { preview = payload; return fixtureCatalog },
+    upsertVaultKey: async payload => { saved = { ...payload } },
+  })
+  try {
+    root.querySelector('button').click(); await flush()
+    const provider = root.querySelector('form select')
+    provider.value = 'openrouter'; provider.dispatchEvent(new Event('change')); await flush()
+    const key = root.querySelector('input[type="password"]')
+    key.value = 'fixture-token'; key.dispatchEvent(new Event('input')); await flush()
+    Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Consultar modelos')).click(); await flush()
+    assert.equal(preview.api_key, 'fixture-token')
+    assert.equal(saved, undefined)
+    const model = root.querySelectorAll('form select')[1]
+    model.value = 'fixture/new-model'; model.dispatchEvent(new Event('change')); await flush()
+    root.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await flush()
+    assert.equal(saved.model_name, 'fixture/new-model')
+  } finally { cleanup() }
+})
+
+
+test('Chat evita enviar un modelo retirado y muestra errores del catálogo', async () => {
+  localStorage.clear()
+  let calls = 0
+  const { root, cleanup } = await mountChatView({
+    getVaultKeys: async () => [{ provider: 'openrouter', service_type: 'llm', is_active: true, model_name: 'vendor/removed' }],
+    getProviderModels: async () => ({ models: [{ id: 'vendor/current', name: 'Actual' }], default_model: 'vendor/removed' }),
+    proxyChat: async () => { calls++ },
+  })
+  try {
+    assert.equal(root.querySelectorAll('select')[1].value, '')
+    const input = root.querySelector('textarea')
+    input.value = 'Hola'; input.dispatchEvent(new Event('input')); await flush()
+    input.dispatchEvent(new browser.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await flush()
+    assert.equal(calls, 0)
+    assert.match(root.textContent, /elige un modelo/)
+  } finally { cleanup(); localStorage.clear() }
+})

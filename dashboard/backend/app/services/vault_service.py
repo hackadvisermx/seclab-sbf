@@ -1,5 +1,6 @@
 import datetime
 import time
+from urllib.parse import urlsplit
 from typing import Any, Dict, List, Optional
 import httpx
 from app.core.database import get_db_connection
@@ -23,8 +24,45 @@ def normalize_endpoint_url(url: Optional[str]) -> Optional[str]:
     return cleaned.rstrip("/")
 
 
+def is_openrouter_url(url: Optional[str]) -> bool:
+    return urlsplit(normalize_endpoint_url(url) or "").hostname in ("openrouter.ai", "eu.openrouter.ai")
+
+
+def openrouter_base_url(url: Optional[str]) -> str:
+    parsed = urlsplit(normalize_endpoint_url(url) or "https://openrouter.ai/api/v1")
+    if parsed.hostname not in ("openrouter.ai", "eu.openrouter.ai") or parsed.scheme != "https" or parsed.username or parsed.password or parsed.port:
+        raise ValueError("OpenRouter requiere https://openrouter.ai/api/v1 o https://eu.openrouter.ai/api/v1")
+    return f"https://{parsed.hostname}/api/v1"
+
 
 class VaultService:
+    async def list_models(self, provider: str, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        entry = self.get_key_entry(provider) if not api_key else None
+        if not api_key:
+            if not entry or not entry.get("is_active"):
+                raise ValueError("Proveedor no configurado o inactivo; introduce una clave para consultar modelos")
+            api_key = entry["api_key"]
+            base_url = base_url or entry.get("base_url")
+        if provider != "openrouter" and not is_openrouter_url(base_url):
+            raise ValueError("Este catálogo requiere un proveedor OpenRouter")
+        base = openrouter_base_url(base_url)
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(f"{base}/models/user", headers={"Authorization": f"Bearer {api_key.strip()}"})
+            if response.status_code != 200:
+                raise RuntimeError(f"No se pudo consultar el catálogo de OpenRouter (HTTP {response.status_code})")
+            try:
+                body = response.json()
+                data = body.get("data") if isinstance(body, dict) else None
+            except ValueError:
+                raise RuntimeError("Catálogo de OpenRouter inválido") from None
+            if not isinstance(data, list):
+                raise RuntimeError("Catálogo de OpenRouter inválido")
+            models = {m["id"]: {"id": m["id"], "name": m.get("name") or m["id"], "context_length": m.get("context_length"), "pricing": m.get("pricing") or {}} for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)}
+            return {"models": sorted(models.values(), key=lambda m: m["name"].casefold()), "default_model": entry.get("model_name") if entry else None}
+        except httpx.HTTPError:
+            raise RuntimeError("No se pudo conectar con OpenRouter para consultar modelos") from None
+
     def list_keys(self) -> List[ApiKeyResponse]:
         """Obtiene la lista de API keys configuradas con las claves enmascaradas."""
         conn = get_db_connection()
@@ -55,17 +93,20 @@ class VaultService:
 
     def get_raw_key(self, provider: str) -> Optional[str]:
         """Obtiene la clave descifrada para uso interno del proxy o clientes de auditoría."""
-        conn = get_db_connection()
-        row = conn.execute("SELECT encrypted_key, is_active FROM api_keys WHERE provider = ?", (provider,)).fetchone()
-        conn.close()
-        if not row or not row["is_active"]:
+        entry = self.get_key_entry(provider)
+        if not entry or not entry.get("is_active"):
             return None
-        return decrypt_secret(row["encrypted_key"])
+        return entry.get("api_key")
 
     def get_key_entry(self, provider: str) -> Optional[Dict[str, Any]]:
         """Obtiene registro completo con la clave descifrada."""
+        prov = provider.lower().strip()
         conn = get_db_connection()
-        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (provider.lower().strip(),)).fetchone()
+        row = conn.execute("SELECT * FROM api_keys WHERE provider = ?", (prov,)).fetchone()
+        if not row and prov == "openrouter":
+            candidate = conn.execute("SELECT * FROM api_keys WHERE provider = 'custom_llm'").fetchone()
+            if candidate and is_openrouter_url(candidate["base_url"]):
+                row = candidate
         conn.close()
         if not row:
             return None
@@ -325,9 +366,7 @@ class VaultService:
 
                 # 8. OPENROUTER
                 elif provider == "openrouter":
-                    clean_base = normalize_endpoint_url(base_url) or "https://openrouter.ai/api/v1"
-                    if "openrouter.ai" in clean_base.lower() and "/api/v1" not in clean_base:
-                        clean_base = clean_base.rstrip("/") + "/api/v1"
+                    clean_base = openrouter_base_url(base_url)
                     url = clean_base if clean_base.endswith("/auth/key") else f"{clean_base}/auth/key"
                     headers = {
                         "Authorization": f"Bearer {api_key}",
@@ -341,7 +380,7 @@ class VaultService:
                         limit_val = data.get("limit")
                         limit_str = f"${limit_val:.2f}" if (isinstance(limit_val, (int, float)) and limit_val is not None) else "Sin límite"
                         usage_val = data.get("usage", 0)
-                        message = f"OpenRouter activo. Uso: ${usage_val:.4f}, Límite: {limit_str}"
+                        message = f"Clave válida; la disponibilidad del modelo se verifica al consultar. Uso: ${usage_val:.4f}, Límite: {limit_str}"
                         details = data
                     elif res.status_code == 401:
                         status = "error"
@@ -357,7 +396,8 @@ class VaultService:
                 elif provider in ("custom_llm", "hermes_local"):
                     clean_base = normalize_endpoint_url(base_url) or "http://localhost:11434"
                     # Si apunta a openrouter, usar el probe de OpenRouter
-                    if "openrouter.ai" in clean_base.lower():
+                    if is_openrouter_url(clean_base):
+                        clean_base = openrouter_base_url(clean_base)
                         if "/api/v1" not in clean_base:
                             clean_base = clean_base.rstrip("/") + "/api/v1"
                         url = clean_base if clean_base.endswith("/auth/key") else f"{clean_base}/auth/key"
@@ -371,7 +411,7 @@ class VaultService:
                             data = res.json().get("data", {})
                             status = "online"
                             usage_val = data.get("usage", 0)
-                            message = f"OpenRouter activo (vía custom_llm). Uso: ${usage_val:.4f}"
+                            message = f"Clave válida; el modelo se verifica al consultar (vía custom_llm). Uso: ${usage_val:.4f}"
                             details = data
                         elif res.status_code == 401:
                             status = "error"
@@ -426,7 +466,7 @@ class VaultService:
         with conn:
             conn.execute(
                 "UPDATE api_keys SET status = ?, status_message = ?, last_checked = ? WHERE provider = ?",
-                (status, message, now_ts, provider.lower()),
+                (status, message, now_ts, entry["provider"]),
             )
         conn.close()
 

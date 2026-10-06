@@ -1,6 +1,6 @@
 from typing import List
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import ApiKeyCreate, ApiKeyResponse, ApiKeyUpdate, HealthCheckResult
+from app.models.schemas import ApiKeyCreate, ApiKeyResponse, ApiKeyUpdate, HealthCheckResult, ModelCatalogRequest
 from app.services.vault_service import vault_service
 
 router = APIRouter(prefix="/vault", tags=["Hermes API Key Vault"])
@@ -19,6 +19,21 @@ def upsert_vault_key(payload: ApiKeyCreate):
         return vault_service.upsert_key(payload)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/models/preview")
+async def preview_models(payload: ModelCatalogRequest):
+    try:
+        return await vault_service.list_models(payload.provider, payload.api_key, payload.base_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/{provider}/models")
+async def provider_models(provider: str):
+    return await preview_models(ModelCatalogRequest(provider=provider))
 
 
 @router.put("/{provider}", response_model=ApiKeyResponse)

@@ -246,3 +246,7 @@ La fase 90 añade `make dashboard-backup`, `make dashboard-restore BACKUP=...` y
 ## Papelera y recuperación de proyectos
 
 Eliminar un reto o auditoría desde el dashboard mueve su carpeta completa a la papelera. La lista de proyectos ofrece acceso a **Papelera**, con restauración por versión y fecha. Un nombre/tipo ocupado o reconocimiento activo impiden restaurar y conservan la copia. No hay purga automática; el respaldo de fase 90 incluye estas copias. Ver [API, operación y límites](phase-91.md).
+
+### Catálogo OpenRouter y modelo base (fase 103)
+
+API Vault permite consultar el catálogo de la cuenta antes de guardar una nueva clave o al editar la existente. El selector **Modelo Inicial / Predeterminado** guarda `model_name` en el Vault. Chat adopta ese modelo al abrir y permite buscar/elegir otro; el Copiloto consulta la misma lista y conserva preferencias específicas previas. Claves antiguas guardadas como `custom_llm` con hostname de OpenRouter siguen funcionando sin migrar ni reemplazar sus secretos. «Online» valida la clave; saldo, límites y disponibilidad del modelo se comprueban al inferir. Si el modelo base ya no existe, elegir uno de la lista. Ver `docs/phase-103.md`.

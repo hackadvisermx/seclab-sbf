@@ -10,12 +10,13 @@ async function request(endpoint, options = {}) {
   const res = await fetch(url, { ...options, headers, credentials: 'same-origin' })
   if (!res.ok) {
     if (res.status === 401) window.dispatchEvent(new Event('seclab-session-expired'))
-    let errorDetail = 'Error en la petición'
+    const errorBody = await res.text()
+    let errorDetail = errorBody || `Error HTTP ${res.status}`
     try {
-      const errJson = await res.json()
+      const errJson = JSON.parse(errorBody)
       errorDetail = errJson.detail || JSON.stringify(errJson)
     } catch {
-      errorDetail = await res.text()
+      // Conserva el mensaje de respuestas que no son JSON.
     }
     throw new Error(errorDetail)
   }
@@ -55,6 +56,8 @@ export const api = {
   testVaultKey: (provider) => request(`/vault/${provider}/test`, { method: 'POST' }),
 
   // Tactical Proxy Gateway
+  getProviderModels: (provider) => request(`/vault/${encodeURIComponent(provider)}/models`),
+  previewProviderModels: (data) => request('/vault/models/preview', { method: 'POST', body: JSON.stringify(data) }),
   proxyChat: (messages, provider = null, model = null, profile = null, temperature = 0.2) => {
     const qs = profile ? `?profile=${profile}` : ''
     const payload = { messages, temperature }

@@ -197,3 +197,9 @@ class ChatCompletionResponse(BaseModel):
     content: str
     latency_ms: int
     usage: Optional[Dict[str, Any]] = None
+
+
+class ModelCatalogRequest(BaseModel):
+    provider: str = "openrouter"
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None

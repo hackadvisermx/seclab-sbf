@@ -629,15 +629,9 @@
               class="bg-slate-900 border border-slate-700 rounded-sm px-2.5 py-1 text-cyan-300 focus:outline-hidden font-mono text-xs"
               title="Modelo o perfil inicial para la auditoría"
             >
-              <optgroup label="🔀 Modelos OpenRouter">
-                <option value="openrouter:anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (OpenRouter)</option>
-                <option value="openrouter:deepseek/deepseek-chat">DeepSeek V3 (OpenRouter)</option>
-                <option value="openrouter:deepseek/deepseek-r1">DeepSeek R1 (OpenRouter)</option>
-                <option value="openrouter:meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (OpenRouter)</option>
-                <option value="openrouter:meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B Free (OpenRouter)</option>
-                <option value="openrouter:openai/gpt-4o">GPT-4o (OpenRouter)</option>
-                <option value="openrouter:openai/gpt-4o-mini">GPT-4o Mini (OpenRouter)</option>
-                <option value="openrouter:google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Free (OpenRouter)</option>
+              <option v-if="copilotSelectedModel.startsWith('openrouter:') && !copilotModels.some(m => `openrouter:${m.id}` === copilotSelectedModel)" :value="copilotSelectedModel">{{ copilotSelectedModel }} (fuera del catálogo)</option>
+              <optgroup label="Modelos de tu cuenta OpenRouter">
+                <option v-for="model in copilotModels" :key="model.id" :value="`openrouter:${model.id}`">{{ model.name }} — {{ model.id }}</option>
               </optgroup>
               <optgroup label="⚡ Perfiles Tácticos">
                 <option value="profile:quick">Flash / Mini (Rápido)</option>
@@ -646,6 +640,7 @@
               </optgroup>
             </select>
 
+            <span v-if="copilotModelsError" role="alert" class="text-xs text-red-400">{{ copilotModelsError }}</span>
             <!-- Botón Inspeccionar Contexto -->
             <button
               @click="openContextInspection"
@@ -1956,12 +1951,29 @@ async function packEngagementAction() {
 // ==============================================================================
 const selectedAgent = ref('triage-agent')
 const copilotProfile = ref('quick')
-const copilotSelectedModel = ref('openrouter:anthropic/claude-3.5-sonnet')
+const copilotSelectedModel = ref('profile:quick')
+const copilotModels = ref([])
+const copilotModelsError = ref('')
 const copilotMessages = ref([])
 const copilotInput = ref('')
 const isCopilotThinking = ref(false)
 const showContextModal = ref(false)
 const injectedContextText = ref('')
+
+async function loadCopilotModels() {
+  try {
+    const keys = await api.getVaultKeys()
+    const key = keys.find(k => k.provider === 'openrouter' && k.is_active) || keys.find(k => {
+      try { return k.provider === 'custom_llm' && k.is_active && ['openrouter.ai', 'eu.openrouter.ai'].includes(new URL(k.base_url.trim().includes('://') ? k.base_url.trim() : `https://${k.base_url.trim()}`).hostname) } catch { return false }
+    })
+    if (!key) return
+    const catalog = await api.getProviderModels(key.provider)
+    copilotModels.value = catalog.models
+    if (catalog.models.some(m => m.id === catalog.default_model) && !localStorage.getItem(`seclab_copilot_model_${engId.value}`) && !localStorage.getItem('seclab_default_audit_model')) {
+      copilotSelectedModel.value = `openrouter:${catalog.default_model}`
+    }
+  } catch (err) { copilotModelsError.value = err.message }
+}
 
 function initCopilotModel() {
   if (typeof localStorage !== 'undefined') {
@@ -2020,7 +2032,9 @@ async function sendCopilotMessage() {
     } else if (copilotSelectedModel.value.startsWith('profile:')) {
       reqProfile = copilotSelectedModel.value.slice(8)
     } else if (copilotSelectedModel.value.includes(':')) {
-      const [p, m] = copilotSelectedModel.value.split(':', 2)
+      const separator = copilotSelectedModel.value.indexOf(':')
+      const p = copilotSelectedModel.value.slice(0, separator)
+      const m = copilotSelectedModel.value.slice(separator + 1)
       reqProvider = p
       reqModel = m
     } else {
@@ -2251,6 +2265,7 @@ async function triggerReconPipeline() {
 
 onMounted(() => {
   initCopilotModel()
+  loadCopilotModels()
   loadScope()
   loadFindings()
   loadLogs()

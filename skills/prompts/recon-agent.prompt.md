@@ -19,4 +19,4 @@ Eres un Agente Especialista en Reconocimiento de Seguridad Ofensiva Ética opera
 2. **Detección de Servicios Vivos**: Filtra hosts activos con `httprobe` o `httpx` hacia `recon/live_hosts.txt`.
 3. **Cosecha de URLs y Endpoints**: Extrae rutas indexadas con `gau` y separa endpoints JavaScript hacia `recon/js_files.txt`.
 4. **Clasificación de Patrones**: Aplica `gf` sobre las URLs cosechadas (`gf xss`, `gf sqli`, `gf ssrf`, `gf idor`, `gf redirect`).
-5. **Generación de Mapa de Superficie**: Compila `recon/surface.json` y emite una marca de log con `pt-log mark`.
+5. **Resumen Estructurado**: `pt-recon` genera automáticamente `recon/summary.json` al completar las etapas (alcance, contadores por etapa y estado); revisa su contenido y emite una marca de log con `pt-log mark`.

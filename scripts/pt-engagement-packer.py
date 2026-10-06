@@ -233,7 +233,7 @@ def pack_engagement(
         if src_recon.is_dir():
             stg_recon = staging_dir / "recon"
             stg_recon.mkdir(parents=True, exist_ok=True)
-            for recon_candidate in ("live_hosts.txt", "subdomains.txt", "surface.json"):
+            for recon_candidate in ("live_hosts.txt", "subdomains.txt", "summary.json"):
                 rf = src_recon / recon_candidate
                 if rf.is_file():
                     rf_dest = stg_recon / recon_candidate

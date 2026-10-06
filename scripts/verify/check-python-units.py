@@ -1078,6 +1078,9 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             recon_dir = tmp / "recon"
             recon_dir.mkdir()
             (recon_dir / "live_hosts.txt").write_text("https://api.example.com\n", encoding="utf-8")
+            # Fase 108 / backlog A4: pt-recon-pipeline.py genera recon/summary.json
+            # (nunca recon/surface.json); el empaquetador debe incluirlo.
+            (recon_dir / "summary.json").write_text('{"engagement": "fixture"}\n', encoding="utf-8")
 
             # 3. Validar empaquetado con sanitización y manifiesto SHA-256
             out_tar = tmp / "exports" / "test_bundle.tar.gz"
@@ -1097,6 +1100,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
                 self.assertTrue(any("REPORT.md" in n for n in names))
                 self.assertTrue(any("target.yaml" in n for n in names))
                 self.assertTrue(any("evidence/VULN-01.md" in n for n in names))
+                self.assertTrue(any("recon/summary.json" in n for n in names), "recon/summary.json no se incluyo en el paquete")
+                self.assertFalse(any("surface.json" in n for n in names), "surface.json nunca lo genera el pipeline real")
 
                 # Extraer y verificar que la evidencia dentro del tarball esté sanitizada
                 san_ev = tf.extractfile(f"{tmp.name}/evidence/VULN-01.md").read().decode("utf-8")

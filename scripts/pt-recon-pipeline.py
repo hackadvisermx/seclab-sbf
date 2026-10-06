@@ -188,7 +188,8 @@ class ReconPipeline:
     def run_subdomain_enumeration(self):
         domains = self.get_in_scope_domains()
         seeds = self.scope_data['scope'].get('in_scope', {}).get('ips', [])
-        discovered = set(self._read_lines('subdomains.txt')) | set(seeds)
+        previous = set(self._read_lines('subdomains.txt'))
+        discovered = set(previous) | set(seeds)
         bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in domains})
         if self.dry_run:
             return {'stage': 'subdomains', 'status': 'simulated', 'planned_passive_queries': bases}
@@ -205,10 +206,13 @@ class ReconPipeline:
                              'assetfinder': ['--subs-only', base], 'findomain': ['-t', base, '-q']}[name]
                 discovered.update(self._tool(name, arguments))
         valid, discarded = self.filter_domains_by_scope(sorted(discovered))
+        new_subdomains = sorted(set(valid) - previous)
         self._write_lines('subdomains.txt', valid)
+        self._write_lines('subdomains_new.txt', new_subdomains)
         self._write_lines('out_of_scope_discarded.txt', [f"[{row['timestamp']}] {row['target']} -> {row['verdict']}: {row['reason']}" for row in discarded])
         return {'stage': 'subdomains', 'status': 'completed', 'total_raw': len(discovered), 'in_scope_count': len(valid),
-                'discarded_count': len(discarded), 'subdomains': valid, 'discarded': discarded}
+                'discarded_count': len(discarded), 'subdomains': valid, 'discarded': discarded,
+                'new_count': len(new_subdomains)}
 
     def run_live_probing(self):
         if not (self.recon_dir / 'subdomains.txt').is_file():
@@ -220,14 +224,17 @@ class ReconPipeline:
             raise StageError('Demasiados objetivos para max_probe_targets; no se inició el sondeo.')
         if self.dry_run:
             return {'stage': 'probe', 'status': 'simulated', 'planned_targets': hosts, 'discarded': discarded}
+        previous_live = set(self._read_lines('live_hosts.txt'))
         observations = ProbeClient(self.scope_data, self.limits).probe(hosts) if hosts else []
         live = sorted({row['url'] for row in observations if row['status'] == 'response'})
+        new_live = sorted(set(live) - previous_live)
         self._write_lines('live_hosts.txt', live)
+        self._write_lines('live_hosts_new.txt', new_live)
         self._write_lines('probe_observations.jsonl', [json.dumps(row, ensure_ascii=False) for row in observations])
         self._write_lines('probe_discarded.txt', [f"{row['target']} -> {row['verdict']}: {row['reason']}" for row in discarded])
         return {'stage': 'probe', 'status': 'completed', 'live_hosts_count': len(live), 'live_hosts': live,
                 'discarded_count': len(discarded), 'blocked_dns_count': sum(row['status'] == 'blocked' for row in observations),
-                'operational_limits': self.limits}
+                'operational_limits': self.limits, 'new_count': len(new_live)}
 
     def run_url_harvesting(self):
         bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in self.get_in_scope_domains()})
@@ -281,11 +288,13 @@ class ReconPipeline:
                    'dry_run': self.dry_run, 'operational_limits': self.limits,
                    'stage_results': results, 'tools_available': {name: bool(path) for name, path in self.tools.items()},
                    'metrics_source': 'none' if self.dry_run else 'previous_artifacts' if failed else 'artifacts',
-                   'subdomains_count': 0, 'subdomains_discarded_out_of_scope': 0,
-                   'live_hosts_count': 0, 'urls_count': 0, 'js_files_count': 0, 'gf_patterns': {}}
+                   'subdomains_count': 0, 'subdomains_discarded_out_of_scope': 0, 'subdomains_new_count': 0,
+                   'live_hosts_count': 0, 'live_hosts_new_count': 0, 'urls_count': 0, 'js_files_count': 0, 'gf_patterns': {}}
         if not self.dry_run:
             for key, filename in (('subdomains_count', 'subdomains.txt'), ('subdomains_discarded_out_of_scope', 'out_of_scope_discarded.txt'),
-                                  ('live_hosts_count', 'live_hosts.txt'), ('urls_count', 'urls_all.txt'), ('js_files_count', 'js_files.txt')):
+                                  ('subdomains_new_count', 'subdomains_new.txt'),
+                                  ('live_hosts_count', 'live_hosts.txt'), ('live_hosts_new_count', 'live_hosts_new.txt'),
+                                  ('urls_count', 'urls_all.txt'), ('js_files_count', 'js_files.txt')):
                 summary[key] = len(self._read_lines(filename))
             if self.patterns_dir.is_dir():
                 for path in self.patterns_dir.glob('*.txt'):
@@ -336,10 +345,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"\n{prefix}SECLAB Recon Pipeline {summary['status']} para: {eng_dir.name}")
     print(f"  Directorio: {pipeline.recon_dir}")
     print(f"  Dominios base autorizados: {', '.join(summary['in_scope_domains']) or 'ninguno'}")
-    print(f"  Subdominios autorizados:   {summary['subdomains_count']}")
+    subdomains_new = summary.get('subdomains_new_count', 0)
+    print(f"  Subdominios autorizados:   {summary['subdomains_count']}" + (f" ({subdomains_new} nuevos desde la última corrida)" if subdomains_new else ""))
     if summary['subdomains_discarded_out_of_scope'] > 0:
         print(f"  Descartados por Scope:     {summary['subdomains_discarded_out_of_scope']} (guardados en out_of_scope_discarded.txt)")
-    print(f"  Servicios web vivos:       {summary['live_hosts_count']}")
+    live_hosts_new = summary.get('live_hosts_new_count', 0)
+    print(f"  Servicios web vivos:       {summary['live_hosts_count']}" + (f" ({live_hosts_new} nuevos desde la última corrida)" if live_hosts_new else ""))
     print(f"  URLs recolectadas:         {summary['urls_count']} (Archivos JS: {summary['js_files_count']})")
 
     if summary["gf_patterns"]:
@@ -379,9 +390,11 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"\nEstado de Reconocimiento: {eng_dir.name}")
     print(f"  Ultima actualizacion:     {summary.get('timestamp', 'N/A')}")
     print(f"  Dominios en alcance:      {', '.join(summary.get('in_scope_domains', [])) or 'N/A'}")
-    print(f"  Subdominios identificados: {summary.get('subdomains_count', 0)}")
+    status_subdomains_new = summary.get('subdomains_new_count', 0)
+    print(f"  Subdominios identificados: {summary.get('subdomains_count', 0)}" + (f" ({status_subdomains_new} nuevos desde la última corrida)" if status_subdomains_new else ""))
     print(f"  Descartados (Scope Guard): {summary.get('subdomains_discarded_out_of_scope', 0)}")
-    print(f"  Servicios web activos:    {summary.get('live_hosts_count', 0)}")
+    status_live_new = summary.get('live_hosts_new_count', 0)
+    print(f"  Servicios web activos:    {summary.get('live_hosts_count', 0)}" + (f" ({status_live_new} nuevos desde la última corrida)" if status_live_new else ""))
     print(f"  URLs archivadas:          {summary.get('urls_count', 0)}")
     print(f"  JavaScript descubiertos:  {summary.get('js_files_count', 0)}")
     if summary.get("gf_patterns"):

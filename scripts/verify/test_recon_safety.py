@@ -155,6 +155,49 @@ class ReconPipelineSafetyTests(unittest.TestCase):
             self.assertEqual(result['summary']['status'], 'failed')
             self.assertEqual(self.recon.joinpath('subdomains.txt').read_text(), 'previous.example.test\n')
 
+    def test_subdomains_new_file_tracks_only_items_absent_from_previous_run(self):
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        result = self.make_pipeline().run_all('subdomains')
+        self.assertEqual(result['summary']['subdomains_new_count'], 1)
+        self.assertEqual(self.recon.joinpath('subdomains_new.txt').read_text(), '10.0.0.1\n')
+
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1", "10.0.0.2"]\n')
+        result = self.make_pipeline().run_all('subdomains')
+        self.assertEqual(result['summary']['subdomains_new_count'], 1)
+        self.assertEqual(self.recon.joinpath('subdomains_new.txt').read_text(), '10.0.0.2\n')
+
+        result = self.make_pipeline().run_all('subdomains')
+        self.assertEqual(result['summary']['subdomains_new_count'], 0)
+        self.assertEqual(self.recon.joinpath('subdomains_new.txt').read_text(), '')
+
+    def test_live_hosts_new_file_tracks_newly_responsive_hosts_across_runs(self):
+        self.recon.joinpath('subdomains.txt').write_text('a.example.test\nb.example.test\n')
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = [
+                {'url': 'https://a.example.test', 'status': 'response', 'target': 'a.example.test'},
+            ]
+            result = self.make_pipeline().run_all('probe')
+        self.assertEqual(result['summary']['live_hosts_new_count'], 1)
+        self.assertEqual(self.recon.joinpath('live_hosts_new.txt').read_text(), 'https://a.example.test\n')
+
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = [
+                {'url': 'https://a.example.test', 'status': 'response', 'target': 'a.example.test'},
+                {'url': 'https://b.example.test', 'status': 'response', 'target': 'b.example.test'},
+            ]
+            result = self.make_pipeline().run_all('probe')
+        self.assertEqual(result['summary']['live_hosts_new_count'], 1)
+        self.assertEqual(self.recon.joinpath('live_hosts_new.txt').read_text(), 'https://b.example.test\n')
+
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = [
+                {'url': 'https://a.example.test', 'status': 'response', 'target': 'a.example.test'},
+                {'url': 'https://b.example.test', 'status': 'response', 'target': 'b.example.test'},
+            ]
+            result = self.make_pipeline().run_all('probe')
+        self.assertEqual(result['summary']['live_hosts_new_count'], 0)
+        self.assertEqual(self.recon.joinpath('live_hosts_new.txt').read_text(), '')
+
     def test_dry_run_does_not_modify_files_or_invent_results(self):
         self.recon.joinpath('subdomains.txt').write_text('example.test\nevil.test\n')
         self.root.joinpath('terminal.log').write_text('unchanged')

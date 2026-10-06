@@ -427,3 +427,79 @@ class TestOpenRouterProxy(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, expected) as exc:
                     asyncio.run(self.proxy_service.chat_completion(req))
             self.assertNotIn("fixture-token", str(exc.exception))
+
+    def test_update_key_reclassifies_provider_and_rejects_collision(self):
+        # Fase 102: ApiKeyUpdate.provider permite mover una clave existente a
+        # otro nombre de proveedor (p. ej. custom_llm -> openrouter) sin
+        # borrar y volver a crearla.
+        from app.models.schemas import ApiKeyCreate, ApiKeyUpdate
+
+        self.vault_service.upsert_key(
+            ApiKeyCreate(
+                provider="custom_llm",
+                label="Open Router",
+                service_type="llm",
+                api_key="fixture-token-a",
+                base_url="https://openrouter.ai/api/v1",
+                model_name="vendor/a",
+                is_active=True,
+            )
+        )
+        updated = self.vault_service.update_key("custom_llm", ApiKeyUpdate(provider="openrouter"))
+        self.assertEqual(updated.provider, "openrouter")
+        self.assertIsNone(self.vault_service.get_key_entry("custom_llm"))
+        self.assertEqual(self.vault_service.get_key_entry("openrouter")["label"], "Open Router")
+
+        # Colision: ya existe una fila 'openrouter', reclasificar otra clave
+        # hacia ese mismo proveedor debe rechazarse con un error claro (no un
+        # error de sqlite por operar sobre la conexion ya cerrada).
+        self.vault_service.upsert_key(
+            ApiKeyCreate(
+                provider="custom_llm",
+                label="Otra clave",
+                service_type="llm",
+                api_key="fixture-token-b",
+                model_name="vendor/b",
+                is_active=True,
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "Ya existe una clave para el proveedor elegido"):
+            self.vault_service.update_key("custom_llm", ApiKeyUpdate(provider="openrouter"))
+        # La clave 'custom_llm' original debe seguir intacta tras el rechazo.
+        self.assertEqual(self.vault_service.get_key_entry("custom_llm")["label"], "Otra clave")
+
+    def test_chat_completion_falls_back_from_custom_llm_to_openrouter_candidate(self):
+        # Fase 102: al pedir explicitamente provider='custom_llm' sin una
+        # fila custom_llm configurada, chat_completion debe intentar
+        # tambien el candidato 'openrouter' en vez de fallar de inmediato
+        # (get_key_entry('custom_llm') no tiene fallback inverso propio).
+        import asyncio
+        from app.models.schemas import ApiKeyCreate
+
+        self.vault_service.upsert_key(
+            ApiKeyCreate(
+                provider="openrouter",
+                label="OpenRouter nativo",
+                service_type="llm",
+                api_key="fixture-token",
+                model_name="vendor/native",
+                is_active=True,
+            )
+        )
+        self.assertIsNone(self.vault_service.get_key_entry("custom_llm"))
+
+        mock_resp = MagicMock(status_code=200)
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "Respuesta via fallback a openrouter"}}],
+            "usage": {"total_tokens": 12},
+        }
+        req = ChatCompletionRequest(messages=[ChatMessage(role="user", content="Hola")], provider="custom_llm")
+
+        async def run_test():
+            with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
+                res = await self.proxy_service.chat_completion(req)
+                self.assertEqual(res.provider, "openrouter")
+                self.assertEqual(res.content, "Respuesta via fallback a openrouter")
+                mock_post.assert_called_once()
+
+        asyncio.run(run_test())

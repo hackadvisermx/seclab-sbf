@@ -204,6 +204,14 @@ class ProxyService:
         # 1. Si se solicitó un proveedor específico
         if req.provider:
             candidates.append((req.provider, req.model))
+            if req.provider == "openrouter":
+                custom_entry = vault_service.get_key_entry("custom_llm")
+                if custom_entry and custom_entry.get("is_active") and is_openrouter_url(custom_entry.get("base_url")):
+                    candidates.append(("custom_llm", req.model))
+            elif req.provider == "custom_llm":
+                openrouter_entry = vault_service.get_key_entry("openrouter")
+                if openrouter_entry and openrouter_entry.get("is_active"):
+                    candidates.append(("openrouter", req.model))
 
         # 2. Si se solicitó un modelo específico sin proveedor explícito
         elif req.model:

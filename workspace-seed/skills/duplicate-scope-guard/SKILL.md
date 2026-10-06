@@ -61,14 +61,26 @@ TARGET_HOST="target.example.com"
 curl -s "https://hackerone.com/hacktivity.json?querystring=${TARGET_HOST}" | jq '.reports[] | {title: .title, url: .url, severity: .severity_rating}' 2>/dev/null || true
 ```
 
-### Paso 4: Veredicto de la Compuerta
-Emitir uno de dos dictámenes antes de permitir que la habilidad `report-generation` procese el hallazgo:
+### Paso 3b: Deduplicación Interna por Causa Raíz y Misma Mitigación (Root-Cause Convergence)
+Inspirado en la disciplina de **Fase 10 de mdpsec**:
+1. Comparar la hipótesis contra todos los hallazgos ya registrados en `evidence/*.md`.
+2. Evaluar:
+   - ¿Es el mismo defecto de software subyacente? (ejemplo: falta de middleware de autorización o sanitizador común).
+   - ¿La misma mitigación en código corregiría ambos endpoints?
+3. Si ambos comparten la misma causa raíz, **CONSOLIDAR**:
+   - No crear fichas fragmentadas por cada parámetro o sub-ruta (e.g. `idor-profile` e `idor-avatar`).
+   - Actualizar la ficha existente añadiendo el nuevo vector como endpoint afectado adicional.
 
-1. **APROBADO**:
+### Paso 4: Veredicto de la Compuerta
+Emitir uno de tres dictámenes antes de permitir que la habilidad `report-generation` procese el hallazgo:
+
+1. **APROBADO (PROVEN / DISPROVED / CANDIDATE)**:
    - Cumple con todas las reglas de scope.
-   - Demuestra impacto verificable y reproducible.
-   - Se autoriza su inclusión en `/workspace/engagements/<engagement>/REPORT.md`.
-2. **DESCARTADO**:
+   - Demuestra impacto verificable y reproducible con par HTTP crudo y control negativo.
+   - Se autoriza su inclusión en `evidence/*.md` y compilación en `REPORT.md`.
+2. **CONSOLIDADO**:
+   - Comparte causa raíz con un hallazgo previo; se incorpora como vector adicional en la ficha existente.
+3. **DESCARTADO**:
    - Se documenta en el archivo interno `/workspace/engagements/<engagement>/out_of_scope_notes.md` con la justificación técnica de descarte, evitando perder tiempo del cliente.
 
 ---

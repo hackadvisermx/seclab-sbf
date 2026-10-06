@@ -60,6 +60,29 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     return metadata, body
 
 
+def normalize_status(raw_status: str) -> str:
+    """Normaliza estados heterogeneos de hallazgos al ciclo Evidence-First."""
+    raw = str(raw_status or "").strip().upper()
+    status_map = {
+        "PROVEN": "PROVEN",
+        "CONFIRMADO": "PROVEN",
+        "VERIFIED": "PROVEN",
+        "CANDIDATE": "CANDIDATE",
+        "HIPOTESIS": "CANDIDATE",
+        "DISPROVED": "DISPROVED",
+        "FALSO_POSITIVO": "DISPROVED",
+        "FALSO POSITIVO": "DISPROVED",
+        "FALSE_POSITIVE": "DISPROVED",
+        "MITIGATED": "MITIGATED",
+        "MITIGADO": "MITIGATED",
+        "REMEDIATED": "MITIGATED",
+        "DRAFT": "DRAFT",
+        "BORRADOR": "DRAFT",
+        "BLOCKED": "BLOCKED",
+    }
+    return status_map.get(raw, raw if raw else "PROVEN")
+
+
 def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     """Lee y estructura un archivo de evidencia markdown."""
     content = file_path.read_text(encoding="utf-8")
@@ -88,6 +111,19 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         except ValueError:
             cvss_score = 0.0
 
+    normalized_status = normalize_status(meta.get("status", "PROVEN"))
+
+    has_negative_control = (
+        "## 2b. Control Negativo" in body
+        or "control negativo" in body.lower()
+        or "negative control" in body.lower()
+    )
+    has_bounded_proof = (
+        "## 2c. Verificaci" in body
+        or "bounded testing" in body.lower()
+        or "no destructiv" in body.lower()
+    )
+
     return {
         "file": file_path.name,
         "path": file_path,
@@ -98,12 +134,14 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         "cvss_score": cvss_score,
         "cwe": meta.get("cwe", "CWE-Unknown"),
         "asset": meta.get("asset", "N/A"),
-        "status": meta.get("status", "Confirmado"),
+        "status": normalized_status,
         "auditor": meta.get("auditor", "tester"),
         "date": meta.get("date", datetime.date.today().isoformat()),
         "audit_log": meta.get("audit_log", "terminal.log"),
         "body": body.strip(),
         "has_poc": "```bash" in body or "curl " in body or "## 2. Pasos" in body,
+        "has_negative_control": has_negative_control,
+        "has_bounded_proof": has_bounded_proof,
         "has_remediation": "## 5. Remediaci" in body or "## Remediaci" in body,
     }
 

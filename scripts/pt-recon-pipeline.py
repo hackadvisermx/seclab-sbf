@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_scope import (ScopeError, normalize_target, is_ip, domain_matches,
@@ -232,9 +233,32 @@ class ReconPipeline:
         self._write_lines('live_hosts_new.txt', new_live)
         self._write_lines('probe_observations.jsonl', [json.dumps(row, ensure_ascii=False) for row in observations])
         self._write_lines('probe_discarded.txt', [f"{row['target']} -> {row['verdict']}: {row['reason']}" for row in discarded])
+        next_commands = self.generate_next_commands(live)
+        self._write_lines('next_commands.txt', next_commands)
         return {'stage': 'probe', 'status': 'completed', 'live_hosts_count': len(live), 'live_hosts': live,
                 'discarded_count': len(discarded), 'blocked_dns_count': sum(row['status'] == 'blocked' for row in observations),
-                'operational_limits': self.limits, 'new_count': len(new_live)}
+                'operational_limits': self.limits, 'new_count': len(new_live),
+                'next_commands_count': len(live)}
+
+    def generate_next_commands(self, live_urls):
+        """Sugiere, por cada host vivo, un comando pt-nmp y pt-fuzz-params listos para copiar.
+
+        Inspirado en el _manual_commands.txt de AutoRecon: le da al operador novato
+        el siguiente paso concreto sin que tenga que decidirlo desde cero. Usa los
+        mismos binarios/helpers ya documentados (pentest-lab.plugin.zsh); no inventa
+        hallazgos ni ejecuta nada por sí mismo.
+        """
+        lines = []
+        for url in live_urls:
+            host = urlsplit(url).hostname
+            if not host:
+                continue
+            if lines:
+                lines.append('')
+            lines.append(f'# {url}')
+            lines.append(f'pt-nmp {host}')
+            lines.append(f'pt-fuzz-params "{url}"')
+        return lines
 
     def run_url_harvesting(self):
         bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in self.get_in_scope_domains()})
@@ -396,6 +420,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         if pats:
             print(f"  Patrones gf detectados:    {', '.join(pats)}")
 
+    next_commands_count = res["stage_results"].get("probe", {}).get("next_commands_count", 0)
+    if next_commands_count:
+        print(f"  Próximos comandos sugeridos: {pipeline.recon_dir / 'next_commands.txt'} ({next_commands_count} hosts)")
     print(f"  Resumen estructurado:      {pipeline.recon_dir / 'summary.json'}\n")
     for result in res["stage_results"].values():
         if result.get("error"):

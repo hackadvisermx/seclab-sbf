@@ -247,6 +247,44 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn('--resume', result.stderr)
 
+    def test_generate_next_commands_suggests_pt_nmp_and_pt_fuzz_params_per_host(self):
+        engine = self.make_pipeline()
+        lines = engine.generate_next_commands(['https://a.example.test', 'http://b.example.test'])
+        self.assertEqual(lines, [
+            '# https://a.example.test',
+            'pt-nmp a.example.test',
+            'pt-fuzz-params "https://a.example.test"',
+            '',
+            '# http://b.example.test',
+            'pt-nmp b.example.test',
+            'pt-fuzz-params "http://b.example.test"',
+        ])
+
+    def test_generate_next_commands_strips_ipv6_brackets_for_pt_nmp_but_not_the_url(self):
+        engine = self.make_pipeline()
+        lines = engine.generate_next_commands(['https://[::1]'])
+        self.assertIn('pt-nmp ::1', lines)
+        self.assertIn('pt-fuzz-params "https://[::1]"', lines)
+
+    def test_probe_stage_writes_next_commands_file_for_live_hosts(self):
+        self.recon.joinpath('subdomains.txt').write_text('a.example.test\n')
+        engine = self.make_pipeline()
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = [{'url': 'https://a.example.test', 'status': 'response', 'target': 'a.example.test'}]
+            result = engine.run_all('probe')
+        self.assertEqual(result['stage_results']['probe']['next_commands_count'], 1)
+        content = self.recon.joinpath('next_commands.txt').read_text()
+        self.assertIn('pt-nmp a.example.test', content)
+        self.assertIn('pt-fuzz-params "https://a.example.test"', content)
+
+    def test_probe_stage_without_live_hosts_writes_empty_next_commands_file(self):
+        self.recon.joinpath('subdomains.txt').write_text('a.example.test\n')
+        engine = self.make_pipeline()
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = [{'url': 'https://a.example.test', 'status': 'connection_error', 'target': 'a.example.test'}]
+            engine.run_all('probe')
+        self.assertEqual(self.recon.joinpath('next_commands.txt').read_text(), '')
+
     def test_dry_run_does_not_modify_files_or_invent_results(self):
         self.recon.joinpath('subdomains.txt').write_text('example.test\nevil.test\n')
         self.root.joinpath('terminal.log').write_text('unchanged')

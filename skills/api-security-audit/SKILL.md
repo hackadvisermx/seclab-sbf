@@ -32,7 +32,7 @@ Su objetivo es detectar fallos estructurales de seguridad en capas de servicios:
    - Todo endpoint de API evaluado debe estar comprendido en `in_scope.endpoints` o `in_scope.domains` de `target.yaml`.
    - Validar previamente con: `pt-scope check <api_endpoint>`.
 2. **Límites Operacionales Estrictos**:
-   - Respetar la tasa de peticiones definida en `operational_limits.max_requests_per_second` (por defecto <= 20 req/s).
+   - Respetar la tasa de peticiones definida en `operational_limits.max_requests_per_second` (por defecto <= 1 req/s).
    - No ejecutar pruebas destructivas de denegación de servicio por agotamiento de recursos o recursión infinita en GraphQL.
 3. **Registro Forense Continuo**:
    - Asegurar que la sesión esté auditada en tmux mediante `pt-log start <engagement>`.

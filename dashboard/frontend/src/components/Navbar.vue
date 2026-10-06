@@ -33,6 +33,14 @@
             Auditorías & Retos
           </router-link>
           <router-link
+            to="/trash"
+            class="px-3 py-1.5 rounded-sm text-sm font-medium transition-all flex items-center space-x-1.5"
+            :class="$route.path === '/trash' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'"
+          >
+            <span>🗑️</span>
+            <span>Papelera</span>
+          </router-link>
+          <router-link
             to="/chat"
             class="px-3 py-1.5 rounded-sm text-sm font-medium transition-all flex items-center space-x-1.5"
             :class="$route.path === '/chat' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'"

@@ -116,6 +116,23 @@ test('Navbar incluye enlace táctico a Chat IA (/chat)', async () => {
   }
 })
 
+test('Navbar incluye enlace táctico a la Papelera (/trash)', async () => {
+  // Fase 110 / backlog A6: antes solo se llegaba a la papelera desde un
+  // botón dentro de la lista de proyectos, no desde el menú principal.
+  const mockApi = {
+    getTelemetry: async () => ({ local_ip: '127.0.0.1', vpn: { connected: false } }),
+    getSavedVpnCredentials: async () => ({}),
+  }
+  const { root, cleanup } = await mountNavbar(mockApi)
+  try {
+    const trashLink = root.querySelector('a[href="/trash"]')
+    assert.ok(trashLink, 'Debe existir enlace hacia /trash en Navbar')
+    assert.match(trashLink.textContent, /Papelera/)
+  } finally {
+    cleanup()
+  }
+})
+
 test('ChatView renderiza selector de modelos OpenRouter y presets populares', async () => {
   const mockApi = {
     getVaultKeys: async () => [

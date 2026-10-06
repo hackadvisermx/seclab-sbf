@@ -330,6 +330,9 @@
             {{ reconStatus.summary?.subdomains_count || 0 }}
           </div>
           <div class="text-[10px] text-slate-500 mt-0.5">Guardados en recon/subdomains.txt</div>
+          <div v-if="(reconStatus.summary?.subdomains_new_count || 0) > 0" class="text-[10px] text-emerald-400 font-bold mt-0.5">
+            +{{ reconStatus.summary.subdomains_new_count }} nuevos desde la última corrida
+          </div>
         </div>
 
         <div class="p-4 rounded-lg bg-[#0d1322] border border-slate-800">
@@ -346,6 +349,9 @@
             {{ reconStatus.summary?.live_hosts_count || 0 }}
           </div>
           <div class="text-[10px] text-slate-500 mt-0.5">live_hosts.txt (HTTP/HTTPS)</div>
+          <div v-if="(reconStatus.summary?.live_hosts_new_count || 0) > 0" class="text-[10px] text-emerald-400 font-bold mt-0.5">
+            +{{ reconStatus.summary.live_hosts_new_count }} nuevos desde la última corrida
+          </div>
         </div>
 
         <div class="p-4 rounded-lg bg-[#0d1322] border border-slate-800">
@@ -1520,7 +1526,9 @@ const reconStatus = ref({
   summary: {
     subdomains_count: 0,
     subdomains_discarded_out_of_scope: 0,
+    subdomains_new_count: 0,
     live_hosts_count: 0,
+    live_hosts_new_count: 0,
     urls_count: 0,
     js_files_count: 0,
     gf_patterns: {},

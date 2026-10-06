@@ -220,3 +220,71 @@ test('VaultView soporta proveedor openrouter con base_url y modelo predeterminad
     cleanup()
   }
 })
+
+test('VaultView permite editar llave existente actualizando base_url y modelo via updateVaultKey', async () => {
+  let updatedProvider = null
+  let updatedPayload = null
+  const mockApi = {
+    getVaultKeys: async () => [
+      {
+        id: 1,
+        provider: 'custom_llm',
+        label: 'Open Router',
+        service_type: 'llm',
+        masked_key: 'sk-or-••••••••••••••••3456',
+        base_url: ' https://openrouter.ai/api/v1',
+        model_name: 'anthropic/claude-3.5-sonnet',
+        is_active: true,
+        status: 'error',
+        status_message: "Fallo de conexión: Request URL is missing an 'http://' or 'https://' protocol.",
+        created_at: '2026-10-05T20:00:00Z',
+      }
+    ],
+    getProxyStats: async () => ({ total_requests: 0 }),
+    getProxyHistory: async () => [],
+    updateVaultKey: async (provider, payload) => {
+      updatedProvider = provider
+      updatedPayload = payload
+      return { status: 'ok' }
+    },
+  }
+  const { root, cleanup } = await mountVaultView(mockApi)
+  try {
+    // Buscar botón de Editar en la tarjeta
+    const editBtn = Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Editar'))
+    assert.ok(editBtn, 'Debe existir botón Editar en la tarjeta')
+    editBtn.click()
+    await flush()
+
+    // Comprobar título del modal en modo edición
+    const modalTitle = root.querySelector('.fixed h2')
+    assert.match(modalTitle.textContent, /Editar Configuración: Open Router/)
+
+    // Comprobar que el select de proveedor está deshabilitado
+    const providerSelect = root.querySelector('form select')
+    assert.equal(providerSelect.disabled, true, 'Proveedor debe estar deshabilitado en edición')
+
+    // Modificar base_url
+    const urlInput = root.querySelector('input[placeholder="http://localhost:11434/v1"]') || Array.from(root.querySelectorAll('form input')).find(i => i.value.includes('openrouter.ai'))
+    assert.ok(urlInput, 'Debe existir input de base_url')
+    urlInput.value = 'https://openrouter.ai/api/v1'
+    urlInput.dispatchEvent(new Event('input'))
+
+    // Enviar formulario
+    const form = root.querySelector('form')
+    form.dispatchEvent(new Event('submit'))
+    await flush()
+
+    // Verificar llamada a api.updateVaultKey
+    assert.equal(updatedProvider, 'custom_llm')
+    assert.ok(updatedPayload)
+    assert.equal(updatedPayload.label, 'Open Router')
+    assert.equal(updatedPayload.base_url, 'https://openrouter.ai/api/v1')
+    assert.equal(updatedPayload.model_name, 'anthropic/claude-3.5-sonnet')
+    assert.equal(updatedPayload.is_active, true)
+    assert.equal(updatedPayload.api_key, undefined, 'api_key no debe enviarse si se dejó en blanco')
+  } finally {
+    cleanup()
+  }
+})
+

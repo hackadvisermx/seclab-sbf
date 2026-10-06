@@ -2,6 +2,7 @@ import datetime
 import json
 import pathlib
 import re
+import sys
 import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
@@ -13,6 +14,29 @@ from app.models.schemas import (
     FindingFrontmatter,
     FindingCreate,
 )
+
+
+class ScopeValidationError(ValueError):
+    """Alcance inválido: target.yaml no se escribe hasta corregirlo."""
+
+
+def _validate_scope_payload(data: Dict[str, Any]) -> None:
+    """Valida scope/operational_limits con las mismas reglas que pt-scope-validator
+    antes de persistir target.yaml, para no dejar en disco un archivo que luego
+    haría fallar pt-scope o el pipeline de reconocimiento."""
+    if not isinstance(data, dict) or "scope" not in data:
+        return
+    scripts_dir = str(SCRIPTS_DIR)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    try:
+        import seclab_scope
+    except ImportError as exc:
+        raise ScopeValidationError(f"No se pudo cargar el validador de alcance: {exc}") from exc
+    try:
+        seclab_scope.validate_scope(data)
+    except seclab_scope.ScopeError as exc:
+        raise ScopeValidationError(str(exc)) from exc
 
 
 def _parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
@@ -282,7 +306,8 @@ class WorkspaceSyncService:
             return yaml.safe_load(f) or {}
 
     def save_target_yaml(self, eng_id: str, data: Dict[str, Any], eng_type: str = "engagement") -> bool:
-        """Guarda la especificación de alcance en target.yaml."""
+        """Guarda la especificación de alcance en target.yaml, validando antes de escribir."""
+        _validate_scope_payload(data)
         target_file = self._resolve_dir(eng_id, eng_type) / "target.yaml"
         target_file.parent.mkdir(parents=True, exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:

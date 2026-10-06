@@ -1,7 +1,7 @@
 from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import ScopeCheckRequest, ScopeCheckResponse
-from app.services.workspace_sync import workspace_service
+from app.services.workspace_sync import workspace_service, ScopeValidationError
 from app.services.runner_service import runner_service
 
 router = APIRouter(prefix="/scope", tags=["Alcance & Scope Guard"])
@@ -19,7 +19,10 @@ def get_scope_config(eng_id: str, type: str = Query("engagement")):
 @router.put("/{eng_id}")
 def update_scope_config(eng_id: str, payload: Dict[str, Any], type: str = Query("engagement")):
     """Actualiza la configuración de alcance en target.yaml."""
-    success = workspace_service.save_target_yaml(eng_id, payload, type)
+    try:
+        success = workspace_service.save_target_yaml(eng_id, payload, type)
+    except ScopeValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not success:
         raise HTTPException(status_code=500, detail="Error al guardar target.yaml")
     return {"status": "ok", "message": "target.yaml guardado con éxito"}

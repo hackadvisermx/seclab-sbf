@@ -2,9 +2,20 @@ import pathlib
 import re
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
-from app.config import CHEATSHEET_FILE, SKILLS_DIR
+from fastapi.responses import HTMLResponse
+from app.config import CHEATSHEET_FILE, SKILLS_DIR, GUIDE_HTML_FILE
 
 router = APIRouter(prefix="/help", tags=["Centro de Ayuda & Tácticas"])
+
+
+@router.get("/guide", response_class=HTMLResponse)
+def get_operator_guide():
+    """Sirve la guía visual e interactiva del operador (guia.html)."""
+    if not GUIDE_HTML_FILE.is_file() or GUIDE_HTML_FILE.is_symlink():
+        raise HTTPException(status_code=404, detail="Guía de laboratorio no encontrada")
+
+    content = GUIDE_HTML_FILE.read_text(encoding="utf-8", errors="ignore")
+    return HTMLResponse(content=content, media_type="text/html; charset=utf-8")
 
 
 @router.get("/cheatsheet")

@@ -78,6 +78,7 @@ export const api = {
   getNextStep: (id, prompt = false, type = 'engagement') => request(`/checklist/${id}/next?prompt=${prompt}&type=${type}`),
 
   // Centro de Ayuda & Telemetría
+  getGuideUrl: () => '/api/v1/help/guide',
   getCheatsheet: () => request('/help/cheatsheet'),
   getSkills: () => request('/help/skills'),
   getSkillDetail: (id) => request(`/help/skills/${id}`),

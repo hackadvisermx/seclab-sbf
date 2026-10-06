@@ -209,7 +209,8 @@ workspace-dir:
 	else \
 		if [ ! -d "$(WORKSPACE_DIR)/skills" ]; then cp -R workspace-seed/skills "$(WORKSPACE_DIR)/"; fi; \
 		if [ ! -d "$(WORKSPACE_DIR)/templates" ]; then cp -R workspace-seed/templates "$(WORKSPACE_DIR)/"; fi; \
-		printf '%s\n' "workspace ya existe con contenido: asegurado skills y templates ($(WORKSPACE_DIR))"; \
+		if [ ! -f "$(WORKSPACE_DIR)/guia.html" ]; then cp workspace-seed/guia.html "$(WORKSPACE_DIR)/"; fi; \
+		printf '%s\n' "workspace ya existe con contenido: asegurado skills, templates y guia.html ($(WORKSPACE_DIR))"; \
 	fi
 
 compose-config: ensure-env vpn-require-dir workspace-dir

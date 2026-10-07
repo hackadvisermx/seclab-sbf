@@ -26,10 +26,59 @@ if (!globalThis.localStorage) {
 const { createApp, nextTick } = await import('vue')
 const vueUrl = pathToFileURL(createRequire(import.meta.url).resolve('vue/dist/vue.runtime.esm-bundler.js')).href
 
+// Compila un SFC real a una URL `data:` importable, reemplazando `from 'vue'`
+// por la URL resuelta del paquete (igual que el resto de este arnés). Se usa
+// para inyectar el ModelPicker real -- no un doble -- dentro de VaultView y
+// ChatView, que lo importan por ruta relativa (`../components/ModelPicker.vue`),
+// algo que un módulo `data:` no puede resolver por sí mismo.
+async function compileComponentUrl(relativePath) {
+  const source = await readFile(new URL(relativePath, import.meta.url), 'utf8')
+  const { descriptor } = parse(source)
+  const compiled = compileScript(descriptor, { id: relativePath, inlineTemplate: true })
+  const code = compiled.content.replace(/from ["']vue["']/g, `from ${JSON.stringify(vueUrl)}`)
+  return `data:text/javascript;base64,${Buffer.from(code).toString('base64')}#${Math.random()}`
+}
+const modelPickerUrl = await compileComponentUrl('../src/components/ModelPicker.vue')
+
 async function flush() {
   await nextTick()
   await new Promise(resolve => setTimeout(resolve, 20))
   await nextTick()
+}
+
+// Helpers para interactuar con el combobox de modelos (ModelPicker): un
+// único <input role="combobox"> que abre un panel flotante con
+// role="listbox"/role="option" al enfocarse, en vez del <select> + <input>
+// de búsqueda separados de antes.
+function getModelPickerInput(root) {
+  return root.querySelector('input[role="combobox"]')
+}
+function getModelPickerOptions(root) {
+  return Array.from(root.querySelectorAll('[role="option"]'))
+}
+async function openModelPicker(root) {
+  const input = getModelPickerInput(root)
+  input.focus()
+  await flush()
+  return input
+}
+async function typeInModelPicker(root, text) {
+  const input = await openModelPicker(root)
+  input.value = text
+  input.dispatchEvent(new Event('input'))
+  await flush()
+  return input
+}
+async function clickModelPickerOption(root, text) {
+  await openModelPicker(root)
+  const option = getModelPickerOptions(root).find(o => o.textContent.includes(text))
+  if (!option) {
+    const available = getModelPickerOptions(root).map(o => o.textContent).join(' | ')
+    throw new Error(`No se encontró la opción "${text}" en el combobox de modelos. Disponibles: ${available}`)
+  }
+  option.dispatchEvent(new browser.window.MouseEvent('mousedown', { bubbles: true }))
+  await flush()
+  return option
 }
 
 async function mountNavbar(api) {
@@ -72,6 +121,7 @@ async function mountChatView(api) {
   const code = compiled.content
     .replace(/from ["']vue["']/g, `from ${JSON.stringify(vueUrl)}`)
     .replace("import { api } from '../api'", 'const api = globalThis.fixtureChatApi')
+    .replace("import ModelPicker from '../components/ModelPicker.vue'", `import ModelPicker from ${JSON.stringify(modelPickerUrl)}`)
 
   const component = (await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}#${Math.random()}`)).default
   const root = document.createElement('div')
@@ -91,6 +141,7 @@ async function mountVaultView(api) {
   const code = compiled.content
     .replace(/from ["']vue["']/g, `from ${JSON.stringify(vueUrl)}`)
     .replace("import { api } from '../api'", 'const api = globalThis.fixtureVaultApi')
+    .replace("import ModelPicker from '../components/ModelPicker.vue'", `import ModelPicker from ${JSON.stringify(modelPickerUrl)}`)
 
   const component = (await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}#${Math.random()}`)).default
   const root = document.createElement('div')
@@ -153,18 +204,18 @@ test('ChatView renderiza selector de modelos OpenRouter y presets populares', as
     assert.match(text, /OPENROUTER & MODEL HUB/)
     assert.match(text, /VAULT ONLINE/)
 
-    // Verificar selectores
+    // Verificar selector de proveedor y combobox de modelo
     const selects = root.querySelectorAll('select')
-    assert.ok(selects.length >= 2, 'Debe haber selectores de proveedor y modelo')
-
+    assert.ok(selects.length >= 1, 'Debe haber selector de proveedor')
     const providerSelect = selects[0]
     assert.match(providerSelect.textContent, /OpenRouter/)
 
-    const modelSelect = selects[1]
-    assert.match(modelSelect.textContent, /Claude 3\.5 Sonnet/)
-    assert.match(modelSelect.textContent, /DeepSeek V3/)
-    assert.match(modelSelect.textContent, /DeepSeek R1/)
-    assert.match(modelSelect.textContent, /Llama 3\.3 70B/)
+    await openModelPicker(root)
+    const optionTexts = getModelPickerOptions(root).map(o => o.textContent)
+    assert.ok(optionTexts.some(t => t.includes('Claude 3.5 Sonnet')))
+    assert.ok(optionTexts.some(t => t.includes('DeepSeek V3')))
+    assert.ok(optionTexts.some(t => t.includes('DeepSeek R1')))
+    assert.ok(optionTexts.some(t => t.includes('Llama 3.3 70B')))
   } finally {
     cleanup()
   }
@@ -189,10 +240,7 @@ test('ChatView despacha consulta al proxy táctico con proveedor y modelo especi
   }
   const { root, cleanup } = await mountChatView(mockApi)
   try {
-    const modelSelect = root.querySelectorAll('select')[1]
-    modelSelect.value = 'deepseek/deepseek-r1'
-    modelSelect.dispatchEvent(new Event('change'))
-    await flush()
+    await clickModelPickerOption(root, 'DeepSeek R1')
 
     const textarea = root.querySelector('textarea')
     assert.ok(textarea, 'Debe existir textarea de entrada')
@@ -297,10 +345,11 @@ test('VaultView permite editar llave existente actualizando base_url y modelo vi
     assert.ok(urlInput, 'Debe existir input de base_url')
     urlInput.value = 'https://openrouter.ai/api/v1'
     urlInput.dispatchEvent(new Event('input'))
+    await flush()
+    // Cambiar base_url reinicia el catálogo precargado (watch() de abajo en
+    // el componente): hay que volver a consultarlo antes de poder guardar.
+    await clickModelPickerOption(root, 'Actualizar modelos')
 
-    await flush()
-    Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Probar clave y cargar modelos')).click()
-    await flush()
     // Enviar formulario
     const form = root.querySelector('form')
     form.dispatchEvent(new Event('submit'))
@@ -340,8 +389,9 @@ test('Vault precarga el catálogo automáticamente al abrir Editar, sin pulsar n
     await flush()
     assert.equal(previewCalls, 1, 'debe consultarse automáticamente al abrir Editar, sin clics adicionales')
     assert.equal(previewPayload.api_key, null, 'sin reescribir el secreto, debe usar la clave ya guardada (api_key null)')
-    const modelSelect = root.querySelectorAll('form select')[1]
-    assert.match(modelSelect.textContent, /DeepSeek R1/, 'el catálogo precargado debe poblar el selector')
+    await openModelPicker(root)
+    const optionTexts = getModelPickerOptions(root).map(o => o.textContent)
+    assert.ok(optionTexts.some(t => t.includes('DeepSeek R1')), 'el catálogo precargado debe poblar el combobox')
   } finally { cleanup() }
 })
 
@@ -377,8 +427,9 @@ test('Chat usa la clave custom_llm de OpenRouter y su catálogo sin presets fijo
     proxyChat: async (messages, provider, model) => { call = { provider, model }; return { content: 'Respuesta', model } },
   })
   try {
-    assert.match(root.querySelectorAll('select')[1].textContent, /Nuevo modelo accesible/)
-    assert.equal(root.querySelectorAll('select')[1].value, 'fixture/new-model')
+    const modelInput = getModelPickerInput(root)
+    assert.match(modelInput.value, /Nuevo modelo accesible/)
+    assert.match(modelInput.value, /fixture\/new-model/)
     const input = root.querySelector('textarea')
     input.value = 'Hola'
     input.dispatchEvent(new Event('input'))
@@ -403,11 +454,10 @@ test('Vault consulta catálogo antes de guardar clave y persiste modelo seleccio
     provider.value = 'openrouter'; provider.dispatchEvent(new Event('change')); await flush()
     const key = root.querySelector('input[type="password"]')
     key.value = 'fixture-token'; key.dispatchEvent(new Event('input')); await flush()
-    Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Probar clave y cargar modelos')).click(); await flush()
+    key.dispatchEvent(new Event('blur')); await flush()
     assert.equal(preview.api_key, 'fixture-token')
     assert.equal(saved, undefined)
-    const model = root.querySelectorAll('form select')[1]
-    model.value = 'fixture/new-model'; model.dispatchEvent(new Event('change')); await flush()
+    await clickModelPickerOption(root, 'Nuevo modelo accesible')
     root.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await flush()
     assert.equal(saved.model_name, 'fixture/new-model')
   } finally { cleanup() }
@@ -435,21 +485,19 @@ test('Vault precarga y filtra el catálogo para OpenAI, Anthropic y Gemini, no s
         await flush()
       }
 
-      // Antes de consultar: debe mostrarse el selector+buscador, no un texto libre.
-      assert.equal(root.querySelectorAll('form select').length, 2, `${provider}: debe mostrar el select de modelos, no un input libre`)
-      assert.ok(root.querySelector('input[placeholder="Buscar por nombre o ID"]'), `${provider}: debe existir el buscador de modelos`)
+      // Antes de consultar: debe mostrarse el combobox de modelos, no un texto libre.
+      assert.equal(root.querySelectorAll('form select').length, 1, `${provider}: solo debe quedar el select de proveedor`)
+      assert.ok(getModelPickerInput(root), `${provider}: debe existir el combobox de modelos`)
 
-      Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Probar clave y cargar modelos')).click()
-      await flush()
+      await clickModelPickerOption(root, 'Actualizar modelos')
       assert.equal(preview.provider, provider)
 
-      // Filtrado al teclear en el buscador.
-      const search = root.querySelector('input[placeholder="Buscar por nombre o ID"]')
-      search.value = 'DeepSeek R1'
-      search.dispatchEvent(new Event('input'))
+      // Filtrado al teclear en el combobox (sigue abierto tras "Actualizar").
+      const input = getModelPickerInput(root)
+      input.value = 'DeepSeek R1'
+      input.dispatchEvent(new Event('input'))
       await flush()
-      const modelSelect = root.querySelectorAll('form select')[1]
-      const optionLabels = Array.from(modelSelect.querySelectorAll('option')).map(o => o.textContent)
+      const optionLabels = getModelPickerOptions(root).map(o => o.textContent)
       assert.ok(optionLabels.some(l => l.includes('DeepSeek R1')), `${provider}: el modelo buscado debe seguir en la lista`)
       assert.ok(!optionLabels.some(l => l.includes('Llama 3.3 70B')), `${provider}: el filtro debe ocultar los modelos que no coinciden`)
     } finally {
@@ -468,7 +516,7 @@ test('Chat evita enviar un modelo retirado y muestra errores del catálogo', asy
     proxyChat: async () => { calls++ },
   })
   try {
-    assert.equal(root.querySelectorAll('select')[1].value, '')
+    assert.equal(getModelPickerInput(root).value, '')
     const input = root.querySelector('textarea')
     input.value = 'Hola'; input.dispatchEvent(new Event('input')); await flush()
     input.dispatchEvent(new browser.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await flush()
@@ -496,21 +544,16 @@ test('Chat IA Táctico precarga y filtra el catálogo para proveedores no-OpenRo
     await flush()
     assert.equal(requestedProvider, 'openai', 'debe consultar el catálogo del proveedor seleccionado, no solo openrouter')
 
-    const modelSelect = root.querySelectorAll('select')[1]
-    assert.match(modelSelect.textContent, /DeepSeek R1/, 'el catálogo debe poblar el selector de modelo igual que para OpenRouter')
+    await openModelPicker(root)
+    const initialOptions = getModelPickerOptions(root).map(o => o.textContent)
+    assert.ok(initialOptions.some(l => l.includes('DeepSeek R1')), 'el catálogo debe poblar el combobox de modelo igual que para OpenRouter')
 
-    const search = root.querySelector('input[aria-label="Buscar modelos"]')
-    assert.ok(search, 'debe existir el buscador de modelos también para proveedores no-OpenRouter')
-    search.value = 'DeepSeek R1'
-    search.dispatchEvent(new Event('input'))
-    await flush()
-    const optionLabels = Array.from(modelSelect.querySelectorAll('option')).map(o => o.textContent)
-    assert.ok(optionLabels.some(l => l.includes('DeepSeek R1')))
-    assert.ok(!optionLabels.some(l => l.includes('Llama 3.3 70B')), 'el filtro debe ocultar los que no coinciden')
+    await typeInModelPicker(root, 'DeepSeek R1')
+    const filteredOptions = getModelPickerOptions(root).map(o => o.textContent)
+    assert.ok(filteredOptions.some(l => l.includes('DeepSeek R1')))
+    assert.ok(!filteredOptions.some(l => l.includes('Llama 3.3 70B')), 'el filtro debe ocultar los que no coinciden')
 
-    modelSelect.value = 'deepseek/deepseek-r1'
-    modelSelect.dispatchEvent(new Event('change'))
-    await flush()
+    await clickModelPickerOption(root, 'DeepSeek R1')
 
     const textarea = root.querySelector('textarea')
     textarea.value = 'Hola'

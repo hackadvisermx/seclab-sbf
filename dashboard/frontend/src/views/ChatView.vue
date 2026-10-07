@@ -103,16 +103,17 @@
             </span>
           </label>
           <div class="flex gap-2">
-            <select
-              v-model="selectedCatalogModel"
-              @change="onCatalogModelChange"
-              class="flex-1 min-w-0 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-white focus:outline-hidden"
-            >
-              <option value="">Elegir modelo</option>
-              <option v-for="model in filteredModels" :key="model.id" :value="model.id">{{ model.name }} — {{ model.id }}</option>
-              <option v-if="selectedCatalogModel && selectedCatalogModel !== 'custom' && !filteredModels.some(m => m.id === selectedCatalogModel)" :value="selectedCatalogModel">{{ selectedCatalogModel }} (selección actual)</option>
-              <option value="custom">✏️ Personalizado (Escribir Slug)</option>
-            </select>
+            <ModelPicker
+              :model-value="selectedCatalogModel"
+              @update:model-value="onCatalogModelChange"
+              :models="availableModels"
+              :loading="modelsLoading"
+              :error="modelsError"
+              placeholder="Elegir modelo"
+              allow-custom
+              class="flex-1 min-w-0"
+              @refresh="loadModels"
+            />
 
             <!-- Input modelo solo cuando se elige "Personalizado" -->
             <input
@@ -123,12 +124,7 @@
               class="flex-1 min-w-0 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-white focus:outline-hidden"
             />
           </div>
-          <div class="mt-2 space-y-1">
-            <input v-model="modelSearch" aria-label="Buscar modelos" placeholder="Buscar por nombre o ID" class="w-full bg-[#070b14] border border-slate-700 px-2 py-1 text-sm" />
-            <button type="button" @click="loadModels" :disabled="modelsLoading" class="text-xs text-cyan-300">{{ modelsLoading ? 'Consultando…' : 'Actualizar catálogo' }}</button>
-            <p class="text-xs text-slate-400">{{ availableModels.length }} modelos disponibles para este proveedor. El saldo, los límites y la disponibilidad se comprueban al consultar.</p>
-            <p v-if="modelsError" role="alert" class="text-xs text-red-400">{{ modelsError }}</p>
-          </div>
+          <p class="mt-2 text-xs text-slate-400">{{ availableModels.length }} modelos disponibles para este proveedor. El saldo, los límites y la disponibilidad se comprueban al consultar.</p>
         </div>
 
         <!-- Selector de Rol / Persona Táctica -->
@@ -303,6 +299,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { api } from '../api'
+import ModelPicker from '../components/ModelPicker.vue'
 
 const messages = ref([])
 const inputMessage = ref('')
@@ -321,10 +318,8 @@ const vaultKeys = ref([])
 const isLoadingKeys = ref(true)
 
 const availableModels = ref([])
-const modelSearch = ref('')
 const modelsLoading = ref(false)
 const modelsError = ref('')
-const filteredModels = computed(() => availableModels.value.filter(m => `${m.name} ${m.id}`.toLowerCase().includes(modelSearch.value.toLowerCase())))
 const openRouterKey = computed(() => vaultKeys.value.find(k => k.provider === 'openrouter' && k.is_active) || vaultKeys.value.find(k => k.provider === 'custom_llm' && k.is_active && isOpenRouter(k.base_url)))
 function isOpenRouter(url) {
   try { return ['openrouter.ai', 'eu.openrouter.ai'].includes(new URL(url?.trim().includes('://') ? url.trim() : `https://${url?.trim()}`).hostname) } catch { return false }
@@ -403,8 +398,9 @@ function onProviderChange() {
   savePreferences()
 }
 
-function onCatalogModelChange() {
-  if (selectedCatalogModel.value !== 'custom') {
+function onCatalogModelChange(value) {
+  selectedCatalogModel.value = value
+  if (value !== 'custom') {
     customModelName.value = ''
   }
   savePreferences()

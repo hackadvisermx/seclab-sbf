@@ -1388,6 +1388,7 @@
               <label class="block text-xs font-mono text-slate-300 mb-1">Slug / Identificador:</label>
               <input
                 v-model="findingForm.slug"
+                :readonly="editingFinding"
                 type="text"
                 required
                 placeholder="idor-user-profile, sqli-login"
@@ -1477,6 +1478,12 @@
             <div class="text-[10px] font-mono text-slate-500">{{ findingForm.cvss_vector }}</div>
           </div>
 
+          <div v-if="editingFinding">
+            <label class="block text-xs font-mono text-slate-300 mb-1">Contenido completo de la ficha (Markdown):</label>
+            <textarea v-model="findingForm.body" rows="14" data-testid="finding-markdown" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-3 text-xs font-mono text-slate-100"></textarea>
+            <p class="text-xs text-slate-400">Conserva las secciones de evidencia, pasos y remediación. La fecha, autor y otros metadatos originales se mantienen.</p>
+          </div>
+          <template v-else>
           <div>
             <label class="block text-xs font-mono text-slate-300 mb-1">Descripción del Hallazgo:</label>
             <textarea
@@ -1527,6 +1534,8 @@
               class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
             />
           </div>
+
+          </template>
 
           <div class="pt-3 border-t border-slate-800 flex items-center justify-end space-x-3">
             <button
@@ -1732,6 +1741,7 @@ const scopeTestResult = ref(null)
 // Findings
 const findings = ref([])
 const showFindingModal = ref(false)
+const editingFinding = ref(false)
 const findingForm = ref({
   slug: '',
   title: '',
@@ -1944,6 +1954,7 @@ async function loadFindings() {
 }
 
 function openNewFindingModal() {
+  editingFinding.value = false
   findingForm.value = {
     slug: '',
     title: '',
@@ -1963,6 +1974,7 @@ function openNewFindingModal() {
 }
 
 function editFinding(f) {
+  editingFinding.value = true
   findingForm.value = {
     slug: f.slug,
     title: f.frontmatter?.title || '',
@@ -1972,7 +1984,8 @@ function editFinding(f) {
     cvss_vector: f.frontmatter?.cvss_vector || '',
     cwe: f.frontmatter?.cwe || '',
     asset: f.frontmatter?.asset || '',
-    description: f.body || '',
+    body: f.body || '',
+    description: '',
     steps_to_reproduce: '',
     http_request: '',
     http_response: '',

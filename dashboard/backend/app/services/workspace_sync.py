@@ -21,6 +21,10 @@ class ScopeValidationError(ValueError):
     """Alcance inválido: target.yaml no se escribe hasta corregirlo."""
 
 
+class FindingUpdateError(ValueError):
+    pass
+
+
 def _validate_scope_payload(data: Dict[str, Any]) -> None:
     """Valida scope/operational_limits con las mismas reglas que pt-scope-validator
     antes de persistir target.yaml, para no dejar en disco un archivo que luego
@@ -40,19 +44,19 @@ def _validate_scope_payload(data: Dict[str, Any]) -> None:
         raise ScopeValidationError(str(exc)) from exc
 
 
-def _parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
-    """Extrae metadatos YAML frontmatter y cuerpo markdown."""
-    frontmatter = {}
-    body = content
-    if content.startswith("---"):
-        parts = content.split("---", 2)
-        if len(parts) >= 3:
-            try:
-                frontmatter = yaml.safe_load(parts[1]) or {}
-            except Exception:
-                pass
-            body = parts[2].strip()
-    return frontmatter, body
+def _parse_frontmatter(content: str, strict: bool = False) -> Tuple[Dict[str, Any], str]:
+    match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)(.*)\Z", content, re.DOTALL)
+    if not match:
+        if strict and content.startswith("---"):
+            raise FindingUpdateError("Frontmatter inválido; no se sobrescribió la ficha.")
+        return {}, content
+    try:
+        metadata = yaml.safe_load(match[1]) or {}
+    except yaml.YAMLError as error:
+        if strict:
+            raise FindingUpdateError("Metadatos YAML inválidos; no se sobrescribió la ficha.") from error
+        metadata = {}
+    return metadata, match[2].strip()
 
 
 class WorkspaceSyncService:
@@ -333,7 +337,7 @@ class WorkspaceSyncService:
                     title=fm_data.get("title", slug.replace("-", " ").capitalize()),
                     severity=str(fm_data.get("severity", "MEDIUM")).upper(),
                     cvss_score=float(fm_data.get("cvss_score")) if fm_data.get("cvss_score") is not None else None,
-                    cvss_vector=fm_data.get("cvss_vector"),
+                    cvss_vector=fm_data.get("cvss_vector", fm_data.get("cvss_v31")),
                     cwe=fm_data.get("cwe"),
                     owasp=fm_data.get("owasp"),
                     asset=fm_data.get("asset"),
@@ -367,7 +371,7 @@ class WorkspaceSyncService:
             title=fm_data.get("title", slug.replace("-", " ").capitalize()),
             severity=str(fm_data.get("severity", "MEDIUM")).upper(),
             cvss_score=float(fm_data.get("cvss_score")) if fm_data.get("cvss_score") is not None else None,
-            cvss_vector=fm_data.get("cvss_vector"),
+            cvss_vector=fm_data.get("cvss_vector", fm_data.get("cvss_v31")),
             cwe=fm_data.get("cwe"),
             owasp=fm_data.get("owasp"),
             asset=fm_data.get("asset"),
@@ -390,6 +394,28 @@ class WorkspaceSyncService:
         ev_dir = self._resolve_dir(eng_id, eng_type) / "evidence"
         ev_dir.mkdir(parents=True, exist_ok=True)
         file_path = ev_dir / f"{finding_create.slug}.md"
+
+        if file_path.exists():
+            if finding_create.body is None:
+                raise FindingUpdateError("Para editar una ficha existente debes conservar su cuerpo Markdown completo.")
+            fm, _ = _parse_frontmatter(file_path.read_text(encoding="utf-8"), strict=True)
+            if not isinstance(fm, dict):
+                raise FindingUpdateError("Los metadatos de la ficha no son válidos; no se sobrescribió.")
+            for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status"):
+                if field in finding_create.model_fields_set:
+                    value = getattr(finding_create, field)
+                    if field in ("severity", "status") and value is not None:
+                        value = value.upper()
+                    fm[field] = value
+            content = f"---\n{yaml.dump(fm, default_flow_style=False, sort_keys=False, allow_unicode=True)}---\n\n{finding_create.body}"
+            temporary = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                temporary.write_text(content, encoding="utf-8")
+                temporary.chmod(file_path.stat().st_mode & 0o777)
+                temporary.replace(file_path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            return self.get_finding(eng_id, finding_create.slug, eng_type)
 
         now_date = datetime.date.today().isoformat()
         fm = {

@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import FindingDetail, FindingCreate
-from app.services.workspace_sync import workspace_service
+from app.services.workspace_sync import workspace_service, FindingUpdateError
 
 router = APIRouter(prefix="/findings", tags=["Hallazgos & Evidencias"])
 
@@ -74,7 +74,10 @@ def get_single_finding(eng_id: str, slug: str, type: str = Query("engagement")):
 @router.post("/{eng_id}", response_model=FindingDetail)
 def create_or_update_finding(eng_id: str, payload: FindingCreate, type: str = Query("engagement")):
     """Crea o actualiza una ficha en evidence/<slug>.md bajo el estándar Evidence-First."""
-    return workspace_service.save_finding(eng_id, payload, type)
+    try:
+        return workspace_service.save_finding(eng_id, payload, type)
+    except FindingUpdateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.delete("/{eng_id}/{slug}")

@@ -126,6 +126,7 @@ class FindingCreate(BaseModel):
     http_request: Optional[str] = None
     http_response: Optional[str] = None
     remediation: Optional[str] = None
+    body: Optional[str] = None
 
 
 # ==============================================================================

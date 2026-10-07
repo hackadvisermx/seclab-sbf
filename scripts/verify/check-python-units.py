@@ -876,8 +876,9 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             shutil.copy(target_yaml, tmp / "target.yaml")
 
             # Comprobar check_findings en estado saludable
-            ok, issues = report_compiler.check_findings(tmp)
+            ok, issues, duplicate_warnings = report_compiler.check_findings(tmp)
             self.assertTrue(ok)
+            self.assertEqual(duplicate_warnings, [])
 
             # Comprobar compilación de REPORT.md
             report_out = report_compiler.build_report(tmp)
@@ -894,9 +895,44 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             # Comprobar detección de activo fuera de alcance
             vuln_file = ev_dir / "VULN-01.md"
             vuln_file.write_text(vuln_file.read_text().replace("https://api.example.com/v1/users/1234/profile", "https://payments.example.com/checkout"))
-            ok_bad, issues_bad = report_compiler.check_findings(tmp)
+            ok_bad, issues_bad, _ = report_compiler.check_findings(tmp)
             self.assertFalse(ok_bad)
             self.assertTrue(any("FUERA DE ALCANCE" in msg for msg in issues_bad))
+
+            # 2c. Validar deduplicacion por causa raiz (fase 122 / backlog A17): dos
+            # fichas que comparten CWE + activo exacto deben marcarse como posible
+            # duplicado, sin por ello fallar la verificacion (es una decision del
+            # operador, no un hecho automatico) ni bloquear la compilacion del reporte.
+            vuln_file.write_text(vuln_file.read_text().replace("https://payments.example.com/checkout", "https://api.example.com/v1/users/1234/profile"))
+            shutil.copy(evidence_tmpl, ev_dir / "VULN-02.md")
+            dup_file = ev_dir / "VULN-02.md"
+            dup_file.write_text(dup_file.read_text().replace("VULN-01", "VULN-02").replace('title: "Título de la Vulnerabilidad o Hallazgo"', 'title: "IDOR en otro endpoint del mismo recurso"'))
+
+            findings_with_dup = report_compiler.get_findings(ev_dir)
+            dup_groups = report_compiler.find_duplicate_groups(findings_with_dup)
+            self.assertEqual(len(dup_groups), 1)
+            self.assertEqual({f["id"] for f in dup_groups[0]}, {"VULN-01", "VULN-02"})
+
+            ok_dup, issues_dup, duplicate_warnings_dup = report_compiler.check_findings(tmp)
+            self.assertTrue(ok_dup, issues_dup)
+            self.assertEqual(len(duplicate_warnings_dup), 1)
+            self.assertIn("VULN-01", duplicate_warnings_dup[0])
+            self.assertIn("VULN-02", duplicate_warnings_dup[0])
+            self.assertIn("CWE-639", duplicate_warnings_dup[0])
+
+            dup_report = report_compiler.build_report(tmp)
+            dup_content = dup_report.read_text(encoding="utf-8")
+            self.assertIn("Posibles duplicados por causa raíz", dup_content)
+            self.assertIn("VULN-01", dup_content)
+            self.assertIn("VULN-02", dup_content)
+
+            # Hallazgos con el mismo CWE pero distinto activo no deben agruparse.
+            dup_file.write_text(dup_file.read_text().replace(
+                "https://api.example.com/v1/users/1234/profile", "https://api.example.com/v1/orders/5678/items"
+            ))
+            findings_diff_asset = report_compiler.get_findings(ev_dir)
+            self.assertEqual(report_compiler.find_duplicate_groups(findings_diff_asset), [])
+            dup_file.unlink()
 
         # 2b. Validar la biblioteca de plantillas de hallazgo reutilizables (fase 121 / backlog A16):
         # cada plantilla debe ser YAML valido para pt-report-compiler Y conservar los placeholders

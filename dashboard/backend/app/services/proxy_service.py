@@ -201,12 +201,12 @@ class ProxyService:
         """Enruta consultas con failover dinámico entre proveedores activos del Vault."""
         candidates = []
 
-        if not req.provider and not req.model and profile == "local":
+        if not req.provider and profile == "local":
             entry = vault_service.get_key_entry("custom_llm")
             if (not entry or not entry.get("is_active") or not entry.get("api_key")
                     or not entry.get("base_url") or is_openrouter_url(entry["base_url"])):
                 raise ValueError("El perfil local requiere un endpoint custom_llm activo; no se enviará el contexto a otro proveedor.")
-            candidates.append(("custom_llm", entry.get("model_name") or "local-model"))
+            candidates.append(("custom_llm", req.model or entry.get("model_name") or "local-model"))
 
         # 1. Si se solicitó un proveedor específico
         if req.provider:
@@ -217,7 +217,7 @@ class ProxyService:
                     candidates.append(("custom_llm", req.model))
 
         # 2. Si se solicitó un modelo específico sin proveedor explícito
-        elif req.model:
+        elif req.model and not candidates:
             # Si el modelo tiene formato "vendor/model" (común en OpenRouter), enrutar preferentemente a OpenRouter si está activo
             if "/" in req.model:
                 openrouter_entry = vault_service.get_key_entry("openrouter")

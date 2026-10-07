@@ -52,3 +52,16 @@ class TestProviderBoundary(unittest.TestCase):
     def test_general_profile_retains_authorized_failover(self):
         _, calls, _ = self.run_request({'openrouter': self.local, 'openai': self.local}, profile='quick', failure=RuntimeError('failed'))
         self.assertEqual([c.args[0] for c in calls], ['openrouter', 'openai'])
+
+    def test_local_with_explicit_model_stays_local_and_missing_endpoint_fails_closed(self):
+        for model in ('local-model', 'vendor/model'):
+            self.req.model = model
+            reply, calls, key_calls = self.run_request({'custom_llm': self.local, 'openrouter': self.local})
+            self.assertIsNotNone(reply)
+            self.assertEqual([c.args[0] for c in calls], ['custom_llm'])
+            self.assertEqual(calls[0].kwargs['model_override'], model)
+            self.assertEqual(key_calls, 0)
+            reply, calls, key_calls = self.run_request({'custom_llm': None, 'openrouter': self.local})
+            self.assertIsNone(reply)
+            self.assertEqual(calls, [])
+            self.assertEqual(key_calls, 0)

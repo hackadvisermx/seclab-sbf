@@ -1,6 +1,6 @@
 # Fase 143: contratos de guía y alcance inicial conservador
 
-Fecha: 2026-10-07. Base: `fa5c310`. Rama: `phase/143-guidance-contracts`.
+Fecha: 2026-10-07. Base: `fa5c310`. Rama: `phase/143-guidance-contracts`. PR: [#163](https://github.com/hackadvisermx/seclab-sbf/pull/163), pendiente de aprobación del owner.
 
 ## Motivo y alcance
 

@@ -28,7 +28,10 @@ class TestTerminalProxy(unittest.TestCase):
         cls.ttyd_port = _free_port()
         cls.ttyd_password = "fixture-ttyd-password"
         cls.ttyd_proc = subprocess.Popen(
-            [str(ttyd_bin), "-i", "127.0.0.1", "-p", str(cls.ttyd_port), "-c", f"tester:{cls.ttyd_password}", "/bin/sh"],
+            # -O replica el flag real de scripts/entrypoint/ttyd-as-tester.sh
+            # (check-origin de ttyd): sin él, este fixture no reproduce el
+            # rechazo que sí ocurre contra el ttyd real de la imagen.
+            [str(ttyd_bin), "-i", "127.0.0.1", "-p", str(cls.ttyd_port), "-O", "-c", f"tester:{cls.ttyd_password}", "/bin/sh"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         deadline = time.monotonic() + 5

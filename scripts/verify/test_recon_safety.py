@@ -1,6 +1,8 @@
 import importlib.util
 import json
+import os
 import pathlib
+import re
 import socket
 import ssl
 import subprocess
@@ -9,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import Mock, patch
 
@@ -285,6 +288,30 @@ class ReconPipelineSafetyTests(unittest.TestCase):
             engine.run_all('probe')
         self.assertEqual(self.recon.joinpath('next_commands.txt').read_text(), '')
 
+    def test_run_all_sends_notification_with_status_on_success_and_failure(self):
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        with patch.object(pipeline, 'send_notification') as notify:
+            self.make_pipeline().run_all('subdomains')
+            notify.assert_called_once()
+            self.assertIn('completed', notify.call_args[0][0])
+            self.assertEqual(notify.call_args.kwargs['level'], 'info')
+
+            notify.reset_mock()
+            self.recon.joinpath('subdomains.txt').write_text('10.0.0.1\n')
+            engine = self.make_pipeline()
+            with patch.object(pipeline, 'ProbeClient') as client:
+                client.return_value.probe.side_effect = OSError('fallo simulado')
+                engine.run_all('probe')
+            notify.assert_called_once()
+            self.assertIn('failed', notify.call_args[0][0])
+            self.assertEqual(notify.call_args.kwargs['level'], 'error')
+
+    def test_run_all_does_not_send_notification_during_dry_run(self):
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        with patch.object(pipeline, 'send_notification') as notify:
+            self.make_pipeline(dry_run=True).run_all('all')
+        notify.assert_not_called()
+
     def test_dry_run_does_not_modify_files_or_invent_results(self):
         self.recon.joinpath('subdomains.txt').write_text('example.test\nevil.test\n')
         self.root.joinpath('terminal.log').write_text('unchanged')
@@ -315,6 +342,119 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(SCRIPTS / 'pt-recon-pipeline.py'), 'filter', str(source), str(other)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, 'other.test\n')
+
+
+class ReconNotificationTests(unittest.TestCase):
+    def test_no_webhook_configured_never_calls_urlopen(self):
+        env = {k: v for k, v in os.environ.items() if k != 'SECLAB_NOTIFY_WEBHOOK'}
+        with patch.dict(os.environ, env, clear=True), patch.object(pipeline.urllib.request, 'urlopen') as urlopen:
+            pipeline.send_notification('titulo', 'mensaje')
+        urlopen.assert_not_called()
+
+    def test_webhook_configured_posts_json_payload_with_title_message_and_level(self):
+        with patch.dict(os.environ, {'SECLAB_NOTIFY_WEBHOOK': 'http://notify.example.test/hook'}):
+            with patch.object(pipeline.urllib.request, 'urlopen') as urlopen:
+                urlopen.return_value.close = Mock()
+                pipeline.send_notification('Reconocimiento completed: demo', 'Subdominios: 3', level='info')
+            urlopen.assert_called_once()
+            request = urlopen.call_args[0][0]
+            self.assertEqual(request.full_url, 'http://notify.example.test/hook')
+            self.assertEqual(request.get_header('Content-type'), 'application/json')
+            body = json.loads(request.data.decode('utf-8'))
+            self.assertIn('Reconocimiento completed: demo', body['text'])
+            self.assertIn('Subdominios: 3', body['text'])
+            self.assertIn('[info]', body['text'])
+
+    def test_network_failure_during_notification_is_swallowed(self):
+        with patch.dict(os.environ, {'SECLAB_NOTIFY_WEBHOOK': 'http://notify.example.test/hook'}):
+            with patch.object(pipeline.urllib.request, 'urlopen', side_effect=OSError('inalcanzable')):
+                pipeline.send_notification('titulo', 'mensaje')  # no debe propagar la excepción
+
+
+class ReconOOBCallbackNotificationTests(unittest.TestCase):
+    """Ejecuta de verdad el servidor HTTP embebido de pt-callback (extraido del
+    plugin zsh) para probar la notificacion webhook opcional end-to-end, no solo
+    que el texto exista en el archivo."""
+
+    def extract_callback_server_script(self):
+        plugin_path = SCRIPTS.parent / 'shell' / 'pentest-lab' / 'pentest-lab.plugin.zsh'
+        content = plugin_path.read_text(encoding='utf-8')
+        match = re.search(r'python3 -c "\n(.*?)\n" "\$port" "\$log_file"', content, re.DOTALL)
+        self.assertIsNotNone(match, 'No se encontro el script embebido de pt-callback en el plugin zsh')
+        return match.group(1)
+
+    def free_port(self):
+        probe_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe_socket.bind(('127.0.0.1', 0))
+        port = probe_socket.getsockname()[1]
+        probe_socket.close()
+        return port
+
+    def start_callback_server(self, tmp_dir, env):
+        script_path = pathlib.Path(tmp_dir) / 'callback_server.py'
+        script_path.write_text(self.extract_callback_server_script(), encoding='utf-8')
+        log_path = pathlib.Path(tmp_dir) / 'callback.log'
+        port = self.free_port()
+        proc = subprocess.Popen([sys.executable, str(script_path), str(port), str(log_path)], env=env)
+        self.addCleanup(lambda: (proc.terminate(), proc.wait(timeout=5)))
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection(('127.0.0.1', port), timeout=0.2):
+                    break
+            except OSError:
+                time.sleep(0.05)
+        else:
+            self.fail('El receptor de callbacks no abrio el puerto a tiempo')
+        return port, log_path
+
+    def start_fake_webhook(self):
+        received = []
+        class WebhookHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get('Content-Length', 0))
+                received.append(json.loads(self.rfile.read(length).decode('utf-8')))
+                self.send_response(200)
+                self.end_headers()
+            def log_message(self, *_args):
+                pass
+        server = ThreadingHTTPServer(('127.0.0.1', 0), WebhookHandler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        return server, received
+
+    def test_oob_callback_posts_webhook_notification_when_configured(self):
+        webhook_server, received = self.start_fake_webhook()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env = dict(os.environ)
+            env['SECLAB_NOTIFY_WEBHOOK'] = f'http://127.0.0.1:{webhook_server.server_port}/hook'
+            port, log_path = self.start_callback_server(tmp_dir, env)
+            urllib.request.urlopen(f'http://127.0.0.1:{port}/ssrf-test', timeout=5).read()
+
+            deadline = time.monotonic() + 5
+            while not received and time.monotonic() < deadline:
+                time.sleep(0.05)
+
+            self.assertEqual(len(received), 1)
+            self.assertIn('Callback OOB recibido', received[0]['text'])
+            self.assertIn('GET /ssrf-test', received[0]['text'])
+            self.assertIn('127.0.0.1', received[0]['text'])
+            self.assertIn('GET /ssrf-test', log_path.read_text(encoding='utf-8'))
+
+    def test_oob_callback_without_webhook_configured_never_calls_out(self):
+        webhook_server, received = self.start_fake_webhook()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env = dict(os.environ)
+            env.pop('SECLAB_NOTIFY_WEBHOOK', None)
+            port, log_path = self.start_callback_server(tmp_dir, env)
+            urllib.request.urlopen(f'http://127.0.0.1:{port}/ssrf-test', timeout=5).read()
+
+            time.sleep(1)
+            self.assertEqual(received, [])
+            self.assertIn('GET /ssrf-test', log_path.read_text(encoding='utf-8'))
 
 
 class ReconProbeSafetyTests(unittest.TestCase):

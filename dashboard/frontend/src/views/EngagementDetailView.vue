@@ -600,22 +600,51 @@
             </span>
           </div>
 
-          <div v-if="checklistData.areas?.length > 0" class="space-y-3">
-            <div
-              v-for="area in checklistData.areas"
-              :key="area.id"
-              class="p-3 rounded-sm bg-slate-900/60 border border-slate-800 flex items-center justify-between"
-            >
-              <div>
-                <span class="font-mono font-bold text-xs text-slate-200 block">{{ area.name }}</span>
-                <span class="text-[11px] font-mono text-slate-400">{{ area.skill }}</span>
-              </div>
-              <span
-                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold"
-                :class="area.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'"
+          <div v-if="checklistData.areas?.length > 0" class="space-y-4">
+            <!-- Barra general segmentada (estilo OWASP WSTG Tracker): un vistazo a las 8 disciplinas -->
+            <div class="flex gap-1" role="img" aria-label="Resumen visual de cobertura por disciplina">
+              <div
+                v-for="area in checklistData.areas"
+                :key="'seg-' + area.id"
+                :title="`${area.name}: ${methodologyStatusMeta(area.status).label}`"
+                class="h-2 flex-1 rounded-sm"
+                :class="methodologyStatusMeta(area.status).barClass"
+              ></div>
+            </div>
+
+            <div class="space-y-3">
+              <div
+                v-for="area in checklistData.areas"
+                :key="area.id"
+                class="p-3 rounded-sm bg-slate-900/60 border border-slate-800 space-y-2"
               >
-                {{ area.status }}
-              </span>
+                <div class="flex items-center justify-between">
+                  <div>
+                    <span class="font-mono font-bold text-xs text-slate-200 block">{{ area.name }}</span>
+                    <span class="text-[11px] font-mono text-slate-400">{{ area.skill }}</span>
+                  </div>
+                  <span
+                    class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold"
+                    :class="methodologyStatusMeta(area.status).badgeClass"
+                  >
+                    {{ methodologyStatusMeta(area.status).label }}
+                  </span>
+                </div>
+                <div
+                  class="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden"
+                  role="progressbar"
+                  :aria-valuenow="methodologyStatusMeta(area.status).percent"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-label="`Progreso de ${area.name}`"
+                >
+                  <div
+                    class="h-full rounded-full transition-all"
+                    :class="methodologyStatusMeta(area.status).barClass"
+                    :style="{ width: methodologyStatusMeta(area.status).percent + '%' }"
+                  ></div>
+                </div>
+              </div>
             </div>
           </div>
           <div v-else class="text-slate-400 text-xs font-mono py-4">
@@ -1620,6 +1649,15 @@ function httpStatusClass(code) {
   if (code < 500) return 'text-amber-400 font-bold'
   return 'text-rose-400 font-bold'
 }
+
+const METHODOLOGY_STATUS_META = {
+  COMPLETED: { label: 'Completo', percent: 100, badgeClass: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30', barClass: 'bg-emerald-500' },
+  IN_PROGRESS: { label: 'Parcial', percent: 50, badgeClass: 'bg-amber-500/10 text-amber-400 border border-amber-500/30', barClass: 'bg-amber-500' },
+  PENDING: { label: 'Pendiente', percent: 0, badgeClass: 'bg-slate-800 text-slate-400 border border-slate-700', barClass: 'bg-slate-700' },
+}
+function methodologyStatusMeta(status) {
+  return METHODOLOGY_STATUS_META[status] || { label: status || 'Desconocido', percent: 0, badgeClass: 'bg-slate-800 text-slate-400 border border-slate-700', barClass: 'bg-slate-700' }
+}
 const isStartingRecon = ref(false)
 const isCancellingRecon = ref(false)
 const reconActionMsg = ref('')
@@ -1979,7 +2017,19 @@ async function loadLogs() {
 
 async function loadChecklist() {
   try {
-    checklistData.value = await api.getChecklist(engId.value, engType.value)
+    const res = await api.getChecklist(engId.value, engType.value)
+    // pt-audit-checklist.py -j devuelve `matrix`/`coverage_score` (ver evaluate()
+    // en scripts/pt-audit-checklist.py); solo el fallback de error del backend
+    // (runner_service.get_audit_checklist, cuando el JSON no se puede parsear)
+    // usa `areas`/`coverage_pct`. Antes de esta fase la plantilla leía siempre
+    // `areas`/`coverage_pct`, así que la corrida real nunca se mostraba: la
+    // pestaña quedaba en "0% Cobertura" pese a tener datos. Se normaliza aquí
+    // para aceptar ambas formas sin tocar el contrato del backend.
+    checklistData.value = {
+      ...res,
+      areas: res.matrix || res.areas || [],
+      coverage_pct: res.coverage_score ?? res.coverage_pct ?? 0,
+    }
     nextStepData.value = await api.getNextStep(engId.value, false, engType.value)
   } catch (err) {
     console.error('Error al cargar checklist:', err)

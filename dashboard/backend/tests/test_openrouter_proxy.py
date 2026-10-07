@@ -206,6 +206,69 @@ class TestOpenRouterProxy(unittest.TestCase):
                 self.assertEqual(called_req.model, "deepseek/deepseek-r1")
                 self.assertIsNone(called_profile)
 
+    def test_copilot_chat_flags_out_of_scope_and_unknown_suggestions(self):
+        """Backlog A20: el copiloto debe validar cada host/URL que sugiera contra
+        pt-scope-validator.py antes de mostrar la respuesta, en vez de confiar solo
+        en la instrucción de alcance del system prompt."""
+        from app.main import app
+        from app.api.endpoints import auth
+        from fastapi.testclient import TestClient
+
+        auth._attempts.clear()
+        with patch.object(auth, "TESTER_PASSWORD", "fixture-password"):
+            client = TestClient(app)
+            login_resp = client.post("/api/v1/auth/login", json={"password": "fixture-password"})
+            self.assertEqual(login_resp.status_code, 200)
+
+            from app.services.workspace_sync import workspace_service
+            from app.services.runner_service import runner_service
+
+            mock_dir = pathlib.Path(self.temp.name) / "test_eng_scope"
+            mock_dir.mkdir(parents=True, exist_ok=True)
+            (mock_dir / "target.yaml").write_text(
+                "scope:\n"
+                "  in_scope:\n"
+                "    domains: ['*.acme.corp']\n"
+                "  out_of_scope:\n"
+                "    domains: ['partner.acme.corp']\n",
+                encoding="utf-8",
+            )
+
+            def chat(content):
+                mock_resp = ChatCompletionResponse(
+                    provider="openrouter",
+                    model="deepseek/deepseek-r1",
+                    content=content,
+                    latency_ms=120,
+                    usage={"total_tokens": 50},
+                )
+                with patch.object(workspace_service, "_resolve_dir", return_value=mock_dir), \
+                     patch.object(runner_service, "get_agent_context", return_value="# Mock context"), \
+                     patch.object(self.proxy_service, "chat_completion", new_callable=AsyncMock) as mock_chat:
+                    mock_chat.return_value = mock_resp
+                    post_data = {
+                        "engagement_id": "test_eng_scope",
+                        "type": "engagement",
+                        "agent_id": "triage-agent",
+                        "provider": "openrouter",
+                        "model": "deepseek/deepseek-r1",
+                        "messages": [{"role": "user", "content": "¿Qué pruebo?"}],
+                    }
+                    res = client.post("/api/v1/copilot/chat", json=post_data)
+                    self.assertEqual(res.status_code, 200, res.text)
+                    return res.json()["content"]
+
+            # Sugerencia que menciona un host excluido explícitamente: debe advertirse.
+            flagged = chat("Prueba https://partner.acme.corp/admin para validar el acceso.")
+            self.assertIn("Validación de Alcance (Scope Guard)", flagged)
+            self.assertIn("partner.acme.corp", flagged)
+            self.assertIn("Prueba https://partner.acme.corp/admin para validar el acceso.", flagged, "el texto original no debe reescribirse, solo anteponerse el aviso")
+
+            # Sugerencia completamente dentro del alcance declarado: sin aviso.
+            clean = chat("Prueba https://api.acme.corp/v1/users para validar el acceso.")
+            self.assertNotIn("Scope Guard", clean)
+            self.assertEqual(clean, "Prueba https://api.acme.corp/v1/users para validar el acceso.")
+
     def test_normalize_endpoint_url(self):
         from app.services.vault_service import normalize_endpoint_url
         self.assertIsNone(normalize_endpoint_url(None))

@@ -1,12 +1,72 @@
+import json
+import pathlib
+import subprocess
+import sys
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+from app.config import SCRIPTS_DIR
 from app.models.schemas import ChatMessage, ChatCompletionRequest, ChatCompletionResponse
 from app.services.workspace_sync import workspace_service
 from app.services.runner_service import runner_service
 from app.services.proxy_service import proxy_service
 
 router = APIRouter(prefix="/copilot", tags=["Copiloto Táctico & Agentes IA"])
+
+
+def _scope_validator_script() -> pathlib.Path:
+    source = SCRIPTS_DIR / "pt-scope-validator.py"
+    return source if source.is_file() else SCRIPTS_DIR / "pt-scope-validator"
+
+
+def _validate_copilot_scope(content: str, target_dir: pathlib.Path) -> List[Dict[str, str]]:
+    """Valida cada host/URL/IP que el copiloto haya sugerido en `content` contra
+    pt-scope-validator.py (acción "check-text", backlog A20), reutilizando las
+    mismas reglas de in_scope/out_of_scope que el resto del laboratorio, en vez
+    de confiar únicamente en la instrucción de alcance del system prompt. No
+    bloquea la respuesta: devuelve solo lo que no está confirmado como IN_SCOPE,
+    para que se le advierta al operador antes de mostrarla."""
+    if not content.strip():
+        return []
+    if not (target_dir / "target.yaml").is_file() and not (target_dir / "scope.txt").is_file():
+        return []
+    script = _scope_validator_script()
+    if not script.is_file():
+        return []
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), "check-text", str(target_dir)],
+            input=content,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode == 2 or not proc.stdout.strip():
+        return []
+    try:
+        findings = json.loads(proc.stdout)
+    except ValueError:
+        return []
+    return findings if isinstance(findings, list) else []
+
+
+def _format_scope_warning(findings: List[Dict[str, str]]) -> str:
+    out_of_scope = [f for f in findings if f.get("verdict") == "OUT_OF_SCOPE"]
+    unknown = [f for f in findings if f.get("verdict") == "UNKNOWN"]
+    lines = ["⚠️ **Validación de Alcance (Scope Guard)**"]
+    if out_of_scope:
+        lines.append("Objetivos **excluidos explícitamente** mencionados en esta respuesta — NO los pruebes:")
+        for f in out_of_scope:
+            lines.append(f"- `{f['target']}` — {f['reason']}")
+    if unknown:
+        lines.append("Objetivos **no confirmados** en el alcance declarado — verifica antes de actuar:")
+        for f in unknown:
+            lines.append(f"- `{f['target']}` — {f['reason']}")
+    lines.append("")
+    lines.append("---")
+    return "\n".join(lines)
 
 
 AGENT_PERSONAS = [
@@ -124,8 +184,13 @@ async def copilot_chat(payload: CopilotChatRequest):
 
     try:
         profile_arg = None if (payload.provider or payload.model) else payload.profile
-        return await proxy_service.chat_completion(proxy_req, profile=profile_arg)
+        response = await proxy_service.chat_completion(proxy_req, profile=profile_arg)
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error en comunicación con el modelo: {str(e)}")
+
+    scope_findings = _validate_copilot_scope(response.content, target_dir)
+    if scope_findings:
+        response.content = _format_scope_warning(scope_findings) + "\n\n" + response.content
+    return response

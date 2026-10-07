@@ -86,6 +86,14 @@ METHODOLOGY_AREAS = [
     },
 ]
 
+METHODOLOGY_AREA_IDS = {area["id"] for area in METHODOLOGY_AREAS}
+
+# Marcador explicito y reconocible para notes.md: '## Disciplina: <id>'. Señal
+# confiable adicional a la heuristica de palabras clave (backlog A18): deja
+# que el operador confirme a mano que una disciplina ya se cubrio, incluso
+# cuando no arrojo ningun hallazgo que la heuristica pueda emparejar.
+DISCIPLINE_MARKER_RE = re.compile(r"^##\s*Disciplina:\s*([A-Za-z_-]+)\s*$", re.IGNORECASE | re.MULTILINE)
+
 
 def parse_simple_yaml_frontmatter(content: str) -> Tuple[Dict[str, str], str]:
     """Extrae y parsea el frontmatter YAML básico de un archivo markdown."""
@@ -171,6 +179,7 @@ class AuditChecklistEvaluator:
         self.evidence_dir = self.engagement_dir / "evidence"
         self.report_file = self.engagement_dir / "REPORT.md"
         self.terminal_log = self.engagement_dir / "terminal.log"
+        self.notes_file = self.engagement_dir / "notes.md"
 
     def collect_evidence_findings(self) -> List[Dict[str, Any]]:
         """Lee y normaliza todos los hallazgos documentados en evidence/*.md."""
@@ -268,12 +277,37 @@ class AuditChecklistEvaluator:
 
         return keywords_found
 
+    def read_discipline_markers(self) -> Set[str]:
+        """Lee marcadores explícitos '## Disciplina: <id>' en notes.md.
+
+        Señal confiable adicional a la heurística de palabras clave: el
+        operador puede confirmar a mano que una disciplina ya se cubrió,
+        incluso sin hallazgos que mostrar (p. ej. porque la prueba no
+        encontró nada explotable) — algo que la heurística por coincidencia
+        de hallazgos nunca puede detectar por sí sola. IDs no reconocidos se
+        ignoran en silencio: notes.md es texto libre, no una fuente de
+        verdad de alcance o seguridad.
+        """
+        markers: Set[str] = set()
+        if not self.notes_file.is_file():
+            return markers
+        try:
+            content = self.notes_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return markers
+        for match in DISCIPLINE_MARKER_RE.finditer(content):
+            area_id = match.group(1).strip().lower()
+            if area_id in METHODOLOGY_AREA_IDS:
+                markers.add(area_id)
+        return markers
+
     def evaluate_area_status(
         self,
         area: Dict[str, Any],
         recon: Dict[str, Any],
         findings: List[Dict[str, Any]],
         log_keywords: Set[str],
+        discipline_markers: Set[str],
     ) -> Dict[str, Any]:
         """Evalúa el estado individual de una disciplina metodológica."""
         area_id = area["id"]
@@ -295,8 +329,18 @@ class AuditChecklistEvaluator:
             if is_match:
                 matching_findings.append(f)
 
-        # 2. Lógica específica por área
-        if area_id == "recon":
+        # 2. Marcador explícito del operador (notes.md): señal confiable que
+        # prevalece sobre la heurística, incluso sin hallazgos que emparejar.
+        explicit_marker = area_id in discipline_markers
+
+        # 3. Lógica específica por área (heurística, se mantiene como respaldo)
+        if explicit_marker:
+            status = "COMPLETED"
+            marker_detail = f"Confirmado explícitamente por el operador (marcador '## Disciplina: {area_id}' en notes.md)"
+            if matching_findings:
+                marker_detail += f"; {len(matching_findings)} hallazgo(s) asociado(s)"
+            details.append(marker_detail)
+        elif area_id == "recon":
             if recon["live_hosts"] > 0 or (recon["subdomains"] > 0 and recon["urls"] > 0):
                 status = "COMPLETED"
                 details.append(f"{recon['subdomains']} subdominios, {recon['live_hosts']} hosts vivos, {recon['urls']} URLs")
@@ -404,13 +448,14 @@ class AuditChecklistEvaluator:
         recon = self.collect_recon_metrics()
         findings = self.collect_evidence_findings()
         log_keywords = self.read_terminal_log_keywords()
+        discipline_markers = self.read_discipline_markers()
 
         matrix = []
         completed_count = 0
         in_progress_count = 0
 
         for area in METHODOLOGY_AREAS:
-            res = self.evaluate_area_status(area, recon, findings, log_keywords)
+            res = self.evaluate_area_status(area, recon, findings, log_keywords, discipline_markers)
             matrix.append(res)
             if res["status"] == "COMPLETED":
                 completed_count += 1

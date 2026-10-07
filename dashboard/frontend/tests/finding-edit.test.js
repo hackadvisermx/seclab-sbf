@@ -10,7 +10,7 @@ const { createApp, nextTick } = await import('vue')
 const require = createRequire(import.meta.url)
 const vueUrl = pathToFileURL(require.resolve('vue/dist/vue.runtime.esm-bundler.js')).href
 const body = '## Descripción\nOriginal\n\n## Control negativo\nPrueba personalizada\n\n```http\nGET / HTTP/1.1\n```'
-const finding = { slug: 'legacy', filename: 'legacy.md', frontmatter: { title: 'Original', severity: 'HIGH', status: 'PROVEN', cvss_score: 6.5 }, body }
+const finding = { slug: 'legacy', filename: 'legacy.md', frontmatter: { title: 'Original', severity: 'INFO', status: 'PROVEN', cvss_score: 0, cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N' }, body }
 async function flush() { await nextTick(); await new Promise(r => setTimeout(r, 0)); await nextTick() }
 async function mount(api) {
   globalThis.fixtureFindingApi = new Proxy(api, { get: (target, key) => target[key] || (async () => ({})) })
@@ -41,9 +41,12 @@ test('editar una ficha conserva Markdown completo, fija el slug y envía solo el
     await clickText(view.root, 'Editar')
     const editor = view.root.querySelector('[data-testid="finding-markdown"]')
     assert.equal(editor.value, body)
+    for (const metric of ['C', 'I', 'A']) assert.equal(view.root.querySelector(`[data-testid="cvss-${metric}"]`).value, 'N')
     assert.equal(view.root.querySelector('input[placeholder="idor-user-profile, sqli-login"]').readOnly, true)
     editor.closest('form').dispatchEvent(new browser.window.Event('submit', { bubbles: true, cancelable: true }))
     await flush()
+    assert.equal(saved.cvss_score, 0)
+    assert.equal(saved.severity, 'INFO')
     assert.equal(saved.body, body)
     assert.equal(saved.description, '')
     assert.equal(saved.slug, 'legacy')

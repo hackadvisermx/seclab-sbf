@@ -50,6 +50,22 @@ def _upstream_ws_url() -> str:
     return f"ws://127.0.0.1:{TTYD_PORT}/ws"
 
 
+def _ttyd_ws_headers() -> dict:
+    # scripts/entrypoint/ttyd-as-tester.sh lanza ttyd con -O (check-origin):
+    # rechaza cualquier upgrade de WebSocket cuyo header Origin no coincida
+    # con el Host que ttyd ve en la petición. Antes de este fix, esta
+    # conexión servidor-a-servidor (este proceso hacia 127.0.0.1:TTYD_PORT)
+    # no enviaba ningún Origin, así que ttyd la rechazaba SIEMPRE con "refuse
+    # to serve WS client from different origin" -- la terminal integrada
+    # nunca llegó a conectar desde que existe este proxy (fase 114/A10), solo
+    # pasaba en las pruebas porque su ttyd de fixture no usaba -O. El Origin
+    # correcto es el propio origen que ttyd ve (127.0.0.1:TTYD_PORT), no el
+    # origen del navegador (ese ya lo valida require_operator por separado).
+    headers = _ttyd_auth_header()
+    headers["Origin"] = _upstream_http_base()
+    return headers
+
+
 @router.api_route("/{sub_path:path}", methods=["GET"])
 async def proxy_http(sub_path: str = "") -> Response:
     """Reenvía GET / y GET /token (los únicos recursos HTTP que sirve ttyd)."""
@@ -80,7 +96,7 @@ async def proxy_websocket(websocket: WebSocket) -> None:
     try:
         async with websockets.connect(
             _upstream_ws_url(),
-            additional_headers=_ttyd_auth_header(),
+            additional_headers=_ttyd_ws_headers(),
             subprotocols=["tty"],
         ) as upstream:
             await websocket.accept(subprotocol="tty")

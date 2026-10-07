@@ -841,6 +841,83 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("pt-eng()", plugin)
         self.assertIn("pt-scope()", plugin)
 
+    def test_copilot_scope_text_validation(self):
+        """Backlog A20: extraer y validar cada host/URL/IP que el copiloto sugiera
+        en texto libre contra el mismo Scope Guard que usa pt-scope-validator.py,
+        antes de mostrar esa respuesta en el dashboard."""
+        target_template = REPO_ROOT / "workspace-seed" / "templates" / "target.yaml"
+        target_data = scope_validator.load_target_yaml(target_template)
+
+        # 1. extract_candidate_targets: URLs, IPs sueltas y hosts, sin duplicados,
+        # y una URL ya capturada no debe volver a contarse como host suelto.
+        text = (
+            "Prueba con curl https://api.example.com/v1/users y repite contra "
+            "https://api.example.com/v1/users de nuevo. También considera "
+            "payments.example.com, 192.0.2.50 y no te olvides de 192.0.2.50 otra vez."
+        )
+        candidates = scope_validator.extract_candidate_targets(text)
+        self.assertEqual(candidates.count("https://api.example.com/v1/users"), 1)
+        self.assertIn("payments.example.com", candidates)
+        self.assertIn("192.0.2.50", candidates)
+        self.assertEqual(candidates.count("192.0.2.50"), 1)
+        # El host de la URL ya capturada no debe aparecer también como host suelto.
+        self.assertNotIn("api.example.com", candidates)
+
+        self.assertEqual(scope_validator.extract_candidate_targets(""), [])
+        self.assertEqual(scope_validator.extract_candidate_targets("Sin objetivos aquí."), [])
+
+        # 2. validate_text_against_scope: solo lo que NO es IN_SCOPE debe advertirse.
+        findings = scope_validator.validate_text_against_scope(text, target_data)
+        findings_by_target = {f["target"]: f for f in findings}
+        self.assertNotIn("https://api.example.com/v1/users", findings_by_target, "api.example.com está in-scope por wildcard; no debe advertirse")
+        self.assertNotIn("192.0.2.50", findings_by_target, "192.0.2.50 está in-scope por CIDR; no debe advertirse")
+        self.assertEqual(findings_by_target["payments.example.com"]["verdict"], "OUT_OF_SCOPE")
+
+        unknown_text = "Revisa unauthorized.com antes de continuar."
+        unknown_findings = scope_validator.validate_text_against_scope(unknown_text, target_data)
+        self.assertEqual(len(unknown_findings), 1)
+        self.assertEqual(unknown_findings[0]["target"], "unauthorized.com")
+        self.assertEqual(unknown_findings[0]["verdict"], "UNKNOWN")
+
+        all_in_scope_text = "Confirma el acceso en example.com y 192.0.2.50."
+        self.assertEqual(scope_validator.validate_text_against_scope(all_in_scope_text, target_data), [])
+
+        # 3. La acción CLI "check-text" (invocada por el backend del copiloto vía
+        # subprocess, dashboard/backend/app/api/endpoints/copilot.py) debe leer el
+        # texto de stdin, emitir el mismo veredicto en JSON y devolver el código de
+        # salida 1 cuando hay algo OUT_OF_SCOPE -- comportamiento dinámico real,
+        # no solo lo que prueban las funciones importadas arriba.
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target_path = pathlib.Path(tmpdir) / "target.yaml"
+            target_path.write_text(target_template.read_text(encoding="utf-8"), encoding="utf-8")
+            proc = subprocess.run(
+                [sys.executable, str(REPO_ROOT / "scripts" / "pt-scope-validator.py"), "check-text", tmpdir],
+                input=text,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 1)
+            cli_findings = json.loads(proc.stdout)
+            cli_targets = {f["target"] for f in cli_findings}
+            self.assertIn("payments.example.com", cli_targets)
+
+            proc_clean = subprocess.run(
+                [sys.executable, str(REPO_ROOT / "scripts" / "pt-scope-validator.py"), "check-text", tmpdir],
+                input=all_in_scope_text,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc_clean.returncode, 0)
+            self.assertEqual(json.loads(proc_clean.stdout), [])
+
+        # 4. Integración en el backend del copiloto.
+        copilot_source = (REPO_ROOT / "dashboard" / "backend" / "app" / "api" / "endpoints" / "copilot.py").read_text(encoding="utf-8")
+        self.assertIn("_validate_copilot_scope", copilot_source)
+        self.assertIn("check-text", copilot_source)
+        self.assertIn("Validación de Alcance (Scope Guard)", copilot_source)
+
     def test_finding_manager_and_report_compiler(self):
         """Verifica la plantilla evidence.md, compilador de reportes y linter Evidence-First."""
         # 1. Validar plantilla de evidencia

@@ -288,13 +288,17 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         except Exception:
             pass
 
-    # Conteo por severidad
+    confirmed = [f for f in findings if f["status"] == "PROVEN"]
+    historical = sum(f["status"] == "MITIGATED" for f in findings)
+    unconfirmed = len(findings) - len(confirmed) - historical
+
+    # Solo evidencia confirmada activa determina el riesgo actual.
     counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
-    for f in findings:
+    for f in confirmed:
         counts[f["severity"]] = counts.get(f["severity"], 0) + 1
 
-    total_vulns = len(findings)
-    overall_posture = "Bajo"
+    total_vulns = len(confirmed)
+    overall_posture = "Bajo" if confirmed else "Sin hallazgos confirmados activos"
     if counts["CRITICAL"] > 0:
         overall_posture = "Crítico"
     elif counts["HIGH"] > 0:
@@ -311,7 +315,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         f"- **Auditor Responsable:** {auditor}",
         f"- **Perfil de Conexión:** {vpn_profile}",
         f"- **Postura General de Riesgo:** **{overall_posture}**",
-        "- **Estado:** Finalizado / Reportado",
+        "- **Estado:** Borrador compilado / Pendiente de revisión",
         "",
         "---",
         "",
@@ -319,13 +323,15 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         "",
         f"Durante el periodo de evaluación sobre el objetivo **{eng_name}**, se llevaron a cabo pruebas técnicas autorizadas "
         "bajo enfoque de caja negra/gris, siguiendo los lineamientos metodológicos de OWASP y PTES con trazabilidad continua. "
-        f"Se identificaron un total de **{total_vulns} hallazgos confirmados** distribuidos de la siguiente manera:",
+        f"Se identificaron un total de **{total_vulns} hallazgos confirmados activos** distribuidos de la siguiente manera:",
         "",
         f"- **Crítica:** {counts['CRITICAL']}",
         f"- **Alta:** {counts['HIGH']}",
         f"- **Media:** {counts['MEDIUM']}",
         f"- **Baja:** {counts['LOW']}",
         f"- **Informativa:** {counts['INFO']}",
+        f"- **Históricos mitigados (excluidos del riesgo actual):** {historical}",
+        f"- **Otros registros no confirmados activos (excluidos del riesgo actual):** {unconfirmed}",
         "",
         "---",
         "",
@@ -364,7 +370,9 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
     lines.extend([
         "---",
         "",
-        "## 3. Matriz Consolidada de Hallazgos",
+        "## 3. Matriz Consolidada de Evidencias",
+        "",
+        "Incluye todos los registros para trazabilidad. Solo PROVEN se cuenta como hallazgo confirmado activo; MITIGATED es histórico y los demás estados no acreditan riesgo actual.",
         "",
         "| ID | Vulnerabilidad / Hallazgo | Severidad | CVSS v3.1 | Activo Afectado | Estado |",
         "|---|---|---|---|---|---|",
@@ -399,6 +407,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
                 f"### {f['id']}: {f['title']}",
                 "",
                 f"- **Severidad:** {f['severity'].capitalize()} (Score: {f['cvss_score']})",
+                f"- **Estado de evidencia:** {f['status']}",
                 f"- **Vector CVSS:** `{f['cvss_v31']}`",
                 f"- **CWE:** {f['cwe']}",
                 f"- **Activo:** `{f['asset']}`",

@@ -918,6 +918,34 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("check-text", copilot_source)
         self.assertIn("Validación de Alcance (Scope Guard)", copilot_source)
 
+    def test_report_current_risk_uses_only_confirmed_active_evidence(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            cases = [("PROVEN", "LOW"), ("candidate", "CRITICAL"), ("DISPROVED", "CRITICAL"),
+                     ("mitigado", "HIGH"), ("DRAFT", "HIGH"), ("BLOCKED", "CRITICAL"), ("custom", "CRITICAL")]
+            for number, (status, severity) in enumerate(cases):
+                (evidence / f"{number}.md").write_text(f"---\nid: VULN-{number}\ntitle: Evidence {number}\nstatus: {status}\nseverity: {severity}\n---\nOriginal body {number}")
+            report = report_compiler.build_report(root).read_text()
+            self.assertIn("**1 hallazgos confirmados activos**", report)
+            self.assertIn("**Postura General de Riesgo:** **Bajo**", report)
+            self.assertIn("**Crítica:** 0", report)
+            self.assertIn("**Históricos mitigados (excluidos del riesgo actual):** 1", report)
+            self.assertIn("**Otros registros no confirmados activos (excluidos del riesgo actual):** 5", report)
+            self.assertIn("Borrador compilado / Pendiente de revisión", report)
+            self.assertNotIn("Finalizado / Reportado", report)
+            for number in range(len(cases)):
+                self.assertIn(f"Original body {number}", report)
+            (evidence / "0.md").unlink()
+            report = report_compiler.build_report(root).read_text()
+            self.assertIn("**0 hallazgos confirmados activos**", report)
+            self.assertIn("Sin hallazgos confirmados activos", report)
+            for path in evidence.glob("*.md"):
+                path.unlink()
+            self.assertIn("**0 hallazgos confirmados activos**", report_compiler.build_report(root).read_text())
+
     def test_report_reads_dashboard_and_legacy_cvss_vectors(self):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
@@ -975,7 +1003,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("# Informe de Auditoría de Seguridad:", content)
             self.assertIn("## 1. Resumen Ejecutivo", content)
             self.assertIn("## 2. Alcance y Límites Operacionales", content)
-            self.assertIn("## 3. Matriz Consolidada de Hallazgos", content)
+            self.assertIn("## 3. Matriz Consolidada de Evidencias", content)
             self.assertIn("## 4. Detalle Técnico de Hallazgos", content)
             self.assertIn("VULN-01", content)
             self.assertIn("CWE-639", content)

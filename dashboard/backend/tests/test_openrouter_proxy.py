@@ -611,11 +611,7 @@ class TestOpenRouterProxy(unittest.TestCase):
         # La clave 'custom_llm' original debe seguir intacta tras el rechazo.
         self.assertEqual(self.vault_service.get_key_entry("custom_llm")["label"], "Otra clave")
 
-    def test_chat_completion_falls_back_from_custom_llm_to_openrouter_candidate(self):
-        # Fase 102: al pedir explicitamente provider='custom_llm' sin una
-        # fila custom_llm configurada, chat_completion debe intentar
-        # tambien el candidato 'openrouter' en vez de fallar de inmediato
-        # (get_key_entry('custom_llm') no tiene fallback inverso propio).
+    def test_explicit_custom_llm_without_key_does_not_use_openrouter(self):
         import asyncio
         from app.models.schemas import ApiKeyCreate
 
@@ -640,9 +636,8 @@ class TestOpenRouterProxy(unittest.TestCase):
 
         async def run_test():
             with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
-                res = await self.proxy_service.chat_completion(req)
-                self.assertEqual(res.provider, "openrouter")
-                self.assertEqual(res.content, "Respuesta via fallback a openrouter")
-                mock_post.assert_called_once()
+                with self.assertRaises(RuntimeError):
+                    await self.proxy_service.chat_completion(req)
+                mock_post.assert_not_called()
 
         asyncio.run(run_test())

@@ -168,6 +168,34 @@ def get_findings(evidence_dir: pathlib.Path) -> List[Dict[str, Any]]:
     return findings
 
 
+def find_duplicate_groups(findings: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    """Agrupa hallazgos que comparten CWE y activo exacto: posible duplicado por
+    causa raíz (mismo defecto subyacente afectando el mismo recurso), al estilo
+    de la deduplicación de Faraday. Excluye CWE desconocido o activo ausente
+    ("N/A"), ya que agrupar por esos valores produciría falsos positivos en
+    cascada. No fusiona ni descarta nada automáticamente: solo lo señala para
+    que el operador decida consolidar con `pt-finding` (ver
+    skills/duplicate-scope-guard/SKILL.md, Paso 3b).
+    """
+    groups: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    for finding in findings:
+        cwe = str(finding.get("cwe", "")).strip()
+        asset = str(finding.get("asset", "")).strip()
+        if not cwe or cwe.upper() == "CWE-UNKNOWN" or not asset or asset.upper() == "N/A":
+            continue
+        groups.setdefault((cwe.upper(), asset), []).append(finding)
+    return [group for group in groups.values() if len(group) > 1]
+
+
+def format_duplicate_warning(group: List[Dict[str, Any]]) -> str:
+    ids = ", ".join(f["id"] for f in group)
+    return (
+        f"Posible duplicado por causa raíz: {ids} comparten {group[0]['cwe']} "
+        f"en el activo '{group[0]['asset']}'. Si es el mismo defecto subyacente, "
+        "consolida con pt-finding en vez de mantener fichas separadas."
+    )
+
+
 def load_scope_validator():
     """Carga dinamicamente scripts/pt-scope-validator.py si existe."""
     script_path = pathlib.Path(__file__).resolve().parent / "pt-scope-validator.py"
@@ -182,15 +210,22 @@ def load_scope_validator():
     return None
 
 
-def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str]]:
-    """Verifica la validez y disciplina evidence-first de los hallazgos."""
+def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[str]]:
+    """Verifica la validez y disciplina evidence-first de los hallazgos.
+
+    Devuelve (ok, issues, duplicate_warnings): `issues` son fallos que deben
+    corregirse (determinan `ok`); `duplicate_warnings` son posibles duplicados
+    por causa raíz (ver find_duplicate_groups) y son solo advertencias — no
+    hacen fallar la verificación, porque consolidar o no es una decisión del
+    operador, no un hecho automático.
+    """
     evidence_dir = engagement_dir / "evidence"
     if not evidence_dir.is_dir():
-        return False, [f"El directorio de evidencia no existe: {evidence_dir}"]
+        return False, [f"El directorio de evidencia no existe: {evidence_dir}"], []
 
     findings = get_findings(evidence_dir)
     if not findings:
-        return True, ["No se encontraron fichas de evidencia (.md) en el directorio."]
+        return True, ["No se encontraron fichas de evidencia (.md) en el directorio."], []
 
     issues: List[str] = []
     scope_val = load_scope_validator()
@@ -219,7 +254,9 @@ def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str]]:
             if verdict == "OUT_OF_SCOPE":
                 issues.append(f"{prefix} ALERTA CRITICA: El activo evaluado '{f['asset']}' esta marcado FUERA DE ALCANCE ({reason})")
 
-    return len(issues) == 0, issues
+    duplicate_warnings = [format_duplicate_warning(group) for group in find_duplicate_groups(findings)]
+
+    return len(issues) == 0, issues, duplicate_warnings
 
 
 def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None) -> pathlib.Path:
@@ -342,6 +379,12 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
     else:
         lines.append("| - | No se registraron vulnerabilidades confirmadas | - | - | - | - |")
 
+    duplicate_groups = find_duplicate_groups(findings)
+    if duplicate_groups:
+        lines.extend(["", "**⚠ Posibles duplicados por causa raíz (revisión manual recomendada):**", ""])
+        for group in duplicate_groups:
+            lines.append(f"- {format_duplicate_warning(group)}")
+
     lines.extend([
         "",
         "---",
@@ -420,20 +463,31 @@ def main() -> int:
             reset = SEVERITY_COLORS["RESET"] if use_color else ""
             print(f"  {f['id']:<10} {color}{sev:<12}{reset} {f['cvss_score']:<6} {f['asset'][:28]:<30} {f['title']}")
         print("")
+
+        duplicate_groups = find_duplicate_groups(findings)
+        if duplicate_groups:
+            print(f"[?] {len(duplicate_groups)} posible(s) duplicado(s) por causa raíz (mismo CWE + activo):")
+            for group in duplicate_groups:
+                print(f"    - {format_duplicate_warning(group)}")
+            print("")
         return 0
 
     elif action == "check":
-        ok, issues = check_findings(eng_dir)
+        ok, issues, duplicate_warnings = check_findings(eng_dir)
         if ok:
             print(f"[+] Verificación exitosa: Todas las evidencias en {eng_dir.name} cumplen con el estándar Evidence-First.")
             for msg in issues:
                 print(f"    - {msg}")
-            return 0
         else:
             print(f"[!] Fallo de validación en las evidencias de {eng_dir.name}:", file=sys.stderr)
             for iss in issues:
                 print(f"    [X] {iss}", file=sys.stderr)
-            return 1
+        if duplicate_warnings:
+            stream = sys.stdout if ok else sys.stderr
+            print(f"\n[?] {len(duplicate_warnings)} posible(s) duplicado(s) por causa raíz (no bloquea la verificación):", file=stream)
+            for msg in duplicate_warnings:
+                print(f"    - {msg}", file=stream)
+        return 0 if ok else 1
 
     elif action == "build":
         out_file = None

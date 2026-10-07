@@ -201,6 +201,7 @@ Las regresiones se ejecutan con `make python-units-check` (incluye `scripts/veri
 
 * **Vista Ejecutiva**: Resumen visual de severidades (Crítica, Alta, Media, Baja, Informativa).
 * **Exportación a PDF**: Reglas `@media print` optimizadas para generar informes listos para cliente mediante `Ctrl+P` o `Imprimir Reporte`.
+* **Deduplicación por causa raíz**: `pt-report list`, `pt-report check` y `pt-report build` (`pt-report-compiler.py`) señalan automáticamente como posible duplicado todo par de fichas de `evidence/*.md` que comparte CWE y activo exacto, al estilo de Faraday. No fusiona ni descarta nada: `check` lo muestra como advertencia sin fallar (consolidar es decisión del operador, con `pt-finding`), y `build` lo incluye como un aviso visible en `REPORT.md` antes del detalle técnico. CWE desconocido o activo ausente ("N/A") se excluyen del agrupamiento para no generar falsos positivos en cascada.
 * **Empaquetado y Cierre**:
   - El botón **📦 Empaquetar y Descargar (.tar.gz)** compila todas las evidencias, notas y bitácoras, sanitiza secretos (JWTs, tokens Bearer, passwords) y genera el manifiesto criptográfico `manifest.sha256`.
   - Descarga automáticamente el archivo `.tar.gz` al navegador del operador.

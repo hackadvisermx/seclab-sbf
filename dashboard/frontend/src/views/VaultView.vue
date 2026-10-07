@@ -378,7 +378,7 @@
             </div>
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Modelo Inicial / Predeterminado:</label>
-              <div v-if="formIsOpenRouter" class="space-y-1.5">
+              <div v-if="formSupportsModelCatalog" class="space-y-1.5">
                 <select
                   @change="keyForm.model_name = $event.target.value"
                   :value="keyForm.model_name"
@@ -389,8 +389,8 @@
                   <option v-if="keyForm.model_name && !filteredFormModels.some(m => m.id === keyForm.model_name)" :value="keyForm.model_name">{{ keyForm.model_name }} (selección actual)</option>
                 </select>
                 <input v-model="formModelSearch" aria-label="Buscar modelos" placeholder="Buscar por nombre o ID" class="w-full bg-[#070b14] border border-slate-700 px-2 py-1 text-xs" />
-                <button type="button" @click="loadFormModels" :disabled="formModelsLoading" class="text-xs text-cyan-300">{{ formModelsLoading ? 'Consultando…' : 'Consultar modelos con esta clave' }}</button>
-                <p class="text-xs text-slate-400">{{ formModels.length }} modelos. La consulta no guarda la clave. El modelo base se guarda al confirmar.</p>
+                <button type="button" @click="loadFormModels" :disabled="formModelsLoading" class="text-xs text-cyan-300">{{ formModelsLoading ? 'Consultando…' : 'Probar clave y cargar modelos' }}</button>
+                <p class="text-xs text-slate-400">{{ formModels.length }} modelos. La consulta prueba la clave sin guardarla; el modelo base se guarda al confirmar.</p>
                 <p v-if="formModelsError" role="alert" class="text-xs text-red-400">{{ formModelsError }}</p>
               </div>
               <input
@@ -467,10 +467,12 @@ const formModels = ref([])
 const formModelSearch = ref('')
 const formModelsLoading = ref(false)
 const formModelsError = ref('')
-const formIsOpenRouter = computed(() => {
-  if (keyForm.value.provider === 'openrouter') return true
-  try { return keyForm.value.provider === 'custom_llm' && ['openrouter.ai', 'eu.openrouter.ai'].includes(new URL(keyForm.value.base_url.trim().includes('://') ? keyForm.value.base_url.trim() : `https://${keyForm.value.base_url.trim()}`).hostname) } catch { return false }
-})
+// Backlog: poder probar la clave y precargar el selector de modelo inicial
+// para CUALQUIER proveedor LLM (OpenRouter, OpenAI, Anthropic, Gemini o un
+// endpoint local), no solo OpenRouter. service_type ya distingue de forma
+// confiable los proveedores LLM del resto (recon/plataforma) vía
+// onProviderSelect/openEditModal, sin necesidad de inspeccionar el hostname.
+const formSupportsModelCatalog = computed(() => keyForm.value.service_type === 'llm')
 const filteredFormModels = computed(() => formModels.value.filter(m => `${m.name} ${m.id}`.toLowerCase().includes(formModelSearch.value.toLowerCase())))
 let modelRequest = 0
 watch(() => [keyForm.value.provider, keyForm.value.api_key, keyForm.value.base_url], () => {
@@ -628,7 +630,7 @@ async function loadProxyHistory() {
 
 async function submitKey() {
   try {
-    if (formIsOpenRouter.value && !formModels.value.some(m => m.id === keyForm.value.model_name)) {
+    if (formSupportsModelCatalog.value && !formModels.value.some(m => m.id === keyForm.value.model_name)) {
       throw new Error('Consulta el catálogo y elige un modelo base disponible antes de guardar')
     }
     if (isEditing.value && editingProvider.value) {

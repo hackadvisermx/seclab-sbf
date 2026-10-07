@@ -104,30 +104,29 @@
           </label>
           <div class="flex gap-2">
             <select
-              v-if="selectedProvider === 'openrouter'"
-              v-model="selectedOpenRouterPreset"
-              @change="onOpenRouterPresetChange"
+              v-model="selectedCatalogModel"
+              @change="onCatalogModelChange"
               class="flex-1 min-w-0 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-white focus:outline-hidden"
             >
               <option value="">Elegir modelo</option>
               <option v-for="model in filteredModels" :key="model.id" :value="model.id">{{ model.name }} — {{ model.id }}</option>
-              <option v-if="selectedOpenRouterPreset && selectedOpenRouterPreset !== 'custom' && !filteredModels.some(m => m.id === selectedOpenRouterPreset)" :value="selectedOpenRouterPreset">{{ selectedOpenRouterPreset }} (selección actual)</option>
+              <option v-if="selectedCatalogModel && selectedCatalogModel !== 'custom' && !filteredModels.some(m => m.id === selectedCatalogModel)" :value="selectedCatalogModel">{{ selectedCatalogModel }} (selección actual)</option>
               <option value="custom">✏️ Personalizado (Escribir Slug)</option>
             </select>
 
-            <!-- Input modelo para otros proveedores o custom -->
+            <!-- Input modelo solo cuando se elige "Personalizado" -->
             <input
-              v-if="selectedProvider !== 'openrouter' || selectedOpenRouterPreset === 'custom'"
+              v-if="selectedCatalogModel === 'custom'"
               v-model="customModelName"
               type="text"
               :placeholder="selectedProvider === 'openrouter' ? 'ej. deepseek/deepseek-r1' : 'ej. gpt-4o, claude-3-5-sonnet'"
               class="flex-1 min-w-0 bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-2 text-white focus:outline-hidden"
             />
           </div>
-          <div v-if="selectedProvider === 'openrouter'" class="mt-2 space-y-1">
+          <div class="mt-2 space-y-1">
             <input v-model="modelSearch" aria-label="Buscar modelos" placeholder="Buscar por nombre o ID" class="w-full bg-[#070b14] border border-slate-700 px-2 py-1 text-sm" />
             <button type="button" @click="loadModels" :disabled="modelsLoading" class="text-xs text-cyan-300">{{ modelsLoading ? 'Consultando…' : 'Actualizar catálogo' }}</button>
-            <p class="text-xs text-slate-400">{{ availableModels.length }} modelos de tu cuenta. El saldo, los límites y la disponibilidad se comprueban al consultar.</p>
+            <p class="text-xs text-slate-400">{{ availableModels.length }} modelos disponibles para este proveedor. El saldo, los límites y la disponibilidad se comprueban al consultar.</p>
             <p v-if="modelsError" role="alert" class="text-xs text-red-400">{{ modelsError }}</p>
           </div>
         </div>
@@ -313,7 +312,7 @@ const copiedIndex = ref(null)
 const notificationMsg = ref('')
 
 const selectedProvider = ref('openrouter')
-const selectedOpenRouterPreset = ref('')
+const selectedCatalogModel = ref('')
 const customModelName = ref('')
 const selectedPersona = ref('red-team')
 const temperature = ref(0.2)
@@ -330,15 +329,23 @@ const openRouterKey = computed(() => vaultKeys.value.find(k => k.provider === 'o
 function isOpenRouter(url) {
   try { return ['openrouter.ai', 'eu.openrouter.ai'].includes(new URL(url?.trim().includes('://') ? url.trim() : `https://${url?.trim()}`).hostname) } catch { return false }
 }
+function resolveApiProvider(provider) {
+  // Una clave de OpenRouter puede estar guardada en el Vault bajo el
+  // provider "custom_llm" (apuntando a openrouter.ai); el backend ya
+  // resuelve este alias para /chat, pero /models necesita el provider real
+  // con el que quedó guardada la fila en SQLite.
+  return provider === 'openrouter' ? (openRouterKey.value?.provider || 'openrouter') : provider
+}
+
 async function loadModels() {
   modelsLoading.value = true
   modelsError.value = ''
   try {
-    const catalog = await api.getProviderModels(openRouterKey.value?.provider || 'openrouter')
+    const catalog = await api.getProviderModels(resolveApiProvider(selectedProvider.value))
     availableModels.value = catalog.models
     const preferred = catalog.default_model
-    if (!availableModels.value.some(m => m.id === selectedOpenRouterPreset.value)) {
-      selectedOpenRouterPreset.value = availableModels.value.some(m => m.id === preferred) ? preferred : ''
+    if (!availableModels.value.some(m => m.id === selectedCatalogModel.value)) {
+      selectedCatalogModel.value = availableModels.value.some(m => m.id === preferred) ? preferred : ''
     }
   } catch (err) {
     availableModels.value = []
@@ -362,13 +369,10 @@ const PERSONA_PROMPTS = {
 }
 
 const effectiveModel = computed(() => {
-  if (selectedProvider.value === 'openrouter') {
-    if (selectedOpenRouterPreset.value === 'custom') {
-      return customModelName.value.trim()
-    }
-    return selectedOpenRouterPreset.value
+  if (selectedCatalogModel.value && selectedCatalogModel.value !== 'custom') {
+    return selectedCatalogModel.value
   }
-  return customModelName.value.trim() || (selectedProvider.value === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet')
+  return customModelName.value.trim()
 })
 
 const effectiveModelDisplay = computed(() => {
@@ -381,9 +385,11 @@ const hasActiveKey = computed(() => {
 
 function onProviderChange() {
   if (selectedProvider.value === 'custom_llm' && openRouterKey.value?.provider === 'custom_llm') selectedProvider.value = 'openrouter'
+  selectedCatalogModel.value = ''
+  // Valores de respaldo si la consulta del catálogo falla o el operador
+  // prefiere escribir el modelo a mano ("Personalizado").
   if (selectedProvider.value === 'openrouter') {
-    selectedOpenRouterPreset.value = openRouterKey.value?.model_name || ''
-    loadModels()
+    selectedCatalogModel.value = openRouterKey.value?.model_name || ''
   } else if (selectedProvider.value === 'openai') {
     customModelName.value = 'gpt-4o'
   } else if (selectedProvider.value === 'anthropic') {
@@ -393,11 +399,12 @@ function onProviderChange() {
   } else if (selectedProvider.value === 'custom_llm') {
     customModelName.value = 'local-model'
   }
+  loadModels()
   savePreferences()
 }
 
-function onOpenRouterPresetChange() {
-  if (selectedOpenRouterPreset.value !== 'custom') {
+function onCatalogModelChange() {
+  if (selectedCatalogModel.value !== 'custom') {
     customModelName.value = ''
   }
   savePreferences()
@@ -417,7 +424,7 @@ function setAsDefaultAuditModel() {
 function savePreferences() {
   if (typeof localStorage !== 'undefined') {
     localStorage.setItem('seclab_chat_provider', selectedProvider.value)
-    localStorage.setItem('seclab_chat_openrouter_preset', selectedOpenRouterPreset.value)
+    localStorage.setItem('seclab_chat_catalog_model', selectedCatalogModel.value)
     localStorage.setItem('seclab_chat_custom_model', customModelName.value)
     localStorage.setItem('seclab_chat_persona', selectedPersona.value)
   }
@@ -428,8 +435,8 @@ function loadPreferences() {
     const prov = localStorage.getItem('seclab_chat_provider')
     if (prov) selectedProvider.value = prov
 
-    const preset = localStorage.getItem('seclab_chat_openrouter_preset')
-    if (preset) selectedOpenRouterPreset.value = preset
+    const preset = localStorage.getItem('seclab_chat_catalog_model')
+    if (preset) selectedCatalogModel.value = preset
 
     const custom = localStorage.getItem('seclab_chat_custom_model')
     if (custom) customModelName.value = custom
@@ -531,7 +538,7 @@ async function sendMessage() {
 
     const res = await api.proxyChat(
       payloadMessages,
-      selectedProvider.value === 'openrouter' ? (openRouterKey.value?.provider || 'openrouter') : selectedProvider.value,
+      resolveApiProvider(selectedProvider.value),
       effectiveModel.value || null,
       null,
       temperature.value
@@ -573,7 +580,9 @@ onMounted(async () => {
     vaultKeys.value = await api.getVaultKeys()
     if (selectedProvider.value === 'custom_llm' && openRouterKey.value?.provider === 'custom_llm') selectedProvider.value = 'openrouter'
     if (selectedProvider.value === 'openrouter' && openRouterKey.value) {
-      selectedOpenRouterPreset.value = openRouterKey.value.model_name || selectedOpenRouterPreset.value
+      selectedCatalogModel.value = openRouterKey.value.model_name || selectedCatalogModel.value
+    }
+    if (hasActiveKey.value) {
       await loadModels()
     }
   } catch {

@@ -37,18 +37,43 @@ def openrouter_base_url(url: Optional[str]) -> str:
 
 class VaultService:
     async def list_models(self, provider: str, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        """Consulta el catálogo de modelos de un proveedor LLM, sin necesidad de
+        haber guardado la clave antes (usado tanto por el modal de alta del
+        Vault como por el selector del Chat Táctico / Copiloto). Cada
+        proveedor tiene su propio formato de listado; se normalizan todos a
+        {"id", "name"} para que la UI los trate de forma uniforme."""
         entry = self.get_key_entry(provider) if not api_key else None
         if not api_key:
             if not entry or not entry.get("is_active"):
                 raise ValueError("Proveedor no configurado o inactivo; introduce una clave para consultar modelos")
             api_key = entry["api_key"]
             base_url = base_url or entry.get("base_url")
-        if provider != "openrouter" and not is_openrouter_url(base_url):
-            raise ValueError("Este catálogo requiere un proveedor OpenRouter")
+        api_key = api_key.strip()
+        default_model = entry.get("model_name") if entry else None
+
+        if provider == "openrouter" or is_openrouter_url(base_url):
+            models = await self._list_openrouter_models(api_key, base_url)
+        elif provider == "openai":
+            models = await self._list_openai_compatible_models(api_key, normalize_endpoint_url(base_url) or "https://api.openai.com/v1", "OpenAI")
+        elif provider == "anthropic":
+            models = await self._list_anthropic_models(api_key, normalize_endpoint_url(base_url) or "https://api.anthropic.com/v1")
+        elif provider == "gemini":
+            models = await self._list_gemini_models(api_key, normalize_endpoint_url(base_url) or "https://generativelanguage.googleapis.com/v1beta")
+        elif provider == "custom_llm":
+            clean_base = normalize_endpoint_url(base_url)
+            if not clean_base:
+                raise ValueError("Especifica un Base URL antes de consultar el catálogo de este endpoint")
+            models = await self._list_openai_compatible_models(api_key, clean_base, "el endpoint")
+        else:
+            raise ValueError(f"El catálogo de modelos no está disponible para el proveedor '{provider}'")
+
+        return {"models": models, "default_model": default_model}
+
+    async def _list_openrouter_models(self, api_key: str, base_url: Optional[str]) -> list:
         base = openrouter_base_url(base_url)
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
-                response = await client.get(f"{base}/models/user", headers={"Authorization": f"Bearer {api_key.strip()}"})
+                response = await client.get(f"{base}/models/user", headers={"Authorization": f"Bearer {api_key}"})
             if response.status_code != 200:
                 raise RuntimeError(f"No se pudo consultar el catálogo de OpenRouter (HTTP {response.status_code})")
             try:
@@ -59,9 +84,79 @@ class VaultService:
             if not isinstance(data, list):
                 raise RuntimeError("Catálogo de OpenRouter inválido")
             models = {m["id"]: {"id": m["id"], "name": m.get("name") or m["id"], "context_length": m.get("context_length"), "pricing": m.get("pricing") or {}} for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)}
-            return {"models": sorted(models.values(), key=lambda m: m["name"].casefold()), "default_model": entry.get("model_name") if entry else None}
+            return sorted(models.values(), key=lambda m: m["name"].casefold())
         except httpx.HTTPError:
             raise RuntimeError("No se pudo conectar con OpenRouter para consultar modelos") from None
+
+    async def _list_openai_compatible_models(self, api_key: str, base: str, label: str) -> list:
+        """Lista modelos de cualquier endpoint compatible con la API de OpenAI:
+        GET {base}/models. Sirve tanto para OpenAI real como para un servidor
+        local (Ollama, LM Studio, vLLM) registrado como custom_llm."""
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(f"{base}/models", headers=headers)
+        except httpx.HTTPError:
+            raise RuntimeError(f"No se pudo conectar con {label} para consultar modelos") from None
+        if response.status_code != 200:
+            raise RuntimeError(f"No se pudo consultar el catálogo de {label} (HTTP {response.status_code})")
+        try:
+            body = response.json()
+            data = body.get("data") if isinstance(body, dict) else None
+        except ValueError:
+            raise RuntimeError(f"Catálogo de {label} inválido") from None
+        if not isinstance(data, list):
+            raise RuntimeError(f"Catálogo de {label} inválido")
+        models = {m["id"]: {"id": m["id"], "name": m.get("name") or m["id"]} for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)}
+        return sorted(models.values(), key=lambda m: m["name"].casefold())
+
+    async def _list_anthropic_models(self, api_key: str, base: str) -> list:
+        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(f"{base}/models", headers=headers)
+        except httpx.HTTPError:
+            raise RuntimeError("No se pudo conectar con Anthropic para consultar modelos") from None
+        if response.status_code != 200:
+            raise RuntimeError(f"No se pudo consultar el catálogo de Anthropic (HTTP {response.status_code})")
+        try:
+            body = response.json()
+            data = body.get("data") if isinstance(body, dict) else None
+        except ValueError:
+            raise RuntimeError("Catálogo de Anthropic inválido") from None
+        if not isinstance(data, list):
+            raise RuntimeError("Catálogo de Anthropic inválido")
+        models = {m["id"]: {"id": m["id"], "name": m.get("display_name") or m["id"]} for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)}
+        return sorted(models.values(), key=lambda m: m["name"].casefold())
+
+    async def _list_gemini_models(self, api_key: str, base: str) -> list:
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(f"{base}/models", params={"key": api_key})
+        except httpx.HTTPError:
+            raise RuntimeError("No se pudo conectar con Gemini para consultar modelos") from None
+        if response.status_code != 200:
+            raise RuntimeError(f"No se pudo consultar el catálogo de Gemini (HTTP {response.status_code})")
+        try:
+            body = response.json()
+            data = body.get("models") if isinstance(body, dict) else None
+        except ValueError:
+            raise RuntimeError("Catálogo de Gemini inválido") from None
+        if not isinstance(data, list):
+            raise RuntimeError("Catálogo de Gemini inválido")
+        models = {}
+        for m in data:
+            if not isinstance(m, dict) or not isinstance(m.get("name"), str):
+                continue
+            # Descarta modelos que no soportan generación de texto (p. ej.
+            # embeddings): un dato real que Gemini declara, no una suposición
+            # por nombre.
+            methods = m.get("supportedGenerationMethods")
+            if isinstance(methods, list) and "generateContent" not in methods:
+                continue
+            model_id = m["name"].removeprefix("models/")
+            models[model_id] = {"id": model_id, "name": m.get("displayName") or model_id}
+        return sorted(models.values(), key=lambda m: m["name"].casefold())
 
     def list_keys(self) -> List[ApiKeyResponse]:
         """Obtiene la lista de API keys configuradas con las claves enmascaradas."""

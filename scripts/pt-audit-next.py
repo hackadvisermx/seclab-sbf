@@ -156,7 +156,14 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
     steps: List[Dict[str, Any]] = []
 
     # 1. Scope / Alcance
-    if not target_yaml.is_file() and not scope_txt.is_file():
+    has_scope = False
+    try:
+        from seclab_scope import load_scope_rules
+        scope_data = load_scope_rules(engagement_dir)
+        has_scope = any(scope_data['scope'].get('in_scope', {}).get(key) for key in ('domains', 'ips', 'cidrs', 'endpoints'))
+    except (ValueError, OSError, ImportError):
+        has_scope = False
+    if not has_scope:
         steps.append({
             "id": "scope",
             "phase": "1. Gobierno & Alcance",
@@ -165,8 +172,8 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
             "skill": "duplicate-scope-guard",
             "prompt_template": "recon-agent",
             "priority": "HIGH",
-            "reason": "No se encontró target.yaml ni scope.txt para gobernar las pruebas de penetración autorizadas.",
-            "command": f"pt-eng new {eng_name} --domain example.com",
+            "reason": "No hay alcance autorizado válido en target.yaml o scope.txt; define y revisa los objetivos antes de probarlos.",
+            "command": "pt-scope show  # Revisar y editar el alcance del proyecto existente",
             "ready_for_closure": False,
         })
 
@@ -493,6 +500,8 @@ def main() -> int:
             "total_pending_steps": len(all_steps),
             "roadmap": all_steps if args.all else None,
         }
+        if args.prompt:
+            out_dict["prompt"] = generate_llm_prompt(eng_dir, next_step)
         output_text = json.dumps(out_dict, indent=2, ensure_ascii=False)
     elif args.prompt:
         output_text = generate_llm_prompt(eng_dir, next_step)
@@ -503,7 +512,7 @@ def main() -> int:
 
     if args.copy:
         copied = False
-        text_to_copy = next_step["command"] if not args.prompt else output_text
+        text_to_copy = generate_llm_prompt(eng_dir, next_step) if args.prompt else next_step["command"]
         for cmd in (["pbcopy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
             try:
                 proc = subprocess.run(cmd, input=text_to_copy, text=True, check=False)

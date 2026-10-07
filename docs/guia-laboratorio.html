@@ -480,10 +480,11 @@ pt-next --prompt</code></pre>
 pt-skills
 
 # En otra pestaña/panel tmux, inicia el receptor de interacciones OOB para SSRF:
-pt-callback listen 9001
+pt-callback start 9001
 
-# Lanza payload con UUID único para rastrear la interacción:
-pt-callback trigger http://127.0.0.1:9001</code></pre>
+# Comprueba el receptor local; esto no prueba SSRF en el objetivo:
+curl http://127.0.0.1:9001/prueba-local
+pt-callback show</code></pre>
         </div>
       </div>
 
@@ -651,7 +652,7 @@ pt-eng pack</code></pre>
           </div>
           <div class="disc-desc">SQLi, SSRF, SSTI, Command Injection con validación fuera de banda (OOB).</div>
         </div>
-        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-callback listen 9001</div>
+        <div class="disc-cmd" onclick="copiarComandoTexto(this)">pt-callback start 9001</div>
       </div>
 
       <div class="discipline-card">
@@ -789,15 +790,15 @@ ligolo-proxy -h</code></pre>
 // Base de datos de herramientas frecuentes en SecLab
 const HERRAMIENTAS = [
   // CLI & Orquestación SecLab
-  { name: 'pt-eng', cat: 'orquestacion', desc: 'Gestiona ciclo de vida de auditorías (new, status, scope, close, pack)', cmd: 'pt-eng new <nombre> [target]' },
+  { name: 'pt-eng', cat: 'orquestacion', desc: 'Gestiona ciclo de vida de auditorías (new, status, scope, close, pack)', cmd: 'pt-eng new <nombre> [--domain dominio]' },
   { name: 'pt-next', cat: 'metodologia', desc: 'Recomendador táctico de próximo paso y generador de prompts para LLMs', cmd: 'pt-next --prompt' },
   { name: 'pt-checklist', cat: 'auditoria', desc: 'Evaluador de cobertura metodológica en 8 disciplinas de seguridad', cmd: 'pt-checklist --markdown' },
-  { name: 'pt-scope', cat: 'seguridad', desc: 'Scope Guard estricto para validar que objetivos pertenezcan al alcance', cmd: 'pt-scope check target.yaml <url>' },
+  { name: 'pt-scope', cat: 'seguridad', desc: 'Scope Guard estricto para validar que objetivos pertenezcan al alcance', cmd: 'pt-scope check <url>' },
   { name: 'pt-finding', cat: 'reportes', desc: 'Gestor de hallazgos con rigor Evidence-First y scoring CVSS v3.1', cmd: 'pt-finding new <slug>' },
   { name: 'pt-report', cat: 'reportes', desc: 'Compilador determinista de reportes ejecutivos y técnicos en Markdown', cmd: 'pt-report compile' },
   { name: 'pt-recon', cat: 'recon', desc: 'Pipeline automatizado de reconocimiento pasivo y activo con Scope Guard', cmd: 'pt-recon <dominio>' },
   { name: 'pt-fuzz-params', cat: 'web', desc: 'Fuzzing determinista de parámetros ocultos en endpoints HTTP con x8', cmd: 'pt-fuzz-params <url>' },
-  { name: 'pt-callback', cat: 'inyecciones', desc: 'Servidor receptor de callbacks para validación OOB de SSRF y blind injection', cmd: 'pt-callback listen 9001' },
+  { name: 'pt-callback', cat: 'inyecciones', desc: 'Servidor receptor de callbacks para validación OOB de SSRF y blind injection', cmd: 'pt-callback start 9001' },
   { name: 'pt-skills', cat: 'agentes', desc: 'Menú interactivo con fzf para consultar Agent Security Skills y prompts', cmd: 'pt-skills prompt' },
   { name: 'pt-cheat', cat: 'ayuda', desc: 'Catálogo difuso (fzf) con 48+ comandos categorizados de pentest', cmd: 'pt-cheat [categoria]' },
   { name: 'pt-log', cat: 'auditoria', desc: 'Captura y firma continua de sesión de terminal con tmux pipe-pane', cmd: 'pt-log start [eng]' },
@@ -848,18 +849,24 @@ function generarComandos() {
   const nombre = document.getElementById('gen-nombre').value.trim() || 'engagement-demo';
   const target = document.getElementById('gen-target').value.trim() || 'target.com';
 
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(nombre) || !/^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(target)) {
+    document.getElementById('plan-generado').textContent = 'Indica un nombre de proyecto válido y un dominio o IPv4 sin esquema, ruta ni comodines.';
+    return;
+  }
+
   const html = `
     <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
       <div style="font-weight: 600; color: var(--accent-green); margin-bottom: 8px;">
         ✅ Secuencia generada para "${nombre}" (${target}):
       </div>
       <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Crear engagement y verificar alcance
-pt-eng new ${nombre} ${target}
+pt-eng new ${nombre} --domain ${target}
 cd /workspace/engagements/${nombre}
-pt-scope check target.yaml https://${target}
+pt-scope check https://${target}
 
 # 2. Ejecutar reconocimiento con Scope Guard
-pt-recon ${nombre}
+pt-recon ${nombre} --dry-run
+# Revisa alcance y límites antes de ejecutar sin --dry-run.
 
 # 3. Consultar recomendador táctico y generar prompt para IA
 pt-next --prompt

@@ -327,3 +327,7 @@ workspace están en `docs/backups.md`, incluida su restauración.
 5. Cerrar la Fase 9: ACL, MFA y device approval de Tailscale, fail2ban y pruebas externas controladas.
 6. Cerrar la Fase 10: backup del workspace, alertas y disaster recovery.
 7. Ejecutar `make tf-apply-*` con credenciales reales del operador y verificar la destrucción.
+
+## Experiencia guiada para principiantes
+
+El [plan de mejoras](docs/plan-experiencia-principiante.md) describe el recorrido de auditoría de un dominio, el papel de la IA y los playbooks, y la entrega por fases. La [fase 143](docs/phase-143.md) inicia las correcciones de guía y alcance.

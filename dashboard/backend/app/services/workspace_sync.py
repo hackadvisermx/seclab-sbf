@@ -25,12 +25,7 @@ class FindingUpdateError(ValueError):
     pass
 
 
-def _validate_scope_payload(data: Dict[str, Any]) -> None:
-    """Valida scope/operational_limits con las mismas reglas que pt-scope-validator
-    antes de persistir target.yaml, para no dejar en disco un archivo que luego
-    haría fallar pt-scope o el pipeline de reconocimiento."""
-    if not isinstance(data, dict) or "scope" not in data:
-        return
+def _scope_module():
     scripts_dir = str(SCRIPTS_DIR)
     if scripts_dir not in sys.path:
         sys.path.insert(0, scripts_dir)
@@ -38,9 +33,16 @@ def _validate_scope_payload(data: Dict[str, Any]) -> None:
         import seclab_scope
     except ImportError as exc:
         raise ScopeValidationError(f"No se pudo cargar el validador de alcance: {exc}") from exc
+    return seclab_scope
+
+
+def _validate_scope_payload(data: Dict[str, Any]) -> None:
+    if not isinstance(data, dict) or "scope" not in data:
+        return
+    module = _scope_module()
     try:
-        seclab_scope.validate_scope(data)
-    except seclab_scope.ScopeError as exc:
+        module.validate_scope(data)
+    except module.ScopeError as exc:
         raise ScopeValidationError(str(exc)) from exc
 
 
@@ -194,6 +196,11 @@ class WorkspaceSyncService:
             target_dir = self._resolve_dir(clean_name, eng_type)
             if target_dir.exists():
                 raise ValueError("Ya existe un proyecto con ese nombre.")
+            scope_module = _scope_module()
+            try:
+                initial_scope = scope_module.initial_scope(domain)
+            except scope_module.ScopeError as error:
+                raise ScopeValidationError(str(error)) from error
             target_dir.mkdir(parents=True, exist_ok=False)
 
             for folder in ("recon", "fuzzing", "evidence", "loot", "screenshots"):
@@ -201,7 +208,7 @@ class WorkspaceSyncService:
 
             # Sembrar target.yaml
             now_date = datetime.date.today().isoformat()
-            sample_domain = domain or f"{clean_name}.local"
+            sample_domain = (domain or "").strip()
             sample_client = client or ("Plataforma CTF" if eng_type == "reto" else clean_name.capitalize())
 
             clean_subtype = (subtype or "machine") if eng_type == "reto" else None
@@ -214,28 +221,15 @@ class WorkspaceSyncService:
                     "created_at": now_date,
                     "auditor": "tester",
                     "client": sample_client,
-                    "tos_reference": "Autorización expresa / Reglas de Laboratorio",
-                    "emergency_contact": "security@local.internal",
+                    "tos_reference": "",
+                    "emergency_contact": "",
                 },
                 "network": {
                     "vpn_profile": "none",
                     "assigned_ip": "",
                     "gateway_dns": "",
                 },
-                "scope": {
-                    "in_scope": {
-                        "domains": [sample_domain, f"*.{sample_domain}"],
-                        "ips": [],
-                        "cidrs": [],
-                        "endpoints": [f"https://{sample_domain}/api"],
-                    },
-                    "out_of_scope": {
-                        "domains": [f"status.{sample_domain}"],
-                        "ips": [],
-                        "cidrs": [],
-                        "notes": ["Sistemas de terceros y pasarelas fuera de alcance"],
-                    },
-                },
+                "scope": initial_scope,
                 "operational_limits": {
                     "max_requests_per_second": 1,
                     "max_parallel_threads": 1,

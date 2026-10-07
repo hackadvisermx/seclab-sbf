@@ -1672,6 +1672,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertEqual(steps_scope[0]["discipline"], "recon")
             self.assertIn("target.yaml", steps_scope[0]["reason"])
 
+            (eng_path / "target.yaml").write_text("scope:\n  in_scope:\n    domains: []\n")
+            self.assertEqual(audit_next.determine_roadmap(eng_path)[0]["id"], "scope")
             # 2. Caso B: target.yaml sembrado -> Recomienda recon
             target_file = eng_path / "target.yaml"
             target_file.write_text(
@@ -1730,6 +1732,13 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("next-test", term_out)
             self.assertIn("Próximo Paso Recomendado", term_out)
 
+            import subprocess
+            result = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/pt-audit-next.py"), "-j", "-p", str(eng_path)], capture_output=True, text=True, check=True)
+            payload = json.loads(result.stdout)
+            self.assertIn("SYSTEM PROMPT", payload["prompt"])
+            self.assertTrue(payload["next_step"]["title"])
+            plain_json = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/pt-audit-next.py"), "-j", str(eng_path)], capture_output=True, text=True, check=True)
+            self.assertNotIn("prompt", json.loads(plain_json.stdout))
             # 6. Validar integración en Dockerfile y plugin Zsh
             dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
             self.assertIn("pt-next", dockerfile)
@@ -1767,6 +1776,17 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("pt-callback", html_content)
         self.assertIn("HERRAMIENTAS", html_content)
 
+        self.assertNotIn("pt-callback listen", html_content)
+        self.assertNotIn("pt-callback trigger", html_content)
+        self.assertNotIn("pt-scope check target.yaml", html_content)
+        self.assertIn("pt-eng new ${nombre} --domain ${target}", html_content)
+        output = io.StringIO()
+        with patch("sys.stdout", output):
+            guide_helper.imprimir_plan_wizard("example-audit", "example.test")
+        self.assertIn("pt-eng new example-audit --domain example.test", output.getvalue())
+        self.assertIn("--dry-run", output.getvalue())
+        with self.assertRaises(ValueError):
+            guide_helper.imprimir_plan_wizard("bad;touch", "example.test")
         # 3. Comprobar presencia de la guía en workspace-seed
         seed_guia = REPO_ROOT / "workspace-seed" / "guia.html"
         self.assertTrue(seed_guia.is_file(), "workspace-seed/guia.html no existe")

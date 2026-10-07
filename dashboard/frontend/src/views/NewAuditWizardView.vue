@@ -98,11 +98,19 @@
           class="w-full bg-[#070b14] border border-slate-800 focus:border-cyan-400 rounded-sm p-2 text-slate-200 font-mono text-xs focus:outline-hidden"
         ></textarea>
       </div>
+      <div>
+        <label class="block text-xs text-slate-300 mb-1">Dominios excluidos (uno por línea):</label>
+        <textarea v-model="scopeForm.exclusions" rows="2" placeholder="Solo exclusiones reales del permiso de auditoría" class="w-full bg-[#070b14] border border-slate-800 rounded-sm p-2 text-xs text-slate-200"></textarea>
+      </div>
+      <label class="flex items-start gap-2 text-xs text-slate-300">
+        <input v-model="scopeConfirmed" type="checkbox" data-testid="confirm-scope" />
+        <span>Confirmo que estos activos están autorizados. Un dominio no incluye sus subdominios: añade *.dominio únicamente si tienes permiso.</span>
+      </label>
       <p v-if="errorMsg" class="text-xs font-mono text-rose-400">{{ errorMsg }}</p>
       <div class="flex items-center space-x-3">
         <button
           type="button"
-          :disabled="isSubmitting"
+          :disabled="isSubmitting || !scopeConfirmed"
           @click="submitStep2"
           class="flex-1 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 text-sm font-mono font-bold"
         >
@@ -111,10 +119,10 @@
         <button
           type="button"
           :disabled="isSubmitting"
-          @click="step = 3"
+          @click="goToDetail"
           class="py-2 px-3 rounded-sm border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-mono"
         >
-          Omitir por ahora
+          Guardar proyecto y revisar después
         </button>
       </div>
     </div>
@@ -171,7 +179,8 @@ const isSubmitting = ref(false)
 const errorMsg = ref('')
 
 const form = ref({ name: '', domain: '', client: '' })
-const scopeForm = ref({ domains: '', ips: '' })
+const scopeForm = ref({ domains: '', ips: '', exclusions: '' })
+const scopeConfirmed = ref(false)
 const dryRun = ref(true)
 
 const created = ref(null) // { id, type }
@@ -190,7 +199,9 @@ async function submitStep1() {
     // Precarga el dominio tecleado en el paso 1 como punto de partida del
     // alcance, para no pedirlo dos veces.
     if (form.value.domain.trim()) {
-      scopeForm.value.domains = form.value.domain.trim()
+      const target = form.value.domain.trim()
+      if (target.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(target)) scopeForm.value.ips = target
+      else scopeForm.value.domains = target
     }
     step.value = 2
   } catch (err) {
@@ -201,6 +212,7 @@ async function submitStep1() {
 }
 
 async function submitStep2() {
+  if (!scopeConfirmed.value) return
   isSubmitting.value = true
   errorMsg.value = ''
   try {
@@ -209,16 +221,19 @@ async function submitStep2() {
     const existingOutScope = current.scope?.out_of_scope || {}
     const { ips, cidrs } = splitIpsAndCidrs(scopeForm.value.ips)
     const domains = scopeForm.value.domains.split('\n').map(s => s.trim()).filter(Boolean)
+    if (!domains.length && !ips.length && !cidrs.length && !existingInScope.endpoints?.length) {
+      throw new Error('Indica al menos un dominio, IP o rango autorizado antes de continuar.')
+    }
     await api.updateScope(created.value.id, {
       ...current,
       scope: {
         in_scope: {
-          domains: domains.length ? domains : (existingInScope.domains || []),
+          domains,
           ips,
           cidrs,
           endpoints: existingInScope.endpoints || [],
         },
-        out_of_scope: existingOutScope,
+        out_of_scope: { ...existingOutScope, domains: scopeForm.value.exclusions.split('\n').map(s => s.trim()).filter(Boolean) },
       },
     }, created.value.type)
     step.value = 3

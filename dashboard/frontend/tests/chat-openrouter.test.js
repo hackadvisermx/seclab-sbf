@@ -299,7 +299,7 @@ test('VaultView permite editar llave existente actualizando base_url y modelo vi
     urlInput.dispatchEvent(new Event('input'))
 
     await flush()
-    Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Consultar modelos')).click()
+    Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Probar clave y cargar modelos')).click()
     await flush()
     // Enviar formulario
     const form = root.querySelector('form')
@@ -357,7 +357,7 @@ test('Vault consulta catálogo antes de guardar clave y persiste modelo seleccio
     provider.value = 'openrouter'; provider.dispatchEvent(new Event('change')); await flush()
     const key = root.querySelector('input[type="password"]')
     key.value = 'fixture-token'; key.dispatchEvent(new Event('input')); await flush()
-    Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Consultar modelos')).click(); await flush()
+    Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Probar clave y cargar modelos')).click(); await flush()
     assert.equal(preview.api_key, 'fixture-token')
     assert.equal(saved, undefined)
     const model = root.querySelectorAll('form select')[1]
@@ -365,6 +365,51 @@ test('Vault consulta catálogo antes de guardar clave y persiste modelo seleccio
     root.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await flush()
     assert.equal(saved.model_name, 'fixture/new-model')
   } finally { cleanup() }
+})
+
+test('Vault precarga y filtra el catálogo para OpenAI, Anthropic y Gemini, no solo OpenRouter', async () => {
+  // El selector de "modelo inicial" del Vault antes solo ofrecía buscar/elegir
+  // de un catálogo real para OpenRouter; para el resto de proveedores LLM caía
+  // a un campo de texto libre. Debe comportarse igual para cualquiera de ellos.
+  for (const provider of ['openai', 'anthropic', 'gemini', 'custom_llm']) {
+    let preview
+    const { root, cleanup } = await mountVaultView({
+      getVaultKeys: async () => [], getProxyStats: async () => ({}), getProxyHistory: async () => [],
+      previewProviderModels: async payload => { preview = payload; return fixtureCatalog },
+      upsertVaultKey: async () => ({}),
+    })
+    try {
+      root.querySelector('button').click(); await flush()
+      const providerSelect = root.querySelector('form select')
+      providerSelect.value = provider; providerSelect.dispatchEvent(new Event('change')); await flush()
+      if (provider === 'custom_llm') {
+        const urlInput = Array.from(root.querySelectorAll('form input')).find(i => i.placeholder?.includes('localhost'))
+        urlInput.value = 'http://localhost:11434/v1'
+        urlInput.dispatchEvent(new Event('input'))
+        await flush()
+      }
+
+      // Antes de consultar: debe mostrarse el selector+buscador, no un texto libre.
+      assert.equal(root.querySelectorAll('form select').length, 2, `${provider}: debe mostrar el select de modelos, no un input libre`)
+      assert.ok(root.querySelector('input[placeholder="Buscar por nombre o ID"]'), `${provider}: debe existir el buscador de modelos`)
+
+      Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Probar clave y cargar modelos')).click()
+      await flush()
+      assert.equal(preview.provider, provider)
+
+      // Filtrado al teclear en el buscador.
+      const search = root.querySelector('input[placeholder="Buscar por nombre o ID"]')
+      search.value = 'DeepSeek R1'
+      search.dispatchEvent(new Event('input'))
+      await flush()
+      const modelSelect = root.querySelectorAll('form select')[1]
+      const optionLabels = Array.from(modelSelect.querySelectorAll('option')).map(o => o.textContent)
+      assert.ok(optionLabels.some(l => l.includes('DeepSeek R1')), `${provider}: el modelo buscado debe seguir en la lista`)
+      assert.ok(!optionLabels.some(l => l.includes('Llama 3.3 70B')), `${provider}: el filtro debe ocultar los modelos que no coinciden`)
+    } finally {
+      cleanup()
+    }
+  }
 })
 
 
@@ -383,5 +428,51 @@ test('Chat evita enviar un modelo retirado y muestra errores del catálogo', asy
     input.dispatchEvent(new browser.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await flush()
     assert.equal(calls, 0)
     assert.match(root.textContent, /elige un modelo/)
+  } finally { cleanup(); localStorage.clear() }
+})
+
+test('Chat IA Táctico precarga y filtra el catálogo para proveedores no-OpenRouter', async () => {
+  // Antes solo OpenRouter tenía selector con buscador/recarga en el Chat; el
+  // resto caía a un campo de texto libre sin catálogo. Debe ser igual para
+  // OpenAI, Anthropic, Gemini y un endpoint local (custom_llm).
+  localStorage.clear()
+  let requestedProvider
+  let call
+  const { root, cleanup } = await mountChatView({
+    getVaultKeys: async () => [{ provider: 'openai', service_type: 'llm', is_active: true }],
+    getProviderModels: async provider => { requestedProvider = provider; return fixtureCatalog },
+    proxyChat: async (messages, provider, model) => { call = { provider, model }; return { content: 'ok', model, provider } },
+  })
+  try {
+    const providerSelect = root.querySelectorAll('select')[0]
+    providerSelect.value = 'openai'
+    providerSelect.dispatchEvent(new Event('change'))
+    await flush()
+    assert.equal(requestedProvider, 'openai', 'debe consultar el catálogo del proveedor seleccionado, no solo openrouter')
+
+    const modelSelect = root.querySelectorAll('select')[1]
+    assert.match(modelSelect.textContent, /DeepSeek R1/, 'el catálogo debe poblar el selector de modelo igual que para OpenRouter')
+
+    const search = root.querySelector('input[aria-label="Buscar modelos"]')
+    assert.ok(search, 'debe existir el buscador de modelos también para proveedores no-OpenRouter')
+    search.value = 'DeepSeek R1'
+    search.dispatchEvent(new Event('input'))
+    await flush()
+    const optionLabels = Array.from(modelSelect.querySelectorAll('option')).map(o => o.textContent)
+    assert.ok(optionLabels.some(l => l.includes('DeepSeek R1')))
+    assert.ok(!optionLabels.some(l => l.includes('Llama 3.3 70B')), 'el filtro debe ocultar los que no coinciden')
+
+    modelSelect.value = 'deepseek/deepseek-r1'
+    modelSelect.dispatchEvent(new Event('change'))
+    await flush()
+
+    const textarea = root.querySelector('textarea')
+    textarea.value = 'Hola'
+    textarea.dispatchEvent(new Event('input'))
+    await flush()
+    textarea.dispatchEvent(new browser.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flush()
+
+    assert.deepEqual(call, { provider: 'openai', model: 'deepseek/deepseek-r1' })
   } finally { cleanup(); localStorage.clear() }
 })

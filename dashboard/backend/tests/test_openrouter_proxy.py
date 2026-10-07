@@ -458,6 +458,86 @@ class TestOpenRouterProxy(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     asyncio.run(self.vault_service.list_models("openrouter", "fixture-token"))
 
+    def test_openai_catalog_uses_v1_models_and_falls_back_id_as_name(self):
+        """El catálogo de OpenAI no es exclusivo de OpenRouter (backlog: poder
+        probar/precargar modelos para 'cualquier proveedor', no solo OpenRouter)."""
+        import asyncio
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"data": [{"id": "gpt-4o"}, {"id": "gpt-4o-mini"}]}
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response) as get:
+            result = asyncio.run(self.vault_service.list_models("openai", "fixture-token"))
+        self.assertEqual(get.call_args.args[0], "https://api.openai.com/v1/models")
+        self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer fixture-token")
+        ids = [m["id"] for m in result["models"]]
+        self.assertIn("gpt-4o", ids)
+        self.assertIn("gpt-4o-mini", ids)
+        # Sin "name" en la respuesta real de OpenAI: debe usar el id como nombre.
+        self.assertEqual(next(m for m in result["models"] if m["id"] == "gpt-4o")["name"], "gpt-4o")
+
+    def test_openai_catalog_respects_custom_base_url(self):
+        import asyncio
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"data": [{"id": "gpt-4o"}]}
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response) as get:
+            asyncio.run(self.vault_service.list_models("openai", "fixture-token", "https://proxy.internal/v1/"))
+        self.assertEqual(get.call_args.args[0], "https://proxy.internal/v1/models")
+
+    def test_anthropic_catalog_uses_x_api_key_and_display_name(self):
+        import asyncio
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"data": [{"id": "claude-3-5-sonnet-20241022", "display_name": "Claude 3.5 Sonnet"}]}
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response) as get:
+            result = asyncio.run(self.vault_service.list_models("anthropic", "fixture-token"))
+        self.assertEqual(get.call_args.args[0], "https://api.anthropic.com/v1/models")
+        headers = get.call_args.kwargs["headers"]
+        self.assertEqual(headers["x-api-key"], "fixture-token")
+        self.assertEqual(headers["anthropic-version"], "2023-06-01")
+        self.assertNotIn("Authorization", headers, "Anthropic usa x-api-key, no Bearer")
+        self.assertEqual(result["models"][0], {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"})
+
+    def test_gemini_catalog_strips_models_prefix_and_drops_non_chat_models(self):
+        import asyncio
+        response = MagicMock(status_code=200)
+        response.json.return_value = {
+            "models": [
+                {"name": "models/gemini-2.0-flash", "displayName": "Gemini 2.0 Flash", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/embedding-001", "displayName": "Embedding 001", "supportedGenerationMethods": ["embedContent"]},
+            ]
+        }
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response) as get:
+            result = asyncio.run(self.vault_service.list_models("gemini", "fixture-key"))
+        self.assertEqual(get.call_args.args[0], "https://generativelanguage.googleapis.com/v1beta/models")
+        self.assertEqual(get.call_args.kwargs["params"], {"key": "fixture-key"})
+        self.assertEqual(len(result["models"]), 1, "El modelo de solo-embeddings no sirve como modelo de chat inicial")
+        self.assertEqual(result["models"][0], {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash"})
+
+    def test_custom_llm_catalog_requires_base_url_and_uses_openai_compatible_endpoint(self):
+        import asyncio
+        with self.assertRaises(ValueError):
+            asyncio.run(self.vault_service.list_models("custom_llm", "fixture-token", ""))
+
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"data": [{"id": "llama3:latest"}]}
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response) as get:
+            result = asyncio.run(self.vault_service.list_models("custom_llm", "fixture-token", "http://localhost:11434/v1"))
+        self.assertEqual(get.call_args.args[0], "http://localhost:11434/v1/models")
+        self.assertEqual(result["models"][0]["id"], "llama3:latest")
+
+    def test_custom_llm_pointing_at_openrouter_still_uses_openrouter_catalog(self):
+        """Un custom_llm cuyo base_url es openrouter.ai debe seguir usando el
+        catálogo real de OpenRouter (/models/user), no el genérico /models."""
+        import asyncio
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"data": [{"id": "vendor/model", "name": "Modelo"}]}
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=response) as get:
+            asyncio.run(self.vault_service.list_models("custom_llm", "fixture-token", "https://openrouter.ai/api/v1"))
+        self.assertEqual(get.call_args.args[0], "https://openrouter.ai/api/v1/models/user")
+
+    def test_unsupported_provider_raises_clear_error(self):
+        import asyncio
+        with self.assertRaises(ValueError):
+            asyncio.run(self.vault_service.list_models("shodan", "fixture-token"))
+
     def test_local_label_does_not_alias_to_router_and_inactive_key_is_rejected(self):
         import asyncio
         from app.models.schemas import ApiKeyCreate, ApiKeyUpdate

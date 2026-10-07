@@ -380,26 +380,15 @@
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Modelo Inicial / Predeterminado:</label>
               <div v-if="formSupportsModelCatalog" class="space-y-1.5">
-                <select
-                  @change="keyForm.model_name = $event.target.value"
-                  :value="keyForm.model_name"
-                  class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-2 py-1 text-xs font-mono text-slate-100 focus:outline-hidden"
-                >
-                  <option value="">Elegir modelo base</option>
-                  <option v-for="model in filteredFormModels" :key="model.id" :value="model.id">{{ model.name }} — {{ model.id }}</option>
-                  <option v-if="keyForm.model_name && !filteredFormModels.some(m => m.id === keyForm.model_name)" :value="keyForm.model_name">{{ keyForm.model_name }} (selección actual)</option>
-                </select>
-                <input v-model="formModelSearch" aria-label="Buscar modelos" placeholder="Buscar por nombre o ID" class="w-full bg-[#070b14] border border-slate-700 px-2 py-1 text-xs" />
-                <button
-                  type="button"
-                  @click="loadFormModels"
-                  :disabled="formModelsLoading"
-                  class="w-full px-3 py-1.5 rounded-sm bg-cyan-500/10 hover:bg-cyan-500/20 disabled:opacity-60 disabled:cursor-not-allowed text-cyan-300 border border-cyan-500/40 text-xs font-mono font-bold transition-colors"
-                >
-                  {{ formModelsLoading ? '⏳ Consultando…' : '🔌 Probar clave y cargar modelos' }}
-                </button>
-                <p class="text-xs text-slate-400">{{ formModels.length }} modelos. Se consulta automáticamente al salir del campo de la clave (o al editar una ya guardada); el botón sirve para reintentar. La consulta prueba la clave sin guardarla; el modelo base se guarda al confirmar.</p>
-                <p v-if="formModelsError" role="alert" class="text-xs text-red-400">{{ formModelsError }}</p>
+                <ModelPicker
+                  v-model="keyForm.model_name"
+                  :models="formModels"
+                  :loading="formModelsLoading"
+                  :error="formModelsError"
+                  placeholder="Elegir modelo base"
+                  @refresh="loadFormModels"
+                />
+                <p class="text-xs text-slate-400">{{ formModels.length }} modelos. Se consulta automáticamente al salir del campo de la clave (o al editar una ya guardada); "Actualizar modelos" en la lista sirve para reintentar. La consulta prueba la clave sin guardarla; el modelo base se guarda al confirmar.</p>
               </div>
               <input
                 v-else
@@ -447,6 +436,7 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { api } from '../api'
+import ModelPicker from '../components/ModelPicker.vue'
 
 const keys = ref([])
 const isLoading = ref(true)
@@ -472,7 +462,6 @@ const keyForm = ref({
 })
 
 const formModels = ref([])
-const formModelSearch = ref('')
 const formModelsLoading = ref(false)
 const formModelsError = ref('')
 // Backlog: poder probar la clave y precargar el selector de modelo inicial
@@ -481,7 +470,6 @@ const formModelsError = ref('')
 // confiable los proveedores LLM del resto (recon/plataforma) vía
 // onProviderSelect/openEditModal, sin necesidad de inspeccionar el hostname.
 const formSupportsModelCatalog = computed(() => keyForm.value.service_type === 'llm')
-const filteredFormModels = computed(() => formModels.value.filter(m => `${m.name} ${m.id}`.toLowerCase().includes(formModelSearch.value.toLowerCase())))
 let modelRequest = 0
 watch(() => [keyForm.value.provider, keyForm.value.api_key, keyForm.value.base_url], () => {
   modelRequest++

@@ -918,6 +918,17 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("check-text", copilot_source)
         self.assertIn("Validación de Alcance (Scope Guard)", copilot_source)
 
+    def test_report_reads_dashboard_and_legacy_cvss_vectors(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "zero.md"
+            for field in ("cvss_vector", "cvss_v31"):
+                vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N"
+                path.write_text(f"---\ntitle: Zero\nseverity: INFO\ncvss_score: 0\n{field}: {vector}\n---\nBody")
+                finding = report_compiler.parse_evidence_file(path)
+                self.assertEqual(finding["cvss_score"], 0.0)
+                self.assertEqual(finding["cvss_v31"], vector)
+
     def test_finding_manager_and_report_compiler(self):
         """Verifica la plantilla evidence.md, compilador de reportes y linter Evidence-First."""
         # 1. Validar plantilla de evidencia

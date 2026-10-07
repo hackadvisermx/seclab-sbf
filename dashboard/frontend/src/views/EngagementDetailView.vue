@@ -527,7 +527,7 @@
                 </span>
               </div>
               <span class="text-xs font-mono text-cyan-400 font-bold">
-                CVSS: {{ f.frontmatter?.cvss_score || 'N/A' }}
+                CVSS: {{ f.frontmatter?.cvss_score ?? 'N/A' }}
               </span>
             </div>
 
@@ -1438,7 +1438,7 @@
             <div class="flex items-center justify-between">
               <span class="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">Calculadora CVSS 3.1</span>
               <span class="text-xs font-mono font-bold" :class="getSeverityClass(findingForm.severity)">
-                {{ findingForm.severity }} (Score: {{ findingForm.cvss_score || '5.0' }})
+                {{ findingForm.severity }} (Score: {{ findingForm.cvss_score ?? '5.0' }})
               </span>
             </div>
 
@@ -1472,6 +1472,18 @@
                 <select v-model="cvssMetrics.UI" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
                   <option value="N">None (N)</option>
                   <option value="R">Required (R)</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-0.5">Scope (S):</label>
+                <select v-model="cvssMetrics.S" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
+                  <option value="U">Unchanged (U)</option><option value="C">Changed (C)</option>
+                </select>
+              </div>
+              <div v-for="metric in ['C', 'I', 'A']" :key="metric">
+                <label class="text-slate-400 block mb-0.5">{{ { C: 'Confidentiality', I: 'Integrity', A: 'Availability' }[metric] }} ({{ metric }}):</label>
+                <select v-model="cvssMetrics[metric]" :data-testid="`cvss-${metric}`" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
+                  <option value="N">None (N)</option><option value="L">Low (L)</option><option value="H">High (H)</option>
                 </select>
               </div>
             </div>
@@ -1955,6 +1967,7 @@ async function loadFindings() {
 
 function openNewFindingModal() {
   editingFinding.value = false
+  cvssMetrics.value = { AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N' }
   findingForm.value = {
     slug: '',
     title: '',
@@ -1980,7 +1993,7 @@ function editFinding(f) {
     title: f.frontmatter?.title || '',
     status: f.frontmatter?.status || 'PROVEN',
     severity: f.frontmatter?.severity || 'MEDIUM',
-    cvss_score: f.frontmatter?.cvss_score || 5.0,
+    cvss_score: f.frontmatter?.cvss_score ?? 5.0,
     cvss_vector: f.frontmatter?.cvss_vector || '',
     cwe: f.frontmatter?.cwe || '',
     asset: f.frontmatter?.asset || '',
@@ -1990,6 +2003,11 @@ function editFinding(f) {
     http_request: '',
     http_response: '',
     remediation: '',
+  }
+  cvssMetrics.value = { AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N' }
+  for (const metric of findingForm.value.cvss_vector.split('/').slice(1)) {
+    const [name, value] = metric.split(':')
+    if (name in cvssMetrics.value) cvssMetrics.value[name] = value
   }
   showFindingModal.value = true
 }

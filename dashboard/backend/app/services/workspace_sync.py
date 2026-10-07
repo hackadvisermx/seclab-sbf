@@ -421,7 +421,7 @@ class WorkspaceSyncService:
         fm = {
             "title": finding_create.title,
             "severity": finding_create.severity.upper(),
-            "cvss_score": finding_create.cvss_score or 5.0,
+            "cvss_score": finding_create.cvss_score if finding_create.cvss_score is not None else 5.0,
             "cvss_vector": finding_create.cvss_vector or "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
             "cwe": finding_create.cwe or "CWE-200",
             "asset": finding_create.asset or "",

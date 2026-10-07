@@ -130,7 +130,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         "id": finding_id,
         "title": title,
         "severity": severity,
-        "cvss_v31": meta.get("cvss_v31", ""),
+        "cvss_v31": meta.get("cvss_vector", meta.get("cvss_v31", "")),
         "cvss_score": cvss_score,
         "cwe": meta.get("cwe", "CWE-Unknown"),
         "asset": meta.get("asset", "N/A"),

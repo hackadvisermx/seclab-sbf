@@ -357,6 +357,7 @@
               :required="!isEditing"
               :placeholder="isEditing ? '(Dejar vacío para conservar clave actual cifrada)' : 'sk-..., token_..., key_...'"
               class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-hidden"
+              @blur="formSupportsModelCatalog && keyForm.api_key.trim() && loadFormModels()"
             />
             <p class="text-[10px] text-slate-500 mt-1 font-mono">
               {{ isEditing ? 'Si ingresas un nuevo valor, se cifrará con AES-256-GCM reemplazando la clave previa.' : 'Se cifra localmente con AES-256-GCM antes de guardarse en SQLite.' }}
@@ -389,8 +390,15 @@
                   <option v-if="keyForm.model_name && !filteredFormModels.some(m => m.id === keyForm.model_name)" :value="keyForm.model_name">{{ keyForm.model_name }} (selección actual)</option>
                 </select>
                 <input v-model="formModelSearch" aria-label="Buscar modelos" placeholder="Buscar por nombre o ID" class="w-full bg-[#070b14] border border-slate-700 px-2 py-1 text-xs" />
-                <button type="button" @click="loadFormModels" :disabled="formModelsLoading" class="text-xs text-cyan-300">{{ formModelsLoading ? 'Consultando…' : 'Probar clave y cargar modelos' }}</button>
-                <p class="text-xs text-slate-400">{{ formModels.length }} modelos. La consulta prueba la clave sin guardarla; el modelo base se guarda al confirmar.</p>
+                <button
+                  type="button"
+                  @click="loadFormModels"
+                  :disabled="formModelsLoading"
+                  class="w-full px-3 py-1.5 rounded-sm bg-cyan-500/10 hover:bg-cyan-500/20 disabled:opacity-60 disabled:cursor-not-allowed text-cyan-300 border border-cyan-500/40 text-xs font-mono font-bold transition-colors"
+                >
+                  {{ formModelsLoading ? '⏳ Consultando…' : '🔌 Probar clave y cargar modelos' }}
+                </button>
+                <p class="text-xs text-slate-400">{{ formModels.length }} modelos. Se consulta automáticamente al salir del campo de la clave (o al editar una ya guardada); el botón sirve para reintentar. La consulta prueba la clave sin guardarla; el modelo base se guarda al confirmar.</p>
                 <p v-if="formModelsError" role="alert" class="text-xs text-red-400">{{ formModelsError }}</p>
               </div>
               <input
@@ -437,7 +445,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { api } from '../api'
 
 const keys = ref([])
@@ -586,7 +594,7 @@ function openAddModal() {
   showModal.value = true
 }
 
-function openEditModal(k) {
+async function openEditModal(k) {
   isEditing.value = true
   editingProvider.value = k.provider
   keyForm.value = {
@@ -599,6 +607,17 @@ function openEditModal(k) {
     is_active: k.is_active ?? true,
   }
   showModal.value = true
+  // La clave ya está guardada: precargar su catálogo de inmediato (sin
+  // esperar a que el operador note y pulse el botón manual) usando esa
+  // clave guardada -- loadFormModels() ya manda api_key=null cuando el
+  // campo de secreto quedó en blanco, y el backend cae a la clave
+  // guardada en ese caso. nextTick() evita una condición de carrera con
+  // el watch() de abajo, que también resetea el catálogo al detectar el
+  // cambio de provider/api_key/base_url de este mismo reinicio del form.
+  if (keyForm.value.service_type === 'llm') {
+    await nextTick()
+    loadFormModels()
+  }
 }
 
 async function loadKeys() {

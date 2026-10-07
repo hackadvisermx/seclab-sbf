@@ -319,6 +319,52 @@ test('VaultView permite editar llave existente actualizando base_url y modelo vi
   }
 })
 
+test('Vault precarga el catálogo automáticamente al abrir Editar, sin pulsar ningún botón', async () => {
+  // Bug real reportado: el botón de cargar modelos estaba estilizado como
+  // texto plano, sin apariencia de botón, y el operador nunca llegaba a
+  // pulsarlo -- `docker logs` del contenedor real confirmó que jamás salía
+  // la petición POST /vault/models/preview. Al editar una llave ya
+  // guardada, el catálogo debe precargarse solo (la clave ya existe).
+  let previewCalls = 0
+  let previewPayload
+  const { root, cleanup } = await mountVaultView({
+    getVaultKeys: async () => [
+      { id: 1, provider: 'openrouter', label: 'OpenRouter', service_type: 'llm', masked_key: 'sk-or-•••1234', base_url: 'https://openrouter.ai/api/v1', model_name: 'anthropic/claude-3.5-sonnet', is_active: true, status: 'online', created_at: '2026-10-05T20:00:00Z' },
+    ],
+    getProxyStats: async () => ({}), getProxyHistory: async () => [],
+    previewProviderModels: async payload => { previewCalls++; previewPayload = payload; return fixtureCatalog },
+  })
+  try {
+    const editBtn = Array.from(root.querySelectorAll('button')).find(b => b.textContent.includes('Editar'))
+    editBtn.click()
+    await flush()
+    assert.equal(previewCalls, 1, 'debe consultarse automáticamente al abrir Editar, sin clics adicionales')
+    assert.equal(previewPayload.api_key, null, 'sin reescribir el secreto, debe usar la clave ya guardada (api_key null)')
+    const modelSelect = root.querySelectorAll('form select')[1]
+    assert.match(modelSelect.textContent, /DeepSeek R1/, 'el catálogo precargado debe poblar el selector')
+  } finally { cleanup() }
+})
+
+test('Vault carga el catálogo al salir del campo de la clave (blur), no solo con el botón', async () => {
+  let previewCalls = 0
+  const { root, cleanup } = await mountVaultView({
+    getVaultKeys: async () => [], getProxyStats: async () => ({}), getProxyHistory: async () => [],
+    previewProviderModels: async () => { previewCalls++; return fixtureCatalog },
+  })
+  try {
+    root.querySelector('button').click(); await flush()
+    const provider = root.querySelector('form select')
+    provider.value = 'openrouter'; provider.dispatchEvent(new Event('change')); await flush()
+    const key = root.querySelector('input[type="password"]')
+    key.value = 'fixture-token'
+    key.dispatchEvent(new Event('input'))
+    await flush()
+    key.dispatchEvent(new Event('blur'))
+    await flush()
+    assert.equal(previewCalls, 1, 'debe consultarse automáticamente al salir del campo de la clave')
+  } finally { cleanup() }
+})
+
 
 
 test('Chat usa la clave custom_llm de OpenRouter y su catálogo sin presets fijos', async () => {

@@ -3,6 +3,7 @@ import json
 import pathlib
 import re
 import sys
+import uuid
 import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
@@ -505,7 +506,7 @@ class WorkspaceSyncService:
             except Exception:
                 credentials = []
 
-        cred_id = cred.get("id") or f"cred-{int(datetime.datetime.now().timestamp())}"
+        cred_id = cred.get("id") or f"cred-{uuid.uuid4().hex}"
         cred["id"] = cred_id
         cred["captured_at"] = cred.get("captured_at") or datetime.date.today().isoformat()
 

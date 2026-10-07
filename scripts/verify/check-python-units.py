@@ -1400,6 +1400,36 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("## Matriz de Cobertura Metodológica", md_out)
             self.assertIn("| 1 | Reconocimiento", md_out)
 
+            # 4b. Validar marcador explicito '## Disciplina: <id>' en notes.md (fase 123 /
+            # backlog A18): debe ser una señal confiable adicional a la heuristica, capaz
+            # de marcar COMPLETED incluso un area sin ningun hallazgo ni rastro heuristico
+            # (p. ej. "injection", que aqui esta en PENDING), y de prevalecer sobre un
+            # estado heuristico ya calculado (p. ej. "client", que aqui esta IN_PROGRESS
+            # por los JS archivados, sin ningun hallazgo client-side real).
+            self.assertEqual(matrix_map["injection"]["status"], "PENDING")
+            (eng_path / "notes.md").write_text(
+                "# Notas del engagement\n\n"
+                "## Disciplina: injection\n"
+                "Probado SSRF/SQLi en los parametros conocidos, sin hallazgos explotables.\n\n"
+                "## Disciplina: client\n"
+                "Revisado CORS y postMessage manualmente, sin hallazgos.\n\n"
+                "## Disciplina: no-existe\n"
+                "Un id invalido no debe romper la evaluacion ni marcar nada.\n",
+                encoding="utf-8",
+            )
+            res_marked = audit_checklist.AuditChecklistEvaluator(eng_path).evaluate()
+            matrix_marked = {row["id"]: row for row in res_marked["matrix"]}
+            self.assertEqual(matrix_marked["injection"]["status"], "COMPLETED")
+            self.assertIn("Disciplina: injection", matrix_marked["injection"]["details"])
+            self.assertEqual(matrix_marked["client"]["status"], "COMPLETED")
+            # El area "auth" sigue completa por hallazgo real, sin marcador: la heuristica
+            # no se elimino, sigue siendo el respaldo cuando no hay marcador explicito.
+            self.assertEqual(matrix_marked["auth"]["status"], "COMPLETED")
+            self.assertIn("VULN-01", matrix_marked["auth"]["findings"])
+            self.assertNotIn("Disciplina", matrix_marked["auth"]["details"])
+            # Un id de disciplina invalido en notes.md no debe afectar nada ni fallar.
+            self.assertEqual(matrix_marked["fuzzing"]["status"], "PENDING")
+
             # 5. Validar integración en Dockerfile y plugin Zsh
             dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
             self.assertIn("pt-audit-checklist", dockerfile)

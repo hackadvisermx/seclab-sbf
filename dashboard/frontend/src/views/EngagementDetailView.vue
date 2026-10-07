@@ -730,6 +730,12 @@
           </div>
         </div>
 
+        <!-- Aviso permanente: el Copiloto solo sugiere, nunca ejecuta nada por sí mismo -->
+        <div class="flex items-start gap-2 p-2.5 rounded-sm border border-cyan-500/30 bg-cyan-950/20 text-[11px] font-mono text-cyan-300">
+          <span aria-hidden="true">ℹ️</span>
+          <p>El Copiloto únicamente <strong>sugiere</strong>: no ejecuta comandos, consultas ni pruebas por sí mismo contra el objetivo. Toda acción debe realizarla el operador manualmente (Terminal, herramientas del laboratorio, etc.).</p>
+        </div>
+
         <!-- Prompts Rápidos Sugeridos -->
         <div class="flex flex-wrap gap-2 text-[11px] font-mono">
           <button

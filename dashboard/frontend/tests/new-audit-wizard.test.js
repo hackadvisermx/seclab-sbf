@@ -92,6 +92,11 @@ test('recorre los 3 pasos y termina en el detalle del proyecto creado', async ()
     const textareas = view.root.querySelectorAll('textarea')
     setInputValue(textareas[0], 'acme-corp.local')
     setInputValue(textareas[1], '10.0.0.5\n10.0.1.0/24')
+    setInputValue(textareas[2], 'excluded.example.test')
+    await flush()
+    assert.equal(view.root.querySelector('button').disabled, true)
+    const confirmation = view.root.querySelector('[data-testid="confirm-scope"]')
+    confirmation.click()
     await flush()
     view.root.querySelector('button').click()
     await flush()
@@ -99,6 +104,7 @@ test('recorre los 3 pasos y termina en el detalle del proyecto creado', async ()
     assert.deepEqual(calls.updateScope.payload.scope.in_scope.domains, ['acme-corp.local'])
     assert.deepEqual(calls.updateScope.payload.scope.in_scope.ips, ['10.0.0.5'])
     assert.deepEqual(calls.updateScope.payload.scope.in_scope.cidrs, ['10.0.1.0/24'])
+    assert.deepEqual(calls.updateScope.payload.scope.out_of_scope.domains, ['excluded.example.test'])
     // El endpoint que ya existia en target.yaml debe conservarse, no perderse.
     assert.deepEqual(calls.updateScope.payload.scope.in_scope.endpoints, ['https://acme-corp.local/api'])
     assert.match(view.root.textContent, /Paso 3/)
@@ -132,12 +138,7 @@ test('omitir alcance y recon tambien termina en el detalle', async () => {
     await flush()
     assert.match(view.root.textContent, /Paso 2/)
 
-    // "Omitir por ahora" es el segundo boton del paso 2.
-    view.root.querySelectorAll('button')[1].click()
-    await flush()
-    assert.match(view.root.textContent, /Paso 3/)
-
-    // "Omitir, ir al detalle" es el segundo boton del paso 3.
+    // Guardar sin confirmar abre el detalle y no permite lanzar el recon.
     view.root.querySelectorAll('button')[1].click()
     await flush()
     assert.equal(view.router.currentRoute.value.fullPath, '/engagements/engagement/htb-quick')
@@ -161,4 +162,21 @@ test('un error del backend en el paso 1 se muestra y no avanza de paso', async (
   } finally {
     view.cleanup()
   }
+})
+
+test('alcance vacío confirmado muestra un error y no avanza', async () => {
+  let saves = 0
+  const view = await mountWizard({ createEngagement: async () => ({ id: 'empty', type: 'engagement' }),
+    getScope: async () => ({ scope: { in_scope: {}, out_of_scope: {} } }),
+    updateScope: async () => { saves++ } })
+  try {
+    setInputValue(view.root.querySelector('input[type="text"]'), 'empty')
+    await flush()
+    view.root.querySelector('button').click(); await flush()
+    view.root.querySelector('[data-testid="confirm-scope"]').click(); await flush()
+    view.root.querySelector('button').click(); await flush()
+    assert.match(view.root.textContent, /Indica al menos un dominio/)
+    assert.equal(saves, 0)
+    assert.match(view.root.textContent, /Paso 2/)
+  } finally { view.cleanup() }
 })

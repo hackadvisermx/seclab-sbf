@@ -10,6 +10,17 @@ class ScopeError(ValueError):
     pass
 
 
+def initial_scope(target=None):
+    value = (target or '').strip()
+    rules = {section: {key: [] for key in ('domains', 'ips', 'cidrs', 'endpoints')}
+             for section in ('in_scope', 'out_of_scope')}
+    rules['out_of_scope']['notes'] = []
+    if value:
+        rules['in_scope']['ips' if is_ip(value) else 'domains'] = [value]
+    validate_scope({'scope': rules})
+    return rules
+
+
 def is_ip(target):
     try:
         ipaddress.ip_address(target)

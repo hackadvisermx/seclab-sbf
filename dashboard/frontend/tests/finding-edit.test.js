@@ -52,3 +52,18 @@ test('editar una ficha conserva Markdown completo, fija el slug y envía solo el
     assert.equal(saved.slug, 'legacy')
   } finally { view.cleanup() }
 })
+
+test('metodología muestra el contrato next_step y genera texto de prompt', async () => {
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [],
+    getArtifacts: async () => [], getLoot: async () => ({ credentials: [], files: [] }),
+    getChecklist: async () => ({ matrix: [], coverage_score: 0 }),
+    getNextStep: async (id, prompt) => ({ next_step: { title: 'Definir alcance', reason: 'Falta autorización', command: 'pt-scope show' }, ...(prompt ? { prompt: 'SYSTEM PROMPT: revisar alcance' } : {}) }) })
+  try {
+    await clickText(view.root, 'Metodología & Cobertura')
+    assert.match(view.root.textContent, /Definir alcance/)
+    assert.match(view.root.textContent, /Falta autorización/)
+    assert.match(view.root.textContent, /pt-scope show/)
+    await clickText(view.root, 'Generar Prompt Táctico')
+    assert.equal(view.root.querySelector('pre').textContent.trim(), 'SYSTEM PROMPT: revisar alcance')
+  } finally { view.cleanup() }
+})

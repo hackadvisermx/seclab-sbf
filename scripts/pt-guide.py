@@ -20,6 +20,7 @@ import http.server
 import json
 import os
 import pathlib
+import re
 import shutil
 import socketserver
 import sys
@@ -63,7 +64,7 @@ DISCIPLINAS: List[Dict[str, Any]] = [
         "desc": "Descubrimiento de subdominios, tecnologías, certificados y superficie expuesta.",
         "cmd": "pt-recon <engagement>",
         "tools": ["assetfinder", "findomain", "httprobe", "gau"],
-        "artifacts": ["recon/subdomains.txt", "recon/alive_hosts.txt", "notes/recon_summary.md"]
+        "artifacts": ["recon/subdomains.txt", "recon/live_hosts.txt", "notes/recon_summary.md"]
     },
     {
         "id": 2,
@@ -97,7 +98,7 @@ DISCIPLINAS: List[Dict[str, Any]] = [
         "key": "ssrf-injection-audit",
         "name": "Inyecciones y SSRF con Validación OOB",
         "desc": "SQLi, SSRF, SSTI y Command Injection verificados con servidor de callbacks local.",
-        "cmd": "pt-callback listen 9001",
+        "cmd": "pt-callback start 9001",
         "tools": ["pt-callback", "sqlmap", "commix", "dalfox"],
         "artifacts": ["evidence/ssrf-oob.md", "evidence/sqli.md"]
     },
@@ -251,20 +252,22 @@ def imprimir_portada() -> None:
 
 def imprimir_plan_wizard(nombre: str, target: str) -> None:
     """Genera y muestra en terminal el plan táctico paso a paso para un target dado."""
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}", nombre) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]*", target):
+        raise ValueError("Indica un nombre válido y un dominio o IPv4 sin esquema, ruta ni comodines.")
     sys.stdout.write(f"\n{C_BOLD}{C_GREEN}Plan Táctico Generado para Engagement: {nombre} ({target}){C_RESET}\n")
     sys.stdout.write(f"{C_GRAY}═══════════════════════════════════════════════════════════════════════{C_RESET}\n\n")
 
     pasos = [
         ("1. Inicializar Engagement y Scope Guard",
-         f"pt-eng new {nombre} {target}\ncd /workspace/engagements/{nombre}\npt-scope check target.yaml https://{target}"),
+         f"pt-eng new {nombre} --domain {target}\ncd /workspace/engagements/{nombre}\npt-scope check https://{target}"),
         ("2. Reconocimiento Automatizado con Scope Guard",
-         f"pt-recon {nombre}"),
+         f"pt-recon {nombre} --dry-run  # Revisar alcance y límites antes de ejecutar sin --dry-run"),
         ("3. Consultar Asesor Táctico y Generar Prompt para LLM",
          f"pt-next --prompt"),
         ("4. Fuzzing de Parámetros Ocultos con x8",
-         f"pt-fuzz-params https://{target}/api"),
+         f"pt-fuzz-params https://{target}  # Usar una URL descubierta y autorizada"),
         ("5. Probar Inyecciones / SSRF con Validación OOB",
-         f"pt-callback listen 9001  # Iniciar receptor OOB en segundo panel tmux"),
+         f"pt-callback start 9001  # Iniciar receptor OOB en segundo panel tmux"),
         ("6. Documentar Hallazgo con Rigor Evidence-First",
          f"pt-finding new idor-usuarios\npt-finding lint"),
         ("7. Evaluar Cobertura Metodológica en 8 Disciplinas",
@@ -303,7 +306,7 @@ def emitir_json() -> None:
         "guide_html_path": str(ruta_html) if ruta_html else None,
         "disciplines": DISCIPLINAS,
         "quick_actions": {
-            "engagement": "pt-eng new <nombre> [target]",
+            "engagement": "pt-eng new <nombre> [--domain dominio]",
             "next_step": "pt-next --prompt",
             "coverage_checklist": "pt-checklist",
             "evidence_finding": "pt-finding new <slug>",
@@ -386,7 +389,11 @@ def main() -> int:
     if args.wizard is not None:
         nombre = args.wizard[0] if len(args.wizard) > 0 else "engagement-audit"
         target = args.wizard[1] if len(args.wizard) > 1 else "target.com"
-        imprimir_plan_wizard(nombre, target)
+        try:
+            imprimir_plan_wizard(nombre, target)
+        except ValueError as error:
+            sys.stderr.write(str(error) + "\n")
+            return 1
         return 0
 
     # Por defecto mostrar portada interactiva

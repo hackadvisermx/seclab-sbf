@@ -658,7 +658,13 @@
             🧠 Asistente Táctico (pt-next)
           </h2>
           <div class="p-3 rounded-sm bg-slate-950 border border-cyan-500/30 text-xs font-mono text-cyan-300">
-            {{ nextStepData.recommendation || 'Analizando estado del proyecto...' }}
+            {{ nextStepData.next_step?.title || nextStepData.recommendation || 'No hay una recomendación disponible.' }}
+          </div>
+          <p v-if="nextStepData.next_step?.reason" class="text-xs text-slate-300">{{ nextStepData.next_step.reason }}</p>
+          <div v-if="nextStepData.next_step?.command" class="space-y-2 text-xs">
+            <p class="text-slate-400">Comando sugerido: revisa el objetivo y el alcance antes de usarlo.</p>
+            <code class="block whitespace-pre-wrap break-all text-cyan-300">{{ nextStepData.next_step.command }}</code>
+            <button @click="copyText(nextStepData.next_step.command)" class="px-3 py-1 rounded-sm bg-slate-800 text-cyan-300">Copiar comando</button>
           </div>
           <button
             @click="loadNextStepPrompt"

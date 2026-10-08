@@ -1,6 +1,6 @@
 # Fase 145: avance del reconocimiento durante la ejecución
 
-Fecha: 2026-10-07. Base: `a1e2a17`. Rama: `phase/145-live-recon-progress`. Estado: lista para revisión del owner; merge pendiente.
+Fecha: 2026-10-07. Base: `a1e2a17`. Rama: `phase/145-live-recon-progress`. PR: [#165](https://github.com/hackadvisermx/seclab-sbf/pull/165), abierto para revisión del owner; merge pendiente.
 
 ## Problema y resultado
 

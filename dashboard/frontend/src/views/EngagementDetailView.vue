@@ -1468,6 +1468,7 @@
                 <option value="MITIGATED">MITIGATED (Mitigado)</option>
                 <option value="DRAFT">DRAFT (Borrador)</option>
               </select>
+              <p class="mt-1 text-[10px] text-slate-400">Las fichas nuevas comienzan como CANDIDATE. Elige PROVEN solo después de revisar la evidencia; los ejemplos de una plantilla no demuestran un hallazgo.</p>
             </div>
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Activo Afectado:</label>
@@ -1833,7 +1834,7 @@ const editingFinding = ref(false)
 const findingForm = ref({
   slug: '',
   title: '',
-  status: 'PROVEN',
+  status: 'CANDIDATE',
   severity: 'MEDIUM',
   cvss_score: 5.3,
   cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N',
@@ -2053,7 +2054,7 @@ function openNewFindingModal() {
   findingForm.value = {
     slug: '',
     title: '',
-    status: 'PROVEN',
+    status: 'CANDIDATE',
     severity: 'MEDIUM',
     cvss_score: 5.3,
     cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N',
@@ -2073,7 +2074,7 @@ function editFinding(f) {
   findingForm.value = {
     slug: f.slug,
     title: f.frontmatter?.title || '',
-    status: f.frontmatter?.status || 'PROVEN',
+    status: f.frontmatter?.status || 'CANDIDATE',
     severity: f.frontmatter?.severity || 'MEDIUM',
     cvss_score: f.frontmatter?.cvss_score ?? 5.0,
     cvss_vector: f.frontmatter?.cvss_vector || '',

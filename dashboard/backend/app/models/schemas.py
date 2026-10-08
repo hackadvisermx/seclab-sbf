@@ -101,7 +101,7 @@ class FindingFrontmatter(BaseModel):
     asset: Optional[str] = None
     date: Optional[str] = None
     author: Optional[str] = "tester"
-    status: Optional[str] = "PROVEN"  # PROVEN, CANDIDATE, DISPROVED, VERIFIED, DRAFT, REMEDIATED, FALSE_POSITIVE
+    status: Optional[str] = "CANDIDATE"  # PROVEN, CANDIDATE, DISPROVED, VERIFIED, DRAFT, REMEDIATED, FALSE_POSITIVE
 
 
 class FindingDetail(BaseModel):
@@ -120,7 +120,7 @@ class FindingCreate(BaseModel):
     cvss_score: Optional[float] = None
     cwe: Optional[str] = None
     asset: Optional[str] = None
-    status: Optional[str] = "PROVEN"
+    status: Optional[str] = "CANDIDATE"
     description: Optional[str] = None
     steps_to_reproduce: Optional[str] = None
     http_request: Optional[str] = None

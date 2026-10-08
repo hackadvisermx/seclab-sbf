@@ -338,7 +338,7 @@ class WorkspaceSyncService:
                     asset=fm_data.get("asset"),
                     date=str(fm_data.get("date", datetime.date.today().isoformat())),
                     author=fm_data.get("author", "tester"),
-                    status=str(fm_data.get("status", "PROVEN")).upper(),
+                    status=str(fm_data.get("status") or "CANDIDATE").strip().upper() or "CANDIDATE",
                 )
                 findings.append(
                     FindingDetail(
@@ -372,7 +372,7 @@ class WorkspaceSyncService:
             asset=fm_data.get("asset"),
             date=str(fm_data.get("date", datetime.date.today().isoformat())),
             author=fm_data.get("author", "tester"),
-            status=str(fm_data.get("status", "PROVEN")).upper(),
+            status=str(fm_data.get("status") or "CANDIDATE").strip().upper() or "CANDIDATE",
         )
         return FindingDetail(
             slug=slug,
@@ -422,7 +422,7 @@ class WorkspaceSyncService:
             "asset": finding_create.asset or "",
             "date": now_date,
             "author": "tester",
-            "status": (finding_create.status or "PROVEN").upper(),
+            "status": (finding_create.status or "CANDIDATE").strip().upper() or "CANDIDATE",
         }
 
         body_parts = []

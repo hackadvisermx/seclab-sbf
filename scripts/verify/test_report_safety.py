@@ -46,6 +46,22 @@ class ReportSafetyTests(unittest.TestCase):
             args.append(str(output))
         return subprocess.run(args, capture_output=True, text=True)
 
+    def test_missing_empty_or_null_status_never_confirms_a_finding(self):
+        path = self.root / 'evidence/finding.md'
+        for declaration in ['', 'status: ""\n', 'status: null\n', 'status: "  "\n']:
+            with self.subTest(declaration=declaration):
+                self.finding('example.test')
+                path.write_text(path.read_text().replace('status: PROVEN\n', declaration))
+                self.assertEqual(report.parse_evidence_file(path)['status'], 'CANDIDATE')
+                text = report.build_report(self.root).read_text()
+                self.assertIn('**0 hallazgos confirmados activos**', text)
+                self.assertIn('| CANDIDATE |', text)
+        for status in ['PROVEN', 'VERIFIED', 'Confirmado']:
+            self.finding('example.test')
+            path.write_text(path.read_text().replace('status: PROVEN', 'status: ' + status))
+            self.assertEqual(report.parse_evidence_file(path)['status'], 'PROVEN')
+            self.assertIn('**1 hallazgos confirmados activos**', report.build_report(self.root).read_text())
+
     def test_cli_blocks_excluded_and_unknown_without_overwriting_reports(self):
         for asset, message in [('excluded.example.test', 'FUERA DE ALCANCE'), ('outside.test', 'sin alcance confirmado')]:
             self.finding(asset)

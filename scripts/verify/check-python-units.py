@@ -969,7 +969,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertEqual(parsed["severity"], "HIGH")
         self.assertEqual(parsed["cvss_score"], 6.5)
         self.assertEqual(parsed["cwe"], "CWE-639")
-        self.assertEqual(parsed["status"], "PROVEN")
+        self.assertEqual(parsed["status"], "CANDIDATE")
         self.assertTrue(parsed["has_negative_control"])
         self.assertTrue(parsed["has_bounded_proof"])
         self.assertTrue(parsed["has_poc"])
@@ -1054,7 +1054,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         # 2b. Validar la biblioteca de plantillas de hallazgo reutilizables (fase 121 / backlog A16):
         # cada plantilla debe ser YAML valido para pt-report-compiler Y conservar los placeholders
         # literales exactos que el sed de `pt-finding new --template` sustituye (VULN-01, el titulo
-        # generico, severity "High", status "PROVEN", la URL de ejemplo y YYYY-MM-DD); si cambian,
+        # generico, severity "High", status "CANDIDATE", la URL de ejemplo y YYYY-MM-DD); si cambian,
         # la sustitucion queda rota en silencio sin que ningun comando lo avise.
         findings_templates_dir = REPO_ROOT / "workspace-seed" / "templates" / "findings"
         self.assertTrue(findings_templates_dir.is_dir(), "workspace-seed/templates/findings no existe")
@@ -1070,14 +1070,14 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn('id: "VULN-01"', raw, f"{name}: falta el placeholder id VULN-01")
             self.assertIn("Título de la Vulnerabilidad o Hallazgo", raw, f"{name}: falta el placeholder de titulo")
             self.assertIn('severity: "High"', raw, f"{name}: falta el placeholder severity High")
-            self.assertIn('status: "PROVEN"', raw, f"{name}: falta el placeholder status PROVEN")
+            self.assertIn('status: "CANDIDATE"', raw, f"{name}: falta el placeholder status CANDIDATE")
             self.assertIn("https://api.example.com/v1/users/1234/profile", raw, f"{name}: falta la URL de ejemplo sustituible")
             self.assertIn("YYYY-MM-DD", raw, f"{name}: falta el placeholder de fecha")
 
             parsed = report_compiler.parse_evidence_file(tmpl_path)
             self.assertEqual(parsed["id"], "VULN-01")
             self.assertEqual(parsed["severity"], "HIGH")
-            self.assertEqual(parsed["status"], "PROVEN")
+            self.assertEqual(parsed["status"], "CANDIDATE")
             self.assertEqual(parsed["cwe"], expected["cwe"], f"{name}: CWE inesperado")
             self.assertEqual(parsed["cvss_score"], expected["cvss_score"], f"{name}: CVSS inesperado")
             self.assertTrue(parsed["has_negative_control"], f"{name}: falta seccion de control negativo")

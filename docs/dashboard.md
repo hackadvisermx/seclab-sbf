@@ -91,6 +91,10 @@ El job `static-analysis` también ejecuta auditoría, pruebas y build del fronte
 
 ---
 
+### Estado inicial de las fichas
+
+Las nuevas fichas de UI/API/CLI y plantillas empiezan como **CANDIDATE**. Un registro sin estado explícito también queda sin confirmar al leerlo, sin reescribir su archivo. Elegir PROVEN requiere revisar la evidencia; los ejemplos de plantillas son material de guía. Los estados expresamente guardados se conservan. Detalles: [fase 151](phase-151.md).
+
 ### Autorización del reconocimiento
 
 En **Alcance**, registra referencia del permiso, inicio/fin y selecciona por separado reconocimiento pasivo y activo. Las fechas se muestran en la zona del navegador y se guardan como instantes UTC. Guardar se habilita después de cargar el contrato. SecLab valida la declaración operativa, no su validez legal.

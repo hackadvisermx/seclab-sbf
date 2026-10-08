@@ -69,6 +69,8 @@ def normalize_status(raw_status: str) -> str:
         "CONFIRMADO": "PROVEN",
         "VERIFIED": "PROVEN",
         "CANDIDATE": "CANDIDATE",
+        "NULL": "CANDIDATE",
+        "~": "CANDIDATE",
         "HIPOTESIS": "CANDIDATE",
         "DISPROVED": "DISPROVED",
         "FALSO_POSITIVO": "DISPROVED",
@@ -81,7 +83,7 @@ def normalize_status(raw_status: str) -> str:
         "BORRADOR": "DRAFT",
         "BLOCKED": "BLOCKED",
     }
-    return status_map.get(raw, raw if raw else "PROVEN")
+    return status_map.get(raw, raw if raw else "CANDIDATE")
 
 
 def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
@@ -112,7 +114,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         except ValueError:
             cvss_score = 0.0
 
-    normalized_status = normalize_status(meta.get("status", "PROVEN"))
+    normalized_status = normalize_status(meta.get("status"))
 
     has_negative_control = (
         "## 2b. Control Negativo" in body

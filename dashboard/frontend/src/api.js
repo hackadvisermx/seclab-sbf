@@ -123,6 +123,7 @@ export const api = {
   // Pipeline de Reconocimiento & Scope Guard
   getReconStatus: (id, type = 'engagement') => request(`/recon/${id}/status?type=${type}`),
   getReconHistory: (id, type = 'engagement', before = null) => request(`/recon/${encodeURIComponent(id)}/history?type=${encodeURIComponent(type)}${before ? `&before=${encodeURIComponent(before)}` : ''}`),
+  previewRecon: (id, data, type = 'engagement') => request(`/recon/${id}/preview?type=${type}`, { method: 'POST', body: JSON.stringify(data) }),
   runRecon: (id, data, type = 'engagement') => request(`/recon/${id}/run?type=${type}`, { method: 'POST', body: JSON.stringify(data) }),
   cancelRecon: (id, type = 'engagement') => request(`/recon/${id}/cancel?type=${type}`, { method: 'POST' }),
   getReconLog: (id, lines = 200, type = 'engagement') => request(`/recon/${id}/log?lines=${lines}&type=${type}`),

@@ -281,10 +281,11 @@
               </div>
             </div>
 
-            <div class="flex items-end">
+            <div class="flex flex-col justify-end gap-2">
+              <button @click="reviewReconPlan" :disabled="reconIsRunning || isReviewingRecon" class="px-3 py-2 border border-cyan-500/50 rounded-sm text-cyan-300 disabled:opacity-50">{{ isReviewingRecon ? "Revisando..." : "Revisar plan sin tráfico" }}</button>
               <button
                 @click="triggerReconPipeline"
-                :disabled="reconIsRunning || isStartingRecon"
+                :disabled="reconIsRunning || isStartingRecon || !reconPreview?.can_start"
                 class="w-full py-2 px-3 rounded-sm font-mono font-bold text-xs transition-all flex items-center justify-center space-x-2 shadow-lg cursor-pointer"
                 :class="reconIsRunning ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 shadow-cyan-500/20'"
               >
@@ -294,6 +295,27 @@
               </button>
             </div>
           </div>
+
+          <p v-if="reconPreviewError" role="alert" class="mt-3 text-xs text-amber-300">{{ reconPreviewError }}</p>
+          <p v-if="!reconPreview" class="mt-3 text-xs text-slate-400">Revisa el plan antes de iniciar. Cambiar etapa, modo o alcance requiere una nueva revisión.</p>
+          <section v-if="reconPreview" data-testid="recon-preview" class="mt-4 space-y-3 text-xs font-mono border border-slate-700 rounded-sm p-3">
+            <h3 class="text-cyan-300 font-bold">{{ reconPreview.dry_run ? 'SIMULACIÓN: sin tráfico ni resultados nuevos' : 'Plan de ejecución' }}</h3>
+            <p>Límites de sondeo activo: {{ reconPreview.operational_limits.max_requests_per_second }} intentos/s · {{ reconPreview.operational_limits.max_parallel_threads }} tareas · {{ reconPreview.operational_limits.max_probe_targets }} destinos máximo · timeout {{ reconPreview.operational_limits.probe_timeout_seconds }} s.</p>
+            <p class="text-slate-400">Las consultas pasivas usan los controles de cada herramienta. Esta revisión no resuelve DNS ni concede permisos; Scope Guard vuelve a validar antes de actuar. Redirecciones externas no se siguen.</p>
+            <div v-for="step in reconPreview.stages" :key="step.stage" class="space-y-1 border-t border-slate-800 pt-2">
+              <h4 class="text-slate-100">{{ historyStageLabel(step.stage) }} · {{ { passive: 'PASIVO', active: 'ACTIVO', local: 'LOCAL' }[step.interaction] }}</h4>
+              <p>{{ step.source }}</p>
+              <p>{{ step.targets_count }} targets conocidos · {{ step.discarded_count }} descartados por alcance.</p>
+              <p v-if="step.targets_pending" class="text-amber-300">Targets futuros pendientes: dependen de etapas anteriores. Descubrir un activo no lo autoriza.</p>
+              <ul class="break-all"><li v-for="target in step.targets" :key="target">{{ target }}<span v-if="step.target_reasons?.[target]" class="text-slate-400"> · {{ step.target_reasons[target] }}</span></li></ul>
+              <p v-if="step.targets_count > step.targets.length" class="text-slate-400">Se muestran los primeros {{ step.targets.length }} targets.</p>
+              <ul class="text-amber-300 break-all"><li v-for="row in step.discarded" :key="row.target">{{ row.target }} · {{ row.verdict }}: {{ row.reason }}</li></ul>
+              <p v-if="step.discarded_count > step.discarded.length">Se muestran los primeros {{ step.discarded.length }} descartes.</p>
+              <ul class="text-rose-300"><li v-for="reason in step.block_reasons" :key="reason">Bloqueado: {{ reason }}</li></ul>
+            </div>
+            <button v-if="!reconPreview.can_start" @click="activeTab = 'scope'; loadScope()" class="px-3 py-1 border border-amber-500/50 rounded-sm text-amber-300">Revisar alcance y autorización</button>
+            <details class="text-slate-400 break-all"><summary>Detalle de revisión</summary><p>Alcance: {{ reconPreview.scope_revision }}</p><p>Plan: {{ reconPreview.plan_revision }}</p><p>{{ reconPreview.generated_at }}</p></details>
+          </section>
 
           <!-- Mensaje / Feedback de Lanzamiento -->
           <button v-if="reconIsRunning" @click="cancelReconPipeline"
@@ -1728,6 +1750,10 @@ const reconStatus = ref({
 })
 const reconStage = ref('all')
 const reconDryRun = ref(false)
+const reconPreview = ref(null)
+const reconPreviewError = ref('')
+const isReviewingRecon = ref(false)
+let reconPreviewRequest = 0
 const reconLogContent = ref('')
 const reconHistory = ref([])
 const reconHistoryCursor = ref(null)
@@ -2003,6 +2029,7 @@ function getFindingStatusClass(status) {
 }
 
 async function loadScope() {
+  invalidateReconPreview()
   scopeLoadState.value = 'loading'
   try {
     const data = await api.getScope(engId.value, engType.value)
@@ -2567,6 +2594,7 @@ async function cancelReconPipeline() {
   reconActionMsg.value = ''
   try {
     const res = await api.cancelRecon(engId.value, engType.value)
+    invalidateReconPreview()
     reconActionSuccess.value = true
     reconActionMsg.value = res.message
     await loadReconStatus()
@@ -2580,21 +2608,51 @@ async function cancelReconPipeline() {
   }
 }
 
+function invalidateReconPreview() {
+  reconPreviewRequest++
+  reconPreview.value = null
+  reconPreviewError.value = ''
+  isReviewingRecon.value = false
+}
+
+async function reviewReconPlan() {
+  const request = ++reconPreviewRequest
+  reconPreview.value = null
+  reconPreviewError.value = ''
+  isReviewingRecon.value = true
+  try {
+    const result = await api.previewRecon(engId.value, { stage: reconStage.value, dry_run: reconDryRun.value }, engType.value)
+    if (request !== reconPreviewRequest) return
+    if (!Array.isArray(result.stages) || typeof result.can_start !== 'boolean' || !result.plan_revision) throw new Error('Vista previa incompleta; reintenta la revisión.')
+    reconPreview.value = result
+  } catch (err) {
+    if (request === reconPreviewRequest) reconPreviewError.value = err.message || 'No se pudo revisar el plan.'
+  } finally {
+    if (request === reconPreviewRequest) isReviewingRecon.value = false
+  }
+}
+
+watch([engId, engType, reconStage, reconDryRun], invalidateReconPreview)
+
 async function triggerReconPipeline() {
+  if (!reconPreview.value?.can_start) return
+  const expectedPlan = reconPreview.value.plan_revision
   isStartingRecon.value = true
   reconActionMsg.value = ''
   try {
     const res = await api.runRecon(
       engId.value,
-      { stage: reconStage.value, dry_run: reconDryRun.value },
+      { stage: reconStage.value, dry_run: reconDryRun.value, expected_plan: expectedPlan },
       engType.value
     )
+    invalidateReconPreview()
     reconActionSuccess.value = true
     reconActionMsg.value = res.message || 'Pipeline iniciado correctamente.'
     await loadReconStatus()
     await loadReconLog()
     startReconPolling()
   } catch (err) {
+    invalidateReconPreview()
     reconActionSuccess.value = false
     reconActionMsg.value = err.message || 'Error al iniciar reconocimiento'
   } finally {

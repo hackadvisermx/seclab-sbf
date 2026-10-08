@@ -29,7 +29,7 @@ Tester con contraseña aleatoria, workspace/base de datos temporales, rootfs rea
 - Chromium: 2 pruebas UI y 2 pruebas de integración real aprobadas; recorrido completo repetido sin fallos con fixture sin red.
 - Imagen `seclab-sbf:full-phase155`, etiqueta de insumos `da197936713eaab8`, idéntica al cálculo del checkout después de las pruebas. Build, smoke, Compose `.env.example`, Actionlint y gate High/Critical aprobados bajo la política existente, sin nuevas excepciones.
 - Timeout intencional de 1 ms falla como se esperaba y limpia recursos; arranque con puerto ocupado devuelve error explícito sin iniciar contenedor ni dejar credenciales. Tras ejecución normal no quedan contenedores `seclab-playwright-*` ni directorio privado.
-- PR hacia baseline preparado para revisión; CI remoto y aprobación individual de merge se consultan en el PR.
+- PR #175 fusionado con aprobación individual en `badcb49`; CI `37813928089` aprobado. Rama/worktree retirados y baseline sincronizado. La fase 156 requiere su propia aprobación.
 
 Comandos:
 

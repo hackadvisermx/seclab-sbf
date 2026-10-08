@@ -238,3 +238,28 @@ test('una respuesta tardía de otro proyecto no aparece en su historial', async 
     assert.match(panel.textContent, /Todavía no hay ejecuciones registradas/)
   } finally { view.cleanup() }
 })
+
+test('bloqueo de Scope Guard muestra motivo, historial y revisión sin ejecutar ni autorizar', async () => {
+  let scopeLoads = 0, launches = 0, saves = 0
+  const job = { run_id: 'blocked-fixture', status: 'blocked', stage: 'probe', dry_run: false,
+    started_at: '2026-10-08T00:00:00Z', finished_at: '2026-10-08T00:01:00Z', error: 'Falta permiso activo' }
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }),
+    getScope: async () => { scopeLoads++; return {} },
+    getReconStatus: async () => ({ job }), getReconHistory: async () => ({ jobs: [job], next_cursor: null }),
+    runReconPipeline: async () => { launches++ }, updateScope: async () => { saves++ } })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const panel = view.root.querySelector('[data-testid=recon-blocked]')
+    assert.match(panel.textContent, /Falta permiso activo/)
+    assert.match(panel.textContent, /simula un plan nuevo/)
+    assert.match(view.root.querySelector('[data-testid=recon-history]').textContent, /Bloqueado \(Scope Guard\)/)
+    assert.doesNotMatch(view.root.textContent, /El reconocimiento falló/)
+    const before = scopeLoads
+    await clickText(view.root, 'Revisar alcance y autorización')
+    assert.equal(view.root.querySelector('[data-testid=recon-blocked]'), null)
+    assert.ok(scopeLoads > before)
+    assert.equal(launches, 0)
+    assert.equal(saves, 0)
+  } finally { view.cleanup() }
+})

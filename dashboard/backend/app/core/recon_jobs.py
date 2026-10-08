@@ -112,7 +112,7 @@ class ReconJobStore:
         return self.get(key)
 
     def finish(self, key, run_id, status, error=None, scope_revision=None):
-        if status not in ('completed', 'simulated', 'failed', 'cancelled', 'interrupted'):
+        if status not in ('completed', 'simulated', 'failed', 'blocked', 'cancelled', 'interrupted'):
             raise ValueError('Estado final de reconocimiento no válido.')
         if scope_revision is not None and (not isinstance(scope_revision, str) or not re.fullmatch(r'[a-f0-9]{64}', scope_revision)):
             raise ValueError('Revisión de alcance no válida.')

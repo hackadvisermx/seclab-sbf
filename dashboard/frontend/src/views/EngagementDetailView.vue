@@ -361,6 +361,12 @@
         <p v-else class="text-xs text-slate-400">{{ ['running', 'cancelling'].includes(reconStatus.job?.status) ? 'Esperando el primer evento de esta ejecución…' : 'Inicia un reconocimiento para ver sus etapas, comandos y salida en vivo.' }}</p>
       </div>
 
+      <div v-if="reconStatus.job?.status === 'blocked'" class="p-3 rounded-sm border border-amber-500/40 bg-amber-950/30 text-amber-300 text-xs font-mono space-y-2" role="alert" data-testid="recon-blocked">
+        <p>Reconocimiento bloqueado por Scope Guard.</p>
+        <p>{{ reconStatus.job.error }}</p>
+        <p>Revisa el alcance, los permisos y la vigencia declarados. Después simula un plan nuevo antes de ejecutarlo. Los archivos anteriores se conservan; este bloqueo no confirma una ejecución completa.</p>
+        <button @click="activeTab = 'scope'; loadScope()" class="px-3 py-1 border border-amber-500/40 rounded-sm">Revisar alcance y autorización</button>
+      </div>
       <div v-if="reconStatus.job?.status === 'failed' || (reconStatus.job?.status === 'idle' && reconStatus.summary?.status === 'failed')" class="p-3 rounded-sm border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
         El reconocimiento falló. Consulta la consola para ver la causa. Las métricas pueden incluir archivos de ejecuciones anteriores; no confirman una ejecución completa.
         <p v-if="reconStatus.job?.error" class="mt-1">{{ reconStatus.job.error }}</p>
@@ -1726,7 +1732,7 @@ const reconHistoryCursor = ref(null)
 const reconHistoryBusy = ref(false)
 const reconHistoryError = ref('')
 let reconHistoryRefreshQueued = false
-const historyStatusLabel = status => ({ running: 'En ejecución', cancelling: 'Cancelación solicitada', completed: 'Completado', failed: 'Fallido', simulated: 'Simulado', interrupted: 'Interrumpido', cancelled: 'Cancelado' })[status] || status
+const historyStatusLabel = status => ({ running: 'En ejecución', cancelling: 'Cancelación solicitada', completed: 'Completado', failed: 'Fallido', blocked: 'Bloqueado (Scope Guard)', simulated: 'Simulado', interrupted: 'Interrumpido', cancelled: 'Cancelado' })[status] || status
 const historyStageLabel = stage => ({ all: 'Todas las etapas', subdomains: 'Subdominios', probe: 'Sondeo HTTP/HTTPS', urls: 'URLs históricas', patterns: 'Patrones locales' })[stage] || stage
 
 const probeSortKey = ref('host')
@@ -1795,10 +1801,10 @@ function reconEventLabel(event) {
   if (event.event === 'command_start') return 'Inicia: ' + event.command
   if (event.event === 'command_end') return event.command_status === 'completed' ? 'Operación terminada' : 'Operación fallida'
   if (event.event === 'stage_start') return 'Inicia etapa: ' + reconStageLabel(event.stage)
-  if (event.event === 'stage_end') return (event.stage_status === 'failed' ? 'Falló etapa: ' : 'Terminó etapa: ') + reconStageLabel(event.stage)
+  if (event.event === 'stage_end') return (event.failure_kind === 'scope_guard' ? 'Bloqueó Scope Guard: ' : event.stage_status === 'failed' ? 'Falló etapa: ' : 'Terminó etapa: ') + reconStageLabel(event.stage)
   return event.event === 'run_start' ? 'Reconocimiento iniciado' : 'Reconocimiento finalizado'
 }
-const reconJobLabel = computed(() => ({ running: '● EJECUTANDO', cancelling: 'CANCELANDO', completed: 'COMPLETADO', failed: 'FALLIDO', simulated: 'SIMULADO', interrupted: 'INTERRUMPIDO', cancelled: 'CANCELADO' })[reconStatus.value.job?.status] || 'LISTO')
+const reconJobLabel = computed(() => ({ running: '● EJECUTANDO', cancelling: 'CANCELANDO', completed: 'COMPLETADO', failed: 'FALLIDO', blocked: 'BLOQUEADO', simulated: 'SIMULADO', interrupted: 'INTERRUMPIDO', cancelled: 'CANCELADO' })[reconStatus.value.job?.status] || 'LISTO')
 
 // Artefactos del laboratorio (recon/, fuzzing/, loot/, etc.)
 const activeArtifactFolder = ref('recon')

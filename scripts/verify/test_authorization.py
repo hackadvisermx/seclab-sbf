@@ -92,6 +92,8 @@ class AuthorizationTests(unittest.TestCase):
             with patch.object(pipeline.subprocess, 'run') as run, patch.object(pipeline, 'ProbeClient') as client:
                 result = engine.run_all('subdomains')
                 self.assertEqual(result['summary']['status'], 'failed')
+                self.assertEqual(result['summary']['failure_kind'], 'scope_guard')
+                self.assertEqual(result['summary']['error'], result['stage_results']['subdomains']['error'])
                 self.assertIn('pasiva', result['stage_results']['subdomains']['error'])
                 result = engine.run_all('probe')
                 self.assertIn('activa', result['stage_results']['probe']['error'])
@@ -107,6 +109,17 @@ class AuthorizationTests(unittest.TestCase):
                 simulation = pipeline.ReconPipeline(root, dry_run=True).run_all('probe')
             self.assertEqual(simulation['summary']['status'], 'simulated')
             self.assertFalse(simulation['summary']['scope_contract']['authorization']['allow_active'])
+
+    def test_technical_error_is_not_a_scope_block(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / 'target.yaml').write_text('scope:\n  in_scope:\n    domains: [example.test]\n')
+            engine = pipeline.ReconPipeline(root)
+            with patch.object(engine, 'run_subdomain_enumeration', side_effect=pipeline.StageError('fixture missing tool')):
+                result = engine.run_all('subdomains')
+            self.assertEqual(result['summary']['status'], 'failed')
+            self.assertEqual(result['summary']['failure_kind'], 'technical')
+            self.assertEqual(result['summary']['error'], 'fixture missing tool')
 
     def test_expiry_during_rate_limit_wait_blocks_connection(self):
         data = self.data()

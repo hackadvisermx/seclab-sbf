@@ -1,6 +1,6 @@
 # Fase 146: revisión técnica v3 y fallo cerrado de pt-recon
 
-Fecha: 2026-10-07. Base: `b353a46`. Rama: `phase/146-v3-flow-baseline`. Worktree: `/Users/castr/tmp/t01-v3-baseline`. PR en preparación hacia `bootstrap/baseline`; requiere aprobación explícita antes del merge.
+Fecha: 2026-10-07. Base: `b353a46`. Rama: `phase/146-v3-flow-baseline`. Worktree: `/Users/castr/tmp/t01-v3-baseline`. PR: [#166](https://github.com/hackadvisermx/seclab-sbf/pull/166), hacia `bootstrap/baseline`; requiere aprobación explícita antes del merge.
 
 ## Cambio y resultado
 
@@ -29,7 +29,10 @@ La entrega incorpora el backlog v3, [inventario de caminos y brechas comprobadas
 | Recorder en host y contenedor `--read-only --network none --user tester` | OK: JSON idénticos, archivos sólo en `/tmp` del contenedor o temporales del host |
 | `make compose-config ENV_FILE=.env.example` | OK |
 | `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12` | OK |
-| `make scan-image SCAN_IMAGE=seclab-sbf:full-phase146` | En curso; gate de High/Critical bajo la política existente |
+| `make scan-image SCAN_IMAGE=seclab-sbf:full-phase146` | OK: gate High/Critical aprobado con `--ignore-unfixed=true`, sin nuevas excepciones |
+| `make verify-secrets` y `make doc-targets-check` tras documentación | OK: sin secretos ni targets make inexistentes |
+
+El CI y su resultado se siguen en el PR #166; la rama incluye los comandos/resultados locales anteriores. La imagen aislada coincide en hash de insumos con los cambios ejecutables de esta rama.
 
 No hay cambios de backend/frontend ni UI; las pruebas aplicables son Python, Zsh y smoke de imagen. La comprobación de límites DNS/redirects del pipeline conserva las pruebas existentes de `test_recon_safety.py`.
 

@@ -152,6 +152,8 @@ def pack_engagement(
     archive_format: str = "tar.gz",
 ) -> Dict[str, Any]:
     """Empaqueta los entregables del engagement con manifiesto SHA-256 y sanitización opcional."""
+    if (engagement_dir / "REPORT.md").is_symlink():
+        raise ValueError("Fuente de exportación no permitida: REPORT.md")
     report_file = ensure_report_built(engagement_dir)
     eng_name = engagement_dir.name
     now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -173,11 +175,27 @@ def pack_engagement(
     manifest_entries: List[str] = []
     total_redactions = 0
     packed_files: List[str] = []
+    source_records = []
+    source_hashes = {}
+
+    def read_source(source):
+        if source.is_symlink() or not source.resolve().is_relative_to(engagement_dir.resolve()):
+            raise ValueError(f"Fuente de exportación no permitida: {source.name}")
+        payload = source.read_bytes()
+        source_hashes[str(source)] = hashlib.sha256(payload).hexdigest()
+        return payload.decode("utf-8")
+
+    def record_source(source, destination, relative):
+        original_hash = source_hashes[str(source)]
+        export_hash = compute_sha256(destination)
+        source_records.append({"path": relative, "original_sha256": original_hash,
+                               "export_sha256": export_hash,
+                               "content_changed": original_hash != export_hash})
 
     try:
         # 1. REPORT.md
         if report_file and report_file.is_file():
-            rep_text = report_file.read_text(encoding="utf-8")
+            rep_text = read_source(report_file)
             if sanitize:
                 rep_text, red = sanitize_text(rep_text)
                 total_redactions += red
@@ -186,12 +204,13 @@ def pack_engagement(
             sha = compute_sha256(stg_rep)
             manifest_entries.append(f"{sha}  REPORT.md")
             packed_files.append("REPORT.md")
+            record_source(report_file, stg_rep, "REPORT.md")
 
         # 2. target.yaml y scope.txt
         for cfg_name in ("target.yaml", "scope.txt", "notes.md"):
             src_cfg = engagement_dir / cfg_name
             if src_cfg.is_file():
-                cfg_text = src_cfg.read_text(encoding="utf-8")
+                cfg_text = read_source(src_cfg)
                 if sanitize and cfg_name == "notes.md":
                     cfg_text, red = sanitize_text(cfg_text)
                     total_redactions += red
@@ -200,6 +219,7 @@ def pack_engagement(
                 sha = compute_sha256(stg_cfg)
                 manifest_entries.append(f"{sha}  {cfg_name}")
                 packed_files.append(cfg_name)
+                record_source(src_cfg, stg_cfg, cfg_name)
 
         # 3. evidence/*.md
         src_ev_dir = engagement_dir / "evidence"
@@ -209,7 +229,7 @@ def pack_engagement(
             for ev_file in sorted(src_ev_dir.glob("*.md")):
                 if ev_file.name.startswith("_"):
                     continue
-                ev_text = ev_file.read_text(encoding="utf-8")
+                ev_text = read_source(ev_file)
                 if sanitize:
                     ev_text, red = sanitize_text(ev_text)
                     total_redactions += red
@@ -219,21 +239,50 @@ def pack_engagement(
                 rel_path = f"evidence/{ev_file.name}"
                 manifest_entries.append(f"{sha}  {rel_path}")
                 packed_files.append(rel_path)
+                record_source(ev_file, dest_ev, rel_path)
 
         # 4. recon/ resúmenes
         src_recon = engagement_dir / "recon"
         if src_recon.is_dir():
             stg_recon = staging_dir / "recon"
             stg_recon.mkdir(parents=True, exist_ok=True)
-            for recon_candidate in ("live_hosts.txt", "subdomains.txt", "summary.json"):
+            for recon_candidate in ("live_hosts.txt", "subdomains.txt", "summary.json",
+                                    "probe_observations.jsonl", "recon.log", "urls_all.txt", "js_files.txt"):
                 rf = src_recon / recon_candidate
                 if rf.is_file():
                     rf_dest = stg_recon / recon_candidate
-                    shutil.copy2(rf, rf_dest)
+                    if rf.is_symlink() or not rf.resolve().is_relative_to(engagement_dir.resolve()):
+                        raise ValueError(f"Fuente de exportación no permitida: recon/{recon_candidate}")
+                    content = read_source(rf)
+                    if sanitize:
+                        content, red = sanitize_text(content)
+                        total_redactions += red
+                    rf_dest.write_text(content, encoding="utf-8")
                     sha = compute_sha256(rf_dest)
                     rel_path = f"recon/{recon_candidate}"
                     manifest_entries.append(f"{sha}  {rel_path}")
                     packed_files.append(rel_path)
+                    record_source(rf, rf_dest, rel_path)
+
+        terminal_log = engagement_dir / "terminal.log"
+        if terminal_log.is_file():
+            if terminal_log.is_symlink() or not terminal_log.resolve().is_relative_to(engagement_dir.resolve()):
+                raise ValueError("Fuente de exportación no permitida: terminal.log")
+            content = read_source(terminal_log)
+            if sanitize:
+                content, red = sanitize_text(content)
+                total_redactions += red
+            destination = staging_dir / "terminal.log"
+            destination.write_text(content, encoding="utf-8")
+            manifest_entries.append(f"{compute_sha256(destination)}  terminal.log")
+            packed_files.append("terminal.log")
+            record_source(terminal_log, destination, "terminal.log")
+
+        source_manifest = staging_dir / "source-manifest.json"
+        source_manifest.write_text(json.dumps({"schema_version": 1, "sanitized": sanitize,
+            "files": source_records}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        manifest_entries.append(f"{compute_sha256(source_manifest)}  source-manifest.json")
+        packed_files.append("source-manifest.json")
 
         # 5. Generar manifest.sha256
         manifest_file = staging_dir / "manifest.sha256"

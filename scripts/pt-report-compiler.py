@@ -152,11 +152,15 @@ def get_findings(evidence_dir: pathlib.Path, strict: bool = False) -> List[Dict[
     if not evidence_dir.is_dir():
         return []
 
+    if strict and evidence_dir.is_symlink():
+        raise ValueError("El directorio de evidencia no puede ser un enlace simbólico.")
     findings = []
     for f in sorted(evidence_dir.glob("*.md")):
         if f.name.startswith("_") or f.name.lower() == "readme.md":
             continue
         try:
+            if strict and f.is_symlink():
+                raise ValueError("La ficha no puede ser un enlace simbólico.")
             findings.append(parse_evidence_file(f))
         except Exception as e:
             if strict:
@@ -330,9 +334,10 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         "",
         "## 1. Resumen Ejecutivo",
         "",
-        f"Durante el periodo de evaluación sobre el objetivo **{eng_name}**, se llevaron a cabo pruebas técnicas autorizadas "
-        "bajo enfoque de caja negra/gris, siguiendo los lineamientos metodológicos de OWASP y PTES con trazabilidad continua. "
-        f"Se identificaron un total de **{total_vulns} hallazgos confirmados activos** distribuidos de la siguiente manera:",
+        f"Este borrador consolida las fichas de **{eng_name}** frente al alcance declarado en `target.yaml`. "
+        "Los estados son declaraciones del operador y requieren revisión humana; la compilación no acredita "
+        "autorización legal, ejecución de una metodología ni suficiencia de la evidencia. "
+        f"Las fichas registran **{total_vulns} hallazgos confirmados activos** distribuidos de la siguiente manera:",
         "",
         f"- **Crítica:** {counts['CRITICAL']}",
         f"- **Alta:** {counts['HIGH']}",
@@ -362,7 +367,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         for ep in in_s.get("endpoints", []):
             lines.append(f"- `[endpoint]` {ep}")
         if not any(in_s.values()):
-            lines.append("- (Definido en scope.txt o sin restricciones listadas)")
+            lines.append("- Sin activos autorizados declarados; no se permite inferir alcance.")
 
         if any(out_s.values()):
             lines.append("\n### Exclusiones Estrictas (Out-of-Scope):")
@@ -420,7 +425,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
                 f"- **Vector CVSS:** `{f['cvss_v31']}`",
                 f"- **CWE:** {f['cwe']}",
                 f"- **Activo:** `{f['asset']}`",
-                f"- **Auditoría Forense:** Registro sellado en `{f['audit_log']}`",
+                f"- **Registro referido por la ficha:** `{f['audit_log']}` (vínculo e integridad no verificados)",
                 "",
                 f"{f['body']}",
                 "",
@@ -441,8 +446,11 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         "",
         "## 6. Trazabilidad Forense",
         "",
-        f"El registro determinista y continuo de todas las acciones de terminal asociadas a esta evaluación "
-        f"permanece archivado en `{engagement_dir / 'terminal.log'}` para fines de auditoría y no repudio.",
+        "El registro `terminal.log` está disponible en el engagement; no se acredita que sea completo ni sellado."
+        if (engagement_dir / 'terminal.log').is_file() and not (engagement_dir / 'terminal.log').is_symlink()
+        else "No hay un registro local `terminal.log` disponible; no se acredita trazabilidad de la terminal.",
+        "En el export, `source-manifest.json` relaciona hashes de archivos originales y de sus copias entregadas. "
+        "Los hashes permiten comparar contenido; no constituyen una firma ni prueban procedencia por sí solos.",
         "",
     ])
 

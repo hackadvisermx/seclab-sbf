@@ -134,6 +134,73 @@ class ReportSafetyTests(unittest.TestCase):
         (self.root / 'target.yaml').unlink()
         self.assertEqual(self.cli('build').returncode, 1)
 
+    def test_report_describes_only_available_records_and_declared_validation(self):
+        content = report.build_report(self.root).read_text()
+        self.assertIn("No hay un registro local `terminal.log` disponible", content)
+        self.assertNotIn("Registro sellado", content)
+        self.assertNotIn("se llevaron a cabo pruebas técnicas autorizadas", content)
+        self.assertIn("requieren revisión humana", content)
+        (self.root / 'terminal.log').write_text('fixture')
+        content = report.build_report(self.root).read_text()
+        self.assertIn("está disponible en el engagement", content)
+        self.assertIn("no se acredita que sea completo ni sellado", content)
+
+    def test_source_manifest_tracks_original_and_sanitized_outputs_in_both_formats(self):
+        import hashlib
+        import zipfile
+        names = ['terminal.log', 'recon/recon.log', 'recon/probe_observations.jsonl',
+                 'recon/urls_all.txt', 'recon/js_files.txt']
+        originals = {}
+        for name in names:
+            path = self.root / name
+            path.parent.mkdir(exist_ok=True)
+            text = '{"output": "Authorization: Bearer fixture-private-token"}\r\n'
+            path.write_bytes(text.encode('utf-8'))
+            originals[name] = path.read_bytes()
+        for archive_format in ['tar.gz', 'zip']:
+            for sanitize in [True, False]:
+                with self.subTest(archive_format=archive_format, sanitize=sanitize):
+                    result = packer.pack_engagement(self.root, sanitize=sanitize, archive_format=archive_format)
+                    if archive_format == 'zip':
+                        with zipfile.ZipFile(result['archive_path']) as archive:
+                            contents = {name.split('/', 1)[1]: archive.read(name) for name in archive.namelist()}
+                    else:
+                        with tarfile.open(result['archive_path']) as archive:
+                            contents = {name.split('/', 1)[1]: archive.extractfile(name).read() for name in archive.getnames()}
+                    manifest = json.loads(contents['source-manifest.json'])
+                    records = {row['path']: row for row in manifest['files']}
+                    self.assertEqual(manifest['schema_version'], 1)
+                    self.assertEqual(manifest['sanitized'], sanitize)
+                    for name in names:
+                        self.assertEqual(records[name]['original_sha256'], hashlib.sha256(originals[name]).hexdigest())
+                        self.assertEqual(records[name]['export_sha256'], hashlib.sha256(contents[name]).hexdigest())
+                        self.assertEqual(records[name]['content_changed'], sanitize)
+                        self.assertEqual((self.root / name).read_bytes(), originals[name])
+                        if sanitize:
+                            self.assertNotIn(b'fixture-private-token', contents[name])
+                        else:
+                            self.assertEqual(contents[name], originals[name])
+                    for line in contents['manifest.sha256'].decode().splitlines():
+                        digest, name = line.split('  ', 1)
+                        self.assertEqual(digest, hashlib.sha256(contents[name]).hexdigest())
+
+    def test_export_rejects_external_symlink_sources_without_creating_bundle(self):
+        external = self.root / 'outside.txt'
+        external.write_text('private fixture')
+        for name in ['terminal.log', 'REPORT.md', 'evidence/finding.md']:
+            with self.subTest(source=name):
+                path = self.root / name
+                if path.exists():
+                    path.unlink()
+                path.symlink_to(external)
+                with self.assertRaises(ValueError):
+                    packer.pack_engagement(self.root)
+                self.assertEqual(external.read_text(), 'private fixture')
+                self.assertFalse(list(self.root.glob('exports/*.tar.gz')))
+                self.assertFalse(list(self.root.glob('.staging_pack*')))
+                path.unlink()
+                self.finding('example.test')
+
 
 if __name__ == '__main__':
     unittest.main()

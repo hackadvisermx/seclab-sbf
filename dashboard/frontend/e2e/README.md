@@ -22,7 +22,7 @@ Ejecuta UI e integración de forma secuencial: comparten el puerto 4199 y el dir
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase157
+make build-full BUILD_TAG=-phase158
 ```
 
 Después, desde `dashboard/frontend`:

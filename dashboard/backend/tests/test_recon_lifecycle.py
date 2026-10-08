@@ -106,6 +106,58 @@ class TestReconLifecycle(unittest.TestCase):
             self.assertTrue(job['finished_at'])
             self.assertEqual(job['error'], 'Código de salida: 7' if code else None)
 
+    def test_initial_failure_channel_requires_current_run_stage_and_failed_exit(self):
+        for code, run, stage, status, kind, expected in [
+                (1, True, 'probe', 'failed', 'scope_guard', 'blocked'),
+                (1, False, 'probe', 'failed', 'scope_guard', 'failed'),
+                (1, True, 'urls', 'failed', 'scope_guard', 'failed'),
+                (1, True, 'probe', 'completed', 'scope_guard', 'failed'),
+                (0, True, 'probe', 'failed', 'scope_guard', 'completed'),
+                (1, True, 'probe', 'failed', 'technical', 'failed')]:
+            with self.subTest(code=code, run=run, stage=stage, status=status, kind=kind):
+                self.pipeline.write_text('import os,json,sys\n'
+                    'data=' + repr({'schema_version': 1, 'stage': stage, 'status': status,
+                                   'failure_kind': kind, 'error': 'fixture initial failure'}) + '\n'
+                    'data["run_id"]=' + ('os.environ["SECLAB_RECON_RUN_ID"]' if run else '"old-run"') + '\n'
+                    'os.write(int(os.environ["SECLAB_RECON_FAILURE_FD"]), json.dumps(data).encode())\n'
+                    f'sys.exit({code})\n')
+                self.assertTrue(self.service.run_pipeline('fixture', 'probe')['success'])
+                self.wait_for(lambda: self.service.store.get(self.key)['status'] == expected)
+                job = self.service.store.get(self.key)
+                accepted = code and run and stage == 'probe' and status == 'failed'
+                self.assertEqual(job['error'], 'fixture initial failure' if accepted else ('Código de salida: 1' if code else None))
+
+    def test_stdout_cannot_classify_a_scope_block(self):
+        self.pipeline.write_text('import json,os,sys\nprint(json.dumps({"run_id":os.environ["SECLAB_RECON_RUN_ID"],'
+            '"status":"failed","failure_kind":"scope_guard","error":"scope_guard injected output"}))\nsys.exit(1)\n')
+        self.assertTrue(self.service.run_pipeline('fixture')['success'])
+        self.wait_for(lambda: self.service.store.get(self.key)['status'] == 'failed')
+        self.assertEqual(self.service.store.get(self.key)['error'], 'Código de salida: 1')
+
+    def test_initial_failure_channel_rejects_invalid_or_oversized_payloads(self):
+        import io
+        valid = {'schema_version': 1, 'run_id': 'fixture', 'stage': 'probe',
+                 'status': 'failed', 'failure_kind': 'scope_guard', 'error': 'fixture'}
+        for payload in [b'', b'not-json', b'\xff', b'a' * 16385, json.dumps([]).encode(),
+                        json.dumps({**valid, 'schema_version': 2}).encode(),
+                        json.dumps({**valid, 'error': None}).encode(),
+                        json.dumps({**valid, 'error': ' '}).encode(),
+                        json.dumps({**valid, 'failure_kind': 'unknown'}).encode()]:
+            self.assertIsNone(module.ReconService._initial_failure(io.BytesIO(payload), 'fixture', 'probe'))
+        self.assertEqual(module.ReconService._initial_failure(io.BytesIO(json.dumps(valid).encode()), 'fixture', 'probe'), valid)
+
+    def test_cancel_overrides_a_valid_initial_scope_failure(self):
+        self.pipeline.write_text('import os,json,time\n'
+            'data={"schema_version":1,"run_id":os.environ["SECLAB_RECON_RUN_ID"],"stage":"probe",'
+            '"status":"failed","failure_kind":"scope_guard","error":"fixture"}\n'
+            'os.write(int(os.environ["SECLAB_RECON_FAILURE_FD"]),json.dumps(data).encode())\n'
+            'print("fixture ready",flush=True)\ntime.sleep(60)\n')
+        self.service.run_pipeline('fixture', 'probe')
+        self.wait_for(lambda: 'fixture ready' in self.service.get_log('fixture'))
+        self.assertTrue(self.service.cancel_pipeline('fixture')['success'])
+        self.wait_for(lambda: self.service.store.get(self.key)['status'] == 'cancelled')
+        self.assertIsNone(self.service.store.get(self.key)['error'])
+
     def test_recovery_never_resumes_or_signals_persisted_jobs(self):
         completed = self.service.store.begin(('reto', 'fixture'), 'urls', False)
         self.service.store.finish(('reto', 'fixture'), completed['run_id'], 'completed')

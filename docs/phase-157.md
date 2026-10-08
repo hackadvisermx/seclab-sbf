@@ -28,7 +28,7 @@ Los metadatos siguen siendo información del proyecto en una base local con perm
 - Backend: 156 pruebas aprobadas en imagen nativa, incluidos snapshot antes de worker, persistencia con cambios de inputs/scope, backup/reinicio/cancelación, rollback atómico por error SQL, límite de tamaño, aislamiento y compatibilidad de INSERT legacy.
 - Frontend: 103 pruebas aprobadas; audit 0 vulnerabilidades.
 - Chromium: 2 pruebas UI y 3 integraciones reales aprobadas, ejecutadas secuencialmente. La integración de reconocimiento simula con `expected_plan`, cambia la lista local, recarga y confirma que el historial conserva hash/hosts/permisos originales. Screenshot `review-history.png` inspeccionado; artefactos de Playwright ignorados.
-- Imagen aislada `seclab-sbf:full-phase157`, hash de insumos `978ec9b219f16f0e`, coincide con el checkout. Build, smoke, Compose `.env.example`, Actionlint y gate High/Critical aprobados bajo política vigente, sin nuevas dependencias ni excepciones.
+- Imagen aislada `seclab-sbf:full-phase157`, hash de insumos `ff26708e27bf2cf0`, coincide con el checkout. Build, smoke, Compose `.env.example`, Actionlint y gate High/Critical aprobados bajo política vigente, sin nuevas dependencias ni excepciones.
 - No quedan contenedores `seclab-playwright-*` ni credenciales temporales. No se modificaron proyectos del owner, imagen `seclab-sbf:full` ni laboratorio vivo.
 
 ```sh

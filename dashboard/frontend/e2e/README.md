@@ -20,7 +20,7 @@ npm run test:e2e:report
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase154
+make build-full BUILD_TAG=-phase155
 ```
 
 Después, desde `dashboard/frontend`:
@@ -29,9 +29,13 @@ Después, desde `dashboard/frontend`:
 npm run test:e2e:integration
 ```
 
-El runner arranca un contenedor propio como tester, rootfs de solo lectura, sin capabilities, en el puerto loopback 4199. Workspace y base de datos son directorios temporales vacíos. No reutiliza un servidor existente: un puerto ocupado hace fallar el arranque.
+El runner arranca un contenedor propio como tester, rootfs de solo lectura, sin capabilities y con `--network none`. Un puente Node en `127.0.0.1:4199` utiliza `docker exec -i ... socat STDIO TCP:127.0.0.1:8080` para acceder al backend por su loopback. No publica puertos Docker ni permite salida de red desde el contenedor. Workspace y base de datos empiezan vacíos en directorios temporales. No reutiliza un servidor existente: un puerto ocupado hace fallar el arranque.
 
-El dashboard solo implementa la identidad `tester`. Cada ejecución crea una contraseña aleatoria para esa identidad en el backend desechable. No hay API de alta de usuarios ni se añaden identidades distintas a producción. La prueba realiza login real, verifica `/auth/me` y cookie HttpOnly, hace logout y comprueba que la sesión dejó de ser válida.
+El dashboard solo implementa la identidad `tester`. Cada ejecución crea una contraseña aleatoria para esa identidad en el backend desechable. No hay API de alta de usuarios ni se añaden identidades distintas a producción. La prueba de autenticación realiza login real, verifica `/auth/me` y cookie HttpOnly, hace logout y comprueba que la sesión dejó de ser válida.
+
+La segunda prueba recorre el wizard, verifica dominio exacto y confirmación, ejecuta una simulación, declara referencia/vigencia sin permisos de tráfico y comprueba bloqueo activo. El helper publica la ruta privada del workspace en `workspace.json`; la prueba escribe únicamente `example.test` en la lista de hosts del proyecto recién creado, sin ejecutar descubrimiento. Comprueba dos jobs distintos en el historial tras recargar, crea una ficha CANDIDATE con petición/respuesta sintéticas, compila con cero confirmados, revisa el Markdown y declara PROVEN explícitamente para comprobar el reporte con un confirmado sintético. Descarga el paquete y verifica entradas/hashes del source-manifest; un activo `outside.test` bloquea recompilación y descarga incluso si existe un reporte previo. Estas pruebas no acreditan suficiencia probatoria ni vínculo estructurado job → finding.
+
+Requisitos de integración: Docker local, imagen construida, Chromium instalado y `tar` en el host. `socat` ya forma parte de la imagen. La suite no llama proveedores de IA ni servicios externos.
 
 Credenciales privadas: `e2e/.playwright-fixture/user.json`, modo 0600, ignorado por Git. No se imprimen en stdout. El directorio, el contenedor y los datos se eliminan al terminar mediante SIGTERM con cierre gradual. Si el host muere o se usa SIGKILL, comprobar el contenedor propio antes de limpiar restos; no borrar ni detener el laboratorio vivo.
 

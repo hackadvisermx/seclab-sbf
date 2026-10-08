@@ -142,7 +142,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         "date": meta.get("date", datetime.date.today().isoformat()),
         "audit_log": meta.get("audit_log", "terminal.log"),
         "body": body.strip(),
-        "has_poc": "```bash" in body or "curl " in body or "## 2. Pasos" in body,
+        "has_poc": "```bash" in body or "curl " in body or "## 2. Pasos" in body or "## Pasos para Reproducir" in body,
         "has_negative_control": has_negative_control,
         "has_bounded_proof": has_bounded_proof,
         "has_remediation": "## 5. Remediaci" in body or "## Remediaci" in body,

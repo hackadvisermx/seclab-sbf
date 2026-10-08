@@ -4,7 +4,7 @@ Fecha: 2026-10-08. Base: `aaacc97` (#173 mergeado con aprobación individual). R
 
 ## Estado al retomar
 
-Owner pidió continuar. Imagen final reconstruida y validada; PR #174 pendiente de CI del nuevo head y aprobación individual antes del merge. El cierre anterior quedó guardado como borrador para evitar dejar una imagen sin verificar.
+PR #174 fusionado con aprobación individual en `006e10b`; CI del head final aprobado en run `37808267032`. Rama/worktree retirados y baseline sincronizado. La fase 155 requiere su propia aprobación.
 
 ## Entrega
 

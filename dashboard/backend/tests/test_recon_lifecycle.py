@@ -1,4 +1,5 @@
 import os
+import json
 import pathlib
 import tempfile
 import threading
@@ -36,6 +37,23 @@ class TestReconLifecycle(unittest.TestCase):
                 return
             threading.Event().wait(.01)
         self.fail('Timed out waiting for fixture')
+
+    def test_progress_is_visible_while_running_and_never_reuses_another_run(self):
+        self.pipeline.write_text('import os,json,pathlib,time\n'
+            'p=pathlib.Path(__import__("sys").argv[2])/"recon"/"progress.json"\n'
+            'p.write_text(json.dumps({"run_id":os.environ["SECLAB_RECON_RUN_ID"],"command":"fixture --slow","recent_output":["first"],"events":[]}))\n'
+            'print("first",flush=True)\ntime.sleep(2)\n')
+        self.assertTrue(self.service.run_pipeline('fixture')['success'])
+        self.wait_for(lambda: self.service.get_status('fixture')['progress'] is not None and 'first' in self.service.get_log('fixture'))
+        status = self.service.get_status('fixture')
+        self.assertEqual(status['job']['status'], 'running')
+        self.assertEqual(status['progress']['command'], 'fixture --slow')
+        self.assertIn('first', self.service.get_log('fixture'))
+        path = self.target / 'recon/progress.json'
+        path.write_text(json.dumps({'run_id': 'another-run', 'command': 'stale'}))
+        self.assertIsNone(self.service.get_status('fixture')['progress'])
+        path.write_text('{broken')
+        self.assertIsNone(self.service.get_status('fixture')['progress'])
 
     def test_completion_simulation_failure_survive_service_recreation(self):
         for dry_run, code, expected in ((False, 0, 'completed'), (True, 0, 'simulated'), (False, 7, 'failed')):

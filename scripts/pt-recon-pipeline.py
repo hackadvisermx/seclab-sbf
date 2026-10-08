@@ -21,6 +21,8 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
+import time
 import urllib.request
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlsplit
@@ -155,11 +157,15 @@ class StageError(RuntimeError):
 
 
 class ReconPipeline:
-    def __init__(self, engagement_dir: pathlib.Path, dry_run: bool = False):
+    def __init__(self, engagement_dir: pathlib.Path, dry_run: bool = False, live: bool = False):
         self.engagement_dir = engagement_dir.resolve()
         self.recon_dir = self.engagement_dir / "recon"
         self.patterns_dir = self.recon_dir / "patterns"
         self.dry_run = dry_run
+        self.live = live and not dry_run
+        self.progress = {'run_id': os.environ.get('SECLAB_RECON_RUN_ID'), 'stage': None,
+                         'command': None, 'command_status': None, 'completed_stages': [],
+                         'recent_output': [], 'events': []}
         self.scope_data = load_scope_rules(self.engagement_dir)
         self.limits = operational_limits(self.scope_data)
         self.tools = detect_tools()
@@ -201,13 +207,70 @@ class ReconPipeline:
             temporary.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
             temporary.replace(path)
 
+    def _emit(self, event, **fields):
+        if not self.live:
+            return
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        if event == 'command_start':
+            self.progress.update(recent_output=[], command_started_at=now)
+        output = fields.pop('output', None)
+        self.progress.update(fields, updated_at=now)
+        if output is not None:
+            lines = [line[:2000] for line in output.splitlines() if line.strip()]
+            self.progress['recent_output'] = (self.progress['recent_output'] + lines)[-80:]
+            for line in lines:
+                print(line, flush=True)
+        else:
+            self.progress['events'] = (self.progress['events'] + [{'event': event, 'at': now, **fields}])[-32:]
+            print(f"[RECON] {event}: " + str(fields.get('command') or fields.get('stage') or fields.get('status') or ''), flush=True)
+        temporary = self.recon_dir / '.progress.json.tmp'
+        temporary.write_text(json.dumps(self.progress, ensure_ascii=False), encoding='utf-8')
+        temporary.replace(self.recon_dir / 'progress.json')
+
+    def _stream_tool(self, command, timeout):
+        with tempfile.NamedTemporaryFile(delete=False) as out, tempfile.NamedTemporaryFile(delete=False) as err:
+            try:
+                with open(out.name, 'rb') as output_reader, open(err.name, 'rb') as error_reader:
+                    pathlib.Path(out.name).unlink()
+                    pathlib.Path(err.name).unlink()
+                    proc = subprocess.Popen(command, stdout=out, stderr=err)
+                    deadline = time.monotonic() + timeout
+                    try:
+                        while True:
+                            finished = proc.poll() is not None
+                            for reader in (output_reader, error_reader):
+                                chunk = reader.read()
+                                if chunk:
+                                    self._emit('output', output=chunk.decode('utf-8', errors='replace'))
+                            if finished:
+                                break
+                            if time.monotonic() >= deadline:
+                                raise subprocess.TimeoutExpired(command, timeout)
+                            time.sleep(0.1)
+                    finally:
+                        if proc.poll() is None:
+                            proc.kill()
+                        proc.wait()
+                    output_reader.seek(0)
+                    error_reader.seek(0)
+                    return subprocess.CompletedProcess(command, proc.returncode,
+                        output_reader.read().decode('utf-8', errors='replace'), error_reader.read().decode('utf-8', errors='replace'))
+            finally:
+                pathlib.Path(out.name).unlink(missing_ok=True)
+                pathlib.Path(err.name).unlink(missing_ok=True)
+
     def _tool(self, name, arguments, timeout=180):
+        command = [self.tools[name], *arguments]
+        self._emit('command_start', command=shlex.join(command), command_status='running')
         try:
-            result = subprocess.run([self.tools[name], *arguments], capture_output=True, text=True, timeout=timeout, check=False)
+            result = self._stream_tool(command, timeout) if self.live else subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
+            self._emit('command_end', command_status='failed')
             raise StageError(f'{name}: tiempo agotado; los resultados anteriores se conservan.') from None
         except OSError:
+            self._emit('command_end', command_status='failed')
             raise StageError(f'{name}: no se pudo ejecutar; los resultados anteriores se conservan.') from None
+        self._emit('command_end', command_status='completed' if result.returncode == 0 else 'failed', exit_code=result.returncode)
         if result.returncode != 0:
             if name == 'subfinder' and 'Could not create provider config file' in (result.stderr or ''):
                 raise StageError('subfinder: no se pudo preparar provider-config.yaml; reconstruye la imagen con la configuración precargada. No se usan resultados parciales.')
@@ -254,7 +317,11 @@ class ReconPipeline:
         if self.dry_run:
             return {'stage': 'probe', 'status': 'simulated', 'planned_targets': hosts, 'discarded': discarded}
         previous_live = set(self._read_lines('live_hosts.txt'))
-        observations = ProbeClient(self.scope_data, self.limits).probe(hosts) if hosts else []
+        self._emit('command_start', command=f'Sondeo HTTP interno: GET / por HTTP y HTTPS; {len(hosts)} hosts autorizados', command_status='running')
+        client = ProbeClient(self.scope_data, self.limits)
+        observations = client.probe(hosts, on_result=lambda rows: self._emit('output', output='\n'.join(
+            f"{row.get('url', row.get('host'))}: {row['status']} {row.get('http_status', '')}" for row in rows))) if self.live else client.probe(hosts)
+        self._emit('command_end', command_status='completed')
         live = sorted({row['url'] for row in observations if row['status'] == 'response'})
         new_live = sorted(set(live) - previous_live)
         self._write_lines('live_hosts.txt', live)
@@ -381,19 +448,26 @@ class ReconPipeline:
             # el checkpoint de "all" ya no es fiable para reanudar.
             checkpoint_path.unlink(missing_ok=True)
         failed_stage = None
+        self.progress['completed_stages'] = list(results)
+        self._emit('run_start', status='running', selected_stage=stage, total_stages=4 if stage == 'all' else 1)
         for name, action in (('subdomains', self.run_subdomain_enumeration), ('probe', self.run_live_probing),
                              ('urls', self.run_url_harvesting), ('patterns', self.run_pattern_classification)):
             if stage not in ('all', name):
                 continue
             if name in results and results[name].get('status') != 'failed':
                 continue
+            self._emit('stage_start', stage=name, stage_status='running', command=None, command_status=None, recent_output=[])
             try:
                 results[name] = action()
+                self.progress['completed_stages'].append(name)
+                self._emit('stage_end', stage=name, stage_status=results[name]['status'])
             except (StageError, ScopeError, OSError) as error:
                 results[name] = {'stage': name, 'status': 'failed', 'error': str(error)}
                 failed_stage = name
+                self._emit('stage_end', stage=name, stage_status='failed', error=str(error))
                 break
         summary = self.generate_summary(results)
+        self._emit('run_end', status=summary['status'])
         if stage == 'all' and not self.dry_run:
             if failed_stage:
                 completed = {name: result for name, result in results.items() if result.get('status') != 'failed'}
@@ -431,7 +505,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        pipeline = ReconPipeline(eng_dir, dry_run=args.dry_run)
+        pipeline = ReconPipeline(eng_dir, dry_run=args.dry_run, live=not args.json)
         res = pipeline.run_all(stage=args.stage, resume=args.resume)
     except (ScopeError, OSError) as error:
         sys.stderr.write(f"Error: {error}\n")

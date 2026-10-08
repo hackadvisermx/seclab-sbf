@@ -67,3 +67,19 @@ test('metodología muestra el contrato next_step y genera texto de prompt', asyn
     assert.equal(view.root.querySelector('pre').textContent.trim(), 'SYSTEM PROMPT: revisar alcance')
   } finally { view.cleanup() }
 })
+
+test('avance en vivo muestra comando y salida provisional; cancelado no se presenta en ejecución', async () => {
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [],
+    getArtifacts: async () => [], getLoot: async () => ({ credentials: [], files: [] }),
+    getReconStatus: async () => ({ job: { status: 'cancelled' }, progress: { stage: 'subdomains', completed_stages: [], total_stages: 4,
+      command: 'subfinder -d example.test -silent', command_status: 'running', recent_output: ['candidate.example.test'], events: [] } }) })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const panel = view.root.querySelector('[data-testid="recon-live-progress"]')
+    assert.match(panel.textContent, /subfinder -d example.test/)
+    assert.match(panel.textContent, /candidate.example.test/)
+    assert.match(panel.textContent, /provisional/)
+    assert.match(panel.textContent, /Interrumpida/)
+    assert.doesNotMatch(panel.textContent, /Si la herramienta trabaja en silencio/)
+  } finally { view.cleanup() }
+})

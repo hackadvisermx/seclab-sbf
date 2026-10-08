@@ -309,7 +309,29 @@
         </div>
       </div>
 
-      <div v-if="reconStatus.job?.status === 'failed' || reconStatus.summary?.status === 'failed'" class="p-3 rounded-sm border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
+      <div class="tactical-card space-y-3" data-testid="recon-live-progress">
+        <h2 class="text-sm font-bold text-cyan-300">Avance de la ejecución</h2>
+        <p class="text-xs text-slate-400">Actualización cada segundo. La salida es provisional; no autoriza objetivos ni confirma resultados. El resumen y los contadores se consolidan al finalizar.</p>
+        <template v-if="reconStatus.progress">
+          <div class="flex flex-wrap gap-3 text-xs font-mono">
+            <span>Etapa: {{ reconStageLabel(reconStatus.progress.stage) }}</span>
+            <span>Etapas terminadas: {{ reconStatus.progress.completed_stages?.length || 0 }}/{{ reconStatus.progress.total_stages || 1 }}</span>
+            <span>Estado: {{ reconJobLabel }}</span>
+          </div>
+          <div v-if="reconStatus.progress.command" class="rounded-sm bg-slate-950 p-3 space-y-2">
+            <p class="text-xs text-slate-400">Comando u operación: {{ reconCommandLabel }}</p>
+            <code class="block text-xs text-cyan-300 whitespace-pre-wrap break-all">{{ reconStatus.progress.command }}</code>
+            <p v-if="reconIsRunning && reconStatus.progress.command_status === 'running'" class="text-xs text-amber-300">En ejecución. Si la herramienta trabaja en silencio, la salida aparecerá cuando la emita.</p>
+          </div>
+          <pre v-if="reconStatus.progress.recent_output?.length" class="max-h-64 overflow-auto whitespace-pre-wrap break-all bg-slate-950 p-3 text-xs text-emerald-300" data-testid="recon-live-output">{{ reconStatus.progress.recent_output.join('\n') }}</pre>
+          <ol class="space-y-1 text-xs text-slate-400">
+            <li v-for="(event, index) in reconStatus.progress.events" :key="index">{{ new Date(event.at).toLocaleTimeString() }} · {{ reconEventLabel(event) }}</li>
+          </ol>
+        </template>
+        <p v-else class="text-xs text-slate-400">{{ ['running', 'cancelling'].includes(reconStatus.job?.status) ? 'Esperando el primer evento de esta ejecución…' : 'Inicia un reconocimiento para ver sus etapas, comandos y salida en vivo.' }}</p>
+      </div>
+
+      <div v-if="reconStatus.job?.status === 'failed' || (reconStatus.job?.status === 'idle' && reconStatus.summary?.status === 'failed')" class="p-3 rounded-sm border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
         El reconocimiento falló. Consulta la consola para ver la causa. Las métricas pueden incluir archivos de ejecuciones anteriores; no confirman una ejecución completa.
         <p v-if="reconStatus.job?.error" class="mt-1">{{ reconStatus.job.error }}</p>
       </div>
@@ -1696,8 +1718,23 @@ const isCancellingRecon = ref(false)
 const reconActionMsg = ref('')
 const reconActionSuccess = ref(true)
 let reconPollTimer = null
+let reconPollBusy = false
 
 const reconIsRunning = computed(() => ['running', 'cancelling'].includes(reconStatus.value.job?.status))
+const RECON_STAGE_LABELS = { subdomains: 'Subdominios', probe: 'Sondeo HTTP/HTTPS', urls: 'URLs históricas', patterns: 'Clasificación de patrones' }
+function reconStageLabel(stage) { return RECON_STAGE_LABELS[stage] || 'Preparando' }
+const reconCommandLabel = computed(() => {
+  const status = reconStatus.value.progress?.command_status
+  if (status === 'running' && !reconIsRunning.value) return 'Interrumpida'
+  return { running: 'En ejecución', completed: 'Terminada', failed: 'Fallida' }[status] || 'Preparando'
+})
+function reconEventLabel(event) {
+  if (event.event === 'command_start') return 'Inicia: ' + event.command
+  if (event.event === 'command_end') return event.command_status === 'completed' ? 'Operación terminada' : 'Operación fallida'
+  if (event.event === 'stage_start') return 'Inicia etapa: ' + reconStageLabel(event.stage)
+  if (event.event === 'stage_end') return (event.stage_status === 'failed' ? 'Falló etapa: ' : 'Terminó etapa: ') + reconStageLabel(event.stage)
+  return event.event === 'run_start' ? 'Reconocimiento iniciado' : 'Reconocimiento finalizado'
+}
 const reconJobLabel = computed(() => ({ running: '● EJECUTANDO', cancelling: 'CANCELANDO', completed: 'COMPLETADO', failed: 'FALLIDO', simulated: 'SIMULADO', interrupted: 'INTERRUMPIDO', cancelled: 'CANCELADO' })[reconStatus.value.job?.status] || 'LISTO')
 
 // Artefactos del laboratorio (recon/, fuzzing/, loot/, etc.)
@@ -2403,12 +2440,16 @@ async function loadReconLog() {
 function startReconPolling() {
   if (reconPollTimer) return
   reconPollTimer = setInterval(async () => {
-    await loadReconStatus()
-    await loadReconLog()
-    if (!['running', 'cancelling'].includes(reconStatus.value.job?.status)) {
-      stopReconPolling()
+    if (reconPollBusy) return
+    reconPollBusy = true
+    try {
+      await loadReconStatus()
+      await loadReconLog()
+      if (!['running', 'cancelling'].includes(reconStatus.value.job?.status)) stopReconPolling()
+    } finally {
+      reconPollBusy = false
     }
-  }, 3000)
+  }, 1000)
 }
 
 function stopReconPolling() {

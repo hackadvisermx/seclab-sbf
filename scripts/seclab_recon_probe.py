@@ -158,9 +158,17 @@ class ProbeClient:
                 connection.close()
         return observations
 
-    def probe(self, hosts):
+    def probe(self, hosts, on_result=None):
         if len(hosts) > self.limits['max_probe_targets']:
             raise ScopeError('Demasiados objetivos para max_probe_targets; no se inició el sondeo.')
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.limits['max_parallel_threads']) as executor:
-            groups = list(executor.map(self.probe_host, hosts))
+            if on_result is None:
+                groups = list(executor.map(self.probe_host, hosts))
+            else:
+                futures = {executor.submit(self.probe_host, host): index for index, host in enumerate(hosts)}
+                groups = [None] * len(hosts)
+                for future in concurrent.futures.as_completed(futures):
+                    rows = future.result()
+                    groups[futures[future]] = rows
+                    on_result(rows)
         return [observation for group in groups for observation in group]

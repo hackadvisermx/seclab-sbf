@@ -1,6 +1,6 @@
 # Fase 144: arranque de subfinder en contenedor de solo lectura
 
-Fecha: 2026-10-07. Base: `f0cd7f4`. Rama: `phase/144-subfinder-readonly-config`. PR: [#164](https://github.com/hackadvisermx/seclab-sbf/pull/164), pendiente de aprobación del owner.
+Fecha: 2026-10-07. Base: `f0cd7f4`. Rama: `phase/144-subfinder-readonly-config`. PR: [#164](https://github.com/hackadvisermx/seclab-sbf/pull/164), fusionado con aprobación explícita del owner en `a1e2a17`.
 
 ## Incidente y evidencia
 

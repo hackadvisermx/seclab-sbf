@@ -148,6 +148,69 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(previous.read_text(), 'https://previous.example.test\n')
         self.assertFalse(self.recon.joinpath('subdomains.txt').exists())
 
+    def test_live_tool_publishes_output_before_exit_and_preserves_artifacts_on_failure(self):
+        tool = self.root / 'slow-tool'
+        tool.write_text(f'#!{sys.executable}\nimport time\nprint("candidate.example.test", flush=True)\ntime.sleep(1)\nraise SystemExit(2)\n')
+        tool.chmod(0o755)
+        self.recon.joinpath('subdomains.txt').write_text('previous.example.test\n')
+        engine = self.make_pipeline()
+        engine.live = True
+        engine.tools = {'subfinder': str(tool)}
+        errors = []
+        def execute():
+            try:
+                engine._tool('subfinder', [])
+            except pipeline.StageError as error:
+                errors.append(str(error))
+        worker = threading.Thread(target=execute)
+        worker.start()
+        self.addCleanup(worker.join)
+        deadline = time.monotonic() + 3
+        progress = {}
+        while time.monotonic() < deadline:
+            path = self.recon / 'progress.json'
+            if path.exists():
+                progress = json.loads(path.read_text())
+                if 'candidate.example.test' in progress['recent_output']:
+                    break
+            time.sleep(.01)
+        self.assertTrue(worker.is_alive(), 'output must be visible while the tool is still running')
+        self.assertEqual(progress['command_status'], 'running')
+        self.assertIn('candidate.example.test', progress['recent_output'])
+        worker.join(3)
+        self.assertTrue(errors)
+        self.assertEqual(json.loads((self.recon / 'progress.json').read_text())['command_status'], 'failed')
+        self.assertEqual(self.recon.joinpath('subdomains.txt').read_text(), 'previous.example.test\n')
+
+    def test_live_tool_timeout_kills_child_and_bounds_output_history(self):
+        tool = self.root / 'timeout-tool'
+        tool.write_text(f'#!{sys.executable}\nimport os,time\nprint(os.getpid(), flush=True)\ntime.sleep(10)\n')
+        tool.chmod(0o755)
+        engine = self.make_pipeline()
+        engine.live = True
+        engine.tools = {'subfinder': str(tool)}
+        with self.assertRaises(pipeline.StageError):
+            engine._tool('subfinder', [], timeout=1.5)
+        data = json.loads((self.recon / 'progress.json').read_text())
+        pid = int(data['recent_output'][0])
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
+        engine._emit('output', output='\n'.join(str(n) for n in range(100)))
+        self.assertEqual(len(json.loads((self.recon / 'progress.json').read_text())['recent_output']), 80)
+
+    def test_probe_live_callback_reports_fast_host_before_slow_one_without_reordering_results(self):
+        client = probe.ProbeClient(rules(), probe.operational_limits(rules()))
+        client.limits['max_parallel_threads'] = 2
+        def result(host):
+            if host == 'slow':
+                time.sleep(.2)
+            return [{'host': host, 'status': 'response'}]
+        reported = []
+        with patch.object(client, 'probe_host', side_effect=result):
+            rows = client.probe(['slow', 'fast'], on_result=lambda rows: reported.append(rows[0]['host']))
+        self.assertEqual(reported, ['fast', 'slow'])
+        self.assertEqual([row['host'] for row in rows], ['slow', 'fast'])
+
     def test_tool_failure_or_timeout_discards_partial_stdout(self):
         self.recon.joinpath('subdomains.txt').write_text('previous.example.test\n')
         for outcome in [subprocess.CompletedProcess([], 2, 'invented.example.test\n', 'error'),

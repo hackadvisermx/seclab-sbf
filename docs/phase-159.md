@@ -42,4 +42,4 @@ La extracción de targets sigue siendo la heurística previa; esta fase no acred
 
 Fuentes navegables, timestamps de provenance, política/revisión del contexto remoto, fallback determinista y persistencia de conversaciones siguen pendientes de V3-05. No se añaden capacidades de ejecución, permisos ni migraciones de datos. Solo Chromium y Docker Desktop macOS comprobados. Revert restaura la omisión anterior del aviso.
 
-PR y CI remoto pendientes. Merge autorizado por el owner hasta 2026-10-09 19:09:04 UTC, condicionado a CI aprobado del head exacto; después vuelve aprobación individual.
+PR #179 fusionado en `d0611da`, CI `37834726343` aprobado del head `2505623`. Rama/worktree retirados y baseline sincronizado. Merge bajo autorización del owner hasta 2026-10-09 19:09:04 UTC; después vuelve aprobación individual.

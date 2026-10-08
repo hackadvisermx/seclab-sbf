@@ -402,3 +402,64 @@ test('Copiloto muestra validación no disponible y conserva la sugerencia como t
     assert.match(view.root.textContent, /no ejecuta comandos/)
   } finally { view.cleanup() }
 })
+
+test('artefacto muestra huella de bytes originales y distingue previsualización con reemplazos', async () => {
+  const file = { name: 'raw.txt', rel_path: 'recon/raw.txt', size: 9 }
+  const view = await mount({ getLoot: async () => ({ credentials: [], files: [] }), getFindings: async () => [], getVaultKeys: async () => [], getArtifacts: async () => [file], getArtifactContent: async () => ({ ...file,
+    content: 'raw �', sha256: 'a'.repeat(64), modified: '2026-10-08T00:00:00+00:00', preview_status: 'decoded_with_replacement' }) })
+  try {
+    await clickText(view.root, 'Artefactos (recon/)')
+    await clickText(view.root, 'raw.txt')
+    const metadata = view.root.querySelector('[data-testid="artifact-fingerprint"]')
+    assert.match(metadata.textContent, /9 bytes/)
+    assert.ok(metadata.textContent.includes('a'.repeat(64)))
+    assert.match(metadata.textContent, /sustituye bytes/)
+    assert.match(metadata.textContent, /no acredita procedencia/)
+    assert.equal(view.root.querySelector('pre').textContent, 'raw �')
+  } finally { view.cleanup() }
+})
+
+test('una lectura tardía no mezcla hash o contenido con otro artefacto y error limpia metadata', async () => {
+  let resolveFirst, rejectThird
+  const first = new Promise(resolve => { resolveFirst = resolve })
+  const third = new Promise((resolve, reject) => { rejectThird = reject })
+  let calls = 0
+  const files = ['one', 'two', 'three'].map(name => ({ name: name + '.txt', rel_path: `recon/${name}.txt`, size: 1 }))
+  const view = await mount({ getLoot: async () => ({ credentials: [], files: [] }), getFindings: async () => [], getVaultKeys: async () => [], getArtifacts: async () => files, getArtifactContent: () => ++calls === 1 ? first : calls === 3 ? third : Promise.resolve({ ...files[1], content: 'two', sha256: 'b'.repeat(64), preview_status: 'complete' }) })
+  try {
+    await clickText(view.root, 'Artefactos (recon/)')
+    await clickText(view.root, 'one.txt')
+    const copy = () => [...view.root.querySelectorAll('button')].find(button => button.textContent.includes('Copiar Previsualización'))
+    assert.equal(copy().disabled, true)
+    await clickText(view.root, 'two.txt')
+    resolveFirst({ ...files[0], content: 'one', sha256: 'a'.repeat(64), preview_status: 'complete' }); await flush()
+    assert.equal(view.root.querySelector('pre').textContent, 'two')
+    assert.ok(view.root.querySelector('[data-testid="artifact-fingerprint"]').textContent.includes('b'.repeat(64)))
+    await clickText(view.root, 'three.txt')
+    assert.equal(view.root.querySelector('[data-testid="artifact-fingerprint"]'), null)
+    assert.equal(copy().disabled, true)
+    rejectThird(new Error('El artefacto cambió; vuelve a seleccionarlo')); await flush()
+    assert.match(view.root.querySelector('pre').textContent, /El artefacto cambió/)
+    assert.equal(view.root.querySelector('[data-testid="artifact-fingerprint"]'), null)
+  } finally { view.cleanup() }
+})
+
+test('cambiar carpeta descarta respuestas antiguas de listado y previsualización', async () => {
+  let resolveFirst, resolvePreview
+  const first = new Promise(resolve => { resolveFirst = resolve })
+  const preview = new Promise(resolve => { resolvePreview = resolve })
+  const file = { name: 'raw.txt', rel_path: 'fuzzing/raw.txt', size: 1 }
+  const view = await mount({ getLoot: async () => ({ credentials: [], files: [] }), getFindings: async () => [], getVaultKeys: async () => [], getArtifacts: async (id, folder) => folder === 'recon' ? first : folder === 'fuzzing' ? [file] : [],
+    getArtifactContent: () => preview })
+  try {
+    await clickText(view.root, 'Artefactos (recon/)')
+    await clickText(view.root, 'fuzzing/')
+    resolveFirst([{ name: 'old.txt', rel_path: 'recon/old.txt', size: 1 }]); await flush()
+    assert.doesNotMatch(view.root.textContent, /old\.txt/)
+    await clickText(view.root, 'raw.txt')
+    await clickText(view.root, 'screenshots/')
+    resolvePreview({ ...file, content: 'stale', sha256: 'a'.repeat(64) }); await flush()
+    assert.equal(view.root.querySelector('[data-testid="artifact-fingerprint"]'), null)
+    assert.doesNotMatch(view.root.textContent, /stale|raw\.txt/)
+  } finally { view.cleanup() }
+})

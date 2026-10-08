@@ -8,6 +8,7 @@ import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
 from app.core.project_trash import ProjectTrash
+from app.core.artifact_snapshot import read_artifact_snapshot
 from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
@@ -696,27 +697,7 @@ class WorkspaceSyncService:
 
     def get_artifact_content(self, eng_id: str, rel_path: str, eng_type: str = "engagement") -> Dict[str, Any]:
         """Lee el contenido de un archivo de artefacto de forma segura contra path traversal."""
-        target_dir = self._resolve_dir(eng_id, eng_type).resolve()
-        requested_path = (target_dir / rel_path).resolve()
-
-        if not requested_path.is_relative_to(target_dir) or not requested_path.is_file():
-            raise FileNotFoundError("Archivo de artefacto no encontrado o acceso denegado")
-
-        size = requested_path.stat().st_size
-        if size > 2 * 1024 * 1024:
-            content = f"[Archivo demasiado grande para previsualizar: {size} bytes]"
-        else:
-            try:
-                content = requested_path.read_text(encoding="utf-8", errors="replace")
-            except Exception as e:
-                content = f"[No se pudo decodificar archivo de texto: {str(e)}]"
-
-        return {
-            "name": requested_path.name,
-            "rel_path": rel_path,
-            "size": size,
-            "content": content,
-        }
+        return read_artifact_snapshot(self._resolve_dir(eng_id, eng_type), rel_path)
 
 
 workspace_service = WorkspaceSyncService()

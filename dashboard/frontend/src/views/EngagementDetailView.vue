@@ -1384,10 +1384,24 @@
                 <span class="text-cyan-400 font-bold">{{ selectedArtifact.rel_path }}</span>
                 <button
                   @click="copyText(selectedArtifactContent)"
-                  class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
+                  :disabled="!artifactSnapshot || !['complete', 'decoded_with_replacement'].includes(artifactSnapshot.preview_status)"
+                  class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 text-[10px]"
                 >
-                  Copiar Contenido
+                  Copiar Previsualización
                 </button>
+              </div>
+              <div v-if="artifactSnapshot" data-testid="artifact-fingerprint" class="space-y-2 text-slate-400 break-words">
+                <p>{{ artifactSnapshot.size }} bytes · Modificado: {{ artifactSnapshot.modified }} (UTC)</p>
+                <div v-if="artifactSnapshot.sha256" class="space-y-1">
+                  <p>SHA-256 del archivo original en esta lectura:</p>
+                  <code class="block text-cyan-300 break-all">{{ artifactSnapshot.sha256 }}</code>
+                  <button @click="copyText(artifactSnapshot.sha256)" class="px-2 py-1 rounded-sm bg-slate-800 text-slate-300">Copiar SHA-256</button>
+                </div>
+                <p v-else class="text-amber-300">Huella no disponible: el archivo supera el límite de lectura de 32 MiB.</p>
+                <p v-if="artifactSnapshot.preview_status === 'decoded_with_replacement'" class="text-amber-300">La previsualización sustituye bytes que no son UTF-8. La huella corresponde a los bytes originales.</p>
+                <p v-if="artifactSnapshot.preview_status === 'too_large'" class="text-amber-300">Sin previsualización textual: el archivo supera 2 MiB.</p>
+                <p v-if="artifactSnapshot.preview_status === 'binary'" class="text-amber-300">Archivo binario; la huella identifica los bytes originales, sin previsualización textual.</p>
+                <p>La huella permite comparar esta versión; no acredita procedencia, autorización ni suficiencia de evidencia.</p>
               </div>
               <pre class="whitespace-pre-wrap text-slate-200 text-xs overflow-x-auto">{{ selectedArtifactContent }}</pre>
             </div>
@@ -1856,6 +1870,8 @@ const activeArtifactFolder = ref('recon')
 const artifactFiles = ref([])
 const selectedArtifact = ref(null)
 const selectedArtifactContent = ref('')
+const artifactSnapshot = ref(null)
+let artifactRequest = 0
 
 const capturedFlagsCount = computed(() => {
   if (flagsData.value.subtype === 'jeopardy') {
@@ -2512,24 +2528,39 @@ async function deleteCredAction(credId) {
 }
 
 async function selectArtifactFolder(folder) {
+  const request = ++artifactRequest
+  const projectId = engId.value
+  const projectType = engType.value
   activeArtifactFolder.value = folder
   selectedArtifact.value = null
   selectedArtifactContent.value = ''
+  artifactSnapshot.value = null
+  artifactFiles.value = []
   try {
-    artifactFiles.value = await api.getArtifacts(engId.value, folder, engType.value)
+    const files = await api.getArtifacts(projectId, folder, projectType)
+    if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
+    artifactFiles.value = files
   } catch (err) {
+    if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
     console.error('Error al listar artefactos:', err)
     artifactFiles.value = []
   }
 }
 
 async function loadArtifactPreview(file) {
+  const request = ++artifactRequest
+  const projectId = engId.value
+  const projectType = engType.value
   selectedArtifact.value = file
   selectedArtifactContent.value = 'Cargando contenido...'
+  artifactSnapshot.value = null
   try {
-    const res = await api.getArtifactContent(engId.value, file.rel_path, engType.value)
+    const res = await api.getArtifactContent(projectId, file.rel_path, projectType)
+    if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
+    artifactSnapshot.value = res
     selectedArtifactContent.value = res.content
   } catch (err) {
+    if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
     selectedArtifactContent.value = 'Error al leer archivo: ' + err.message
   }
 }
@@ -2678,6 +2709,7 @@ async function triggerReconPipeline() {
 }
 
 watch([engId, engType], () => {
+  selectArtifactFolder('recon')
   reconHistory.value = []
   reconHistoryCursor.value = null
   reconHistoryError.value = ''
@@ -2702,6 +2734,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  artifactRequest++
   stopReconPolling()
 })
 </script>

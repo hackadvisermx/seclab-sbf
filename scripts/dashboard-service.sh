@@ -13,6 +13,7 @@ STATE_DIR="${STATE_DIR:-/var/lib/seclab/dashboard}"
 mkdir -p "$STATE_DIR"
 chmod 700 "$STATE_DIR"
 
+export HOME=/home/tester
 export WORKSPACE_DIR
 export DASHBOARD_DIR="/usr/local/share/seclab/dashboard"
 export SECLAB_DATA_DIR="$STATE_DIR"

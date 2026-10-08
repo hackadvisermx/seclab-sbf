@@ -16,6 +16,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -208,6 +209,8 @@ class ReconPipeline:
         except OSError:
             raise StageError(f'{name}: no se pudo ejecutar; los resultados anteriores se conservan.') from None
         if result.returncode != 0:
+            if name == 'subfinder' and 'Could not create provider config file' in (result.stderr or ''):
+                raise StageError('subfinder: no se pudo preparar provider-config.yaml; reconstruye la imagen con la configuración precargada. No se usan resultados parciales.')
             raise StageError(f'{name}: código de salida {result.returncode}; no se usan resultados parciales.')
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
@@ -411,6 +414,11 @@ class ReconPipeline:
         return {'summary': summary, 'stage_results': results, 'dry_run': self.dry_run}
 
 
+def retry_command(eng_dir, summary):
+    options = '--resume' if (eng_dir / 'recon' / '.checkpoint.json').is_file() else '--stage ' + shlex.quote(summary['resumable_from'])
+    return f'pt-recon {shlex.quote(str(eng_dir))} {options}'
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """Ejecuta el pipeline de reconocimiento."""
     if args.resume and args.stage != 'all':
@@ -459,7 +467,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         if result.get("error"):
             print("  Error: " + result["error"])
     if summary.get("resumable_from") and not args.dry_run:
-        print(f"  Para reintentar solo desde la etapa fallida: pt-recon run {eng_dir.name} --resume\n")
+        print(f"  Para reintentar la etapa fallida: {retry_command(eng_dir, summary)}\n")
     return 1 if summary["status"] == "failed" else 0
 
 
@@ -500,7 +508,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         if pats:
             print(f"  Patrones de riesgo gf:    {', '.join(pats)}")
     if summary.get("resumable_from"):
-        print(f"  Pendiente de reanudar en: {summary['resumable_from']} (pt-recon run {eng_dir.name} --resume)")
+        print(f"  Pendiente de reintentar en: {summary['resumable_from']} ({retry_command(eng_dir, summary)})")
     print()
     return 0
 

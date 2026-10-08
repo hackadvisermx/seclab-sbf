@@ -4,6 +4,7 @@ import os
 import pathlib
 import re
 import socket
+import shlex
 import ssl
 import subprocess
 import sys
@@ -157,6 +158,19 @@ class ReconPipelineSafetyTests(unittest.TestCase):
                 result = engine.run_all('subdomains')
             self.assertEqual(result['summary']['status'], 'failed')
             self.assertEqual(self.recon.joinpath('subdomains.txt').read_text(), 'previous.example.test\n')
+
+    def test_subfinder_missing_provider_config_reports_action_without_partial_results(self):
+        self.recon.joinpath('subdomains.txt').write_text('previous.example.test\n')
+        engine = self.make_pipeline()
+        engine.tools = {'subfinder': '/fixture/subfinder'}
+        failure = subprocess.CompletedProcess([], 1, 'invented.example.test\n', 'Could not create provider config file: read-only file system')
+        with patch.object(pipeline.subprocess, 'run', return_value=failure):
+            result = engine.run_all('subdomains')
+        error = result['stage_results']['subdomains']['error']
+        self.assertIn('provider-config.yaml', error)
+        self.assertIn('reconstruye la imagen', error)
+        self.assertEqual(self.recon.joinpath('subdomains.txt').read_text(), 'previous.example.test\n')
+        self.assertEqual(result['summary']['status'], 'failed')
 
     def test_subdomains_new_file_tracks_only_items_absent_from_previous_run(self):
         self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
@@ -324,6 +338,14 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(result['summary']['status'], 'simulated')
         self.assertEqual(result['summary']['live_hosts_count'], 0)
         self.assertNotIn('subdomains', result['stage_results']['subdomains'])
+
+    def test_retry_command_uses_checkpoint_or_selected_stage_and_quotes_project_path(self):
+        summary = {'resumable_from': 'subdomains'}
+        self.assertEqual(shlex.split(pipeline.retry_command(self.root, summary)), ['pt-recon', str(self.root), '--stage', 'subdomains'])
+        self.recon.joinpath('.checkpoint.json').write_text('{}')
+        self.assertEqual(shlex.split(pipeline.retry_command(self.root, summary)), ['pt-recon', str(self.root), '--resume'])
+        other = self.root / 'path with spaces'
+        self.assertEqual(shlex.split(pipeline.retry_command(other, summary)), ['pt-recon', str(other), '--stage', 'subdomains'])
 
     def test_cli_failure_is_nonzero_and_status_is_read_only(self):
         result = subprocess.run([sys.executable, str(SCRIPTS / 'pt-recon-pipeline.py'), 'run', str(self.root), '--stage', 'probe', '--json'], capture_output=True, text=True)

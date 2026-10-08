@@ -753,6 +753,7 @@ RUN usermod --login tester --home /home/tester --move-home --shell /usr/bin/zsh 
   && ln -sfn /usr/local/share/seclab/gf-patterns /home/tester/.config/gf \
   && ln -sfn /etc/gdb/gdbinit /home/tester/.gdbinit \
   && printf 'sources: []\n' > /home/tester/.config/subfinder/config.yaml \
+  && printf '{}\n' > /home/tester/.config/subfinder/provider-config.yaml \
   && chown -R tester:tester /home/tester
 COPY .tmux.conf /home/tester/.tmux.conf
 RUN chown root:root /home/tester/.tmux.conf \

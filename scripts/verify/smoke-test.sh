@@ -68,4 +68,6 @@ pt-forward status >/dev/null 2>&1 || test $? -eq 1
   exit 1
 }
 
+/bin/sh "$(dirname "$0")/check-subfinder-readonly.sh" "$image"
+
 printf '%s\n' "smoke_test=ok imagen=$image"

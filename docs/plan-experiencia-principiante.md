@@ -23,7 +23,7 @@ La IA ayuda a interpretar evidencias, explicar pruebas y proponer pasos. Los pla
 
 | Fase | Estado | Cambio y aceptación |
 | --- | --- | --- |
-| 1. Contratos y alcance | Implementación en revisión (143) | Recomendación y prompt visibles; comandos conocidos válidos; dominio exacto o IP sin objetivos inventados; alcance vacío exige revisión; omitir confirmación abre el detalle sin lanzar recon. |
+| 1. Contratos y alcance | Implementada y fusionada (143, PR #163) | Recomendación y prompt visibles; comandos conocidos válidos; dominio exacto o IP sin objetivos inventados; alcance vacío exige revisión; omitir confirmación abre el detalle sin lanzar recon. |
 | 2. Asistente persistente | Pendiente; depende de 1 | Guardar y retomar progreso. Recoger autorización, ventanas, contactos, exclusiones, límites, usuarios/roles y requisitos del objetivo. Distinguir pasos completos, pendientes y bloqueados. Recargar no pierde el estado. |
 | 3. Matriz de pruebas | Pendiente; depende de 2 | Casos por activo y rol: pendiente, probado sin hallazgo, hallazgo candidato/confirmado, no aplicable con motivo y bloqueado. Cada resultado conserva evidencia o explicación; no se completa una disciplina solo por un hallazgo. |
 | 4. Playbooks guiados | Pendiente; depende de 2–3 | Cada paso explica objetivo, prerrequisitos, entradas, límites, comando revisable y salida esperada. Enlaza artefactos reales. Rechaza objetivos fuera del alcance y evita escaneos intensivos por defecto. No exige rediseñar todas las herramientas. |

@@ -1,6 +1,6 @@
 # Fase 147: validación obligatoria de reportes y exportación
 
-Fecha: 2026-10-07. Base: `154ebfc`. Rama: `phase/147-report-scope-gate`. Worktree: `/Users/castr/tmp/t01-report-gate`. V3-03a; PR hacia `bootstrap/baseline`.
+Fecha: 2026-10-07. Base: `154ebfc`. Rama: `phase/147-report-scope-gate`. Worktree: `/Users/castr/tmp/t01-report-gate`. V3-03a; [PR #167](https://github.com/hackadvisermx/seclab-sbf/pull/167) hacia `bootstrap/baseline`.
 
 ## Cambios
 
@@ -16,7 +16,7 @@ Fecha: 2026-10-07. Base: `154ebfc`. Rama: `phase/147-report-scope-gate`. Worktre
 - `make verify`: 150 pruebas Python aprobadas, incluido scope ausente/inválido, UNKNOWN/exclusión, fichas ilegibles, PoC ausente, falta de validador, salida personalizada, no sobrescritura y hash de paquete válido.
 - `make dashboard-tests LAB_IMAGE=full-phase147 IMAGE_SOURCE=remote`: 127 pruebas; nuevos casos API ejecutan los scripts instalados reales, comprueban 409 ante exclusión y paquete antiguo con mtime futuro.
 - `make build-full BUILD_TAG=-phase147`: imagen aislada `seclab-sbf:full-phase147`, hash `9090d8974368a11c`, igual a los insumos de la rama.
-- Smoke, Compose `.env.example`, Actionlint y gate de CVEs High/Critical: resultados finales registrados en el PR; política existente, sin nuevas excepciones.
+- Smoke, Compose `.env.example`, Actionlint y gate de CVEs High/Critical: aprobados sobre la imagen final; política existente, sin nuevas excepciones.
 - Recorder en host y contenedor `--read-only --network none --user tester`: misma [medición 147](baselines/v3-phase147.json), conservando la [línea base 146](baselines/v3-phase146.json).
 
 ## Cambios de comportamiento y límites

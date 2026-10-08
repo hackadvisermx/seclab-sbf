@@ -26,7 +26,7 @@ La aplicación registra alcance declarado; no determina si una autorización es 
 
 ## Priorización
 
-V3-00 iniciada en fase 146: [revisión técnica y línea base](v3-flujo-verificado.md), fallback inseguro de `pt-recon` corregido y validación con personas pendiente. El diagnóstico confirmó que `pt-report build` evita el gate de `check`; la corrección V3-03a se prioriza como fase pequeña antes de completar el modelo de procedencia. Las demás iniciativas siguen pendientes.
+V3-00 iniciada en fase 146: [revisión técnica y línea base](v3-flujo-verificado.md), fallback inseguro de `pt-recon` corregido y validación con personas pendiente. El diagnóstico confirmó que `pt-report build` evita el gate de `check`; V3-03a se implementa en fase 147 con validación obligatoria en compilación y exportación, incluido el dashboard. La procedencia completa y las demás iniciativas siguen pendientes.
 
 | Prioridad | Iniciativa | Resultado esperado | Dependencias |
 |---|---|---|---|

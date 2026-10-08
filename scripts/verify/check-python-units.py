@@ -924,10 +924,11 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             root = pathlib.Path(directory)
             evidence = root / "evidence"
             evidence.mkdir()
+            (root / "target.yaml").write_text("scope:\n  in_scope:\n    domains: [example.test]\n  out_of_scope:\n    domains: []\n")
             cases = [("PROVEN", "LOW"), ("candidate", "CRITICAL"), ("DISPROVED", "CRITICAL"),
                      ("mitigado", "HIGH"), ("DRAFT", "HIGH"), ("BLOCKED", "CRITICAL"), ("custom", "CRITICAL")]
             for number, (status, severity) in enumerate(cases):
-                (evidence / f"{number}.md").write_text(f"---\nid: VULN-{number}\ntitle: Evidence {number}\nstatus: {status}\nseverity: {severity}\n---\nOriginal body {number}")
+                (evidence / f"{number}.md").write_text(f"---\nid: VULN-{number}\ntitle: Evidence {number}\nstatus: {status}\nseverity: {severity}\nasset: example.test\n---\nOriginal body {number}\n## 2. Pasos\n## 5. Remediación")
             report = report_compiler.build_report(root).read_text()
             self.assertIn("**1 hallazgos confirmados activos**", report)
             self.assertIn("**Postura General de Riesgo:** **Bajo**", report)
@@ -2082,6 +2083,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(build_inputs))
     dashboard_backup = load_module('dashboard_backup_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_dashboard_backup.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(dashboard_backup))
+    report_safety = load_module("report_safety_tests", REPO_ROOT / "scripts" / "verify" / "test_report_safety.py")
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(report_safety))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

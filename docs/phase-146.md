@@ -1,6 +1,6 @@
 # Fase 146: revisión técnica v3 y fallo cerrado de pt-recon
 
-Fecha: 2026-10-07. Base: `b353a46`. Rama: `phase/146-v3-flow-baseline`. Worktree: `/Users/castr/tmp/t01-v3-baseline`. PR: [#166](https://github.com/hackadvisermx/seclab-sbf/pull/166), hacia `bootstrap/baseline`; requiere aprobación explícita antes del merge.
+Fecha: 2026-10-07. Base: `b353a46`. Rama: `phase/146-v3-flow-baseline`. Worktree: `/Users/castr/tmp/t01-v3-baseline`. PR: [#166](https://github.com/hackadvisermx/seclab-sbf/pull/166), fusionado hacia `bootstrap/baseline` en `154ebfc` con aprobación explícita del owner.
 
 ## Cambio y resultado
 

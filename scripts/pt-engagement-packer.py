@@ -12,6 +12,7 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 import argparse
 import datetime
 import hashlib
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -128,29 +129,20 @@ def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib
     return None
 
 
-def ensure_report_built(engagement_dir: pathlib.Path) -> Optional[pathlib.Path]:
-    """Verifica si REPORT.md existe o lo compila automáticamente con pt-report-compiler."""
-    rep_file = engagement_dir / "REPORT.md"
-    if rep_file.is_file():
-        return rep_file
-
+def ensure_report_built(engagement_dir: pathlib.Path) -> pathlib.Path:
+    """Recompila con el alcance y las fichas actuales antes de cada exportación."""
     compiler_path = pathlib.Path(__file__).resolve().parent / "pt-report-compiler.py"
     if not compiler_path.is_file():
         compiler_path = pathlib.Path("/usr/local/bin/pt-report-compiler")
-
-    if compiler_path.is_file():
-        spec = importlib.util.spec_from_file_location("report_compiler", compiler_path)
-        if spec and spec.loader:
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            try:
-                mod.build_report(engagement_dir)
-                if rep_file.is_file():
-                    return rep_file
-            except Exception:
-                pass
-
-    return rep_file if rep_file.is_file() else None
+    if not compiler_path.is_file():
+        raise ValueError("Reporte bloqueado: falta pt-report-compiler; reconstruye la imagen.")
+    spec = importlib.util.spec_from_file_location("report_compiler", compiler_path,
+            loader=importlib.machinery.SourceFileLoader("report_compiler", str(compiler_path)))
+    if not spec or not spec.loader:
+        raise ValueError("Reporte bloqueado: no se pudo cargar pt-report-compiler.")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.build_report(engagement_dir)
 
 
 def pack_engagement(
@@ -488,7 +480,14 @@ def main() -> int:
 
     if args.subcommand == "pack":
         out_p = pathlib.Path(args.output).resolve() if args.output else None
-        res = pack_engagement(eng_dir, output_path=out_p, sanitize=args.sanitize, archive_format=args.format)
+        try:
+            res = pack_engagement(eng_dir, output_path=out_p, sanitize=args.sanitize, archive_format=args.format)
+        except (ValueError, OSError, ImportError) as error:
+            if args.json:
+                print(json.dumps({"status": "blocked", "message": str(error)}, ensure_ascii=False))
+            else:
+                print(f"[!] Exportación bloqueada: {error}", file=sys.stderr)
+            return 1
         if args.json:
             print(json.dumps(res, indent=2))
         else:

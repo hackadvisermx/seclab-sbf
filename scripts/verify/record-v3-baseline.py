@@ -125,7 +125,15 @@ def reporting(root):
     finding('https://excluded.example.test')
     excluded_check = cli('check')
     excluded_build = cli('build')
-    content = (directory / 'REPORT.md').read_text()
+    report_path = directory / 'REPORT.md'
+    content = report_path.read_text() if report_path.exists() else ''
+    try:
+        packer.pack_engagement(directory, sanitize=True)
+        excluded_pack = 'success'
+    except ValueError:
+        excluded_pack = 'blocked'
+    finding('https://example.test')
+    cli('build')
     raw_paths = ['recon/probe_observations.jsonl', 'recon/recon.log']
     for name in raw_paths:
         (directory / name).write_text('fixture de salida original\n', encoding='utf-8')
@@ -141,9 +149,10 @@ def reporting(root):
         'check_unknown_asset_exit': unknown_check,
         'check_excluded_asset_exit': excluded_check,
         'build_excluded_asset_exit': excluded_build,
+        'export_excluded_asset_status': excluded_pack,
         'excluded_asset_in_report': 'https://excluded.example.test' in content,
         'original_artifact_link_in_finding': any(name in evidence.read_text() for name in raw_paths),
-        'report_claims_terminal_log_without_file': 'permanece archivado en' in content
+        'report_claims_terminal_log_without_file': 'permanece archivado en' in report_path.read_text()
             and not (directory / 'terminal.log').exists(),
         'export_manifest_hashes_valid': hashes_valid,
         'original_outputs_omitted_by_export': sorted(set(raw_paths) - included),

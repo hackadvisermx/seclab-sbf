@@ -15,14 +15,14 @@ npm run test:e2e:report
 
 Ejecuta UI e integración de forma secuencial: comparten el puerto 4199 y el directorio de resultados.
 
-`test:e2e` construye el frontend y abre una vista previa propia en `127.0.0.1:4199`. Dos pruebas de UI verifican el formulario/error de acceso y persistencia de tema. La API está simulada y las peticiones externas se abortan; estas dos pruebas no verifican autenticación del backend.
+`test:e2e` construye el frontend y abre una vista previa propia en `127.0.0.1:4199`. Tres pruebas de UI verifican el formulario/error de acceso, persistencia de tema y aviso de validación no disponible del Copiloto sin ejecución. La API está simulada y las peticiones externas se abortan; estas pruebas no verifican autenticación del backend.
 
 ## Backend real con usuario temporal
 
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase158
+make build-full BUILD_TAG=-phase159
 ```
 
 Después, desde `dashboard/frontend`:

@@ -198,7 +198,8 @@ class TestOpenRouterProxy(unittest.TestCase):
                 data = res.json()
                 self.assertEqual(data["provider"], "openrouter")
                 self.assertEqual(data["model"], "deepseek/deepseek-r1")
-                self.assertEqual(data["content"], "Respuesta copilot con modelo seleccionado")
+                self.assertTrue(data["content"].endswith("Respuesta copilot con modelo seleccionado"))
+                self.assertIn("Validación de alcance no disponible", data["content"])
 
                 # Verificar argumentos pasados a proxy_service
                 called_req, called_profile = mock_chat.call_args[0][0], mock_chat.call_args[1].get("profile")

@@ -137,6 +137,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-05 — Copiloto con fuentes, límites y fallback (P1)
 
+**Entrega parcial V3-05a (fase 159).** El Copiloto muestra `Validación de alcance no disponible` ante scope/validador ausentes, timeout, fallo de inicio, scope inválido o respuesta/código inconsistentes. Conserva texto original y metadata; una comprobación limpia mantiene la respuesta anterior y las exclusiones/UNKNOWN mantienen sus advertencias. Comprobado con validador instalado, API/proveedor simulado, Vue y Chromium; no ejecuta reconocimiento. Detalle y límites en `phase-159.md`. Fuentes navegables, revisión/redacción del contexto remoto y fallback determinista continúan pendientes; no se declara V3-05 completa.
+
 **Problema.** El copiloto ya es consultivo y recibe contexto del engagement, pero la advertencia de alcance no equivale a una cita de procedencia y puede no ejecutarse si el validador falla.
 
 **Trabajo.** Mantener la ejecución estructuralmente separada de las capacidades del Copiloto. Vincular cada explicación/borrador que use evidencia a IDs navegables; distinguir sugerencia, borrador y contenido revisado; hacer visible modelo/proveedor, hora, fuentes y contexto que saldrá de la instancia. Mostrar degradación si falla IA o validación de alcance. Ofrecer reglas/playbooks deterministas cuando el proveedor no esté disponible.

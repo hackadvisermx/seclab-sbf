@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from authorization_fixture import AUTHORIZATION_FIXTURE, AUTHORIZATION_YAML
 from unittest.mock import Mock, patch
 
 SCRIPTS = pathlib.Path(os.environ.get('SCOPE_REVISION_SCRIPTS', pathlib.Path(__file__).resolve().parents[1]))
@@ -30,14 +31,14 @@ class ScopeRevisionTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = pathlib.Path(temporary.name)
         self.scope = self.root / 'target.yaml'
-        self.scope.write_text('scope:\n  in_scope:\n    domains: [example.test]\n  out_of_scope:\n    domains: []\n')
+        self.scope.write_text('scope:\n  in_scope:\n    domains: [example.test]\n  out_of_scope:\n    domains: []\n' + AUTHORIZATION_YAML)
         (self.root / 'recon').mkdir()
         (self.root / 'recon/subdomains.txt').write_text('example.test\n')
         with patch.object(pipeline, 'detect_tools', return_value={'subfinder': 'fixture'}):
             self.engine = pipeline.ReconPipeline(self.root)
 
     def revoke(self):
-        self.scope.write_text('scope:\n  in_scope:\n    domains: []\n  out_of_scope:\n    domains: [example.test]\n')
+        self.scope.write_text('scope:\n  in_scope:\n    domains: []\n  out_of_scope:\n    domains: [example.test]\n' + AUTHORIZATION_YAML)
 
     def test_scope_changed_after_plan_blocks_probe_before_constructor(self):
         self.revoke()

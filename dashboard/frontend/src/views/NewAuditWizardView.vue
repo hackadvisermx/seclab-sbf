@@ -137,11 +137,12 @@
         <input type="checkbox" v-model="dryRun" class="rounded-sm bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-500" />
         <span>Modo Dry-Run (simula sin tocar la red; recomendado para la primera vez)</span>
       </label>
+      <p v-if="!dryRun" role="alert" class="text-xs text-amber-300">Para enviar tráfico, abre el detalle y registra autorización y vigencia en Alcance.</p>
       <p v-if="errorMsg" class="text-xs font-mono text-rose-400">{{ errorMsg }}</p>
       <div class="flex items-center space-x-3">
         <button
           type="button"
-          :disabled="isSubmitting"
+          :disabled="isSubmitting || !dryRun"
           @click="submitStep3"
           class="flex-1 py-2 rounded-sm bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 text-slate-950 text-sm font-mono font-bold"
         >
@@ -153,7 +154,7 @@
           @click="goToDetail"
           class="py-2 px-3 rounded-sm border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-mono"
         >
-          Omitir, ir al detalle
+          {{ dryRun ? "Omitir, ir al detalle" : "Configurar autorización en detalle" }}
         </button>
       </div>
     </div>
@@ -245,6 +246,10 @@ async function submitStep2() {
 }
 
 async function submitStep3() {
+  if (!dryRun.value) {
+    errorMsg.value = 'Registra autorización y vigencia en Alcance antes de enviar tráfico.'
+    return
+  }
   isSubmitting.value = true
   errorMsg.value = ''
   try {

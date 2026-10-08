@@ -37,7 +37,7 @@ def _scope_module():
 
 
 def _validate_scope_payload(data: Dict[str, Any]) -> None:
-    if not isinstance(data, dict) or "scope" not in data:
+    if not isinstance(data, dict) or not ({"scope", "authorization"} & set(data)):
         return
     module = _scope_module()
     try:
@@ -230,6 +230,7 @@ class WorkspaceSyncService:
                     "gateway_dns": "",
                 },
                 "scope": initial_scope,
+                "authorization": scope_module.default_authorization(),
                 "operational_limits": {
                     "max_requests_per_second": 1,
                     "max_parallel_threads": 1,

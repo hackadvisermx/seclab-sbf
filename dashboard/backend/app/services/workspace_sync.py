@@ -8,7 +8,7 @@ import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
 from app.core.project_trash import ProjectTrash
-from app.core.artifact_snapshot import read_artifact_snapshot
+from app.core.artifact_snapshot import read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs
 from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
@@ -24,6 +24,23 @@ class ScopeValidationError(ValueError):
 
 class FindingUpdateError(ValueError):
     pass
+
+
+def _finding_refs(metadata):
+    try:
+        return {'artifact_refs': normalize_artifact_refs(metadata.get('artifact_refs', []))}
+    except ValueError as error:
+        return {'artifact_refs': [], 'artifact_refs_error': str(error)}
+
+
+def _finding_markdown(metadata, body):
+    fields = dict(metadata)
+    has_references = 'artifact_refs' in fields
+    references = fields.pop('artifact_refs', None)
+    header = yaml.dump(fields, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    if has_references:
+        header += 'artifact_refs: ' + json.dumps(normalize_artifact_refs(references), ensure_ascii=True) + '\n'
+    return '---\n' + header + '---\n\n' + body
 
 
 def _scope_module():
@@ -348,6 +365,7 @@ class WorkspaceSyncService:
                         frontmatter=fm,
                         body=body,
                         engagement_id=eng_id,
+                        **_finding_refs(fm_data),
                     )
                 )
             except Exception:
@@ -381,13 +399,21 @@ class WorkspaceSyncService:
             frontmatter=fm,
             body=body,
             engagement_id=eng_id,
+            **_finding_refs(fm_data),
         )
 
     def save_finding(self, eng_id: str, finding_create: FindingCreate, eng_type: str = "engagement") -> FindingDetail:
         """Crea o actualiza una ficha en evidence/<slug>.md preservando el formato Evidence-First."""
         if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", finding_create.slug):
             raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
-        ev_dir = self._resolve_dir(eng_id, eng_type) / "evidence"
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        ev_dir = target_dir / "evidence"
+        references = None
+        if 'artifact_refs' in finding_create.model_fields_set:
+            try:
+                references = validate_artifact_refs(target_dir, finding_create.artifact_refs)
+            except (OSError, ValueError) as error:
+                raise FindingUpdateError('No se guardó la ficha: ' + str(error)) from error
         ev_dir.mkdir(parents=True, exist_ok=True)
         file_path = ev_dir / f"{finding_create.slug}.md"
 
@@ -403,7 +429,12 @@ class WorkspaceSyncService:
                     if field in ("severity", "status") and value is not None:
                         value = value.upper()
                     fm[field] = value
-            content = f"---\n{yaml.dump(fm, default_flow_style=False, sort_keys=False, allow_unicode=True)}---\n\n{finding_create.body}"
+            if references is not None:
+                fm['artifact_refs'] = references
+            try:
+                content = _finding_markdown(fm, finding_create.body)
+            except ValueError as error:
+                raise FindingUpdateError(str(error)) from error
             temporary = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.tmp")
             try:
                 temporary.write_text(content, encoding="utf-8")
@@ -425,6 +456,8 @@ class WorkspaceSyncService:
             "author": "tester",
             "status": (finding_create.status or "CANDIDATE").strip().upper() or "CANDIDATE",
         }
+        if references is not None:
+            fm['artifact_refs'] = references
 
         body_parts = []
         body_parts.append(f"## Descripción\n{finding_create.description or 'Detalles de la vulnerabilidad.'}\n")
@@ -441,7 +474,7 @@ class WorkspaceSyncService:
         body_parts.append(f"## Remediación y Mitigación\n{finding_create.remediation or 'Implementar validación estricta de entradas y principio de mínimo privilegio.'}\n")
 
         markdown_body = "\n".join(body_parts)
-        file_content = f"---\n{yaml.dump(fm, default_flow_style=False, sort_keys=False, allow_unicode=True)}---\n\n{markdown_body}"
+        file_content = _finding_markdown(fm, markdown_body)
 
         file_path.write_text(file_content, encoding="utf-8")
 
@@ -451,6 +484,7 @@ class WorkspaceSyncService:
             frontmatter=FindingFrontmatter(**fm),
             body=markdown_body,
             engagement_id=eng_id,
+            **_finding_refs(fm),
         )
 
     def delete_finding(self, eng_id: str, slug: str, eng_type: str = "engagement") -> bool:

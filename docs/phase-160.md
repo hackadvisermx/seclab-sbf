@@ -40,4 +40,4 @@ No añade identidad persistente de artefacto, captura inmutable, firma, parser n
 
 API conserva campos anteriores y añade metadata. Las rutas relativas antes normalizadas que contenían dot/traversal ya no se aceptan. Binarios con NUL muestran aviso en vez de texto sustituido. El límite de hash evita trabajo no acotado por solicitud. No cambia exports/manifest, autorización, hallazgos ni datos existentes. Solo Chromium/macOS Docker Desktop comprobados; lector usa APIs POSIX de la imagen Linux y macOS. Revert restaura visor anterior sin migración.
 
-PR/CI remoto consultar entrega antes de merge. Autorización temporal del owner vigente hasta 2026-10-09 19:09:04 UTC, condicionada a CI aprobado del head exacto; después vuelve aprobación individual.
+PR #180 fusionado en `eef7924974b1f78b1d18e1db5052cf2fc0744a40`; CI `37858140399` aprobado para head `9748e659624941aa2dd4c15561af5b5877be1f06`. Autorización temporal del owner vigente hasta 2026-10-09 19:09:04 UTC, condicionada a CI aprobado del head exacto; después vuelve aprobación individual.

@@ -5,6 +5,7 @@ import pathlib
 import subprocess
 import sys
 import tarfile
+import hashlib
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -45,6 +46,83 @@ class ReportSafetyTests(unittest.TestCase):
         if output:
             args.append(str(output))
         return subprocess.run(args, capture_output=True, text=True)
+
+    def link_fixture(self, path='recon/raw.txt', payload=b'fixture artifact'):
+        artifact = self.root / path
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_bytes(payload)
+        reference = {'path': path, 'sha256': hashlib.sha256(payload).hexdigest()}
+        finding = self.root / 'evidence/finding.md'
+        finding.write_text(finding.read_text().replace('status: PROVEN\n', 'status: PROVEN\nartifact_refs: ' + json.dumps([reference]) + '\n'))
+        return artifact, reference
+
+    def test_linked_version_is_rendered_and_changed_missing_or_invalid_refs_block(self):
+        artifact, reference = self.link_fixture()
+        text = report.build_report(self.root).read_text()
+        self.assertIn('[recon/raw.txt](./recon/raw.txt)', text)
+        self.assertIn(reference['sha256'], text)
+        previous = (self.root / 'REPORT.md').read_bytes()
+        for state in ['changed', 'missing']:
+            if state == 'changed':
+                artifact.write_bytes(b'changed')
+            else:
+                artifact.unlink()
+            self.assertEqual(self.cli('check').returncode, 1)
+            self.assertEqual(self.cli('build').returncode, 1)
+            self.assertEqual((self.root / 'REPORT.md').read_bytes(), previous)
+        for value in ['null', '{}', '[{}]', 'not-json', json.dumps([reference, reference]),
+                      json.dumps([dict(reference, path='../outside')]), json.dumps([dict(reference, sha256='wrong')])]:
+            self.finding('example.test')
+            path = self.root / 'evidence/finding.md'
+            path.write_text(path.read_text().replace('status: PROVEN\n', 'status: PROVEN\nartifact_refs: ' + value + '\n'))
+            self.assertEqual(self.cli('check').returncode, 1, value)
+
+    def test_selected_artifact_is_exported_with_hashes_and_sanitization(self):
+        payload = b'Authorization: Bearer fixture-private-token\nResponse: fixture\n'
+        artifact, reference = self.link_fixture('fuzzing/response.txt', payload)
+        for sanitize in [False, True]:
+            destination = self.root / ('safe.tar.gz' if sanitize else 'original.tar.gz')
+            packer.pack_engagement(self.root, destination, sanitize=sanitize)
+            with tarfile.open(destination) as archive:
+                copied = archive.extractfile(f'{self.root.name}/fuzzing/response.txt').read()
+                manifest = json.load(archive.extractfile(f'{self.root.name}/source-manifest.json'))
+                row = next(row for row in manifest['files'] if row['path'] == reference['path'])
+                self.assertEqual(row['original_sha256'], reference['sha256'])
+                self.assertEqual(row['export_sha256'], hashlib.sha256(copied).hexdigest())
+                self.assertEqual(row['content_changed'], sanitize)
+                if sanitize:
+                    self.assertNotIn(b'fixture-private-token', copied)
+                else:
+                    self.assertEqual(copied, payload)
+            self.assertEqual(artifact.read_bytes(), payload)
+
+    def test_binary_selected_export_is_explicit_and_sanitized_export_fails_closed(self):
+        for relative, payload in [('screenshots/raw.bin', b'\0\xffbinary'), ('recon/subdomains.txt', b'\0binary')]:
+            with self.subTest(relative=relative):
+                self.finding('example.test')
+                artifact, _ = self.link_fixture(relative, payload)
+                destination = self.root / 'binary.tar.gz'
+                packer.pack_engagement(self.root, destination)
+                before = destination.read_bytes()
+                with self.assertRaisesRegex(ValueError, 'binario'):
+                    packer.pack_engagement(self.root, destination, sanitize=True)
+                self.assertEqual(destination.read_bytes(), before)
+                self.assertEqual(artifact.read_bytes(), payload)
+                self.assertFalse(list(self.root.glob('.staging_pack*')))
+
+    def test_change_after_report_validation_blocks_pack_and_preserves_prior_bundle(self):
+        artifact, _ = self.link_fixture()
+        destination = self.root / 'prior.tar.gz'
+        destination.write_bytes(b'prior bundle')
+        real_build = packer.ensure_report_built
+        def build_and_change(*args, **kwargs):
+            result = real_build(*args, **kwargs)
+            artifact.write_bytes(b'changed after validation')
+            return result
+        with patch.object(packer, 'ensure_report_built', side_effect=build_and_change), self.assertRaises(ValueError):
+            packer.pack_engagement(self.root, destination)
+        self.assertEqual(destination.read_bytes(), b'prior bundle')
+        self.assertFalse(list(self.root.glob('.staging_pack*')))
 
     def test_missing_empty_or_null_status_never_confirms_a_finding(self):
         path = self.root / 'evidence/finding.md'

@@ -24,6 +24,9 @@ import tarfile
 import zipfile
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seclab_artifacts import read_artifact_snapshot, HASH_LIMIT
+
 # Patrones para sanitización automática de credenciales
 RE_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b")
 RE_AUTH_HEADER = re.compile(r"(?i)(Authorization:\s*(?:Bearer|Basic|Token)\s+)[^\r\n\"\'`]+")
@@ -129,7 +132,7 @@ def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib
     return None
 
 
-def ensure_report_built(engagement_dir: pathlib.Path) -> pathlib.Path:
+def ensure_report_built(engagement_dir: pathlib.Path, artifact_reference_output=None) -> pathlib.Path:
     """Recompila con el alcance y las fichas actuales antes de cada exportación."""
     compiler_path = pathlib.Path(__file__).resolve().parent / "pt-report-compiler.py"
     if not compiler_path.is_file():
@@ -142,7 +145,7 @@ def ensure_report_built(engagement_dir: pathlib.Path) -> pathlib.Path:
         raise ValueError("Reporte bloqueado: no se pudo cargar pt-report-compiler.")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.build_report(engagement_dir)
+    return mod.build_report(engagement_dir, artifact_reference_output=artifact_reference_output)
 
 
 def pack_engagement(
@@ -154,7 +157,8 @@ def pack_engagement(
     """Empaqueta los entregables del engagement con manifiesto SHA-256 y sanitización opcional."""
     if (engagement_dir / "REPORT.md").is_symlink():
         raise ValueError("Fuente de exportación no permitida: REPORT.md")
-    report_file = ensure_report_built(engagement_dir)
+    references = {}
+    report_file = ensure_report_built(engagement_dir, references)
     eng_name = engagement_dir.name
     now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
 
@@ -279,6 +283,36 @@ def pack_engagement(
             record_source(terminal_log, destination, "terminal.log")
 
         source_manifest = staging_dir / "source-manifest.json"
+        total = 0
+        for relative, expected_hash in references.items():
+            snapshot = read_artifact_snapshot(engagement_dir, relative, include_bytes=True)
+            total += snapshot['size']
+            if total > HASH_LIMIT or snapshot['sha256'] != expected_hash:
+                raise ValueError('Artefacto vinculado cambiado o fuera del límite: ' + relative)
+            payload = snapshot['_bytes']
+            if sanitize and (snapshot['preview_status'] in ('binary', 'decoded_with_replacement') or b'\0' in payload):
+                raise ValueError('No se puede sanitizar el artefacto vinculado binario: ' + relative)
+            destination = staging_dir / relative
+            if relative in packed_files:
+                original = next(row['original_sha256'] for row in source_records if row['path'] == relative)
+                if original != expected_hash:
+                    raise ValueError('Artefacto cambió al exportar: ' + relative)
+                continue
+            if sanitize:
+                try:
+                    text = payload.decode('utf-8')
+                except UnicodeDecodeError:
+                    raise ValueError('No se puede sanitizar el artefacto vinculado no UTF-8: ' + relative) from None
+                text, red = sanitize_text(text)
+                total_redactions += red
+                payload = text.encode('utf-8')
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(payload)
+            manifest_entries.append(f'{compute_sha256(destination)}  {relative}')
+            packed_files.append(relative)
+            source_records.append({'path': relative, 'original_sha256': expected_hash,
+                                   'export_sha256': compute_sha256(destination),
+                                   'content_changed': expected_hash != compute_sha256(destination)})
         source_manifest.write_text(json.dumps({"schema_version": 1, "sanitized": sanitize,
             "files": source_records}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         manifest_entries.append(f"{compute_sha256(source_manifest)}  source-manifest.json")

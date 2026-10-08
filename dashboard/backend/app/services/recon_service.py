@@ -10,6 +10,7 @@ import threading
 from typing import Any, Dict, List, Optional
 from app.config import SCRIPTS_DIR, WORKSPACE_DIR, RECON_DB_PATH
 from app.core.recon_jobs import ReconJobStore, ACTIVE_STATUSES
+from app.core.recon_review import reviewed_plan
 from app.core.workspace_paths import project_directory
 
 class ReconService:
@@ -260,10 +261,15 @@ class ReconService:
         """Inicia el pipeline de reconocimiento en un hilo en segundo plano."""
         if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
             return {"success": False, "error": "Etapa de reconocimiento no válida."}
+        review = None
         if expected_plan:
             preview = self.preview_pipeline(engagement_id, stage, dry_run, engagement_type)
             if not preview.get('success') or preview.get('plan_revision') != expected_plan or not preview.get('can_start'):
                 return {'success': False, 'error': 'El plan cambió o está bloqueado; revisa targets, permisos y límites antes de iniciar.'}
+            try:
+                review = reviewed_plan(preview)
+            except (KeyError, TypeError, ValueError):
+                return {'success': False, 'error': 'La revisión está incompleta; vuelve a revisar antes de iniciar.'}
         with self._lock:
             if self._closing:
                 return {'success': False, 'error': 'El dashboard se está cerrando.'}
@@ -275,8 +281,8 @@ class ReconService:
             recon_dir.mkdir(parents=True, exist_ok=True)
             log_path = recon_dir / 'recon.log'
             try:
-                job = self.store.begin(job_key, stage, dry_run)
-            except RuntimeError as error:
+                job = self.store.begin(job_key, stage, dry_run, reviewed_plan=review)
+            except (RuntimeError, ValueError) as error:
                 return {'success': False, 'error': str(error), 'job': self.store.get(job_key)}
             thread = threading.Thread(target=self._execute_pipeline_worker,
                 args=(job_key, target_dir, stage, dry_run, log_path, job['run_id'], expected_plan), daemon=True)

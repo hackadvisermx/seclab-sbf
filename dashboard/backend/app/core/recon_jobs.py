@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import pathlib
 import re
@@ -40,6 +41,10 @@ class ReconJobStore:
                 origin TEXT NOT NULL, PRIMARY KEY (engagement_type, engagement_id, run_id))""")
             conn.execute("""CREATE INDEX IF NOT EXISTS recon_history_project
                 ON recon_job_history (engagement_type, engagement_id, started_at DESC, run_id DESC)""")
+            conn.execute("""CREATE TABLE IF NOT EXISTS recon_job_reviews (
+                engagement_type TEXT NOT NULL, engagement_id TEXT NOT NULL,
+                run_id TEXT NOT NULL, reviewed_plan TEXT NOT NULL,
+                PRIMARY KEY (engagement_type, engagement_id, run_id))""")
             # Only the last legacy row is known; never reconstruct older jobs.
             conn.execute("""INSERT OR IGNORE INTO recon_job_history
                 SELECT engagement_type, engagement_id, run_id, status, stage, dry_run,
@@ -55,6 +60,11 @@ class ReconJobStore:
                  WHERE recon_jobs.engagement_type=recon_job_history.engagement_type
                    AND recon_jobs.engagement_id=recon_job_history.engagement_id
                    AND recon_jobs.run_id=recon_job_history.run_id)""")
+            conn.execute("""DELETE FROM recon_job_reviews WHERE NOT EXISTS (
+                SELECT 1 FROM recon_job_history WHERE
+                    recon_job_history.engagement_type=recon_job_reviews.engagement_type
+                    AND recon_job_history.engagement_id=recon_job_reviews.engagement_id
+                    AND recon_job_history.run_id=recon_job_reviews.run_id)""")
         self.path.chmod(0o600)
 
     def connect(self):
@@ -73,6 +83,12 @@ class ReconJobStore:
             return None
         result = dict(row)
         result['dry_run'] = bool(result['dry_run'])
+        if 'reviewed_plan' in result and result['reviewed_plan'] is not None:
+            try:
+                plan = json.loads(result['reviewed_plan'])
+                result['reviewed_plan'] = plan if isinstance(plan, dict) and plan.get('schema_version') == 1 else None
+            except (ValueError, TypeError):
+                result['reviewed_plan'] = None
         return result
 
     def get(self, key):
@@ -83,21 +99,27 @@ class ReconJobStore:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError('El límite de historial debe estar entre 1 y 100.')
         with closing(self.connect()) as conn:
-            query = 'SELECT * FROM recon_job_history WHERE engagement_type=? AND engagement_id=?'
+            query = '''SELECT h.*, r.reviewed_plan FROM recon_job_history h
+                LEFT JOIN recon_job_reviews r ON h.engagement_type=r.engagement_type
+                    AND h.engagement_id=r.engagement_id AND h.run_id=r.run_id
+                WHERE h.engagement_type=? AND h.engagement_id=?'''
             args = list(key)
             if before:
                 cursor = conn.execute('SELECT started_at, run_id FROM recon_job_history '
                     'WHERE engagement_type=? AND engagement_id=? AND run_id=?', (*key, before)).fetchone()
                 if cursor is None:
                     raise ValueError('El cursor no pertenece al historial de este proyecto.')
-                query += ' AND (started_at, run_id) < (?, ?)'
+                query += ' AND (h.started_at, h.run_id) < (?, ?)'
                 args.extend((cursor['started_at'], cursor['run_id']))
-            query += ' ORDER BY started_at DESC, run_id DESC LIMIT ?'
+            query += ' ORDER BY h.started_at DESC, h.run_id DESC LIMIT ?'
             rows = conn.execute(query, (*args, limit + 1)).fetchall()
         jobs = [self.job(row) for row in rows[:limit]]
         return {'jobs': jobs, 'next_cursor': jobs[-1]['run_id'] if len(rows) > limit else None}
 
-    def begin(self, key, stage, dry_run):
+    def begin(self, key, stage, dry_run, reviewed_plan=None):
+        payload = json.dumps(reviewed_plan, ensure_ascii=False, separators=(',', ':')) if reviewed_plan is not None else None
+        if payload is not None and len(payload.encode('utf-8')) > 192 * 1024:
+            raise ValueError('La revisión excede el límite de metadatos del job.')
         with closing(self.connect()) as conn, conn:
             conn.execute('BEGIN IMMEDIATE')
             current = conn.execute('SELECT status FROM recon_jobs WHERE engagement_type=? AND engagement_id=?', key).fetchone()
@@ -109,6 +131,10 @@ class ReconJobStore:
                 SELECT engagement_type, engagement_id, run_id, status, stage, dry_run,
                        started_at, finished_at, error, NULL, 'dashboard'
                 FROM recon_jobs WHERE engagement_type=? AND engagement_id=?""", key)
+            if payload is not None:
+                conn.execute("""INSERT INTO recon_job_reviews
+                    SELECT engagement_type, engagement_id, run_id, ? FROM recon_jobs
+                    WHERE engagement_type=? AND engagement_id=?""", (payload, *key))
         return self.get(key)
 
     def finish(self, key, run_id, status, error=None, scope_revision=None):
@@ -152,3 +178,4 @@ class ReconJobStore:
         with closing(self.connect()) as conn, conn:
             conn.execute('DELETE FROM recon_jobs WHERE engagement_type=? AND engagement_id=?', key)
             conn.execute('DELETE FROM recon_job_history WHERE engagement_type=? AND engagement_id=?', key)
+            conn.execute('DELETE FROM recon_job_reviews WHERE engagement_type=? AND engagement_id=?', key)

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { readFile, writeFile } from 'node:fs/promises'
 
-test('vista previa sin job y revisión obsoleta rechazada antes de simular', async ({ page }) => {
+test('vista previa sin job y revisión obsoleta rechazada antes de simular', async ({ page }, testInfo) => {
   const user = JSON.parse(await readFile(new URL('../.playwright-fixture/user.json', import.meta.url), 'utf8'))
   const { workspace } = JSON.parse(await readFile(new URL('../.playwright-fixture/workspace.json', import.meta.url), 'utf8'))
   const id = 'preview-audit'
@@ -39,5 +39,21 @@ test('vista previa sin job y revisión obsoleta rechazada antes de simular', asy
   await expect(launch).toBeEnabled()
   await launch.click()
   await expect(page.getByText('Simulación finalizada sin consultas de red.', { exact: false })).toBeVisible({ timeout: 20000 })
-  await expect(page.getByTestId('recon-history').getByRole('listitem')).toHaveCount(1)
+  const history = page.getByTestId('recon-history')
+  await expect(history.getByRole('listitem')).toHaveCount(1)
+  const saved = (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs[0]
+  expect(saved.reviewed_plan.stages[0].targets).toEqual([{ host: 'example.test', verdict: 'IN_SCOPE' }])
+  expect(saved.reviewed_plan.authorization.allow_active).toBe(false)
+  await writeFile(input, 'changed.test\n')
+  await page.reload()
+  await page.getByRole('button', { name: /Reconocimiento/ }).filter({ hasText: '📡' }).click()
+  await history.getByText('Plan revisado al iniciar', { exact: true }).click()
+  const review = history.getByTestId('recon-history-review')
+  await expect(review).toContainText(saved.reviewed_plan.plan_revision)
+  await expect(review).toContainText('example.test · IN_SCOPE')
+  await expect(review).toContainText('activo no')
+  await expect(review).toContainText('8 s por petición')
+  await expect(review).not.toContainText('changed.test')
+  expect((await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs[0].reviewed_plan).toEqual(saved.reviewed_plan)
+  await page.screenshot({ path: testInfo.outputPath('review-history.png'), fullPage: true })
 })

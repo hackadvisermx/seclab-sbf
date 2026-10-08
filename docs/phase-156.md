@@ -28,7 +28,7 @@ El helper `_tool` exigía permiso pasivo incluso para `gf`, que clasifica archiv
 - Chromium: 2 pruebas UI y 3 de integración real aprobadas. Suites ejecutadas secuencialmente; recorrido completo repetido con datos sintéticos sin red.
 - Imagen `seclab-sbf:full-phase156`, hash `02f714067585abe1`, coincide con insumos después de pruebas. Build, smoke, Compose `.env.example`, Actionlint y gate High/Critical aprobados bajo política vigente, sin nuevas excepciones.
 - Confirmación adicional de `gf` real en contenedor sin red; no quedan contenedores de prueba ni credenciales.
-- PR preparado hacia baseline; CI remoto y aprobación individual se consultan en el PR.
+- PR #176 fusionado con aprobación individual del owner en `52f6552`; CI `37817641538` aprobado. Rama/worktree retirados y baseline sincronizado.
 
 Comandos:
 

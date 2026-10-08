@@ -240,6 +240,8 @@ class ReconPipeline:
                                    'dry_run': simulate, 'hosts': hosts_input, 'urls': urls_input})
         return {'success': True, 'stage': stage, 'dry_run': simulate,
                 'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'authorization': {**{key: value for key, value in self.scope_contract['authorization'].items() if key != 'reference'},
+                                  'reference_present': bool(self.scope_contract['authorization']['reference'])},
                 'scope_revision': self.scope_revision, 'plan_revision': revision,
                 'operational_limits': self.limits, 'stages': plan,
                 'can_start': not any(row['block_reasons'] for row in plan)}

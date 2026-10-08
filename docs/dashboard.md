@@ -91,6 +91,12 @@ El job `static-analysis` también ejecuta auditoría, pruebas y build del fronte
 
 ---
 
+### Autorización del reconocimiento
+
+En **Alcance**, registra referencia del permiso, inicio/fin y selecciona por separado reconocimiento pasivo y activo. Las fechas se muestran en la zona del navegador y se guardan como instantes UTC. Guardar se habilita después de cargar el contrato. SecLab valida la declaración operativa, no su validez legal.
+
+Los proyectos nuevos y anteriores sin declaración tienen ambos permisos desactivados. El wizard permite simular y abre el detalle para configurar permiso antes de tráfico. Las consultas a fuentes requieren permiso pasivo vigente; el sondeo HTTP/HTTPS requiere permiso activo vigente. Expiración/revocación bloquea nuevas acciones; no cancela procesos ya iniciados. La terminal libre no está interceptada por Scope Guard. Detalles y compatibilidad: [fase 150](phase-150.md).
+
 ### Jobs de reconocimiento persistentes
 
 La fase 89 implementa la persistencia y control de ciclo de vida de los jobs de reconocimiento.

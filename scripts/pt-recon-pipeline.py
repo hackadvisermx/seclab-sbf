@@ -30,7 +30,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_scope import (ScopeError, normalize_target, is_ip, domain_matches,
-                          parse_simple_yaml_lists, load_scope_rules, load_target_yaml, load_scope_txt, check_scope)
+                          parse_simple_yaml_lists, load_scope_rules, load_target_yaml, load_scope_txt, check_scope, authorization_contract, require_authorization)
 
 from seclab_recon_probe import ProbeClient, operational_limits
 
@@ -175,7 +175,8 @@ class ReconPipeline:
 
     @staticmethod
     def _contract(data):
-        return {'scope': data['scope'], 'operational_limits': operational_limits(data)}
+        return {'scope': data['scope'], 'operational_limits': operational_limits(data),
+                'authorization': authorization_contract(data)}
 
     @staticmethod
     def _revision(contract):
@@ -187,6 +188,7 @@ class ReconPipeline:
         if self._revision(self._contract(current)) != self.scope_revision:
             raise ScopeError('El alcance o sus límites cambiaron durante el reconocimiento; no se iniciarán nuevas acciones. Simula y ejecuta un plan nuevo.')
         if target is not None:
+            require_authorization(current, 'active')
             verdict, reason = check_scope(target, current)
             if verdict != 'IN_SCOPE':
                 raise ScopeError(f'Acción bloqueada por alcance para {target}: {verdict} ({reason}).')
@@ -282,6 +284,7 @@ class ReconPipeline:
 
     def _tool(self, name, arguments, timeout=180):
         self.revalidate_scope()
+        require_authorization(load_scope_rules(self.engagement_dir), 'passive')
         command = [self.tools[name], *arguments]
         self._emit('command_start', command=shlex.join(command), command_status='running')
         try:
@@ -307,6 +310,8 @@ class ReconPipeline:
         bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in domains})
         if self.dry_run:
             return {'stage': 'subdomains', 'status': 'simulated', 'planned_passive_queries': bases}
+        if bases:
+            require_authorization(load_scope_rules(self.engagement_dir), 'passive')
         available = [name for name in ('subfinder', 'assetfinder', 'findomain') if self.tools.get(name)]
         if bases and not available:
             raise StageError('No hay enumeradores pasivos disponibles; no se inventaron subdominios.')
@@ -338,6 +343,8 @@ class ReconPipeline:
             raise StageError('Demasiados objetivos para max_probe_targets; no se inició el sondeo.')
         if self.dry_run:
             return {'stage': 'probe', 'status': 'simulated', 'planned_targets': hosts, 'discarded': discarded}
+        if hosts:
+            require_authorization(load_scope_rules(self.engagement_dir), 'active')
         previous_live = set(self._read_lines('live_hosts.txt'))
         self._emit('command_start', command=f'Sondeo HTTP interno: GET / por HTTP y HTTPS; {len(hosts)} hosts autorizados', command_status='running')
         self.revalidate_scope()
@@ -382,6 +389,8 @@ class ReconPipeline:
         bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in self.get_in_scope_domains()})
         if self.dry_run:
             return {'stage': 'urls', 'status': 'simulated', 'planned_passive_queries': bases}
+        if bases:
+            require_authorization(load_scope_rules(self.engagement_dir), 'passive')
         available = [name for name in ('gau', 'waybackurls') if self.tools.get(name)]
         if bases and not available:
             raise StageError('No hay herramientas de URLs históricas; no se inventaron URLs.')
@@ -487,6 +496,7 @@ class ReconPipeline:
             try:
                 self.revalidate_scope()
                 results[name] = action()
+                results[name]['interaction'] = 'simulation' if self.dry_run else {'subdomains': 'passive', 'probe': 'active', 'urls': 'passive', 'patterns': 'local'}[name]
                 self.progress['completed_stages'].append(name)
                 self._emit('stage_end', stage=name, stage_status=results[name]['status'])
             except (StageError, ScopeError, OSError) as error:

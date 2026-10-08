@@ -1687,6 +1687,9 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
                 "      - next.test\n",
                 encoding="utf-8",
             )
+            self.assertEqual(audit_next.determine_roadmap(eng_path)[0]["id"], "authorization")
+            from authorization_fixture import AUTHORIZATION_YAML
+            target_file.write_text(target_file.read_text() + AUTHORIZATION_YAML)
             steps_recon = audit_next.determine_roadmap(eng_path)
             self.assertEqual(steps_recon[0]["id"], "recon")
             self.assertEqual(steps_recon[0]["skill"], "recon-profiling")
@@ -2087,6 +2090,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(report_safety))
     scope_revision = load_module("scope_revision_tests", REPO_ROOT / "scripts" / "verify" / "test_scope_revision.py")
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(scope_revision))
+    authorization = load_module("authorization_tests", REPO_ROOT / "scripts" / "verify" / "test_authorization.py")
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(authorization))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

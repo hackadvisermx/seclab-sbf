@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+from authorization_fixture import AUTHORIZATION_FIXTURE, AUTHORIZATION_YAML
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import Mock, patch
@@ -27,7 +28,7 @@ spec.loader.exec_module(pipeline)
 
 
 def rules():
-    return {'scope': {'in_scope': {'domains': ['example.test', '*.example.test']},
+    return {'authorization': dict(AUTHORIZATION_FIXTURE), 'scope': {'in_scope': {'domains': ['example.test', '*.example.test']},
                       'out_of_scope': {'domains': ['excluded.example.test']}}}
 
 
@@ -108,7 +109,7 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = pathlib.Path(self.temporary.name)
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    domains: [example.test, "*.example.test"]\n  out_of_scope:\n    domains: [excluded.example.test]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    domains: [example.test, "*.example.test"]\n  out_of_scope:\n    domains: [excluded.example.test]\n' + AUTHORIZATION_YAML)
         self.recon = self.root / 'recon'
         self.recon.mkdir()
 
@@ -236,12 +237,12 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(result['summary']['status'], 'failed')
 
     def test_subdomains_new_file_tracks_only_items_absent_from_previous_run(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         result = self.make_pipeline().run_all('subdomains')
         self.assertEqual(result['summary']['subdomains_new_count'], 1)
         self.assertEqual(self.recon.joinpath('subdomains_new.txt').read_text(), '10.0.0.1\n')
 
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1", "10.0.0.2"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1", "10.0.0.2"]\n' + AUTHORIZATION_YAML)
         result = self.make_pipeline().run_all('subdomains')
         self.assertEqual(result['summary']['subdomains_new_count'], 1)
         self.assertEqual(self.recon.joinpath('subdomains_new.txt').read_text(), '10.0.0.2\n')
@@ -279,7 +280,7 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(self.recon.joinpath('live_hosts_new.txt').read_text(), '')
 
     def test_resume_skips_completed_stages_and_retries_only_the_failed_one(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         engine = self.make_pipeline()
         with patch.object(pipeline, 'ProbeClient') as client:
             client.return_value.probe.side_effect = OSError('fallo simulado de red')
@@ -303,13 +304,13 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertFalse(self.recon.joinpath('.checkpoint.json').exists())
 
     def test_resume_without_a_checkpoint_behaves_like_a_fresh_run(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         result = self.make_pipeline().run_all('all', resume=True)
         self.assertEqual(result['summary']['status'], 'completed')
         self.assertEqual(result['stage_results']['subdomains']['subdomains'], ['10.0.0.1'])
 
     def test_manual_single_stage_run_invalidates_the_checkpoint(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         engine = self.make_pipeline()
         with patch.object(pipeline, 'ProbeClient') as client:
             client.return_value.probe.side_effect = OSError('fallo simulado')
@@ -366,7 +367,7 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(self.recon.joinpath('next_commands.txt').read_text(), '')
 
     def test_run_all_sends_notification_with_status_on_success_and_failure(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         with patch.object(pipeline, 'send_notification') as notify:
             self.make_pipeline().run_all('subdomains')
             notify.assert_called_once()
@@ -384,7 +385,7 @@ class ReconPipelineSafetyTests(unittest.TestCase):
             self.assertEqual(notify.call_args.kwargs['level'], 'error')
 
     def test_run_all_does_not_send_notification_during_dry_run(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         with patch.object(pipeline, 'send_notification') as notify:
             self.make_pipeline(dry_run=True).run_all('all')
         notify.assert_not_called()

@@ -25,6 +25,13 @@ engagement:
   #     role: "cross_user"
   #     description: "Usuario estándar para pruebas de acceso no autorizado"
 
+authorization:
+  reference: ""
+  valid_from: ""
+  valid_until: ""
+  allow_passive: false
+  allow_active: false
+
 network:
   vpn_profile: "none" # tryhackme | hackthebox | client | none
   assigned_ip: ""

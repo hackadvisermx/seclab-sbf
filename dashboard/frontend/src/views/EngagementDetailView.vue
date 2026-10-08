@@ -85,12 +85,42 @@
             </h2>
             <button
               @click="saveScopeConfig"
-              :disabled="isSavingScope"
+              :disabled="isSavingScope || scopeLoadState !== 'ready'"
               class="px-3 py-1 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold"
             >
               {{ isSavingScope ? 'Guardando...' : 'Guardar Alcance' }}
             </button>
           </div>
+
+          <p v-if="scopeLoadState === 'loading'" class="text-xs text-slate-400">Cargando contrato de alcance...</p>
+          <div v-if="scopeLoadState === 'error'" class="text-xs text-amber-300">
+            No se pudo cargar el contrato. Reintenta antes de editar o guardar.
+            <button @click="loadScope" class="ml-2 underline">Reintentar carga de alcance</button>
+          </div>
+          <fieldset :disabled="scopeLoadState !== 'ready'" class="space-y-3 border border-slate-700 rounded-sm p-3 text-xs font-mono">
+            <legend class="text-cyan-300 px-1">Autorización y vigencia</legend>
+            <p class="text-slate-400">Registra el permiso del responsable. SecLab comprueba esta declaración; no determina su validez legal. Las fechas se muestran en tu zona horaria.</p>
+            <label class="block text-slate-300">Referencia de autorización
+              <input v-model="authorizationForm.reference" type="text" class="mt-1 w-full bg-[#070b14] border border-slate-700 rounded-sm p-2" placeholder="Contrato, reglas del programa o permiso del laboratorio" />
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="block text-slate-300">Inicio
+                <input v-model="authorizationForm.valid_from" type="datetime-local" step="0.001" class="mt-1 w-full bg-[#070b14] border border-slate-700 rounded-sm p-2" />
+              </label>
+              <label class="block text-slate-300">Fin
+                <input v-model="authorizationForm.valid_until" type="datetime-local" step="0.001" class="mt-1 w-full bg-[#070b14] border border-slate-700 rounded-sm p-2" />
+              </label>
+            </div>
+            <label class="flex items-start gap-2 text-slate-300">
+              <input v-model="authorizationForm.allow_passive" type="checkbox" class="mt-0.5" />
+              <span>Permitir reconocimiento pasivo: consultas a fuentes externas sin contactar al objetivo.</span>
+            </label>
+            <label class="flex items-start gap-2 text-slate-300">
+              <input v-model="authorizationForm.allow_active" type="checkbox" class="mt-0.5" />
+              <span>Permitir reconocimiento activo: solicitudes HTTP/HTTPS a los targets dentro de alcance.</span>
+            </label>
+            <p class="text-amber-300">Guardar Alcance aplica estos permisos. Sin permiso vigente, el tráfico gestionado queda bloqueado; puedes simular. La terminal libre no está interceptada por Scope Guard.</p>
+          </fieldset>
 
           <!-- In-Scope -->
           <div class="space-y-3">
@@ -1603,6 +1633,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { renderReport } from '../report-security'
 import { splitIpsAndCidrs } from '../scope-utils'
+import { authorizationToForm, authorizationFromForm } from '../authorization-utils'
 import { normalizeProbeResults, sortProbeResults } from '../recon-results'
 import { api } from '../api'
 import DeleteProjectButton from '../components/DeleteProjectButton.vue'
@@ -1783,12 +1814,14 @@ const tabs = computed(() => {
 
 // Scope
 const scopeData = ref({})
+const authorizationForm = ref(authorizationToForm())
 const inScopeDomainsText = ref('')
 const inScopeIpsText = ref('')
 const outScopeDomainsText = ref('')
 const outScopeNotesText = ref('')
 const hasScope = ref(false)
 const isSavingScope = ref(false)
+const scopeLoadState = ref('loading')
 
 const scopeTestInput = ref('')
 const scopeTestResult = ref(null)
@@ -1940,9 +1973,11 @@ function getFindingStatusClass(status) {
 }
 
 async function loadScope() {
+  scopeLoadState.value = 'loading'
   try {
     const data = await api.getScope(engId.value, engType.value)
     scopeData.value = data
+    authorizationForm.value = authorizationToForm(data.authorization)
     hasScope.value = !!data.scope
     const inScope = data.scope?.in_scope || {}
     const outScope = data.scope?.out_of_scope || {}
@@ -1950,12 +1985,15 @@ async function loadScope() {
     inScopeIpsText.value = [...(inScope.ips || []), ...(inScope.cidrs || [])].join('\n')
     outScopeDomainsText.value = (outScope.domains || []).join('\n')
     outScopeNotesText.value = (outScope.notes || []).join('\n')
+    scopeLoadState.value = 'ready'
   } catch (err) {
+    scopeLoadState.value = 'error'
     console.error('Error al cargar alcance:', err)
   }
 }
 
 async function saveScopeConfig() {
+  if (scopeLoadState.value !== 'ready') return
   isSavingScope.value = true
   try {
     const { ips: inScopeIps, cidrs: inScopeCidrs } = splitIpsAndCidrs(inScopeIpsText.value)
@@ -1965,6 +2003,7 @@ async function saveScopeConfig() {
     const existingOutScope = scopeData.value.scope?.out_of_scope || {}
     const payload = {
       ...scopeData.value,
+      authorization: authorizationFromForm(authorizationForm.value),
       scope: {
         in_scope: {
           domains: inScopeDomainsText.value.split('\n').map(s => s.trim()).filter(Boolean),

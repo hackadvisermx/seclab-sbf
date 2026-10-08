@@ -11,6 +11,7 @@ import socket
 import sys
 import tarfile
 import tempfile
+from authorization_fixture import AUTHORIZATION_YAML
 from unittest.mock import Mock, patch
 
 SCRIPTS = pathlib.Path(__file__).resolve().parents[1]
@@ -36,7 +37,7 @@ def project(root, name):
     (directory / 'target.yaml').write_text(
         'engagement:\n  name: fixture\n  status: active\n'
         'scope:\n  in_scope:\n    domains: [example.test]\n'
-        '  out_of_scope:\n    domains: [excluded.example.test]\n', encoding='utf-8')
+        '  out_of_scope:\n    domains: [excluded.example.test]\n' + AUTHORIZATION_YAML, encoding='utf-8')
     (directory / 'recon').mkdir()
     (directory / 'evidence').mkdir()
     return directory

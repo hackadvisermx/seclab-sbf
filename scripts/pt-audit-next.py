@@ -177,6 +177,25 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
             "ready_for_closure": False,
         })
 
+    if has_scope:
+        try:
+            from seclab_scope import require_authorization
+            require_authorization(scope_data, 'passive')
+            require_authorization(scope_data, 'active')
+        except (ValueError, OSError) as error:
+            steps.append({
+                "id": "authorization",
+                "phase": "1. Gobierno & Alcance",
+                "title": "Revisar autorización y vigencia del reconocimiento",
+                "discipline": "recon",
+                "skill": "duplicate-scope-guard",
+                "prompt_template": "recon-agent",
+                "priority": "HIGH",
+                "reason": str(error),
+                "command": "pt-recon --dry-run  # Simular; configura los permisos en Alcance antes de enviar tráfico",
+                "ready_for_closure": False,
+            })
+
     # Extraer métricas de la evaluación del checklist
     matrix_map: Dict[str, Dict[str, Any]] = {}
     if eval_data and "matrix" in eval_data:

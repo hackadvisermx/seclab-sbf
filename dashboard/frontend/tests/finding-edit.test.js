@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { test } from 'node:test'
 import { JSDOM } from 'jsdom'
 const browser = new JSDOM('<body></body>', { url: 'http://localhost' })
-for (const key of ['window','document','Element','SVGElement','HTMLElement','Node','localStorage']) globalThis[key] = browser.window[key]
+for (const key of ['window','document','Document','Element','SVGElement','HTMLElement','Node','localStorage']) globalThis[key] = browser.window[key]
 const { createApp, nextTick } = await import('vue')
 const require = createRequire(import.meta.url)
 const vueUrl = pathToFileURL(require.resolve('vue/dist/vue.runtime.esm-bundler.js')).href
@@ -21,7 +21,7 @@ async function mount(api) {
     .replace(/from ["']vue["']/g, `from ${JSON.stringify(vueUrl)}`)
     .replace("import { useRoute, useRouter } from 'vue-router'", "const useRoute = () => ({ params: { id: 'fixture', type: 'engagement' } }); const useRouter = () => ({ push() {} })")
     .replace("import { api } from '../api'", 'const api = globalThis.fixtureFindingApi')
-  for (const name of ['report-security','scope-utils','recon-results']) code = code.replace(`from '../${name}'`, `from ${JSON.stringify(new URL(`../src/${name}.js`, import.meta.url).href)}`)
+  for (const name of ['report-security','scope-utils','recon-results','authorization-utils']) code = code.replace(`from '../${name}'`, `from ${JSON.stringify(new URL(`../src/${name}.js`, import.meta.url).href)}`)
   for (const name of ['DeleteProjectButton','HelpTooltip']) code = code.replace(new RegExp(`import ${name} from ['"]\\.\\./components/${name}\\.vue['"]`), `const ${name} = { render: () => null }`)
   const component = (await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}#${Math.random()}`)).default
   const root = document.createElement('div'); document.body.append(root)
@@ -81,5 +81,61 @@ test('avance en vivo muestra comando y salida provisional; cancelado no se prese
     assert.match(panel.textContent, /provisional/)
     assert.match(panel.textContent, /Interrumpida/)
     assert.doesNotMatch(panel.textContent, /Si la herramienta trabaja en silencio/)
+  } finally { view.cleanup() }
+})
+
+test('el editor persiste vigencia y permiso pasivo sin activar permiso activo', async () => {
+  let saved
+  const scope = { scope: { in_scope: { domains: ['example.test'] }, out_of_scope: {} } }
+  const view = await mount({ getScope: async () => scope, getVaultKeys: async () => [],
+    getFindings: async () => [], getArtifacts: async () => [], getLoot: async () => ({ credentials: [], files: [] }),
+    updateScope: async (id, payload) => { saved = structuredClone(payload); Object.assign(scope, saved) } })
+  try {
+    const fields = view.root.querySelector('fieldset')
+    assert.ok(fields)
+    const [passive, active] = fields.querySelectorAll('input[type=checkbox]')
+    assert.equal(passive.checked, false)
+    assert.equal(active.checked, false)
+    const reference = fields.querySelector('input[type=text]')
+    reference.value = 'Permiso de fixture'
+    reference.dispatchEvent(new window.Event('input', { bubbles: true }))
+    const [start, end] = fields.querySelectorAll('input[type=datetime-local]')
+    start.value = '2000-01-01T00:00'
+    end.value = '2099-01-01T00:00'
+    for (const field of [start, end]) field.dispatchEvent(new window.Event('input', { bubbles: true }))
+    passive.checked = true
+    passive.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await clickText(view.root, 'Guardar Alcance')
+    assert.equal(saved.authorization.reference, 'Permiso de fixture')
+    assert.equal(saved.authorization.valid_from, new Date(start.value).toISOString())
+    assert.equal(saved.authorization.allow_passive, true)
+    assert.equal(saved.authorization.allow_active, false)
+    assert.deepEqual(saved.scope.in_scope.domains, ['example.test'])
+  } finally { view.cleanup() }
+})
+
+
+test('guardar espera la carga del contrato y un fallo permite reintentar sin sobrescribir', async () => {
+  let resolveScope, writes = 0
+  let response = new Promise(resolve => { resolveScope = resolve })
+  const view = await mount({ getScope: () => response, getVaultKeys: async () => [], getFindings: async () => [],
+    getArtifacts: async () => [], getLoot: async () => ({ credentials: [], files: [] }),
+    updateScope: async () => { writes++ } })
+  try {
+    const save = () => [...view.root.querySelectorAll('button')].find(b => b.textContent.includes('Guardar Alcance'))
+    assert.equal(save().disabled, true)
+    assert.equal(view.root.querySelector('fieldset').disabled, true)
+    save().click(); await flush(); assert.equal(writes, 0)
+    resolveScope({ scope: { in_scope: { domains: ['example.test'] } } }); await flush()
+    assert.equal(save().disabled, false)
+    response = Promise.reject(new Error('fixture unavailable'))
+    await clickText(view.root, 'Guardar Alcance')
+    assert.equal(writes, 1)
+    assert.equal(save().disabled, true)
+    assert.match(view.root.textContent, /No se pudo cargar el contrato/)
+    response = Promise.resolve({ scope: { in_scope: { domains: ['example.test'] } } })
+    await clickText(view.root, 'Reintentar carga de alcance')
+    assert.equal(save().disabled, false)
+    assert.equal(writes, 1)
   } finally { view.cleanup() }
 })

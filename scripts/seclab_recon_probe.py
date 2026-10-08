@@ -9,7 +9,7 @@ import ssl
 import subprocess
 import threading
 import time
-from seclab_scope import ScopeError, check_scope, normalize_target
+from seclab_scope import ScopeError, check_scope, normalize_target, require_authorization
 
 
 def operational_limits(data):
@@ -126,6 +126,7 @@ class ProbeClient:
         verdict, reason = check_scope(host, self.scope_data)
         if verdict != 'IN_SCOPE':
             return [{'host': host, 'status': 'blocked', 'reason': reason}]
+        require_authorization(self.scope_data, 'active')
         try:
             resolved = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
             addresses = sorted({normalize_target(item[4][0]) for item in resolved})
@@ -141,6 +142,7 @@ class ProbeClient:
                 observations.append({'host': host, 'url': url, 'status': 'blocked', 'reason': 'Endpoint excluido del alcance.'})
                 continue
             self.limiter.wait()
+            require_authorization(self.scope_data, 'active')
             if self.before_request:
                 self.before_request(url + "/")
             connection = PinnedConnection(host, address, port, self.limits['probe_timeout_seconds'], tls=scheme == 'https')

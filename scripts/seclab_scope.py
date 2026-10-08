@@ -1,5 +1,6 @@
 """Reglas compartidas de alcance para el validador y el reconocimiento."""
 import ast
+import datetime
 import ipaddress
 import pathlib
 import re
@@ -8,6 +9,66 @@ import urllib.parse
 
 class ScopeError(ValueError):
     pass
+
+
+def default_authorization():
+    return {'reference': '', 'valid_from': '', 'valid_until': '',
+            'allow_passive': False, 'allow_active': False}
+
+
+def _authorization_time(value):
+    if not isinstance(value, str):
+        raise ScopeError('La vigencia requiere fechas ISO 8601 con zona horaria.')
+    try:
+        result = datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        raise ScopeError('La vigencia requiere fechas ISO 8601 con zona horaria.') from None
+    if result.tzinfo is None or result.utcoffset() is None:
+        raise ScopeError('La vigencia requiere zona horaria explícita.')
+    try:
+        return result.astimezone(datetime.timezone.utc)
+    except (ValueError, OverflowError):
+        raise ScopeError('La vigencia está fuera del rango de fechas admitido.') from None
+
+
+def authorization_contract(data):
+    if 'authorization' not in data:
+        return default_authorization()
+    supplied = data['authorization']
+    if not isinstance(supplied, dict) or set(supplied) - set(default_authorization()):
+        raise ScopeError('authorization requiere un objeto con referencia, vigencia y permisos conocidos.')
+    contract = {**default_authorization(), **supplied}
+    for key in ('allow_passive', 'allow_active'):
+        if type(contract[key]) is not bool:
+            raise ScopeError(f'{key} requiere true o false, sin comillas.')
+    for key in ('reference', 'valid_from', 'valid_until'):
+        if not isinstance(contract[key], str):
+            raise ScopeError(f'{key} requiere texto.')
+        contract[key] = contract[key].strip()
+    if contract['allow_passive'] or contract['allow_active']:
+        if not all(contract[key] for key in ('reference', 'valid_from', 'valid_until')):
+            raise ScopeError('Para permitir actividad se requieren referencia, inicio y fin de autorización.')
+    start = _authorization_time(contract['valid_from']) if contract['valid_from'] else None
+    end = _authorization_time(contract['valid_until']) if contract['valid_until'] else None
+    if start and end and start >= end:
+        raise ScopeError('El fin de autorización debe ser posterior al inicio.')
+    return contract
+
+
+def require_authorization(data, interaction, now=None):
+    if interaction in ('local', 'simulation'):
+        return
+    if interaction not in ('passive', 'active'):
+        raise ScopeError('Tipo de interacción desconocido.')
+    contract = authorization_contract(data)
+    if not contract['allow_' + interaction]:
+        label = 'pasiva' if interaction == 'passive' else 'activa'
+        raise ScopeError(f'Falta permiso explícito para actividad {label}. Configura autorización y vigencia en Alcance; la simulación sigue disponible.')
+    current = now or datetime.datetime.now(datetime.timezone.utc)
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise ScopeError('El reloj de autorización requiere zona horaria.')
+    if not _authorization_time(contract['valid_from']) <= current < _authorization_time(contract['valid_until']):
+        raise ScopeError('La autorización está fuera de su ventana de vigencia. Revisa inicio/fin con el responsable; no se enviará tráfico.')
 
 
 def initial_scope(target=None):
@@ -105,6 +166,7 @@ def validate_scope(data):
                         raise ValueError()
                 except ValueError:
                     raise ScopeError('Hay una regla de alcance inválida.') from None
+    authorization_contract(data)
     limits = data.get('operational_limits', {})
     if not isinstance(limits, dict):
         raise ScopeError('operational_limits debe ser un objeto.')
@@ -143,7 +205,9 @@ def parse_simple_yaml_lists(content):
             if ('root', section) in seen:
                 raise ScopeError('Sección YAML duplicada.')
             seen.add(('root', section))
-            if section in ('scope', 'operational_limits') and match.group(2) and not match.group(2).startswith('#'):
+            if section == 'authorization':
+                data['authorization'] = {}
+            if section in ('scope', 'operational_limits', 'authorization') and match.group(2) and not match.group(2).startswith('#'):
                 raise ScopeError('La configuración requiere objetos de alcance y límites.')
             continue
         if section == 'scope':
@@ -172,14 +236,17 @@ def parse_simple_yaml_lists(content):
             else:
                 raise ScopeError('Las reglas deben ser listas.')
             data['scope'][subsection][field] = values
-        elif section in ('engagement', 'operational_limits') and indent == 2:
+        elif section in ('engagement', 'operational_limits', 'authorization') and indent == 2:
             key, separator, value = text.partition(':')
             if separator:
                 if (section, key) in seen:
                     raise ScopeError('Regla YAML duplicada.')
                 seen.add((section, key))
-                data[section][key] = _scalar(value)
-        elif section == 'operational_limits':
+                parsed = _scalar(value)
+                if section == 'authorization' and key in ('allow_passive', 'allow_active') and value.split(' #', 1)[0].strip() in ('true', 'false'):
+                    parsed = value.split(' #', 1)[0].strip() == 'true'
+                data[section][key] = parsed
+        elif section in ('operational_limits', 'authorization'):
             raise ScopeError('Límite YAML no soportado sin PyYAML.')
     if ('root', 'scope') not in seen:
         raise ScopeError('Falta scope en target.yaml.')

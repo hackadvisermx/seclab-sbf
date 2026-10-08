@@ -1,5 +1,7 @@
 # Backlog de mejoras — benchmark con proyectos similares (2026-10-06)
 
+> Estado: acciones A1–A21 completadas. Este archivo conserva el backlog histórico; el roadmap siguiente está en [backlog de mejoras v3](backlog-mejoras-v3.md).
+
 Este documento nace de un ejercicio de comparación entre `seclab-sbf` y proyectos externos de
 reconocimiento/pentesting automatizado, orientado a identificar mejoras — en especial para la
 fase de reconocimiento y para que el laboratorio sea más sencillo de operar para un usuario no

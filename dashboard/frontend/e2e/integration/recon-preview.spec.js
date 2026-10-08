@@ -57,3 +57,33 @@ test('vista previa sin job y revisión obsoleta rechazada antes de simular', asy
   expect((await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs[0].reviewed_plan).toEqual(saved.reviewed_plan)
   await page.screenshot({ path: testInfo.outputPath('review-history.png'), fullPage: true })
 })
+
+test('scope inválido al arrancar queda bloqueado y conserva resultados anteriores', async ({ page }, testInfo) => {
+  const user = JSON.parse(await readFile(new URL('../.playwright-fixture/user.json', import.meta.url), 'utf8'))
+  const { workspace } = JSON.parse(await readFile(new URL('../.playwright-fixture/workspace.json', import.meta.url), 'utf8'))
+  const id = 'startup-block'
+  await page.route('**/*', route => new URL(route.request().url()).origin === 'http://127.0.0.1:4199' ? route.continue() : route.abort())
+  await page.goto('/')
+  await page.getByLabel('Contraseña').fill(user.password)
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Cerrar sesión', exact: true })).toBeVisible()
+  expect((await page.request.post('/api/v1/engagements', { data: { name: id, domain: 'example.test', type: 'engagement' } })).ok()).toBe(true)
+  await writeFile(`${workspace}/engagements/${id}/target.yaml`, 'scope: [invalid')
+  const original = JSON.stringify({ run_id: 'previous', status: 'completed', subdomains_count: 7 })
+  const summary = `${workspace}/engagements/${id}/recon/summary.json`
+  await writeFile(summary, original)
+  expect((await page.request.post(`/api/v1/recon/${id}/run`, { data: { stage: 'probe' } })).ok()).toBe(true)
+  await page.goto(`/engagements/engagement/${id}`)
+  await page.getByRole('button', { name: /Reconocimiento/ }).filter({ hasText: '📡' }).click()
+  await expect(page.getByText('Reconocimiento bloqueado por Scope Guard.', { exact: true })).toBeVisible({ timeout: 20000 })
+  const result = (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs[0]
+  expect(result.status).toBe('blocked')
+  expect(result.error).not.toBe('Código de salida: 1')
+  expect(await readFile(summary, 'utf8')).toBe(original)
+  await page.reload()
+  await page.getByRole('button', { name: /Reconocimiento/ }).filter({ hasText: '📡' }).click()
+  await expect(page.getByTestId('recon-history')).toContainText(result.run_id)
+  await expect(page.getByTestId('recon-history')).toContainText('Bloqueado (Scope Guard)')
+  await expect(page.getByTestId('recon-history')).toContainText(result.error)
+  await page.screenshot({ path: testInfo.outputPath('startup-block.png'), fullPage: true })
+})

@@ -597,6 +597,21 @@ def retry_command(eng_dir, summary):
     return f'pt-recon {shlex.quote(str(eng_dir))} {options}'
 
 
+def record_initial_failure(error, stage):
+    descriptor = os.environ.get('SECLAB_RECON_FAILURE_FD')
+    if not descriptor:
+        return
+    try:
+        payload = {'schema_version': 1, 'run_id': os.environ.get('SECLAB_RECON_RUN_ID'),
+                   'stage': stage, 'status': 'failed',
+                   'failure_kind': 'scope_guard' if isinstance(error, ScopeError) else 'technical',
+                   'error': str(error)[:2000]}
+        with os.fdopen(os.dup(int(descriptor)), 'wb') as output:
+            output.write(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+    except (OSError, ValueError):
+        pass
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """Ejecuta el pipeline de reconocimiento."""
     if args.resume and args.stage != 'all':
@@ -614,6 +629,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             raise ScopeError('El plan revisado cambió; vuelve a revisar la vista previa antes de iniciar.')
         res = pipeline.run_all(stage=args.stage, resume=args.resume)
     except (ScopeError, OSError) as error:
+        record_initial_failure(error, args.stage)
         sys.stderr.write(f"Error: {error}\n")
         return 1
 

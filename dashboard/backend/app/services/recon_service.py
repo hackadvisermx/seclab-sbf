@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import threading
+import tempfile
 from typing import Any, Dict, List, Optional
 from app.config import SCRIPTS_DIR, WORKSPACE_DIR, RECON_DB_PATH
 from app.core.recon_jobs import ReconJobStore, ACTIVE_STATUSES
@@ -216,6 +217,24 @@ class ReconService:
         revision = summary.get('scope_revision')
         return revision if isinstance(revision, str) and re.fullmatch(r'[a-f0-9]{64}', revision) else None
 
+    @staticmethod
+    def _initial_failure(source, run_id, stage):
+        try:
+            source.seek(0)
+            raw = source.read(16385)
+            if len(raw) > 16384:
+                return None
+            result = json.loads(raw)
+            if (isinstance(result, dict) and result.get('schema_version') == 1
+                    and result.get('run_id') == run_id and result.get('stage') == stage
+                    and result.get('status') == 'failed'
+                    and result.get('failure_kind') in ('scope_guard', 'technical')
+                    and isinstance(result.get('error'), str) and result['error'].strip()):
+                return result
+        except (OSError, ValueError, UnicodeError):
+            pass
+        return None
+
     def get_log(self, engagement_id: str, lines: int = 200, engagement_type: str = "engagement") -> str:
         """Retorna el contenido del archivo de bitácora recon.log."""
         target_dir = self.get_target_dir(engagement_id, engagement_type)
@@ -337,7 +356,7 @@ class ReconService:
             cmd.append('--dry-run')
         proc = None
         try:
-            with open(log_path, 'a', encoding='utf-8') as log_f:
+            with tempfile.TemporaryFile() as failure_f, open(log_path, 'a', encoding='utf-8') as log_f:
                 with self._lock:
                     job = self.store.get(job_key)
                     if not job or job['run_id'] != run_id:
@@ -349,8 +368,9 @@ class ReconService:
                     log_f.flush()
                     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, bufsize=1, start_new_session=True,
-                        env={**os.environ, 'SECLAB_RECON_RUN_ID': run_id},
-                        pass_fds=(() if self._lease is None else (self._lease,)))
+                        env={**os.environ, 'SECLAB_RECON_RUN_ID': run_id,
+                             'SECLAB_RECON_FAILURE_FD': str(failure_f.fileno())},
+                        pass_fds=((failure_f.fileno(),) if self._lease is None else (self._lease, failure_f.fileno())))
                     self._processes[job_key] = proc
                 if proc.stdout:
                     with proc.stdout:
@@ -363,8 +383,11 @@ class ReconService:
                     cancelled = job and job['status'] == 'cancelling'
                     status = 'cancelled' if cancelled else (('simulated' if dry_run else 'completed') if proc.returncode == 0 else 'failed')
                     error = None if cancelled or proc.returncode == 0 else f'Código de salida: {proc.returncode}'
-                    outcome = self._completed_summary(target_dir, run_id) or {}
+                    initial = self._initial_failure(failure_f, run_id, stage)
+                    outcome = initial or self._completed_summary(target_dir, run_id) or {}
                     reason = outcome.get('error')
+                    if status == 'failed' and initial and outcome.get('failure_kind') == 'technical':
+                        error = reason[:2000]
                     if status == 'failed' and outcome.get('status') == 'failed' and outcome.get('failure_kind') == 'scope_guard' and isinstance(reason, str) and reason.strip():
                         status, error = 'blocked', reason[:2000]
                     self.store.finish(job_key, run_id, status, error, self._completed_scope_revision(target_dir, run_id))

@@ -33,6 +33,29 @@ def rules():
 
 
 class ReconScopeSafetyTests(unittest.TestCase):
+    def test_initial_scope_error_uses_optional_private_channel_without_workspace_writes(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as channel:
+            root = pathlib.Path(directory)
+            config = root / 'target.yaml'
+            config.write_text('scope: [invalid')
+            command = [sys.executable, str(SCRIPTS / 'pt-recon-pipeline.py'), 'run', str(root), '--stage', 'probe', '--json']
+            result = subprocess.run(command, capture_output=True, text=True,
+                env={**os.environ, 'SECLAB_RECON_RUN_ID': 'fixture', 'SECLAB_RECON_FAILURE_FD': str(channel.fileno())},
+                pass_fds=(channel.fileno(),))
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, '')
+            channel.seek(0)
+            outcome = json.load(channel)
+            self.assertEqual(outcome['run_id'], 'fixture')
+            self.assertEqual(outcome['stage'], 'probe')
+            self.assertEqual(outcome['failure_kind'], 'scope_guard')
+            self.assertTrue(outcome['error'])
+            self.assertEqual(list(root.iterdir()), [config])
+            unavailable = subprocess.run(command, capture_output=True, text=True,
+                env={**os.environ, 'SECLAB_RECON_FAILURE_FD': 'invalid'})
+            self.assertEqual((unavailable.returncode, unavailable.stdout, unavailable.stderr),
+                             (result.returncode, result.stdout, result.stderr))
+
     def test_exact_and_wildcard_scope_have_distinct_boundaries(self):
         data = rules()
         data['scope']['in_scope']['domains'] = ['*.example.test']

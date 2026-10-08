@@ -139,3 +139,20 @@ test('guardar espera la carga del contrato y un fallo permite reintentar sin sob
     assert.equal(writes, 1)
   } finally { view.cleanup() }
 })
+
+
+test('nueva ficha abre como CANDIDATE y una confirmación explícita no cambia la siguiente', async () => {
+  const view = await mount({ getScope: async () => ({}), getVaultKeys: async () => [], getFindings: async () => [],
+    getArtifacts: async () => [], getLoot: async () => ({ credentials: [], files: [] }) })
+  const status = () => [...view.root.querySelectorAll('select')].find(el => el.querySelector('option[value="CANDIDATE"]'))
+  try {
+    await clickText(view.root, 'Hallazgos')
+    await clickText(view.root, 'Nueva Ficha')
+    assert.equal(status().value, 'CANDIDATE')
+    assert.match(view.root.textContent, /ejemplos de una plantilla no demuestran/)
+    status().value = 'PROVEN'; status().dispatchEvent(new window.Event('change', { bubbles: true })); await flush()
+    await clickText(view.root, 'Cancelar')
+    await clickText(view.root, 'Nueva Ficha')
+    assert.equal(status().value, 'CANDIDATE')
+  } finally { view.cleanup() }
+})

@@ -6,7 +6,7 @@ cvss_v31: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N"
 cvss_score: 5.3
 cwe: "CWE-799"
 asset: "https://api.example.com/v1/users/1234/profile"
-status: "PROVEN" # PROVEN (Confirmado) | CANDIDATE (Prerrequisito pendiente) | DISPROVED (Falsificado/Descartado) | MITIGATED (Corregido)
+status: "CANDIDATE" # PROVEN (Confirmado) | CANDIDATE (Prerrequisito pendiente) | DISPROVED (Falsificado/Descartado) | MITIGATED (Corregido)
 auditor: "tester"
 date: "YYYY-MM-DD"
 audit_log: "terminal.log"

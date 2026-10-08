@@ -22,6 +22,26 @@ class TestEvidenceFirstHunting(unittest.TestCase):
             client="Target Security Lab",
         )
 
+    def test_new_finding_defaults_to_candidate_without_implicit_confirmation(self):
+        for index, payload in enumerate([{}, {'status': None}, {'status': ''}, {'status': '  '}]):
+            with self.subTest(payload=payload):
+                request = FindingCreate(slug=f'default-{index}', title='Fixture', **payload)
+                detail = self.service.save_finding('hunting-lab', request)
+                self.assertEqual(detail.frontmatter.status, 'CANDIDATE')
+                stored = self.service.get_finding('hunting-lab', request.slug)
+                self.assertEqual(stored.frontmatter.status, 'CANDIDATE')
+
+    def test_empty_legacy_status_is_candidate_in_list_and_detail_without_rewriting(self):
+        directory = self.ws_path / 'engagements/hunting-lab/evidence'
+        for index, declaration in enumerate(['', 'status: null\n', 'status: ""\n', 'status: "  "\n']):
+            path = directory / f'missing-{index}.md'
+            path.write_text('---\ntitle: Fixture\n' + declaration + '---\nBody')
+            original = path.read_bytes()
+            self.assertEqual(self.service.get_finding('hunting-lab', path.stem).frontmatter.status, 'CANDIDATE')
+            listed = next(f for f in self.service.list_findings('hunting-lab') if f.slug == path.stem)
+            self.assertEqual(listed.frontmatter.status, 'CANDIDATE')
+            self.assertEqual(path.read_bytes(), original)
+
     def test_save_finding_with_proven_status(self):
         finding_data = FindingCreate(
             slug="idor-user-profile",
@@ -104,8 +124,8 @@ class TestEvidenceFirstHunting(unittest.TestCase):
 
         findings = self.service.list_findings("hunting-lab")
         legacy_item = next(f for f in findings if f.slug == "legacy-vuln")
-        # El fallback por defecto debe ser PROVEN
-        self.assertEqual(legacy_item.frontmatter.status, "PROVEN")
+        # Sin estado explícito la ficha queda sin confirmar
+        self.assertEqual(legacy_item.frontmatter.status, "CANDIDATE")
 
         # Ficha con estado en español o mixto
         legacy_confirmado = ev_dir / "legacy-confirmado.md"

@@ -1,6 +1,6 @@
 # Fase 153: motivo de bloqueo separado del fallo técnico
 
-Fecha: 2026-10-08. Rama: `phase/153-recon-blocked-reasons`. Base: `c481335` (fase 152, PR #172 pendiente de merge). Worktree aislado: `/Users/castr/tmp/t01-recon-blocked`. Entrega parcial V3-02b.
+Fecha: 2026-10-08. Rama: `phase/153-recon-blocked-reasons`. Base inicial: `c481335` (fase 152); integrada `d186963` tras merge aprobado de #172. PR #173 listo para revisión individual. Worktree aislado: `/Users/castr/tmp/t01-recon-blocked`. Entrega parcial V3-02b.
 
 ## Problema comprobado
 
@@ -32,4 +32,4 @@ Clasificación para errores de Scope Guard atrapados dentro de una etapa. Si fal
 
 No completa los eventos/estados de todo el engagement, preview de targets ni referencias finding→job. Tampoco afirma que no hubo tráfico anterior: un cambio de alcance durante una etapa puede detener nuevas acciones después de otras ya ejecutadas. Terminal libre sigue fuera de la interceptación.
 
-Reversión: revertir el PR. No requiere eliminar historial ni cambiar datos existentes. El laboratorio vivo, proyectos del owner y su etiqueta de imagen permanecen intactos. Merge requiere aprobación individual; esta rama depende de #172.
+Reversión: revertir el PR. No requiere eliminar historial ni cambiar datos existentes. El laboratorio vivo, proyectos del owner y su etiqueta de imagen permanecen intactos. La dependencia #172 está mergeada. #173 requiere su propia aprobación individual. CI del primer head aprobado en run `37787370099`; la sincronización con baseline no altera insumos ejecutables.

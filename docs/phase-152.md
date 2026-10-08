@@ -4,7 +4,7 @@ Fecha: 2026-10-08. Base: `60ad4a0` (PR #171, fase 151). Rama: `phase/152-recon-j
 
 ## Estado de cierre de sesión
 
-Trabajo guardado por petición del owner de detenerse. Validación local completa; pendiente CI y revisión del PR. No mergeado. No iniciar otra fase al retomar sin revisar este punto de relevo. La excepción de merges correspondía a esta sesión; después vuelve la aprobación individual.
+Trabajo guardado al detenerse y retomado después por el owner. CI aprobado en run `37776333918`. PR #172 mergeado con aprobación individual explícita del owner en `d186963b0242f1738df587e01f56d9a331d36bdf`. La excepción de merges de la sesión anterior terminó; cada PR siguiente requiere su propia aprobación.
 
 ## Cambios
 

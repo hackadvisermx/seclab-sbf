@@ -433,10 +433,12 @@ class ReconPipeline:
     def generate_summary(self, results):
         failed = any(result.get('status') == 'failed' for result in results.values())
         resumable_from = next((name for name, result in results.items() if result.get('status') == 'failed'), None)
+        failure = results.get(resumable_from, {})
         summary = {'engagement': self.engagement_dir.name,
                    'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                    'in_scope_domains': self.get_in_scope_domains(), 'stages_executed': list(results),
                    'status': 'failed' if failed else 'simulated' if self.dry_run else 'completed',
+                   'failure_kind': failure.get('failure_kind'), 'error': failure.get('error'),
                    'resumable_from': resumable_from,
                    'dry_run': self.dry_run, 'operational_limits': self.limits,
                    'run_id': self.progress['run_id'],
@@ -500,9 +502,10 @@ class ReconPipeline:
                 self.progress['completed_stages'].append(name)
                 self._emit('stage_end', stage=name, stage_status=results[name]['status'])
             except (StageError, ScopeError, OSError) as error:
-                results[name] = {'stage': name, 'status': 'failed', 'error': str(error)}
+                failure_kind = 'scope_guard' if isinstance(error, ScopeError) else 'technical'
+                results[name] = {'stage': name, 'status': 'failed', 'error': str(error), 'failure_kind': failure_kind}
                 failed_stage = name
-                self._emit('stage_end', stage=name, stage_status='failed', error=str(error))
+                self._emit('stage_end', stage=name, stage_status='failed', error=str(error), failure_kind=failure_kind)
                 break
         summary = self.generate_summary(results)
         self._emit('run_end', status=summary['status'])

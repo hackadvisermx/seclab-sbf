@@ -196,19 +196,24 @@ class ReconService:
                 **self.store.history((engagement_type, engagement_id), limit, before)}
 
     @staticmethod
-    def _completed_scope_revision(target_dir, run_id):
+    def _completed_summary(target_dir, run_id):
         # A stale summary must never become provenance for a later job.
         path = target_dir / 'recon' / 'summary.json'
         try:
             if path.parent.is_symlink() or path.is_symlink() or path.stat().st_size > 2 * 1024 * 1024:
                 return None
             summary = json.loads(path.read_text(encoding='utf-8'))
-            revision = summary.get('scope_revision')
-            if summary.get('run_id') == run_id and isinstance(revision, str) and re.fullmatch(r'[a-f0-9]{64}', revision):
-                return revision
+            if isinstance(summary, dict) and summary.get('run_id') == run_id:
+                return summary
         except (OSError, ValueError, AttributeError):
             pass
         return None
+
+    @classmethod
+    def _completed_scope_revision(cls, target_dir, run_id):
+        summary = cls._completed_summary(target_dir, run_id) or {}
+        revision = summary.get('scope_revision')
+        return revision if isinstance(revision, str) and re.fullmatch(r'[a-f0-9]{64}', revision) else None
 
     def get_log(self, engagement_id: str, lines: int = 200, engagement_type: str = "engagement") -> str:
         """Retorna el contenido del archivo de bitácora recon.log."""
@@ -325,6 +330,10 @@ class ReconService:
                     cancelled = job and job['status'] == 'cancelling'
                     status = 'cancelled' if cancelled else (('simulated' if dry_run else 'completed') if proc.returncode == 0 else 'failed')
                     error = None if cancelled or proc.returncode == 0 else f'Código de salida: {proc.returncode}'
+                    outcome = self._completed_summary(target_dir, run_id) or {}
+                    reason = outcome.get('error')
+                    if status == 'failed' and outcome.get('status') == 'failed' and outcome.get('failure_kind') == 'scope_guard' and isinstance(reason, str) and reason.strip():
+                        status, error = 'blocked', reason[:2000]
                     self.store.finish(job_key, run_id, status, error, self._completed_scope_revision(target_dir, run_id))
                     self._processes.pop(job_key, None)
         except Exception as error:

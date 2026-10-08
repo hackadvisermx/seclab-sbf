@@ -72,6 +72,29 @@ class TestReconLifecycle(unittest.TestCase):
         path.write_text('{broken')
         self.assertIsNone(self.service.get_status('fixture')['progress'])
 
+    def test_worker_records_scope_block_only_for_matching_failed_summary(self):
+        cases = [(1, 'scope_guard', 'failed', True, 'Falta permiso activo', 'blocked'),
+                 (1, 'technical', 'failed', True, 'Falta herramienta', 'failed'),
+                 (1, 'scope_guard', 'failed', False, 'Error antiguo', 'failed'),
+                 (0, 'scope_guard', 'failed', True, 'Error inesperado', 'completed'),
+                 (1, 'scope_guard', 'completed', True, 'Inconsistente', 'failed'),
+                 (1, 'scope_guard', 'failed', True, None, 'failed')]
+        for code, kind, outcome_status, matches, reason, expected in cases:
+            with self.subTest(expected=expected, code=code, matches=matches, kind=kind):
+                self.pipeline.write_text('import os,json,pathlib,sys\n'
+                    'p=pathlib.Path(sys.argv[2])/"recon"/"summary.json"\n'
+                    'data=' + repr({'status': outcome_status, 'failure_kind': kind, 'error': reason}) + '\n'
+                    'data["run_id"]=' + ('os.environ["SECLAB_RECON_RUN_ID"]' if matches else '"old-run"') + '\n'
+                    'p.write_text(json.dumps(data))\n'
+                    f'sys.exit({code})\n')
+                self.assertTrue(self.service.run_pipeline('fixture')['success'])
+                self.wait_for(lambda: self.service.store.get(self.key)['status'] == expected)
+                job = self.service.store.get(self.key)
+                self.assertEqual(job['error'], reason if expected == 'blocked' else (f'Código de salida: {code}' if code else None))
+                self.assertEqual(self.service.get_history('fixture')['jobs'][0]['status'], expected)
+        reopened = module.ReconService(self.db).get_history('fixture')['jobs']
+        self.assertTrue(any(j['status'] == 'blocked' and j['error'] == 'Falta permiso activo' for j in reopened))
+
     def test_completion_simulation_failure_survive_service_recreation(self):
         for dry_run, code, expected in ((False, 0, 'completed'), (True, 0, 'simulated'), (False, 7, 'failed')):
             self.pipeline.write_text(f'import sys\nprint("fixture", flush=True)\nsys.exit({code})\n')

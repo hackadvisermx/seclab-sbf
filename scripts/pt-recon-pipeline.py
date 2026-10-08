@@ -183,6 +183,67 @@ class ReconPipeline:
         return hashlib.sha256(json.dumps(contract, sort_keys=True, ensure_ascii=False,
                                         separators=(',', ':')).encode('utf-8')).hexdigest()
 
+    def preview(self, stage='all', simulate=False):
+        stages = ['subdomains', 'probe', 'urls', 'patterns'] if stage == 'all' else [stage]
+        if any(value not in ('subdomains', 'probe', 'urls', 'patterns') for value in stages):
+            raise ScopeError('Etapa de reconocimiento no válida.')
+        hosts_input = self._read_lines('subdomains.txt')
+        urls_input = self._read_lines('urls_all.txt')
+        bases = sorted({value[2:] if value.startswith('*.') else value for value in self.get_in_scope_domains()})
+        plan = []
+        for name in stages:
+            pending = stage == 'all' and name in ('probe', 'patterns')
+            discarded = []
+            if name in ('subdomains', 'urls'):
+                targets = bases
+                interaction = 'passive' if bases else 'local'
+                source = 'Dominios base consultados en fuentes externas; no reciben tráfico directo.'
+            else:
+                if name == 'probe':
+                    targets, discarded = self.filter_domains_by_scope(hosts_input)
+                else:
+                    targets = []
+                    for value in sorted(set(urls_input)):
+                        verdict, reason = check_scope(value, self.scope_data)
+                        if verdict == 'IN_SCOPE':
+                            targets.append(value)
+                        else:
+                            discarded.append({'target': value, 'verdict': verdict, 'reason': reason})
+                interaction = 'active' if name == 'probe' else 'local'
+                source = 'recon/subdomains.txt' if name == 'probe' else 'recon/urls_all.txt'
+            reasons = []
+            if not simulate and interaction != 'local' and (targets or pending):
+                try:
+                    require_authorization(self.scope_data, interaction)
+                except ScopeError as error:
+                    reasons.append(str(error))
+            if name == 'probe' and len(targets) > self.limits['max_probe_targets']:
+                reasons.append('Demasiados objetivos para max_probe_targets; revisa la lista.')
+            if not simulate:
+                if name == 'probe' and not pending and not (self.recon_dir / 'subdomains.txt').is_file():
+                    reasons.append('Falta recon/subdomains.txt; ejecuta subdominios o prepara una lista autorizada.')
+                if name == 'patterns' and not pending and not (self.recon_dir / 'urls_all.txt').is_file():
+                    reasons.append('Falta recon/urls_all.txt para clasificar patrones.')
+                tools = {'subdomains': ('subfinder', 'assetfinder', 'findomain'), 'urls': ('gau', 'waybackurls')}.get(name)
+                if tools and targets and not any(self.tools.get(tool) for tool in tools):
+                    reasons.append('No hay herramientas disponibles para esta etapa; reconstruye la imagen.')
+                if name == 'patterns' and (targets or pending) and not self.tools.get('gf'):
+                    reasons.append('gf no está disponible; reconstruye la imagen.')
+                if name == 'subdomains' and not bases and not hosts_input and not self.scope_data['scope']['in_scope'].get('ips'):
+                    reasons.append('No hay dominios ni IPs explícitas; para CIDR prepara una lista autorizada.')
+            target_reasons = {target: (('Consulta pasiva derivada de reglas: ' + ', '.join(rule for rule in self.get_in_scope_domains() if rule.lstrip('*.') == target)) if name in ('subdomains', 'urls') else check_scope(target, self.scope_data)[1]) for target in targets[:50]}
+            plan.append({'stage': name, 'interaction': interaction, 'source': source,
+                         'targets': targets[:50], 'target_reasons': target_reasons, 'targets_count': len(targets),
+                         'discarded': discarded[:50], 'discarded_count': len(discarded),
+                         'targets_pending': pending, 'block_reasons': reasons})
+        revision = self._revision({'engagement': str(self.engagement_dir), 'scope_revision': self.scope_revision, 'stage': stage,
+                                   'dry_run': simulate, 'hosts': hosts_input, 'urls': urls_input})
+        return {'success': True, 'stage': stage, 'dry_run': simulate,
+                'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'scope_revision': self.scope_revision, 'plan_revision': revision,
+                'operational_limits': self.limits, 'stages': plan,
+                'can_start': not any(row['block_reasons'] for row in plan)}
+
     def revalidate_scope(self, target=None):
         current = load_scope_rules(self.engagement_dir)
         if self._revision(self._contract(current)) != self.scope_revision:
@@ -282,9 +343,9 @@ class ReconPipeline:
                 pathlib.Path(out.name).unlink(missing_ok=True)
                 pathlib.Path(err.name).unlink(missing_ok=True)
 
-    def _tool(self, name, arguments, timeout=180):
+    def _tool(self, name, arguments, timeout=180, interaction='passive'):
         self.revalidate_scope()
-        require_authorization(load_scope_rules(self.engagement_dir), 'passive')
+        require_authorization(load_scope_rules(self.engagement_dir), interaction)
         command = [self.tools[name], *arguments]
         self._emit('command_start', command=shlex.join(command), command_status='running')
         try:
@@ -421,7 +482,7 @@ class ReconPipeline:
             temporary.write_text(''.join(url + '\n' for url in urls), encoding='utf-8')
             outputs = {}
             for pattern in DEFAULT_GF_PATTERNS:
-                matches = self._tool('gf', [pattern, str(temporary)], 60) if urls else []
+                matches = self._tool('gf', [pattern, str(temporary)], 60, interaction='local') if urls else []
                 outputs[pattern] = sorted({value for value in matches if check_scope(value, self.scope_data)[0] == 'IN_SCOPE'})
             for pattern, matches in outputs.items():
                 self._write_lines('patterns/' + pattern + '.txt', matches)
@@ -547,6 +608,8 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     try:
         pipeline = ReconPipeline(eng_dir, dry_run=args.dry_run, live=not args.json)
+        if args.expected_plan and pipeline.preview(args.stage, args.dry_run)['plan_revision'] != args.expected_plan:
+            raise ScopeError('El plan revisado cambió; vuelve a revisar la vista previa antes de iniciar.')
         res = pipeline.run_all(stage=args.stage, resume=args.resume)
     except (ScopeError, OSError) as error:
         sys.stderr.write(f"Error: {error}\n")
@@ -584,6 +647,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     if summary.get("resumable_from") and not args.dry_run:
         print(f"  Para reintentar la etapa fallida: {retry_command(eng_dir, summary)}\n")
     return 1 if summary["status"] == "failed" else 0
+
+
+def cmd_preview(args):
+    directory = resolve_engagement_dir(args.target)
+    if not directory:
+        raise ScopeError('No se pudo localizar el engagement para revisar el plan.')
+    result = ReconPipeline(directory, dry_run=True).preview(args.stage, args.dry_run)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -694,7 +766,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Con --stage all (por defecto): omite las etapas que ya completaron en el intento anterior y continúa desde la que falló.",
     )
     p_run.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado.")
+    p_run.add_argument('--expected-plan', default=None, help='Revisión de la vista previa que debe conservarse al iniciar.')
     p_run.set_defaults(func=cmd_run)
+
+    p_preview = subparsers.add_parser('preview', help='Revisa targets, permisos y límites sin tráfico ni escritura de artefactos.')
+    p_preview.add_argument('target')
+    p_preview.add_argument('--stage', choices=['all', 'subdomains', 'probe', 'urls', 'patterns'], default='all')
+    p_preview.add_argument('--dry-run', action='store_true')
+    p_preview.set_defaults(func=cmd_preview)
 
     # Subcomando: status
     p_status = subparsers.add_parser("status", help="Muestra métricas del reconocimiento activo.")

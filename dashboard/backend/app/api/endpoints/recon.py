@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Literal
 from app.services.recon_service import recon_service
 
@@ -9,6 +9,7 @@ router = APIRouter(prefix="/recon", tags=["Reconocimiento & Scope Guard"])
 class ReconRunRequest(BaseModel):
     stage: Literal['all', 'subdomains', 'probe', 'urls', 'patterns'] = "all"
     dry_run: bool = False
+    expected_plan: str | None = Field(default=None, pattern='^[a-f0-9]{64}$')
 
 
 @router.get("/{id}/status")
@@ -33,6 +34,15 @@ def get_recon_history(id: str, type: str = Query("engagement", pattern="^(engage
     return result
 
 
+@router.post("/{id}/preview")
+def preview_recon_pipeline(id: str, req: ReconRunRequest,
+                           type: str = Query("engagement", pattern="^(engagement|reto)$")):
+    result = recon_service.preview_pipeline(id, req.stage, req.dry_run, type)
+    if not result.get('success'):
+        raise HTTPException(status_code=400, detail=result.get('error', 'No se pudo revisar el plan.'))
+    return result
+
+
 @router.post("/{id}/run")
 def run_recon_pipeline(
     id: str,
@@ -45,6 +55,7 @@ def run_recon_pipeline(
         stage=req.stage,
         dry_run=req.dry_run,
         engagement_type=type,
+        expected_plan=req.expected_plan,
     )
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", "Error al iniciar el pipeline"))

@@ -13,6 +13,8 @@ npm run test:e2e:headed
 npm run test:e2e:report
 ```
 
+Ejecuta UI e integración de forma secuencial: comparten el puerto 4199 y el directorio de resultados.
+
 `test:e2e` construye el frontend y abre una vista previa propia en `127.0.0.1:4199`. Dos pruebas de UI verifican el formulario/error de acceso y persistencia de tema. La API está simulada y las peticiones externas se abortan; estas dos pruebas no verifican autenticación del backend.
 
 ## Backend real con usuario temporal
@@ -20,7 +22,7 @@ npm run test:e2e:report
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase155
+make build-full BUILD_TAG=-phase156
 ```
 
 Después, desde `dashboard/frontend`:
@@ -33,7 +35,9 @@ El runner arranca un contenedor propio como tester, rootfs de solo lectura, sin 
 
 El dashboard solo implementa la identidad `tester`. Cada ejecución crea una contraseña aleatoria para esa identidad en el backend desechable. No hay API de alta de usuarios ni se añaden identidades distintas a producción. La prueba de autenticación realiza login real, verifica `/auth/me` y cookie HttpOnly, hace logout y comprueba que la sesión dejó de ser válida.
 
-La segunda prueba recorre el wizard, verifica dominio exacto y confirmación, ejecuta una simulación, declara referencia/vigencia sin permisos de tráfico y comprueba bloqueo activo. El helper publica la ruta privada del workspace en `workspace.json`; la prueba escribe únicamente `example.test` en la lista de hosts del proyecto recién creado, sin ejecutar descubrimiento. Comprueba dos jobs distintos en el historial tras recargar, crea una ficha CANDIDATE con petición/respuesta sintéticas, compila con cero confirmados, revisa el Markdown y declara PROVEN explícitamente para comprobar el reporte con un confirmado sintético. Descarga el paquete y verifica entradas/hashes del source-manifest; un activo `outside.test` bloquea recompilación y descarga incluso si existe un reporte previo. Estas pruebas no acreditan suficiencia probatoria ni vínculo estructurado job → finding.
+La prueba de auditoría recorre el wizard, verifica dominio exacto y confirmación, ejecuta una simulación, declara referencia/vigencia sin permisos de tráfico y comprueba bloqueo activo en la vista previa y en un job iniciado directamente por API (para verificar el control del backend). El helper publica la ruta privada del workspace en `workspace.json`; la prueba escribe únicamente `example.test` en la lista de hosts del proyecto recién creado, sin ejecutar descubrimiento. Comprueba dos jobs distintos en el historial tras recargar, crea una ficha CANDIDATE con petición/respuesta sintéticas, compila con cero confirmados, revisa el Markdown y declara PROVEN explícitamente para comprobar el reporte con un confirmado sintético. Descarga el paquete y verifica entradas/hashes del source-manifest; un activo `outside.test` bloquea recompilación y descarga incluso si existe un reporte previo. Estas pruebas no acreditan suficiencia probatoria ni vínculo estructurado job → finding.
+
+Otra prueba comprueba la vista previa sin crear jobs, el bloqueo por permiso ausente, la invalidación al cambiar modo y el rechazo de una lista modificada tras la revisión. Tras revisar de nuevo, permite simular.
 
 Requisitos de integración: Docker local, imagen construida, Chromium instalado y `tar` en el host. `socat` ya forma parte de la imagen. La suite no llama proveedores de IA ni servicios externos.
 

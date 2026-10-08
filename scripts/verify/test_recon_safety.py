@@ -117,6 +117,65 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         with patch.object(pipeline, 'detect_tools', return_value={}):
             return pipeline.ReconPipeline(self.root, dry_run)
 
+    def test_preview_is_read_only_and_never_opens_network_or_runs_tools(self):
+        self.recon.joinpath('subdomains.txt').write_text('example.test\nexcluded.example.test\nevil.test\n')
+        self.recon.joinpath('urls_all.txt').write_text('https://example.test/profile?id=1\nhttps://excluded.example.test/a\nhttps://excluded.example.test/b\n')
+        before = {str(path): path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        instance = self.make_pipeline()
+        with patch.object(socket, 'socket', side_effect=AssertionError('network')), patch.object(socket, 'getaddrinfo', side_effect=AssertionError('DNS')), patch.object(pipeline.subprocess, 'run', side_effect=AssertionError('tool')):
+            result = instance.preview('probe')
+            local = instance.preview('patterns', True)
+        self.assertEqual(local['stages'][0]['targets'], ['https://example.test/profile?id=1'])
+        self.assertEqual(local['stages'][0]['discarded_count'], 2)
+        self.assertTrue(result['can_start'])
+        self.assertEqual(result['stages'][0]['targets'], ['example.test'])
+        self.assertEqual(result['stages'][0]['discarded_count'], 2)
+        self.assertEqual(before, {str(path): path.read_bytes() for path in self.root.rglob('*') if path.is_file()})
+
+    def test_preview_permissions_simulation_pending_targets_and_bounded_lists(self):
+        config = self.root / 'target.yaml'
+        config.write_text(config.read_text().replace('allow_active: true', 'allow_active: false'))
+        self.recon.joinpath('subdomains.txt').write_text(''.join(f'host{number}.example.test\n' for number in range(70)))
+        result = self.make_pipeline().preview('probe')
+        self.assertFalse(result['can_start'])
+        self.assertEqual(result['stages'][0]['targets_count'], 70)
+        self.assertEqual(len(result['stages'][0]['targets']), 50)
+        self.assertTrue(self.make_pipeline().preview('probe', True)['can_start'])
+        complete = self.make_pipeline().preview('all')
+        self.assertTrue(complete['stages'][1]['targets_pending'])
+        self.assertTrue(complete['stages'][3]['targets_pending'])
+
+    def test_preview_revision_changes_with_scope_or_input_and_cli_rejects_stale_plan(self):
+        self.recon.joinpath('subdomains.txt').write_text('example.test\n')
+        original = self.make_pipeline().preview('probe', True)
+        self.assertEqual(original['plan_revision'], self.make_pipeline().preview('probe', True)['plan_revision'])
+        with tempfile.TemporaryDirectory() as other:
+            clone = pathlib.Path(other)
+            (clone / 'recon').mkdir()
+            (clone / 'target.yaml').write_bytes((self.root / 'target.yaml').read_bytes())
+            (clone / 'recon/subdomains.txt').write_text('example.test\n')
+            self.assertNotEqual(original['plan_revision'], pipeline.ReconPipeline(clone, True).preview('probe', True)['plan_revision'])
+        self.recon.joinpath('subdomains.txt').write_text('child.example.test\n')
+        changed = self.make_pipeline().preview('probe', True)
+        self.assertNotEqual(original['plan_revision'], changed['plan_revision'])
+        result = subprocess.run([sys.executable, str(SCRIPTS / 'pt-recon-pipeline.py'), 'run', str(self.root), '--stage', 'probe', '--dry-run', '--expected-plan', original['plan_revision']], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('plan revisado cambió', result.stderr)
+        self.assertFalse((self.recon / 'summary.json').exists())
+        config = self.root / 'target.yaml'
+        config.write_text(config.read_text().replace('allow_active: true', 'allow_active: false'))
+        self.assertNotEqual(changed['plan_revision'], self.make_pipeline().preview('probe', True)['plan_revision'])
+
+    def test_local_pattern_classification_does_not_require_passive_permission(self):
+        config = self.root / 'target.yaml'
+        config.write_text(config.read_text().replace('allow_passive: true', 'allow_passive: false'))
+        self.recon.joinpath('urls_all.txt').write_text('https://example.test/profile?id=1\n')
+        instance = self.make_pipeline()
+        instance.tools['gf'] = 'fixture-gf'
+        with patch.object(pipeline.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')):
+            result = instance.run_all('patterns')
+        self.assertEqual(result['summary']['status'], 'completed', result['summary'].get('error'))
+
     def test_scope_filter_runs_before_probe_constructor_or_dns(self):
         self.recon.joinpath('subdomains.txt').write_text('example.test\nexcluded.example.test\nevil.test\nhttps://user@example.test\n')
         with patch.object(pipeline, 'ProbeClient') as client:

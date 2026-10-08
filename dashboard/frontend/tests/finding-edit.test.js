@@ -292,3 +292,58 @@ test('compilación bloqueada muestra el motivo sin sustituir el reporte anterior
     assert.match(view.root.querySelector('.report-content-html').textContent, /Reporte anterior/)
   } finally { view.cleanup() }
 })
+
+test('vista previa bloqueada muestra targets/motivos y simulación revisada envía su revisión', async () => {
+  let launched, simulate = false
+  const preview = dry_run => ({ stages: [{ stage: 'probe', interaction: 'active', source: 'recon/subdomains.txt', targets: ['example.test'], targets_count: 1, discarded: [], discarded_count: 0, block_reasons: dry_run ? [] : ['Falta permiso activo'] }],
+    dry_run, can_start: dry_run, plan_revision: 'a'.repeat(64), scope_revision: 'b'.repeat(64), operational_limits: { max_requests_per_second: 1, max_parallel_threads: 1, max_probe_targets: 1000 } })
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }),
+    previewRecon: async (id, payload) => { simulate = payload.dry_run; return preview(simulate) },
+    runRecon: async (id, payload) => { launched = payload; return { success: true } } })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const launch = () => [...view.root.querySelectorAll('button')].find(button => button.textContent.includes('Iniciar Reconocimiento'))
+    assert.equal(launch().disabled, true)
+    await clickText(view.root, 'Revisar plan sin tráfico')
+    assert.match(view.root.querySelector('[data-testid=recon-preview]').textContent, /example.test/)
+    assert.match(view.root.textContent, /Falta permiso activo/)
+    assert.equal(launch().disabled, true)
+    const mode = view.root.querySelector('#recon-dry-run'); mode.checked = true; mode.dispatchEvent(new window.Event('change', { bubbles: true })); await flush()
+    assert.equal(view.root.querySelector('[data-testid=recon-preview]'), null)
+    await clickText(view.root, 'Revisar plan sin tráfico')
+    assert.equal(simulate, true)
+    assert.equal(launch().disabled, false)
+    await clickText(view.root, 'Iniciar Reconocimiento')
+    assert.equal(launched.expected_plan, 'a'.repeat(64))
+    assert.equal(launched.dry_run, true)
+  } finally { view.cleanup() }
+})
+
+test('respuesta tardía de vista previa no habilita un modo distinto', async () => {
+  let finish
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }), previewRecon: () => new Promise(resolve => { finish = resolve }) })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    await clickText(view.root, 'Revisar plan sin tráfico')
+    const mode = view.root.querySelector('#recon-dry-run'); mode.checked = true; mode.dispatchEvent(new window.Event('change', { bubbles: true })); await flush()
+    finish({ can_start: true, stages: [], plan_revision: 'a'.repeat(64) }); await flush()
+    assert.equal(view.root.querySelector('[data-testid=recon-preview]'), null)
+    assert.equal([...view.root.querySelectorAll('button')].find(button => button.textContent.includes('Iniciar Reconocimiento')).disabled, true)
+  } finally { view.cleanup() }
+})
+
+test('carga inicial tardía del alcance no borra una revisión más reciente', async () => {
+  let finishScope
+  const view = await mount({ getScope: () => new Promise(resolve => { finishScope = resolve }), getVaultKeys: async () => [],
+    getFindings: async () => [], getArtifacts: async () => [], getLoot: async () => ({ credentials: [], files: [] }),
+    previewRecon: async () => ({ stages: [], operational_limits: {}, can_start: true, plan_revision: 'a'.repeat(64) }) })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    await clickText(view.root, 'Revisar plan sin tráfico')
+    assert.ok(view.root.querySelector('[data-testid=recon-preview]'))
+    finishScope({}); await flush()
+    assert.ok(view.root.querySelector('[data-testid=recon-preview]'))
+  } finally { view.cleanup() }
+})

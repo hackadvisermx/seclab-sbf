@@ -8,7 +8,7 @@ import { randomBytes } from 'node:crypto'
 
 const credentialsDir = fileURLToPath(new URL('./.playwright-fixture/', import.meta.url))
 const name = `seclab-playwright-${process.pid}-${randomBytes(4).toString('hex')}`
-const image = process.env.PLAYWRIGHT_LAB_IMAGE || 'seclab-sbf:full-phase155'
+const image = process.env.PLAYWRIGHT_LAB_IMAGE || 'seclab-sbf:full-phase156'
 let root, child, server, ownsCredentials = false, cleaning
 const connections = new Set()
 

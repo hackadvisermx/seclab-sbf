@@ -229,16 +229,41 @@ class ReconService:
         except Exception:
             return ""
 
+    def preview_pipeline(self, engagement_id, stage='all', dry_run=False, engagement_type='engagement'):
+        if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
+            return {'success': False, 'error': 'Etapa de reconocimiento no válida.'}
+        target = self.get_target_dir(engagement_id, engagement_type)
+        if target is None:
+            return {'success': False, 'error': 'Directorio del engagement no encontrado.'}
+        command = [self.py_bin, str(self.pipeline_script), 'preview', str(target), '--stage', stage]
+        if dry_run:
+            command.append('--dry-run')
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            if result.returncode:
+                return {'success': False, 'error': (result.stderr or 'No se pudo revisar el plan.')[:2000]}
+            preview = json.loads(result.stdout)
+            if not isinstance(preview, dict) or preview.get('success') is not True or not isinstance(preview.get('plan_revision'), str):
+                raise ValueError('Contrato de vista previa inválido.')
+            return preview
+        except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+            return {'success': False, 'error': 'No se pudo revisar el plan: ' + str(error)[:500]}
+
     def run_pipeline(
         self,
         engagement_id: str,
         stage: str = "all",
         dry_run: bool = False,
         engagement_type: str = "engagement",
+        expected_plan: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Inicia el pipeline de reconocimiento en un hilo en segundo plano."""
         if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
             return {"success": False, "error": "Etapa de reconocimiento no válida."}
+        if expected_plan:
+            preview = self.preview_pipeline(engagement_id, stage, dry_run, engagement_type)
+            if not preview.get('success') or preview.get('plan_revision') != expected_plan or not preview.get('can_start'):
+                return {'success': False, 'error': 'El plan cambió o está bloqueado; revisa targets, permisos y límites antes de iniciar.'}
         with self._lock:
             if self._closing:
                 return {'success': False, 'error': 'El dashboard se está cerrando.'}
@@ -254,7 +279,7 @@ class ReconService:
             except RuntimeError as error:
                 return {'success': False, 'error': str(error), 'job': self.store.get(job_key)}
             thread = threading.Thread(target=self._execute_pipeline_worker,
-                args=(job_key, target_dir, stage, dry_run, log_path, job['run_id']), daemon=True)
+                args=(job_key, target_dir, stage, dry_run, log_path, job['run_id'], expected_plan), daemon=True)
             self._threads[job_key] = thread
             try:
                 thread.start()
@@ -298,8 +323,10 @@ class ReconService:
             self.store.delete(key)
             return entry
 
-    def _execute_pipeline_worker(self, job_key, target_dir, stage, dry_run, log_path, run_id):
+    def _execute_pipeline_worker(self, job_key, target_dir, stage, dry_run, log_path, run_id, expected_plan=None):
         cmd = [self.py_bin, str(self.pipeline_script), 'run', str(target_dir), '--stage', stage]
+        if expected_plan:
+            cmd.extend(['--expected-plan', expected_plan])
         if dry_run:
             cmd.append('--dry-run')
         proc = None

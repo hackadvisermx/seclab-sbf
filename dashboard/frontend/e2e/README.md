@@ -22,7 +22,7 @@ Ejecuta UI e integración de forma secuencial: comparten el puerto 4199 y el dir
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase159
+make build-full BUILD_TAG=-phase160
 ```
 
 Después, desde `dashboard/frontend`:
@@ -40,6 +40,8 @@ La prueba de auditoría recorre el wizard, verifica dominio exacto y confirmaci�
 Otra prueba comprueba la vista previa sin crear jobs, el bloqueo por permiso ausente, la invalidación al cambiar modo y el rechazo de una lista modificada tras la revisión. Tras revisar de nuevo, permite simular y comprueba que el historial conserva la revisión original después de cambiar la lista y recargar. Captura `review-history.png` en el directorio local de resultados.
 
 Requisitos de integración: Docker local, imagen construida, Chromium instalado y `tar` en el host. `socat` ya forma parte de la imagen. La suite no llama proveedores de IA ni servicios externos.
+
+La prueba de artefactos escribe solo archivos sintéticos del proyecto temporal, compara SHA-256 con bytes originales, comprueba actualización de versión y el límite de previsualización de 2 MiB, y verifica que texto HTML permanece literal. Captura `artifact-fingerprint.png`; no crea hallazgos ni acredita vínculo con un job. Las cinco integraciones inician una sesión cada una, dentro del límite de cinco intentos por minuto de la instancia desechable.
 
 Credenciales privadas: `e2e/.playwright-fixture/user.json`, modo 0600, ignorado por Git. No se imprimen en stdout. El directorio, el contenedor y los datos se eliminan al terminar mediante SIGTERM con cierre gradual. Si el host muere o se usa SIGKILL, comprobar el contenedor propio antes de limpiar restos; no borrar ni detener el laboratorio vivo.
 

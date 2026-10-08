@@ -102,6 +102,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
 
+**Entrega parcial V3-03d (fase 160).** El visor/API identifican la versión leída de un archivo mediante SHA-256 de bytes originales, tamaño y mtime UTC, distinguen límites/binario/decodificación con sustituciones y rechazan cambios detectados durante la lectura. La UI evita mezclar respuestas tardías de otro archivo/carpeta/proyecto. Huella hasta 32 MiB y preview textual hasta 2 MiB; no modifica originales ni crea snapshots persistentes. Detalle en [phase-160.md](phase-160.md). IDs estables de artefacto, vínculos a jobs/findings y revisión humana estructurada siguen pendientes; no se declara V3-03 completa.
+
 **Problema.** Ya existen artefactos, fichas de evidencia, estados de hallazgo, deduplicación y compuertas de paquete. La oportunidad es conectar esas piezas para que una afirmación del reporte pueda justificarse con la fuente original y la decisión humana correspondiente.
 
 **Trabajo.** Acordar IDs estables para artefactos/observaciones y referencias desde findings. Preservar el resultado bruto como fuente identificable; asociar herramienta/versión si aplica, target, job/playbook step, timestamp, estado del parser y hash de contenido. Una observación derivada apunta al artefacto original. El finding referencia una o más evidencias, activo, estado, rationale y revisión humana. El reporte conserva enlaces o identificadores de origen. Extender el packer y compilador existentes en vez de crear un export paralelo.

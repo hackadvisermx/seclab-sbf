@@ -1,6 +1,6 @@
 # Fase 148: origen de archivos exportados y reporte verificable
 
-Fecha: 2026-10-07. Base: `d88a0f9`. Rama: `phase/148-report-source-manifest`. Worktree: `/Users/castr/tmp/t01-report-provenance`. V3-03b, corrige D08.
+Fecha: 2026-10-07. Base: `d88a0f9`. Rama: `phase/148-report-source-manifest`. Worktree: `/Users/castr/tmp/t01-report-provenance`. V3-03b, corrige D08. [PR #168](https://github.com/hackadvisermx/seclab-sbf/pull/168) fusionado en `efc4e01` con la excepción autorizada.
 
 ## Resultado
 

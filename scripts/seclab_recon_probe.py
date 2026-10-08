@@ -112,13 +112,16 @@ class PinnedConnection(http.client.HTTPConnection):
 
 
 class ProbeClient:
-    def __init__(self, scope_data, limits):
+    def __init__(self, scope_data, limits, before_request=None):
+        self.before_request = before_request
         self.scope_data = scope_data
         self.limits = limits
         self.forbidden = local_network_addresses()
         self.limiter = RateLimiter(limits['max_requests_per_second'])
 
     def probe_host(self, host):
+        if self.before_request:
+            self.before_request(host)
         observations = []
         verdict, reason = check_scope(host, self.scope_data)
         if verdict != 'IN_SCOPE':
@@ -138,6 +141,8 @@ class ProbeClient:
                 observations.append({'host': host, 'url': url, 'status': 'blocked', 'reason': 'Endpoint excluido del alcance.'})
                 continue
             self.limiter.wait()
+            if self.before_request:
+                self.before_request(url + "/")
             connection = PinnedConnection(host, address, port, self.limits['probe_timeout_seconds'], tls=scheme == 'https')
             timer = threading.Timer(self.limits['probe_timeout_seconds'], connection.expire)
             timer.daemon = True

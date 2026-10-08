@@ -57,6 +57,7 @@ def simulation(root):
     result = engine.run_all()
     return {
         'status': result['summary']['status'],
+        'scope_revision_recorded': len(result['summary'].get('scope_revision', '')) == 64,
         'planned_probe_targets': result['stage_results']['probe']['planned_targets'],
         'discarded_probe_candidates': len(result['stage_results']['probe']['discarded']),
         'workspace_unchanged': before == snapshot(directory),
@@ -95,6 +96,7 @@ def resumption(root):
             probe_repeated = client.called
     return {
         'initial_status': initial['summary']['status'],
+        'checkpoint_scope_revision_recorded': len(checkpoint.get('scope_revision', '')) == 64,
         'checkpoint_completed_stages': sorted(checkpoint['completed']),
         'resumed_status': resumed['summary']['status'],
         'subdomains_repeated': 'subfinder' in calls,

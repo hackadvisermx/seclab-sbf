@@ -2085,6 +2085,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(dashboard_backup))
     report_safety = load_module("report_safety_tests", REPO_ROOT / "scripts" / "verify" / "test_report_safety.py")
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(report_safety))
+    scope_revision = load_module("scope_revision_tests", REPO_ROOT / "scripts" / "verify" / "test_scope_revision.py")
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(scope_revision))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

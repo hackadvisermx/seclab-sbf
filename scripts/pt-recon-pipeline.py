@@ -11,6 +11,7 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 
 import argparse
 import datetime
+import hashlib
 import ipaddress
 import json
 import os
@@ -168,7 +169,27 @@ class ReconPipeline:
                          'recent_output': [], 'events': []}
         self.scope_data = load_scope_rules(self.engagement_dir)
         self.limits = operational_limits(self.scope_data)
+        self.scope_contract = self._contract(self.scope_data)
+        self.scope_revision = self._revision(self.scope_contract)
         self.tools = detect_tools()
+
+    @staticmethod
+    def _contract(data):
+        return {'scope': data['scope'], 'operational_limits': operational_limits(data)}
+
+    @staticmethod
+    def _revision(contract):
+        return hashlib.sha256(json.dumps(contract, sort_keys=True, ensure_ascii=False,
+                                        separators=(',', ':')).encode('utf-8')).hexdigest()
+
+    def revalidate_scope(self, target=None):
+        current = load_scope_rules(self.engagement_dir)
+        if self._revision(self._contract(current)) != self.scope_revision:
+            raise ScopeError('El alcance o sus límites cambiaron durante el reconocimiento; no se iniciarán nuevas acciones. Simula y ejecuta un plan nuevo.')
+        if target is not None:
+            verdict, reason = check_scope(target, current)
+            if verdict != 'IN_SCOPE':
+                raise ScopeError(f'Acción bloqueada por alcance para {target}: {verdict} ({reason}).')
 
     def prepare_directories(self):
         if not self.dry_run:
@@ -260,6 +281,7 @@ class ReconPipeline:
                 pathlib.Path(err.name).unlink(missing_ok=True)
 
     def _tool(self, name, arguments, timeout=180):
+        self.revalidate_scope()
         command = [self.tools[name], *arguments]
         self._emit('command_start', command=shlex.join(command), command_status='running')
         try:
@@ -318,7 +340,8 @@ class ReconPipeline:
             return {'stage': 'probe', 'status': 'simulated', 'planned_targets': hosts, 'discarded': discarded}
         previous_live = set(self._read_lines('live_hosts.txt'))
         self._emit('command_start', command=f'Sondeo HTTP interno: GET / por HTTP y HTTPS; {len(hosts)} hosts autorizados', command_status='running')
-        client = ProbeClient(self.scope_data, self.limits)
+        self.revalidate_scope()
+        client = ProbeClient(self.scope_data, self.limits, before_request=self.revalidate_scope)
         observations = client.probe(hosts, on_result=lambda rows: self._emit('output', output='\n'.join(
             f"{row.get('url', row.get('host'))}: {row['status']} {row.get('http_status', '')}" for row in rows))) if self.live else client.probe(hosts)
         self._emit('command_end', command_status='completed')
@@ -407,6 +430,8 @@ class ReconPipeline:
                    'status': 'failed' if failed else 'simulated' if self.dry_run else 'completed',
                    'resumable_from': resumable_from,
                    'dry_run': self.dry_run, 'operational_limits': self.limits,
+                   'run_id': self.progress['run_id'],
+                   'scope_revision': self.scope_revision, 'scope_contract': self.scope_contract,
                    'stage_results': results, 'tools_available': {name: bool(path) for name, path in self.tools.items()},
                    'metrics_source': 'none' if self.dry_run else 'previous_artifacts' if failed else 'artifacts',
                    'subdomains_count': 0, 'subdomains_discarded_out_of_scope': 0, 'subdomains_new_count': 0,
@@ -442,6 +467,8 @@ class ReconPipeline:
         if stage == 'all' and resume and not self.dry_run:
             checkpoint = self._load_checkpoint()
             if checkpoint:
+                if checkpoint.get('scope_revision') != self.scope_revision:
+                    raise ScopeError('El checkpoint no corresponde al alcance actual. Simula y reinicia sin --resume; se conservan los artefactos anteriores.')
                 results.update(checkpoint['completed'])
         elif stage != 'all' and not self.dry_run:
             # Una etapa manual rompe el orden que asume la cadena automática;
@@ -458,6 +485,7 @@ class ReconPipeline:
                 continue
             self._emit('stage_start', stage=name, stage_status='running', command=None, command_status=None, recent_output=[])
             try:
+                self.revalidate_scope()
                 results[name] = action()
                 self.progress['completed_stages'].append(name)
                 self._emit('stage_end', stage=name, stage_status=results[name]['status'])
@@ -472,7 +500,7 @@ class ReconPipeline:
             if failed_stage:
                 completed = {name: result for name, result in results.items() if result.get('status') != 'failed'}
                 self._write_lines('.checkpoint.json', [json.dumps(
-                    {'completed': completed, 'failed_stage': failed_stage,
+                    {'completed': completed, 'failed_stage': failed_stage, 'scope_revision': self.scope_revision,
                      'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat()},
                     ensure_ascii=False)])
             else:

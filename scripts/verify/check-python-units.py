@@ -958,6 +958,15 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
                 self.assertEqual(finding["cvss_score"], 0.0)
                 self.assertEqual(finding["cvss_v31"], vector)
 
+    def test_report_recognizes_dashboard_reproduction_heading(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "dashboard.md"
+            path.write_text('---\ntitle: Synthetic fixture\nasset: https://example.test/profile\n---\n\n## Pasos para Reproducir\n1. Revisar petición sintética\n\n```http\nGET /profile HTTP/1.1\nHost: example.test\n```\n\n## Remediación y Mitigación\nRevisar permisos.\n')
+            self.assertTrue(report_compiler.parse_evidence_file(path)["has_poc"])
+            path.write_text(path.read_text().replace("## Pasos para Reproducir", "## Descripción"))
+            self.assertFalse(report_compiler.parse_evidence_file(path)["has_poc"])
+
     def test_finding_manager_and_report_compiler(self):
         """Verifica la plantilla evidence.md, compilador de reportes y linter Evidence-First."""
         # 1. Validar plantilla de evidencia

@@ -263,3 +263,32 @@ test('bloqueo de Scope Guard muestra motivo, historial y revisión sin ejecutar 
     assert.equal(saves, 0)
   } finally { view.cleanup() }
 })
+
+test('vista ejecutiva usa cifras del reporte compilado y conserva su estado borrador', async () => {
+  const content = '- **Fecha de Emisión:** 2025-12-01\n- **Crítica:** 0\n- **Alta:** 0\n- **Media:** 0\n- **Baja:** 0\n- **Informativa:** 0'
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [finding],
+    getArtifacts: async () => [], getLoot: async () => ({ credentials: [], files: [] }),
+    previewReport: async () => ({ compiled: true, content }) })
+  try {
+    await clickText(view.root, 'Reporte (REPORT.md)')
+    assert.deepEqual([...view.root.querySelectorAll('.report-printable div.text-center span.text-2xl')].map(el => el.textContent), ['0', '0', '0', '0', '0'])
+    assert.match(view.root.textContent, /BORRADOR \/ PENDIENTE DE REVISIÓN/)
+    assert.match(view.root.textContent, /2025-12-01/)
+  } finally { view.cleanup() }
+})
+
+test('compilación bloqueada muestra el motivo sin sustituir el reporte anterior', async () => {
+  let previews = 0
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [],
+    getArtifacts: async () => [], getLoot: async () => ({ credentials: [], files: [] }),
+    previewReport: async () => { previews++; return { content: '# Reporte anterior' } },
+    compileReport: async () => ({ success: false, log: 'Reporte bloqueado: activo fuera de alcance', content: '' }) })
+  try {
+    const before = previews
+    await clickText(view.root, 'Compilar Reporte')
+    assert.match(view.root.querySelector('[data-testid=report-error]').textContent, /fuera de alcance/)
+    assert.equal(previews, before)
+    await clickText(view.root, 'Reporte (REPORT.md)')
+    assert.match(view.root.querySelector('.report-content-html').textContent, /Reporte anterior/)
+  } finally { view.cleanup() }
+})

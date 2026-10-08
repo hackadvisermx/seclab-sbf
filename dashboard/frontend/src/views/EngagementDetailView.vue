@@ -55,6 +55,8 @@
       </div>
     </div>
 
+    <p v-if="reportError" role="alert" data-testid="report-error" class="text-xs font-mono text-rose-300">{{ reportError }}</p>
+
     <!-- Navegación por Pestañas Tácticas -->
     <div class="no-print flex items-center space-x-1 border-b border-[#1b253b] text-xs font-mono overflow-x-auto pb-1">
       <button
@@ -1009,7 +1011,7 @@
             <div class="text-right text-xs font-mono text-slate-400 print:text-slate-600">
               <div>Fecha de Emisión: <span class="text-slate-200 font-bold print:text-black">{{ reportCompiledDate }}</span></div>
               <div>Auditor Principal: <span class="text-cyan-400 font-bold print:text-black">tester (SecLab Operator)</span></div>
-              <div>Estado: <span class="text-emerald-400 font-bold print:text-emerald-700">CONFIRMADO</span></div>
+              <div>Estado: <span class="text-emerald-400 font-bold print:text-emerald-700">BORRADOR / PENDIENTE DE REVISIÓN</span></div>
             </div>
           </div>
 
@@ -1902,23 +1904,13 @@ const isSavingNotes = ref(false)
 
 // Report & Pack
 const reportContent = ref('')
+const reportError = ref('')
 const isCompiling = ref(false)
 const isPacking = ref(false)
 const reportViewMode = ref('executive')
 
 const reportStats = computed(() => {
   const stats = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
-  if (findings.value && findings.value.length > 0) {
-    for (const f of findings.value) {
-      const sev = (f.severity || f.frontmatter?.severity || '').toUpperCase()
-      if (sev === 'CRITICAL') stats.critical++
-      else if (sev === 'HIGH') stats.high++
-      else if (sev === 'MEDIUM') stats.medium++
-      else if (sev === 'LOW') stats.low++
-      else stats.info++
-    }
-    return stats
-  }
   if (reportContent.value) {
     const crit = reportContent.value.match(/Crítica:\*\*\s*(\d+)/i)
     const high = reportContent.value.match(/Alta:\*\*\s*(\d+)/i)
@@ -1936,7 +1928,7 @@ const reportStats = computed(() => {
 
 const reportCompiledDate = computed(() => {
   if (reportContent.value) {
-    const match = reportContent.value.match(/Fecha:\*\*\s*([^\n]+)/i)
+    const match = reportContent.value.match(/Fecha de Emisión:\*\*\s*([^\n]+)/i)
     if (match) return match[1].trim()
   }
   return new Date().toISOString().split('T')[0]
@@ -2224,13 +2216,18 @@ async function saveNotes() {
 
 async function compileReportAction() {
   isCompiling.value = true
+  reportError.value = ''
   try {
     const res = await api.compileReport(engId.value, engType.value)
-    reportContent.value = res.content || res.log
+    if (!res.success) {
+      reportError.value = res.log || 'Reporte bloqueado; revisa alcance y evidencia.'
+      return
+    }
+    reportContent.value = res.content
     activeTab.value = 'report'
     await loadReport()
   } catch (err) {
-    alert('Error al compilar reporte: ' + err.message)
+    reportError.value = 'Error al compilar reporte: ' + err.message
   } finally {
     isCompiling.value = false
   }

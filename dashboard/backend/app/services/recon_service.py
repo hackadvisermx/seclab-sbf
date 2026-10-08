@@ -166,7 +166,17 @@ class ReconService:
         except Exception:
             pass
 
+        progress = None
+        progress_path = recon_dir / 'progress.json'
+        try:
+            candidate = json.loads(progress_path.read_text(encoding='utf-8'))
+            if isinstance(candidate, dict) and job.get('run_id') and candidate.get('run_id') == job['run_id']:
+                progress = candidate
+        except (OSError, ValueError):
+            pass
+
         return {
+            "progress": progress,
             "engagement_id": engagement_id,
             "engagement_type": engagement_type,
             "job": job,
@@ -279,6 +289,7 @@ class ReconService:
                     log_f.flush()
                     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, bufsize=1, start_new_session=True,
+                        env={**os.environ, 'SECLAB_RECON_RUN_ID': run_id},
                         pass_fds=(() if self._lease is None else (self._lease,)))
                     self._processes[job_key] = proc
                 if proc.stdout:

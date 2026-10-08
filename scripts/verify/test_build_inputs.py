@@ -50,9 +50,25 @@ class BuildInputsTests(unittest.TestCase):
         previous = self.hashes()
         for name in ('dashboard/frontend/dist/stale.js', 'dashboard/frontend/node_modules/example/index.js',
                      'dashboard/backend/data/vault.db', 'dashboard/backend/app/__pycache__/app.pyc',
+                     'dashboard/frontend/playwright-report/index.html', 'dashboard/frontend/test-results/trace.zip',
+                     'dashboard/frontend/blob-report/report.zip', 'dashboard/frontend/e2e/.playwright-fixture/user.json',
                      'dashboard/frontend/.env.local', 'dashboard/backend/.env'):
             self.write(name, 'must-not-enter-source-hash')
         self.assertEqual(self.hashes(), previous)
+
+    def test_playwright_sources_remain_inputs_and_generated_paths_are_docker_ignored(self):
+        previous = self.hashes()[1]
+        for name in ('dashboard/frontend/playwright.config.js', 'dashboard/frontend/playwright.integration.config.js',
+                     'dashboard/frontend/e2e/temporary-backend.mjs', 'dashboard/frontend/e2e/integration/auth.spec.js'):
+            self.write(name, 'changed')
+            current = self.hashes()[1]
+            self.assertNotEqual(current, previous)
+            previous = current
+        docker_ignored = (ROOT / '.dockerignore').read_text().splitlines()
+        for name in ('dashboard/frontend/playwright-report', 'dashboard/frontend/test-results',
+                     'dashboard/frontend/blob-report', 'dashboard/frontend/e2e/.playwright-fixture'):
+            self.assertIn(name, inputs.EXCLUDED_ROOTS)
+            self.assertIn(name, docker_ignored)
 
     def test_file_rename_or_executable_mode_affects_hash(self):
         path = self.write('scripts/helper.sh', 'same bytes')

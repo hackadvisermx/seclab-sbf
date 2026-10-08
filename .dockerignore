@@ -19,6 +19,10 @@ supply-chain
 dashboard/.venv
 dashboard/frontend/node_modules
 dashboard/frontend/dist
+dashboard/frontend/playwright-report
+dashboard/frontend/test-results
+dashboard/frontend/blob-report
+dashboard/frontend/e2e/.playwright-fixture
 dashboard/backend/data
 dashboard/*.pid
 

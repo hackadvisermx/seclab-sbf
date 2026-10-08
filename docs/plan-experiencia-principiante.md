@@ -2,6 +2,8 @@
 
 Fecha: 2026-10-07. Base revisada: `fa5c310`. Primera entrega: fase 143, rama `phase/143-guidance-contracts`. Este plan complementa el backlog A1–A21 ya cerrado; no lo reabre.
 
+Seguimiento: las fases pendientes 2–7 se reorganizaron en [backlog de mejoras v3](backlog-mejoras-v3.md), que prioriza autorización ejecutable, estado del engagement y procedencia de evidencia. Este documento conserva el diagnóstico y el recorrido inicial de la fase 143.
+
 ## Objetivo y límites
 
 Una persona que conoce su dominio autorizado debe poder saber qué hacer, por qué, qué resultado guardar y cuál es el siguiente paso. El caso principal es una auditoría web de un dominio público autorizado; los retos CTF conservan un recorrido separado. La cobertura expresa trabajo documentado, nunca una garantía de ausencia de vulnerabilidades.

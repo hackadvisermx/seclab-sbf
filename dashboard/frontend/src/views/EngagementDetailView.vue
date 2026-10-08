@@ -523,6 +523,29 @@
           </div>
         </div>
       </div>
+
+      <section class="tactical-card space-y-3" data-testid="recon-history">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-mono font-bold text-white">Historial de reconocimiento</h3>
+          <button @click="loadReconHistory()" :disabled="reconHistoryBusy" class="px-3 py-1 rounded-sm border border-slate-700 text-cyan-300 text-xs disabled:opacity-50">Actualizar historial</button>
+        </div>
+        <p class="text-xs text-slate-400">Conserva metadatos de jobs del dashboard. Los artefactos y la salida de arriba corresponden al workspace actual; este historial no guarda copias de outputs anteriores.</p>
+        <p v-if="reconHistoryError" role="alert" class="text-xs text-amber-300">{{ reconHistoryError }}</p>
+        <p v-if="reconHistory.length === 0" class="text-xs text-slate-400">{{ reconHistoryBusy ? 'Cargando historial...' : 'Todavía no hay ejecuciones registradas.' }}</p>
+        <ol v-else class="space-y-3 text-xs font-mono">
+          <li v-for="job in reconHistory" :key="job.run_id" class="border border-slate-800 rounded-sm p-3 space-y-1">
+            <div class="flex flex-wrap justify-between gap-2 text-slate-100">
+              <span>{{ historyStageLabel(job.stage) }} · {{ job.dry_run ? 'SIMULACIÓN' : 'EJECUCIÓN' }}</span>
+              <span>{{ historyStatusLabel(job.status) }}</span>
+            </div>
+            <p class="text-slate-400">Inicio: {{ new Date(job.started_at).toLocaleString() }} · Fin: {{ job.finished_at ? new Date(job.finished_at).toLocaleString() : 'Pendiente' }}</p>
+            <p class="text-slate-500 break-all">Job: {{ job.run_id }} · Revisión: {{ job.scope_revision || 'No registrada' }}</p>
+            <p v-if="job.origin === 'legacy-current'" class="text-amber-300">Registro anterior importado: solo se conservaba el último job; no se reconstruyen ejecuciones previas.</p>
+            <p v-if="job.error" class="text-amber-300 break-words">{{ job.error }}</p>
+          </li>
+        </ol>
+        <button v-if="reconHistoryCursor" @click="loadReconHistory(true)" :disabled="reconHistoryBusy" class="text-xs text-cyan-300 underline disabled:opacity-50">Cargar ejecuciones anteriores</button>
+      </section>
     </div>
 
     <!-- TAB 2: HALLAZGOS & EVIDENCIAS (Evidence-First) -->
@@ -1630,7 +1653,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { renderReport } from '../report-security'
 import { splitIpsAndCidrs } from '../scope-utils'
@@ -1698,6 +1721,14 @@ const reconStatus = ref({
 const reconStage = ref('all')
 const reconDryRun = ref(false)
 const reconLogContent = ref('')
+const reconHistory = ref([])
+const reconHistoryCursor = ref(null)
+const reconHistoryBusy = ref(false)
+const reconHistoryError = ref('')
+let reconHistoryRefreshQueued = false
+const historyStatusLabel = status => ({ running: 'En ejecución', cancelling: 'Cancelación solicitada', completed: 'Completado', failed: 'Fallido', simulated: 'Simulado', interrupted: 'Interrumpido', cancelled: 'Cancelado' })[status] || status
+const historyStageLabel = stage => ({ all: 'Todas las etapas', subdomains: 'Subdominios', probe: 'Sondeo HTTP/HTTPS', urls: 'URLs históricas', patterns: 'Patrones locales' })[stage] || stage
+
 const probeSortKey = ref('host')
 const probeSortDir = ref('asc')
 const sortedProbeResults = computed(() => {
@@ -2456,10 +2487,39 @@ async function loadArtifactPreview(file) {
   }
 }
 
+async function loadReconHistory(append = false) {
+  if (reconHistoryBusy.value) {
+    if (!append) reconHistoryRefreshQueued = true
+    return
+  }
+  reconHistoryBusy.value = true
+  reconHistoryError.value = ''
+  const projectId = engId.value
+  const projectType = engType.value
+  try {
+    const result = await api.getReconHistory(projectId, projectType, append ? reconHistoryCursor.value : null)
+    if (projectId !== engId.value || projectType !== engType.value) return
+    const jobs = Array.isArray(result.jobs) ? result.jobs : []
+    reconHistory.value = append ? [...new Map([...reconHistory.value, ...jobs].map(job => [job.run_id, job])).values()] : jobs
+    reconHistoryCursor.value = result.next_cursor || null
+  } catch (error) {
+    if (projectId !== engId.value || projectType !== engType.value) return
+    reconHistoryError.value = error.message || 'No se pudo cargar el historial.'
+  } finally {
+    reconHistoryBusy.value = false
+    if (reconHistoryRefreshQueued) {
+      reconHistoryRefreshQueued = false
+      loadReconHistory()
+    }
+  }
+}
+
 async function loadReconStatus() {
   try {
     const res = await api.getReconStatus(engId.value, engType.value)
+    const previous = reconStatus.value.job
     reconStatus.value = res
+    if (previous?.status && (previous.run_id !== res.job?.run_id || previous.status !== res.job?.status)) loadReconHistory()
     if (['running', 'cancelling'].includes(res.job?.status)) {
       startReconPolling()
     }
@@ -2539,6 +2599,13 @@ async function triggerReconPipeline() {
   }
 }
 
+watch([engId, engType], () => {
+  reconHistory.value = []
+  reconHistoryCursor.value = null
+  reconHistoryError.value = ''
+  loadReconHistory()
+})
+
 onMounted(() => {
   initCopilotModel()
   loadCopilotModels()
@@ -2553,6 +2620,7 @@ onMounted(() => {
   selectArtifactFolder('recon')
   loadReconStatus()
   loadReconLog()
+  loadReconHistory()
 })
 
 onUnmounted(() => {

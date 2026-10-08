@@ -20,6 +20,19 @@ def get_recon_status(id: str, type: str = Query("engagement", pattern="^(engagem
     return status
 
 
+@router.get("/{id}/history")
+def get_recon_history(id: str, type: str = Query("engagement", pattern="^(engagement|reto)$"),
+                      limit: int = Query(25, ge=1, le=100),
+                      before: str | None = Query(None, pattern="^[a-f0-9]{32}$")):
+    try:
+        result = recon_service.get_history(id, type, limit, before)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from None
+    if 'error' in result:
+        raise HTTPException(status_code=404, detail=result['error'])
+    return result
+
+
 @router.post("/{id}/run")
 def run_recon_pipeline(
     id: str,

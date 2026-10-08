@@ -6,20 +6,21 @@ import { test } from 'node:test'
 import { JSDOM } from 'jsdom'
 const browser = new JSDOM('<body></body>', { url: 'http://localhost' })
 for (const key of ['window','document','Document','Element','SVGElement','HTMLElement','Node','localStorage']) globalThis[key] = browser.window[key]
-const { createApp, nextTick } = await import('vue')
+const { createApp, nextTick, reactive } = await import('vue')
 const require = createRequire(import.meta.url)
 const vueUrl = pathToFileURL(require.resolve('vue/dist/vue.runtime.esm-bundler.js')).href
 const body = '## Descripción\nOriginal\n\n## Control negativo\nPrueba personalizada\n\n```http\nGET / HTTP/1.1\n```'
 const finding = { slug: 'legacy', filename: 'legacy.md', frontmatter: { title: 'Original', severity: 'INFO', status: 'PROVEN', cvss_score: 0, cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N' }, body }
 async function flush() { await nextTick(); await new Promise(r => setTimeout(r, 0)); await nextTick() }
-async function mount(api) {
+async function mount(api, route = { params: { id: 'fixture', type: 'engagement' } }) {
+  globalThis.fixtureFindingRoute = route
   globalThis.fixtureFindingApi = new Proxy(api, { get: (target, key) => target[key] || (async () => ({})) })
   const source = await readFile(new URL('../src/views/EngagementDetailView.vue', import.meta.url), 'utf8')
   const { parse, compileScript } = await import('@vue/compiler-sfc')
   const { descriptor } = parse(source)
   let code = compileScript(descriptor, { id: 'finding-edit', inlineTemplate: true }).content
     .replace(/from ["']vue["']/g, `from ${JSON.stringify(vueUrl)}`)
-    .replace("import { useRoute, useRouter } from 'vue-router'", "const useRoute = () => ({ params: { id: 'fixture', type: 'engagement' } }); const useRouter = () => ({ push() {} })")
+    .replace("import { useRoute, useRouter } from 'vue-router'", "const useRoute = () => globalThis.fixtureFindingRoute; const useRouter = () => ({ push() {} })")
     .replace("import { api } from '../api'", 'const api = globalThis.fixtureFindingApi')
   for (const name of ['report-security','scope-utils','recon-results','authorization-utils']) code = code.replace(`from '../${name}'`, `from ${JSON.stringify(new URL(`../src/${name}.js`, import.meta.url).href)}`)
   for (const name of ['DeleteProjectButton','HelpTooltip']) code = code.replace(new RegExp(`import ${name} from ['"]\\.\\./components/${name}\\.vue['"]`), `const ${name} = { render: () => null }`)
@@ -154,5 +155,86 @@ test('nueva ficha abre como CANDIDATE y una confirmación explícita no cambia l
     await clickText(view.root, 'Cancelar')
     await clickText(view.root, 'Nueva Ficha')
     assert.equal(status().value, 'CANDIDATE')
+  } finally { view.cleanup() }
+})
+
+
+test('historial muestra estados, origen legado y páginas sin duplicar jobs', async () => {
+  const calls = []
+  const job = (run_id, status, origin = 'dashboard') => ({ run_id, status, origin, stage: 'probe', dry_run: status === 'simulated', started_at: '2026-10-08T00:00:00Z', finished_at: '2026-10-08T00:01:00Z', scope_revision: null })
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }),
+    getReconHistory: async (id, type, before) => {
+      calls.push({ id, type, before })
+      return before ? { jobs: [job('second', 'cancelled'), job('third', 'interrupted', 'legacy-current')], next_cursor: null }
+        : { jobs: [job('first', 'simulated'), job('second', 'cancelled')], next_cursor: 'second' }
+    } })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const panel = view.root.querySelector('[data-testid=recon-history]')
+    assert.match(panel.textContent, /SIMULACIÓN/)
+    assert.match(panel.textContent, /Simulado/)
+    assert.match(panel.textContent, /Cancelado/)
+    assert.match(panel.textContent, /no guarda copias de outputs anteriores/)
+    await clickText(view.root, 'Cargar ejecuciones anteriores')
+    assert.equal(panel.querySelectorAll('li').length, 3)
+    assert.match(panel.textContent, /Interrumpido/)
+    assert.match(panel.textContent, /Registro anterior importado/)
+    assert.ok(calls.some(call => call.id === 'fixture' && call.type === 'engagement' && call.before === 'second'))
+  } finally { view.cleanup() }
+})
+
+test('historial comunica fallo de API y permite recuperar con reintento explícito', async () => {
+  let unavailable = true
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }),
+    getReconHistory: async () => { if (unavailable) throw new Error('Historial no disponible'); return { jobs: [], next_cursor: null } } })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const panel = view.root.querySelector('[data-testid=recon-history]')
+    assert.match(panel.querySelector('[role=alert]').textContent, /Historial no disponible/)
+    unavailable = false
+    await clickText(view.root, 'Actualizar historial')
+    assert.equal(panel.querySelector('[role=alert]'), null)
+    assert.match(panel.textContent, /Todavía no hay ejecuciones registradas/)
+  } finally { view.cleanup() }
+})
+
+test('un cambio de estado mientras se carga historial provoca una actualización posterior', async () => {
+  let resolveInitial, calls = 0
+  const initial = new Promise(resolve => { resolveInitial = resolve })
+  const job = status => ({ run_id: 'same', status, stage: 'probe', dry_run: false, started_at: '2026-10-08T00:00:00Z' })
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }), getReconStatus: async () => ({ job: job('completed') }),
+    getReconHistory: async () => ++calls === 1 ? initial : { jobs: [job('completed')], next_cursor: null } })
+  try {
+    resolveInitial({ jobs: [job('running')], next_cursor: null })
+    await flush(); await flush()
+    await clickText(view.root, 'Reconocimiento')
+    assert.ok(calls >= 2)
+    const panel = view.root.querySelector('[data-testid=recon-history]')
+    assert.match(panel.textContent, /Completado/)
+    assert.doesNotMatch(panel.textContent, /En ejecución/)
+  } finally { view.cleanup() }
+})
+
+
+test('una respuesta tardía de otro proyecto no aparece en su historial', async () => {
+  let resolveOld
+  const pending = new Promise(resolve => { resolveOld = resolve })
+  const route = reactive({ params: { id: 'first', type: 'engagement' } })
+  const calls = []
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }),
+    getReconHistory: async id => { calls.push(id); return id === 'first' ? pending : { jobs: [], next_cursor: null } } }, route)
+  try {
+    route.params.id = 'second'; await flush()
+    resolveOld({ jobs: [{ run_id: 'old-project', status: 'completed', stage: 'probe', dry_run: false, started_at: '2026-10-08T00:00:00Z' }], next_cursor: null })
+    await flush(); await flush()
+    await clickText(view.root, 'Reconocimiento')
+    const panel = view.root.querySelector('[data-testid=recon-history]')
+    assert.doesNotMatch(panel.textContent, /old-project/)
+    assert.ok(calls.includes('second'))
+    assert.match(panel.textContent, /Todavía no hay ejecuciones registradas/)
   } finally { view.cleanup() }
 })

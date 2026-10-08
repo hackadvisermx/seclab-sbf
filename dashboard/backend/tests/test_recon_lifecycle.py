@@ -38,6 +38,23 @@ class TestReconLifecycle(unittest.TestCase):
             threading.Event().wait(.01)
         self.fail('Timed out waiting for fixture')
 
+    def test_worker_history_retains_revision_only_for_its_own_summary(self):
+        revision = 'a' * 64
+        self.pipeline.write_text('import os,json,pathlib,sys\n'
+            'p=pathlib.Path(sys.argv[2])/"recon"/"summary.json"\n'
+            'p.write_text(json.dumps({"run_id":os.environ["SECLAB_RECON_RUN_ID"],"scope_revision":"' + revision + '"}))\n')
+        self.service.run_pipeline('fixture')
+        self.wait_for(lambda: self.service.store.get(self.key)['status'] == 'completed')
+        first = self.service.store.get(self.key)['run_id']
+        self.pipeline.write_text('print("fixture without a new summary")\n')
+        self.service.run_pipeline('fixture', dry_run=True)
+        self.wait_for(lambda: self.service.store.get(self.key)['status'] == 'simulated')
+        jobs = self.service.get_history('fixture')['jobs']
+        self.assertEqual(len(jobs), 2)
+        self.assertIsNone(jobs[0]['scope_revision'])
+        self.assertEqual(jobs[1]['run_id'], first)
+        self.assertEqual(jobs[1]['scope_revision'], revision)
+
     def test_progress_is_visible_while_running_and_never_reuses_another_run(self):
         self.pipeline.write_text('import os,json,pathlib,time\n'
             'p=pathlib.Path(__import__("sys").argv[2])/"recon"/"progress.json"\n'

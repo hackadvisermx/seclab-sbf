@@ -2,9 +2,9 @@
 
 Fecha: 2026-10-08. Base: `aaacc97` (#173 mergeado con aprobación individual). Rama `phase/154-playwright-setup`, worktree `/Users/castr/tmp/t01-playwright`.
 
-## Estado al detenerse
+## Estado al retomar
 
-Owner pidió detenerse para salir. Instalación funcional guardada; no mergeada. Pendiente reconstruir imagen con el último ajuste de configuración, repetir sus gates finales y revisar CI antes de pedir aprobación individual. No iniciar otra mejora mientras siga vigente la petición de parar.
+Owner pidió continuar. Imagen final reconstruida y validada; PR #174 pendiente de CI del nuevo head y aprobación individual antes del merge. El cierre anterior quedó guardado como borrador para evitar dejar una imagen sin verificar.
 
 ## Entrega
 
@@ -14,11 +14,13 @@ La aplicación solo admite `tester`, sin creación multiusuario. Se pidió aclar
 
 Dos pruebas de UI y una de login/logout real pasaron. Se detectó que el cierre forzado por defecto de Playwright dejaba Docker y credenciales; se corrigió con `gracefulShutdown` SIGTERM. Repetición de integración aprobada y comprobación posterior: ningún contenedor `seclab-playwright-*` ni directorio de credenciales permanece. El fixture inicial se limpió explícitamente.
 
-## Validación y pendientes
+## Validación final
 
-- 169 Python, 97 frontend, audit 0; dos pruebas Chromium UI y una integración real aprobadas.
-- Imagen aislada `seclab-sbf:full-phase154` (`1650475a883fd914`) construida antes del último ajuste de cierre gradual; 146 backend, smoke, Compose, Actionlint y CVE aprobados contra ese snapshot.
-- **La imagen todavía no corresponde a los insumos finales** (configuración de cierre actualizada después). Reconstruir etiqueta aislada y volver a registrar hash/gates antes de aprobación. No se toca `seclab-sbf:full` ni el contenedor vivo.
+- **170 Python**, **146 backend**, **97 frontend**, audit **0 vulnerabilidades**; dos pruebas Chromium UI y una integración real aprobadas.
+- Imagen aislada `seclab-sbf:full-phase154`, hash `3e435b50c65014f8`, idéntico al cálculo de insumos tras las pruebas. Build, smoke, Compose `.env.example`, Actionlint y gate CVE bajo política vigente aprobados, sin excepciones nuevas.
+- Un timeout forzado de 1 ms produce el fallo esperado; después no queda contenedor ni directorio de credenciales. Una nueva ejecución normal vuelve a pasar con cleanup comprobado.
+- Se detectó y corrigió que los reportes/resultados de Playwright entraban en el hash y contexto Docker. `.dockerignore` y `EXCLUDED_ROOTS` excluyen reportes, resultados, blob-report y el directorio privado de credenciales. La regresión comprueba que no cambian el hash y que config/helpers/tests sí lo cambian; también verifica las exclusiones Docker.
+- No se modifica `seclab-sbf:full` ni el laboratorio vivo.
 - Instalación/utilización documentadas en [guía E2E](../dashboard/frontend/e2e/README.md). La suite de UI simulada no sustituye la integración real; las tres pruebas iniciales no cubren toda la aplicación. Solo Chromium configurado; CI no ejecuta todavía estas suites.
 
 Reversión: retirar dependencia/scripts/configuraciones/pruebas. Los binarios Chromium viven en caché del usuario y no son recursos del laboratorio. Ninguna cuenta de producción ni datos del owner fueron modificados.

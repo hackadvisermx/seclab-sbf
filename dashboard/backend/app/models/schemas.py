@@ -110,6 +110,8 @@ class FindingDetail(BaseModel):
     frontmatter: FindingFrontmatter
     body: str  # Contenido markdown (descripción, pasos, pruebas HTTP, mitigación)
     engagement_id: str
+    artifact_refs: List[Dict[str, str]] = Field(default_factory=list)
+    artifact_refs_error: Optional[str] = None
 
 
 class FindingCreate(BaseModel):
@@ -127,6 +129,7 @@ class FindingCreate(BaseModel):
     http_response: Optional[str] = None
     remediation: Optional[str] = None
     body: Optional[str] = None
+    artifact_refs: Optional[List[Dict[str, str]]] = None
 
 
 # ==============================================================================

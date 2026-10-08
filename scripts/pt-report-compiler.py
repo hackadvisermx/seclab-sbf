@@ -17,6 +17,9 @@ import re
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seclab_artifacts import validate_artifact_refs
+
 SEVERITY_ORDER = {
     "CRITICAL": 5,
     "HIGH": 4,
@@ -52,6 +55,9 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
                 if ":" in line_str:
                     key, val = line_str.split(":", 1)
                     key = key.strip()
+                    if key == 'artifact_refs':
+                        metadata[key] = val.strip()
+                        continue
                     val = val.strip().strip("'\"")
                     # Manejo de comentarios inline
                     if " #" in val:
@@ -142,6 +148,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         "date": meta.get("date", datetime.date.today().isoformat()),
         "audit_log": meta.get("audit_log", "terminal.log"),
         "body": body.strip(),
+        "artifact_refs_raw": meta.get('artifact_refs', []),
         "has_poc": "```bash" in body or "curl " in body or "## 2. Pasos" in body or "## Pasos para Reproducir" in body,
         "has_negative_control": has_negative_control,
         "has_bounded_proof": has_bounded_proof,
@@ -251,6 +258,10 @@ def review_report_inputs(engagement_dir: pathlib.Path):
 
     for f in findings:
         prefix = f"[{f['file']}]"
+        try:
+            f['artifact_refs'] = validate_artifact_refs(engagement_dir, f['artifact_refs_raw'])
+        except (OSError, ValueError) as error:
+            issues.append(f'{prefix} Evidencia vinculada no válida: {error}')
         if not f["title"]:
             issues.append(f"{prefix} Falta el título de la vulnerabilidad.")
         if not f["has_poc"]:
@@ -282,7 +293,7 @@ def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[
     return not issues, issues, duplicates
 
 
-def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None) -> pathlib.Path:
+def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None, artifact_reference_output=None) -> pathlib.Path:
     """Compila el informe final REPORT.md a partir de target.yaml y evidence/*.md."""
     if output_path is None:
         output_path = engagement_dir / "REPORT.md"
@@ -290,6 +301,10 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
     findings, target_data, issues, _ = review_report_inputs(engagement_dir)
     if issues:
         raise ReportValidationError(issues)
+    if artifact_reference_output is not None:
+        for finding in findings:
+            for reference in finding.get('artifact_refs', []):
+                artifact_reference_output[reference['path']] = reference['sha256']
 
     # Intentar leer metadatos de target.yaml
     eng_name = engagement_dir.name
@@ -428,6 +443,8 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
                 f"- **CWE:** {f['cwe']}",
                 f"- **Activo:** `{f['asset']}`",
                 f"- **Registro referido por la ficha:** `{f['audit_log']}` (vínculo e integridad no verificados)",
+                *[f"- **Artefacto vinculado:** [{reference['path']}](./{reference['path']}) · SHA-256 `{reference['sha256']}`"
+                  for reference in f.get('artifact_refs', [])],
                 "",
                 f"{f['body']}",
                 "",

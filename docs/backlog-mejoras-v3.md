@@ -102,6 +102,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
 
+**Entrega parcial V3-03e (fase 161).** Las fichas guardan referencias explícitas ruta/SHA-256 a versiones revisadas de artefactos; UI conserva los vínculos al editar/recargar y muestra si el original cambió. Reporte y paquete revalidan las referencias declaradas y bloquean archivos ausentes, cambiados o referencias inválidas. El export incorpora archivos seleccionados con hashes original/copia, sanitiza texto y rechaza binarios/no UTF-8 en modo sanitizado. Detalle en [phase-161.md](phase-161.md). Los vínculos siguen siendo opcionales para fichas legacy y no confirman hallazgos; exigir evidencia y rationale para PROVEN, IDs persistentes, snapshots inmutables y procedencia job/herramienta siguen pendientes.
+
 **Entrega parcial V3-03d (fase 160).** El visor/API identifican la versión leída de un archivo mediante SHA-256 de bytes originales, tamaño y mtime UTC, distinguen límites/binario/decodificación con sustituciones y rechazan cambios detectados durante la lectura. La UI evita mezclar respuestas tardías de otro archivo/carpeta/proyecto. Huella hasta 32 MiB y preview textual hasta 2 MiB; no modifica originales ni crea snapshots persistentes. Detalle en [phase-160.md](phase-160.md). IDs estables de artefacto, vínculos a jobs/findings y revisión humana estructurada siguen pendientes; no se declara V3-03 completa.
 
 **Problema.** Ya existen artefactos, fichas de evidencia, estados de hallazgo, deduplicación y compuertas de paquete. La oportunidad es conectar esas piezas para que una afirmación del reporte pueda justificarse con la fuente original y la decisión humana correspondiente.

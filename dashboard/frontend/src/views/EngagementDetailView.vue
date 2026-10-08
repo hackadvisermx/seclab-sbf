@@ -662,6 +662,11 @@
             <div class="mt-3 text-xs text-slate-300 font-sans line-clamp-3 bg-slate-900/50 p-2.5 rounded-sm border border-slate-800">
               {{ f.body }}
             </div>
+            <p v-if="f.artifact_refs_error" class="text-xs text-amber-300">{{ f.artifact_refs_error }}</p>
+            <div v-for="reference in f.artifact_refs || []" :key="reference.path" class="mt-2 text-xs font-mono break-words" data-testid="finding-artifact-ref">
+              <button @click="openFindingArtifact(reference)" class="text-cyan-300 underline">Abrir {{ reference.path }}</button>
+              <code class="block break-all text-slate-400">{{ reference.sha256 }}</code>
+            </div>
           </div>
 
           <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-mono">
@@ -1391,6 +1396,7 @@
                 </button>
               </div>
               <div v-if="artifactSnapshot" data-testid="artifact-fingerprint" class="space-y-2 text-slate-400 break-words">
+                <p v-if="expectedArtifactSha && artifactSnapshot.sha256 !== expectedArtifactSha" class="text-amber-300">La versión actual no coincide con la vinculada al hallazgo. Revisa la evidencia; el vínculo guardado no se ha cambiado.</p>
                 <p>{{ artifactSnapshot.size }} bytes · Modificado: {{ artifactSnapshot.modified }} (UTC)</p>
                 <div v-if="artifactSnapshot.sha256" class="space-y-1">
                   <p>SHA-256 del archivo original en esta lectura:</p>
@@ -1692,6 +1698,29 @@
 
           </template>
 
+          <section class="space-y-2 border-t border-slate-800 pt-3 text-xs" data-testid="finding-artifact-editor">
+            <h3 class="font-bold text-cyan-300">Artefactos vinculados</h3>
+            <p class="text-slate-400">Revisa y vincula una versión de recon/, fuzzing/ o screenshots/. El paquete incluirá los archivos seleccionados. Vincular no confirma el hallazgo.</p>
+            <div v-if="findingForm.artifact_refs_error" class="text-amber-300">
+              {{ findingForm.artifact_refs_error }}
+              <button type="button" @click="findingForm.artifact_refs_error = null; findingForm.artifact_refs = []" class="underline">Descartar referencias inválidas</button>
+            </div>
+            <div v-for="(reference, index) in findingForm.artifact_refs" :key="reference.path" class="flex gap-2 items-start">
+              <div class="min-w-0 flex-1 break-all text-slate-300">{{ reference.path }}<code class="block text-[10px]">{{ reference.sha256 }}</code></div>
+              <button type="button" @click="findingForm.artifact_refs.splice(index, 1)" class="text-rose-300">Quitar vínculo</button>
+            </div>
+            <label for="finding-artifact-path" class="block text-slate-300">Ruta del artefacto</label>
+            <input id="finding-artifact-path" v-model="findingArtifactPath" placeholder="recon/raw.txt" class="w-full bg-[#070b14] border border-slate-700 p-2 text-slate-100" />
+            <button type="button" @click="reviewFindingArtifact" :disabled="findingArtifactBusy || !findingArtifactPath" class="px-2 py-1 bg-slate-800 text-cyan-300 disabled:opacity-40">{{ findingArtifactBusy ? 'Leyendo artefacto...' : 'Revisar artefacto' }}</button>
+            <p v-if="findingArtifactError" role="alert" class="text-amber-300">{{ findingArtifactError }}</p>
+            <div v-if="findingArtifactDraft" class="space-y-2">
+              <code class="block break-all text-cyan-300">SHA-256: {{ findingArtifactDraft.sha256 }}</code>
+              <pre class="max-h-40 overflow-auto whitespace-pre-wrap text-slate-300">{{ findingArtifactDraft.content }}</pre>
+              <p v-if="findingArtifactDraft.preview_status !== 'complete'" class="text-amber-300">{{ { decoded_with_replacement: 'Texto con bytes sustituidos', binary: 'Archivo binario', too_large: 'Archivo mayor a 2 MiB' }[findingArtifactDraft.preview_status] || 'Previsualización parcial' }}. La huella corresponde al archivo original. Los binarios y el texto no UTF-8 no pueden incluirse en la exportación sanitizada.</p>
+              <button type="button" @click="addFindingArtifact" class="px-2 py-1 bg-cyan-700 text-white">Vincular versión revisada</button>
+            </div>
+          </section>
+
           <div class="pt-3 border-t border-slate-800 flex items-center justify-end space-x-3">
             <button
               type="button"
@@ -1702,6 +1731,7 @@
             </button>
             <button
               type="submit"
+              :disabled="!!findingForm.artifact_refs_error"
               class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono"
             >
               Guardar Ficha
@@ -1871,6 +1901,7 @@ const artifactFiles = ref([])
 const selectedArtifact = ref(null)
 const selectedArtifactContent = ref('')
 const artifactSnapshot = ref(null)
+const expectedArtifactSha = ref(null)
 let artifactRequest = 0
 
 const capturedFlagsCount = computed(() => {
@@ -1943,7 +1974,14 @@ const findingForm = ref({
   http_request: '',
   http_response: '',
   remediation: '',
+  artifact_refs: [],
+  artifact_refs_error: null,
 })
+const findingArtifactPath = ref('')
+const findingArtifactDraft = ref(null)
+const findingArtifactError = ref('')
+const findingArtifactBusy = ref(false)
+let findingArtifactRequest = 0
 
 const cvssMetrics = ref({
   AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N'
@@ -2138,6 +2176,10 @@ async function loadFindings() {
 }
 
 function openNewFindingModal() {
+  findingArtifactPath.value = ''
+  findingArtifactDraft.value = null
+  findingArtifactError.value = ''
+  findingArtifactRequest++
   editingFinding.value = false
   cvssMetrics.value = { AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N' }
   findingForm.value = {
@@ -2154,11 +2196,17 @@ function openNewFindingModal() {
     http_request: '',
     http_response: '',
     remediation: '',
+    artifact_refs: [],
+    artifact_refs_error: null,
   }
   showFindingModal.value = true
 }
 
 function editFinding(f) {
+  findingArtifactPath.value = ''
+  findingArtifactDraft.value = null
+  findingArtifactError.value = ''
+  findingArtifactRequest++
   editingFinding.value = true
   findingForm.value = {
     slug: f.slug,
@@ -2175,6 +2223,8 @@ function editFinding(f) {
     http_request: '',
     http_response: '',
     remediation: '',
+    artifact_refs: (f.artifact_refs || []).map(reference => ({ ...reference })),
+    artifact_refs_error: f.artifact_refs_error || null,
   }
   cvssMetrics.value = { AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N' }
   for (const metric of findingForm.value.cvss_vector.split('/').slice(1)) {
@@ -2196,8 +2246,10 @@ async function recalcCvss() {
 }
 
 async function submitFinding() {
+  if (findingForm.value.artifact_refs_error) return
   try {
-    await api.saveFinding(engId.value, findingForm.value, engType.value)
+    const { artifact_refs_error, ...payload } = findingForm.value
+    await api.saveFinding(engId.value, payload, engType.value)
     showFindingModal.value = false
     await loadFindings()
   } catch (err) {
@@ -2535,6 +2587,7 @@ async function selectArtifactFolder(folder) {
   selectedArtifact.value = null
   selectedArtifactContent.value = ''
   artifactSnapshot.value = null
+  expectedArtifactSha.value = null
   artifactFiles.value = []
   try {
     const files = await api.getArtifacts(projectId, folder, projectType)
@@ -2547,11 +2600,12 @@ async function selectArtifactFolder(folder) {
   }
 }
 
-async function loadArtifactPreview(file) {
+async function loadArtifactPreview(file, expectedHash = null) {
   const request = ++artifactRequest
   const projectId = engId.value
   const projectType = engType.value
   selectedArtifact.value = file
+  expectedArtifactSha.value = expectedHash
   selectedArtifactContent.value = 'Cargando contenido...'
   artifactSnapshot.value = null
   try {
@@ -2564,6 +2618,56 @@ async function loadArtifactPreview(file) {
     selectedArtifactContent.value = 'Error al leer archivo: ' + err.message
   }
 }
+
+async function openFindingArtifact(reference) {
+  activeTab.value = 'artifacts'
+  const request = artifactRequest + 1
+  await selectArtifactFolder(reference.path.split('/')[0])
+  if (request !== artifactRequest) return
+  await loadArtifactPreview({ rel_path: reference.path, name: reference.path.split('/').at(-1) }, reference.sha256)
+}
+
+async function reviewFindingArtifact() {
+  const request = ++findingArtifactRequest
+  const projectId = engId.value
+  const projectType = engType.value
+  const path = findingArtifactPath.value
+  findingArtifactDraft.value = null
+  findingArtifactError.value = ''
+  if (!/^(recon|fuzzing|screenshots)\/[a-zA-Z0-9._/-]{1,230}$/.test(path) || path.split('/').some(part => ['', '.', '..'].includes(part))) {
+    findingArtifactError.value = 'Usa una ruta canónica de recon/, fuzzing/ o screenshots/ con nombre ASCII sin espacios.'
+    return
+  }
+  findingArtifactBusy.value = true
+  try {
+    const snapshot = await api.getArtifactContent(projectId, path, projectType)
+    if (request !== findingArtifactRequest || !showFindingModal.value || projectId !== engId.value || projectType !== engType.value) return
+    if (snapshot.fingerprint_status !== 'available' || !/^[a-f0-9]{64}$/.test(snapshot.sha256 || '')) throw new Error('El artefacto no tiene una huella disponible para vincular.')
+    findingArtifactDraft.value = { ...snapshot, rel_path: path }
+  } catch (error) {
+    if (request === findingArtifactRequest) findingArtifactError.value = error.message
+  } finally {
+    if (request === findingArtifactRequest) findingArtifactBusy.value = false
+  }
+}
+
+function addFindingArtifact() {
+  const snapshot = findingArtifactDraft.value
+  if (!snapshot || snapshot.rel_path !== findingArtifactPath.value) return
+  if (findingForm.value.artifact_refs.length >= 10 || findingForm.value.artifact_refs.some(reference => reference.path === snapshot.rel_path)) {
+    findingArtifactError.value = 'Máximo 10 vínculos sin rutas duplicadas. Quita el vínculo anterior para reemplazarlo.'
+    return
+  }
+  findingForm.value.artifact_refs.push({ path: snapshot.rel_path, sha256: snapshot.sha256 })
+  findingArtifactPath.value = ''
+}
+
+watch([findingArtifactPath, showFindingModal, engId, engType], () => {
+  findingArtifactRequest++
+  findingArtifactDraft.value = null
+  findingArtifactError.value = ''
+  findingArtifactBusy.value = false
+})
 
 async function loadReconHistory(append = false) {
   if (reconHistoryBusy.value) {
@@ -2734,6 +2838,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  findingArtifactRequest++
   artifactRequest++
   stopReconPolling()
 })

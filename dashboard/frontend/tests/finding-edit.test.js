@@ -463,3 +463,61 @@ test('cambiar carpeta descarta respuestas antiguas de listado y previsualizació
     assert.doesNotMatch(view.root.textContent, /stale|raw\.txt/)
   } finally { view.cleanup() }
 })
+
+test('editar conserva vínculos y solo añade la versión revisada explícitamente', async () => {
+  const reference = { path: 'recon/kept.txt', sha256: 'a'.repeat(64) }
+  let saved
+  const view = await mount({ getLoot: async () => ({ credentials: [], files: [] }), getArtifacts: async () => [], getVaultKeys: async () => [],
+    getFindings: async () => [{ ...finding, artifact_refs: [reference] }],
+    getArtifactContent: async () => ({ content: 'fixture bytes', sha256: 'b'.repeat(64), fingerprint_status: 'available', preview_status: 'complete' }),
+    saveFinding: async (id, payload) => { saved = JSON.parse(JSON.stringify(payload)) } })
+  try {
+    await clickText(view.root, 'Hallazgos')
+    await clickText(view.root, 'Editar')
+    const section = view.root.querySelector('[data-testid="finding-artifact-editor"]')
+    assert.match(section.textContent, /recon\/kept.txt/)
+    const input = section.querySelector('input')
+    input.value = 'recon/new.txt'; input.dispatchEvent(new window.Event('input', { bubbles: true })); await flush()
+    await clickText(section, 'Revisar artefacto')
+    assert.match(section.textContent, /fixture bytes/)
+    await clickText(section, 'Vincular versión revisada')
+    await clickText(view.root, 'Guardar Ficha')
+    assert.equal(saved.body, body)
+    assert.deepEqual(saved.artifact_refs, [reference, { path: 'recon/new.txt', sha256: 'b'.repeat(64) }])
+  } finally { view.cleanup() }
+})
+
+test('respuesta tardía del revisor no vincula otra ruta y referencias inválidas requieren descarte', async () => {
+  let resolveRead, writes = 0
+  const read = new Promise(resolve => { resolveRead = resolve })
+  const view = await mount({ getLoot: async () => ({ credentials: [], files: [] }), getArtifacts: async () => [], getVaultKeys: async () => [],
+    getFindings: async () => [{ ...finding, artifact_refs_error: 'Referencias inválidas', artifact_refs: [] }],
+    getArtifactContent: () => read, saveFinding: async () => { writes++ } })
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Editar')
+    const section = view.root.querySelector('[data-testid="finding-artifact-editor"]')
+    await clickText(view.root, 'Guardar Ficha'); assert.equal(writes, 0)
+    const input = section.querySelector('input')
+    input.value = 'recon/one.txt'; input.dispatchEvent(new window.Event('input', { bubbles: true })); await flush()
+    await clickText(section, 'Revisar artefacto')
+    input.value = 'recon/two.txt'; input.dispatchEvent(new window.Event('input', { bubbles: true })); await flush()
+    resolveRead({ content: 'stale', sha256: 'a'.repeat(64), fingerprint_status: 'available' }); await flush()
+    assert.doesNotMatch(section.textContent, /stale|Vincular versión revisada/)
+    await clickText(section, 'Descartar referencias inválidas')
+    await clickText(view.root, 'Guardar Ficha'); assert.equal(writes, 1)
+  } finally { view.cleanup() }
+})
+
+test('abrir evidencia vinculada muestra diferencia sin actualizar la huella guardada', async () => {
+  const reference = { path: 'recon/raw.txt', sha256: 'a'.repeat(64) }
+  const view = await mount({ getLoot: async () => ({ credentials: [], files: [] }), getArtifacts: async () => [], getVaultKeys: async () => [],
+    getFindings: async () => [{ ...finding, artifact_refs: [reference] }],
+    getArtifactContent: async () => ({ content: 'changed', sha256: 'b'.repeat(64), fingerprint_status: 'available', preview_status: 'complete' }) })
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Abrir recon/raw.txt')
+    assert.match(view.root.textContent, /no coincide con la vinculada/)
+    assert.match(view.root.textContent, /no se ha cambiado/)
+    await clickText(view.root, 'Hallazgos')
+    assert.ok(view.root.querySelector('[data-testid="finding-artifact-ref"]').textContent.includes('a'.repeat(64)))
+  } finally { view.cleanup() }
+})

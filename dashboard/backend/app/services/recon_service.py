@@ -3,6 +3,7 @@ import signal
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import threading
@@ -188,6 +189,27 @@ class ReconService:
             "has_recon_data": summary_path.is_file() or (recon_dir / "subdomains.txt").is_file(),
         }
 
+    def get_history(self, engagement_id, engagement_type='engagement', limit=25, before=None):
+        if not self.get_target_dir(engagement_id, engagement_type):
+            return {'error': 'Proyecto no encontrado.'}
+        return {'engagement_id': engagement_id, 'engagement_type': engagement_type,
+                **self.store.history((engagement_type, engagement_id), limit, before)}
+
+    @staticmethod
+    def _completed_scope_revision(target_dir, run_id):
+        # A stale summary must never become provenance for a later job.
+        path = target_dir / 'recon' / 'summary.json'
+        try:
+            if path.parent.is_symlink() or path.is_symlink() or path.stat().st_size > 2 * 1024 * 1024:
+                return None
+            summary = json.loads(path.read_text(encoding='utf-8'))
+            revision = summary.get('scope_revision')
+            if summary.get('run_id') == run_id and isinstance(revision, str) and re.fullmatch(r'[a-f0-9]{64}', revision):
+                return revision
+        except (OSError, ValueError, AttributeError):
+            pass
+        return None
+
     def get_log(self, engagement_id: str, lines: int = 200, engagement_type: str = "engagement") -> str:
         """Retorna el contenido del archivo de bitácora recon.log."""
         target_dir = self.get_target_dir(engagement_id, engagement_type)
@@ -303,7 +325,7 @@ class ReconService:
                     cancelled = job and job['status'] == 'cancelling'
                     status = 'cancelled' if cancelled else (('simulated' if dry_run else 'completed') if proc.returncode == 0 else 'failed')
                     error = None if cancelled or proc.returncode == 0 else f'Código de salida: {proc.returncode}'
-                    self.store.finish(job_key, run_id, status, error)
+                    self.store.finish(job_key, run_id, status, error, self._completed_scope_revision(target_dir, run_id))
                     self._processes.pop(job_key, None)
         except Exception as error:
             with self._lock:

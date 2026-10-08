@@ -163,6 +163,24 @@ def reporting(root):
     }
 
 
+def recognition_history(root):
+    module = load('v3_recon_jobs', SCRIPTS.parent / 'dashboard/backend/app/core/recon_jobs.py')
+    path = root / 'history/jobs.db'
+    store = module.ReconJobStore(path)
+    key = ('engagement', 'fixture-history')
+    ids = []
+    for status in ['completed', 'simulated', 'failed']:
+        job = store.begin(key, 'probe', status == 'simulated')
+        ids.append(job['run_id'])
+        store.finish(key, job['run_id'], status)
+    reopened = module.ReconJobStore(path)
+    jobs = reopened.history(key)['jobs']
+    return {'fixture_only': True, 'runner_executed': False, 'jobs_retained': len(jobs),
+            'statuses': [job['status'] for job in jobs],
+            'all_ids_preserved_after_reopening': {job['run_id'] for job in jobs} == set(ids),
+            'current_job_is_latest': reopened.get(key)['run_id'] == ids[-1]}
+
+
 def main():
     def denied(*args, **kwargs):
         raise RuntimeError('El recorder de fixtures intentó utilizar la red.')
@@ -174,7 +192,7 @@ def main():
         root = pathlib.Path(folder)
         result = {'fixture_only': True, 'human_usability_measured': False,
                   'simulation': simulation(root), 'resumption': resumption(root),
-                  'reporting': reporting(root)}
+                  'reporting': reporting(root), 'recognition_history': recognition_history(root)}
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 

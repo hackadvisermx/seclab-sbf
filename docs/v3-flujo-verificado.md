@@ -52,8 +52,8 @@ El pipeline carga `target.yaml`/`scope.txt` al construir la ejecución. Utiliza 
 | D03 | **Refutada para sondeo interno; otros caminos pendientes** | `PinnedConnection` utiliza IP comprobada, Host/SNI original y registra `redirect_followed: false` | Verificar individualmente helpers/proveedores; no afirmar que todo producto aplica ese control |
 | D04 | **Confirmada** | `pt-nmp`, `pt-fuzz-params` y shell libre no pasan por matcher; route guard comprueba rutas, no engagement | V3-01/04: delimitar ejecución gestionada y responsabilidades del operador; controles técnicos que sean viables |
 | D05 | **Confirmada** | Pipeline mantiene `scope_data` cargado una vez; job no conserva versión del contrato ni permiso pasivo/activo | V3-01: contrato/versionado y revalidación operativa |
-| D06 | **Confirmada, P0** | En fixture: `check` rechaza activo excluido (exit 1), `build` genera reporte que lo incluye (exit 0) | V3-03a: hacer cumplir la validación antes de compilar/exportar una entrega final; distinguir borrador revisable si se ofrece |
-| D07 | **Confirmada, P0** | En fixture: `check` acepta activo `UNKNOWN` (exit 0), texto PoC sintético sin artefacto original y estado `PROVEN`; cierre llega a `closed` | V3-01/03: política explícita de scope y revisión/evidencia para afirmar `PROVEN` |
+| D06 | **Corregida en 147** | En fixture: `check` rechaza activo excluido (exit 1), `build` genera reporte que lo incluye (exit 0) | Check/build comparten validación; export recompila; download no reutiliza paquetes previos ante bloqueo. Ver [fase 147](phase-147.md) |
+| D07 | **Parcialmente corregida en 147; procedencia pendiente** | En fixture: `check` acepta activo `UNKNOWN` (exit 0), texto PoC sintético sin artefacto original y estado `PROVEN`; cierre llega a `closed` | UNKNOWN y activo ausente ya bloquean check/build/export. Revisión de fuente original y cierre siguen pendientes en V3-03 |
 | D08 | **Confirmada** | Reporte asegura que `terminal.log` está archivado aunque el archivo no exista; pack omite `probe_observations.jsonl` y `recon.log`, pero hashes de archivos incluidos son correctos | V3-03: afirmaciones ajustadas a archivos reales y export de la cadena de procedencia |
 | D09 | **Confirmada parcialmente** | Job tiene `run_id`; SQLite conserva último job por engagement. Artefactos expuestos por ruta/tamaño/mtime, sin ID independiente/job/source | V3-02/03: historial de decisiones y relaciones estables. No declarar ausencia total de IDs o hashing |
 | D10 | **Refutada para recon; revisión humana incompleta** | El pipeline escribe recon, no findings. UI/CLI permiten estados; ficha nueva puede empezar en `PROVEN` sin vínculo a output original | V3-03: separar observación de confirmación con requisitos explícitos, conservando estados actuales |
@@ -97,3 +97,7 @@ Para completar V3-00 faltan sesiones de tareas con perfiles reales. Registrar po
 4. Experto/supervisor: localizar en el reporte el origen de una afirmación y decidir si es defendible.
 
 No hay aún porcentajes de finalización, abandono, falsos bloqueos o tiempo de supervisión medidos. La instrumentación existente de jobs y proxy aporta datos técnicos, pero no mide decisiones/hints ni sustituye esas sesiones.
+
+## Evolución posterior a la línea base
+
+La línea base 146 se conserva como registro histórico. [Medición 147](baselines/v3-phase147.json): check UNKNOWN = 1, build de activo excluido = 1, export excluido = blocked. El recorder usa después una ficha dentro de alcance para observar los límites todavía pendientes de procedencia/cierre.

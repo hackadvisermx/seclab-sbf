@@ -33,15 +33,8 @@ def pack_engagement(eng_id: str, sanitize: bool = Query(True), type: str = Query
         raise HTTPException(status_code=404, detail="Directorio del engagement no encontrado")
     res = runner_service.pack_engagement(str(target_dir), sanitize=sanitize)
 
-    # Identificar el paquete generado en exports/
-    exports_dir = target_dir / "exports"
-    latest_bundle = None
-    if exports_dir.is_dir():
-        pkgs = sorted(list(exports_dir.glob("*.tar.gz")) + list(exports_dir.glob("*.zip")), key=lambda p: p.stat().st_mtime, reverse=True)
-        if pkgs:
-            latest_bundle = pkgs[0].name
-
-    res["latest_bundle"] = latest_bundle
+    archive_path = res.get("archive_path")
+    res["latest_bundle"] = pathlib.Path(archive_path).name if res.get("success") and archive_path else None
     return res
 
 
@@ -52,16 +45,16 @@ def download_engagement(eng_id: str, type: str = Query("engagement")):
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail="Directorio no encontrado")
 
-    exports_dir = target_dir / "exports"
-    if not exports_dir.is_dir() or not any(exports_dir.iterdir()):
-        # Si no existe, empaquetar automáticamente primero
-        runner_service.pack_engagement(str(target_dir), sanitize=True)
-
-    pkgs = sorted(list(exports_dir.glob("*.tar.gz")) + list(exports_dir.glob("*.zip")), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not pkgs:
-        raise HTTPException(status_code=404, detail="No se encontró ningún paquete para descargar")
-
-    latest_pkg = pkgs[0]
+    result = runner_service.pack_engagement(str(target_dir), sanitize=True)
+    if not result.get("success"):
+        raise HTTPException(status_code=409, detail=result.get("stderr") or result.get("stdout") or "Exportación bloqueada; revisa alcance y evidencias.")
+    archive_path = result.get("archive_path")
+    if not archive_path:
+        raise HTTPException(status_code=500, detail="El empaquetador no devolvió un archivo generado.")
+    latest_pkg = pathlib.Path(archive_path).resolve()
+    exports_dir = (target_dir / "exports").resolve()
+    if latest_pkg.parent != exports_dir or not latest_pkg.is_file():
+        raise HTTPException(status_code=500, detail="El paquete generado no está disponible en exports/.")
     media_type = "application/gzip" if latest_pkg.name.endswith(".tar.gz") else "application/zip"
     return FileResponse(
         path=str(latest_pkg),

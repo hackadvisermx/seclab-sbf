@@ -9,6 +9,7 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 """
 
 import datetime
+import importlib.machinery
 import importlib.util
 import os
 import pathlib
@@ -146,7 +147,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     }
 
 
-def get_findings(evidence_dir: pathlib.Path) -> List[Dict[str, Any]]:
+def get_findings(evidence_dir: pathlib.Path, strict: bool = False) -> List[Dict[str, Any]]:
     """Carga y ordena todos los hallazgos en el directorio de evidencia."""
     if not evidence_dir.is_dir():
         return []
@@ -158,6 +159,8 @@ def get_findings(evidence_dir: pathlib.Path) -> List[Dict[str, Any]]:
         try:
             findings.append(parse_evidence_file(f))
         except Exception as e:
+            if strict:
+                raise ValueError(f"No se pudo leer la ficha {f.name}: {e}") from e
             print(f"[!] Advertencia: No se pudo parsear {f}: {e}", file=sys.stderr)
 
     # Ordenar por severidad descendente y luego por CVSS score
@@ -202,7 +205,8 @@ def load_scope_validator():
     if not script_path.is_file():
         script_path = pathlib.Path("/usr/local/bin/pt-scope-validator")
     if script_path.is_file():
-        spec = importlib.util.spec_from_file_location("pt_scope_validator", script_path)
+        spec = importlib.util.spec_from_file_location("pt_scope_validator", script_path,
+            loader=importlib.machinery.SourceFileLoader("pt_scope_validator", str(script_path)))
         if spec and spec.loader:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
@@ -210,53 +214,66 @@ def load_scope_validator():
     return None
 
 
-def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[str]]:
-    """Verifica la validez y disciplina evidence-first de los hallazgos.
+class ReportValidationError(ValueError):
+    def __init__(self, issues):
+        self.issues = issues
+        super().__init__("Reporte bloqueado: " + "; ".join(issues))
 
-    Devuelve (ok, issues, duplicate_warnings): `issues` son fallos que deben
-    corregirse (determinan `ok`); `duplicate_warnings` son posibles duplicados
-    por causa raíz (ver find_duplicate_groups) y son solo advertencias — no
-    hacen fallar la verificación, porque consolidar o no es una decisión del
-    operador, no un hecho automático.
-    """
+
+def review_report_inputs(engagement_dir: pathlib.Path):
     evidence_dir = engagement_dir / "evidence"
-    if not evidence_dir.is_dir():
-        return False, [f"El directorio de evidencia no existe: {evidence_dir}"], []
-
-    findings = get_findings(evidence_dir)
-    if not findings:
-        return True, ["No se encontraron fichas de evidencia (.md) en el directorio."], []
-
     issues: List[str] = []
-    scope_val = load_scope_validator()
-    target_yaml = engagement_dir / "target.yaml"
-    scope_data = None
-    if scope_val and target_yaml.is_file():
+    findings = []
+    if not evidence_dir.is_dir():
+        issues.append(f"El directorio de evidencia no existe: {evidence_dir}")
+    else:
         try:
-            scope_data = scope_val.load_target_yaml(target_yaml)
-        except Exception:
-            pass
+            findings = get_findings(evidence_dir, strict=True)
+        except (OSError, ValueError) as error:
+            issues.append(str(error))
+
+    scope_val = None
+    scope_data = {}
+    try:
+        scope_val = load_scope_validator()
+        if scope_val is None:
+            issues.append("Scope Guard no está disponible; reconstruye la imagen del laboratorio.")
+        else:
+            scope_data = scope_val.load_target_yaml(engagement_dir / "target.yaml")
+    except Exception as error:
+        issues.append(f"No se pudo validar target.yaml: {error}")
 
     for f in findings:
         prefix = f"[{f['file']}]"
         if not f["title"]:
             issues.append(f"{prefix} Falta el título de la vulnerabilidad.")
-        if f["severity"] not in SEVERITY_ORDER:
-            issues.append(f"{prefix} Severidad inválida '{f['severity']}'. Debe ser Critical, High, Medium, Low o Info.")
         if not f["has_poc"]:
             issues.append(f"{prefix} Criterio Evidence-First incumplido: falta sección de PoC o comandos curl reproducibles.")
         if not f["has_remediation"]:
             issues.append(f"{prefix} Falta sección de recomendación o remediación técnica.")
+        asset = str(f["asset"]).strip()
+        if not asset or asset.upper() == "N/A":
+            issues.append(f"{prefix} Falta el activo; indica un objetivo autorizado en target.yaml.")
+        elif scope_val and scope_data:
+            try:
+                verdict, reason = scope_val.check_scope(asset, scope_data)
+                if verdict == "OUT_OF_SCOPE":
+                    issues.append(f"{prefix} ALERTA CRITICA: El activo evaluado '{asset}' esta marcado FUERA DE ALCANCE ({reason})")
+                elif verdict != "IN_SCOPE":
+                    issues.append(f"{prefix} Activo '{asset}' sin alcance confirmado ({verdict}: {reason}). Revisa target.yaml.")
+            except Exception as error:
+                issues.append(f"{prefix} No se pudo validar el activo: {error}")
 
-        # Verificar activo contra target.yaml si está disponible
-        if scope_val and scope_data and f["asset"] and f["asset"] != "N/A":
-            verdict, reason = scope_val.check_scope(f["asset"], scope_data)
-            if verdict == "OUT_OF_SCOPE":
-                issues.append(f"{prefix} ALERTA CRITICA: El activo evaluado '{f['asset']}' esta marcado FUERA DE ALCANCE ({reason})")
+    duplicates = [format_duplicate_warning(group) for group in find_duplicate_groups(findings)]
+    return findings, scope_data, issues, duplicates
 
-    duplicate_warnings = [format_duplicate_warning(group) for group in find_duplicate_groups(findings)]
 
-    return len(issues) == 0, issues, duplicate_warnings
+def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[str]]:
+    """Devuelve (ok, issues, duplicate_warnings); los duplicados no bloquean."""
+    findings, _, issues, duplicates = review_report_inputs(engagement_dir)
+    if not findings and not issues:
+        return True, ["No se encontraron fichas de evidencia (.md) en el directorio."], duplicates
+    return not issues, issues, duplicates
 
 
 def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None) -> pathlib.Path:
@@ -264,8 +281,9 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
     if output_path is None:
         output_path = engagement_dir / "REPORT.md"
 
-    evidence_dir = engagement_dir / "evidence"
-    findings = get_findings(evidence_dir)
+    findings, target_data, issues, _ = review_report_inputs(engagement_dir)
+    if issues:
+        raise ReportValidationError(issues)
 
     # Intentar leer metadatos de target.yaml
     eng_name = engagement_dir.name
@@ -273,20 +291,11 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
     vpn_profile = "none"
     auditor = "tester"
     date_str = datetime.date.today().isoformat()
-    scope_val = load_scope_validator()
-    target_yaml = engagement_dir / "target.yaml"
-    target_data: Dict[str, Any] = {}
-
-    if scope_val and target_yaml.is_file():
-        try:
-            target_data = scope_val.load_target_yaml(target_yaml)
-            eng_meta = target_data.get("engagement", {})
-            eng_name = eng_meta.get("name", eng_name)
-            client = eng_meta.get("client", client)
-            auditor = eng_meta.get("auditor", auditor)
-            vpn_profile = target_data.get("network", {}).get("vpn_profile", vpn_profile)
-        except Exception:
-            pass
+    eng_meta = target_data.get("engagement", {})
+    eng_name = eng_meta.get("name", eng_name)
+    client = eng_meta.get("client", client)
+    auditor = eng_meta.get("auditor", auditor)
+    vpn_profile = target_data.get("network", {}).get("vpn_profile", vpn_profile)
 
     confirmed = [f for f in findings if f["status"] == "PROVEN"]
     historical = sum(f["status"] == "MITIGATED" for f in findings)
@@ -502,7 +511,11 @@ def main() -> int:
         out_file = None
         if len(sys.argv) >= 4:
             out_file = pathlib.Path(sys.argv[3]).resolve()
-        res_file = build_report(eng_dir, out_file)
+        try:
+            res_file = build_report(eng_dir, out_file)
+        except (ValueError, OSError) as error:
+            print(f"[!] {error}", file=sys.stderr)
+            return 1
         print(f"[+] Reporte compilado exitosamente en: {res_file}")
         findings = get_findings(evidence_dir)
         print(f"    Total de hallazgos consolidados: {len(findings)}")

@@ -377,3 +377,28 @@ test('historial conserva revisión, permisos y límites sin confundir alcance ej
     for (const hash of ['a', 'b', 'c']) assert.ok(panel.textContent.includes(hash.repeat(64)))
   } finally { view.cleanup() }
 })
+
+test('Copiloto muestra validación no disponible y conserva la sugerencia como texto', async () => {
+  let payload, executed = false
+  const original = '<script>fixture-only</script> Revisa example.test.'
+  const warning = '⚠️ Validación de alcance no disponible. La comprobación agotó su tiempo de espera.\nEsta respuesta sigue siendo una sugerencia sin comprobación de alcance.\n\n'
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }),
+    runRecon: async () => { executed = true },
+    sendCopilotChat: async data => { payload = structuredClone(data); return { content: warning + original, provider: 'fixture', model: 'fixture-model', latency_ms: 12 } } })
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    const input = view.root.querySelector('input[placeholder^="Pregunta al copiloto"]')
+    input.value = 'Ayuda con evidencia'
+    input.dispatchEvent(new browser.window.Event('input', { bubbles: true }))
+    input.closest('form').dispatchEvent(new browser.window.Event('submit', { bubbles: true, cancelable: true }))
+    await flush()
+    assert.equal(payload.messages[0].content, 'Ayuda con evidencia')
+    assert.match(view.root.textContent, /Validación de alcance no disponible/)
+    assert.ok([...view.root.querySelectorAll('pre')].some(pre => pre.textContent === warning + original))
+    assert.equal(view.root.querySelector('script'), null)
+    assert.equal(executed, false)
+    assert.match(view.root.textContent, /fixture-model/)
+    assert.match(view.root.textContent, /no ejecuta comandos/)
+  } finally { view.cleanup() }
+})

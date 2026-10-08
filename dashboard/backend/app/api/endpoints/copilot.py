@@ -19,20 +19,14 @@ def _scope_validator_script() -> pathlib.Path:
     return source if source.is_file() else SCRIPTS_DIR / "pt-scope-validator"
 
 
-def _validate_copilot_scope(content: str, target_dir: pathlib.Path) -> List[Dict[str, str]]:
-    """Valida cada host/URL/IP que el copiloto haya sugerido en `content` contra
-    pt-scope-validator.py (acción "check-text", backlog A20), reutilizando las
-    mismas reglas de in_scope/out_of_scope que el resto del laboratorio, en vez
-    de confiar únicamente en la instrucción de alcance del system prompt. No
-    bloquea la respuesta: devuelve solo lo que no está confirmado como IN_SCOPE,
-    para que se le advierta al operador antes de mostrarla."""
+def _validate_copilot_scope(content: str, target_dir: pathlib.Path) -> Dict[str, Any]:
     if not content.strip():
-        return []
+        return {'available': True, 'findings': []}
     if not (target_dir / "target.yaml").is_file() and not (target_dir / "scope.txt").is_file():
-        return []
+        return {'available': False, 'reason': 'Falta target.yaml o scope.txt en el proyecto.'}
     script = _scope_validator_script()
     if not script.is_file():
-        return []
+        return {'available': False, 'reason': 'El validador de alcance no está instalado.'}
     try:
         proc = subprocess.run(
             [sys.executable, str(script), "check-text", str(target_dir)],
@@ -41,15 +35,25 @@ def _validate_copilot_scope(content: str, target_dir: pathlib.Path) -> List[Dict
             text=True,
             timeout=10,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    if proc.returncode == 2 or not proc.stdout.strip():
-        return []
+    except subprocess.TimeoutExpired:
+        return {'available': False, 'reason': 'La comprobación de alcance agotó su tiempo de espera.'}
+    except OSError:
+        return {'available': False, 'reason': 'No se pudo iniciar el validador de alcance.'}
+    if proc.returncode not in (0, 1, 3) or not proc.stdout.strip():
+        return {'available': False, 'reason': 'El validador falló; revisa el alcance y la instalación.'}
     try:
         findings = json.loads(proc.stdout)
     except ValueError:
-        return []
-    return findings if isinstance(findings, list) else []
+        return {'available': False, 'reason': 'El validador devolvió una respuesta inválida.'}
+    if not isinstance(findings, list) or any(
+            not isinstance(finding, dict) or finding.get('verdict') not in ('OUT_OF_SCOPE', 'UNKNOWN')
+            or not all(isinstance(finding.get(key), str) and finding[key].strip() for key in ('target', 'reason'))
+            for finding in findings):
+        return {'available': False, 'reason': 'El validador devolvió una respuesta inválida.'}
+    expected_code = 1 if any(finding['verdict'] == 'OUT_OF_SCOPE' for finding in findings) else (3 if findings else 0)
+    if proc.returncode != expected_code:
+        return {'available': False, 'reason': 'El resultado del validador es inconsistente.'}
+    return {'available': True, 'findings': findings}
 
 
 def _format_scope_warning(findings: List[Dict[str, str]]) -> str:
@@ -190,7 +194,14 @@ async def copilot_chat(payload: CopilotChatRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error en comunicación con el modelo: {str(e)}")
 
-    scope_findings = _validate_copilot_scope(response.content, target_dir)
-    if scope_findings:
-        response.content = _format_scope_warning(scope_findings) + "\n\n" + response.content
+    validation = _validate_copilot_scope(response.content, target_dir)
+    if not validation['available']:
+        response.content = (
+            '⚠️ Validación de alcance no disponible. ' + validation['reason'] + '\n'
+            'Esta respuesta sigue siendo una sugerencia sin comprobación de alcance. '
+            'Revisa y corrige el alcance antes de realizar acciones; el Copiloto no autoriza ni ejecuta pruebas.\n\n'
+            + response.content
+        )
+    elif validation['findings']:
+        response.content = _format_scope_warning(validation['findings']) + "\n\n" + response.content
     return response

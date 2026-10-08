@@ -347,3 +347,33 @@ test('carga inicial tardía del alcance no borra una revisión más reciente', a
     assert.ok(view.root.querySelector('[data-testid=recon-preview]'))
   } finally { view.cleanup() }
 })
+
+
+test('historial conserva revisión, permisos y límites sin confundir alcance ejecutado ni legacy', async () => {
+  const plan = { schema_version: 1, checked_at: '2026-10-08T00:00:00Z', plan_revision: 'a'.repeat(64),
+    scope_revision: 'b'.repeat(64), dry_run: true, authorization: { allow_passive: true, allow_active: false },
+    operational_limits: { max_requests_per_second: 1, max_parallel_threads: 2, max_probe_targets: 100, probe_timeout_seconds: 8 },
+    stages: [{ stage: 'probe', interaction: 'active', targets_count: 70, discarded_count: 1, targets_pending: true,
+      targets: [{ host: 'reviewed.example.test', verdict: 'IN_SCOPE' }], discarded: [{ host: 'external.test', verdict: 'UNKNOWN' }] }] }
+  const job = { run_id: 'reviewed', status: 'simulated', stage: 'probe', dry_run: true,
+    started_at: '2026-10-08T00:00:00Z', scope_revision: 'c'.repeat(64), reviewed_plan: plan }
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }),
+    getReconHistory: async () => ({ jobs: [job, { ...job, run_id: 'legacy', reviewed_plan: null }], next_cursor: null }) })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const panel = view.root.querySelector('[data-testid=recon-history]')
+    assert.equal(panel.querySelectorAll('[data-testid=recon-history-review]').length, 1)
+    assert.match(panel.textContent, /Plan revisado al iniciar/)
+    assert.match(panel.textContent, /pasivo sí · activo no/)
+    assert.match(panel.textContent, /La simulación no otorga permisos/)
+    assert.match(panel.textContent, /8 s por petición/)
+    assert.match(panel.textContent, /reviewed.example.test · IN_SCOPE/)
+    assert.match(panel.textContent, /external.test · UNKNOWN/)
+    assert.match(panel.textContent, /Targets finales pendientes/)
+    assert.match(panel.textContent, /Muestra limitada a 50/)
+    assert.match(panel.textContent, /rutas, consultas, fragmentos y credenciales/)
+    assert.match(panel.textContent, /Sin plan revisado registrado/)
+    for (const hash of ['a', 'b', 'c']) assert.ok(panel.textContent.includes(hash.repeat(64)))
+  } finally { view.cleanup() }
+})

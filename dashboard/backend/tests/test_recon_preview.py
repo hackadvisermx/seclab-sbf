@@ -60,3 +60,38 @@ class TestReconPreview(unittest.TestCase):
             self.assertFalse(self.service.preview_pipeline('fixture')['success'])
         with patch.object(module.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, json.dumps([]), '')):
             self.assertFalse(self.service.preview_pipeline('fixture')['success'])
+
+    def test_review_is_saved_before_worker_and_not_rebuilt_from_current_inputs(self):
+        self.addCleanup(self.service._threads.clear)
+        preview = self.service.preview_pipeline('fixture', 'probe', True)
+        with patch.object(module.threading.Thread, 'start'):
+            result = self.service.run_pipeline('fixture', 'probe', True, expected_plan=preview['plan_revision'])
+        self.assertTrue(result['success'], result)
+        review = self.service.get_history('fixture')['jobs'][0]['reviewed_plan']
+        self.assertEqual(review['plan_revision'], preview['plan_revision'])
+        self.assertEqual(review['scope_revision'], preview['scope_revision'])
+        self.assertEqual(review['stages'][0]['targets'], [{'host': 'example.test', 'verdict': 'IN_SCOPE'}])
+        self.assertEqual(review['stages'][0]['discarded'], [{'host': 'unknown.test', 'verdict': 'UNKNOWN'}])
+        self.assertFalse(review['authorization']['allow_active'])
+        self.service.store.finish(('engagement', 'fixture'), result['job']['run_id'], 'failed', 'fixture')
+        (self.target / 'recon/subdomains.txt').write_text('changed.test\n')
+        (self.target / 'target.yaml').write_text('scope:\n  in_scope:\n    domains: [changed.test]\n')
+        reopened = module.ReconService(self.root / 'jobs.db')
+        self.addCleanup(reopened.shutdown)
+        job = reopened.get_history('fixture')['jobs'][0]
+        self.assertEqual(job['reviewed_plan'], review)
+        self.assertIsNone(job['scope_revision'])
+        self.assertEqual(job['status'], 'failed')
+
+    def test_no_review_is_invented_for_direct_api_and_incomplete_review_creates_no_job(self):
+        self.addCleanup(self.service._threads.clear)
+        with patch.object(module.threading.Thread, 'start'):
+            result = self.service.run_pipeline('fixture', dry_run=True)
+        self.assertTrue(result['success'])
+        self.assertIsNone(self.service.get_history('fixture')['jobs'][0]['reviewed_plan'])
+        self.service.store.finish(('engagement', 'fixture'), result['job']['run_id'], 'simulated')
+        with patch.object(self.service, 'preview_pipeline', return_value={
+                'success': True, 'plan_revision': 'a' * 64, 'can_start': True}):
+            denied = self.service.run_pipeline('fixture', dry_run=True, expected_plan='a' * 64)
+        self.assertFalse(denied['success'])
+        self.assertEqual(len(self.service.get_history('fixture')['jobs']), 1)

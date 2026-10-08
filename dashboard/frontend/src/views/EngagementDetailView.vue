@@ -569,7 +569,24 @@
               <span>{{ historyStatusLabel(job.status) }}</span>
             </div>
             <p class="text-slate-400">Inicio: {{ new Date(job.started_at).toLocaleString() }} · Fin: {{ job.finished_at ? new Date(job.finished_at).toLocaleString() : 'Pendiente' }}</p>
-            <p class="text-slate-500 break-all">Job: {{ job.run_id }} · Revisión: {{ job.scope_revision || 'No registrada' }}</p>
+            <p class="text-slate-500 break-all">Job: {{ job.run_id }} · Alcance de ejecución: {{ job.scope_revision || 'No registrado' }}</p>
+            <details v-if="job.reviewed_plan" data-testid="recon-history-review" class="space-y-2 text-slate-400">
+              <summary class="cursor-pointer text-cyan-300">Plan revisado al iniciar</summary>
+              <p>Validado: {{ new Date(job.reviewed_plan.checked_at).toLocaleString() }} · {{ job.reviewed_plan.dry_run ? 'SIMULACIÓN' : 'EJECUCIÓN' }}</p>
+              <p class="break-all">Plan: {{ job.reviewed_plan.plan_revision }} · Alcance revisado: {{ job.reviewed_plan.scope_revision }}</p>
+              <p>Permisos declarados: pasivo {{ job.reviewed_plan.authorization.allow_passive ? 'sí' : 'no' }} · activo {{ job.reviewed_plan.authorization.allow_active ? 'sí' : 'no' }}. La simulación no otorga permisos.</p>
+              <p v-if="job.reviewed_plan.authorization.valid_from || job.reviewed_plan.authorization.valid_until">Ventana declarada: {{ job.reviewed_plan.authorization.valid_from || 'Sin inicio' }} → {{ job.reviewed_plan.authorization.valid_until || 'Sin fin' }}</p>
+              <p>Límites de sondeo: {{ job.reviewed_plan.operational_limits.max_requests_per_second }} intentos/s · {{ job.reviewed_plan.operational_limits.max_parallel_threads }} simultáneos · {{ job.reviewed_plan.operational_limits.max_probe_targets }} targets · {{ job.reviewed_plan.operational_limits.probe_timeout_seconds }} s por petición</p>
+              <div v-for="step in job.reviewed_plan.stages" :key="step.stage" class="border-l border-slate-700 pl-2 space-y-1">
+                <p>{{ historyStageLabel(step.stage) }} · {{ { passive: 'PASIVO', active: 'ACTIVO', local: 'LOCAL' }[step.interaction] }} · {{ step.targets_count }} targets revisados · {{ step.discarded_count }} descartados</p>
+                <p v-if="step.targets_pending" class="text-amber-300">Targets finales pendientes de etapas previas; el descubrimiento no amplía el alcance.</p>
+                <p v-for="(target, index) in step.targets" :key="`target-${index}`" class="break-all">{{ target.host }} · {{ target.verdict }}</p>
+                <p v-for="(target, index) in step.discarded" :key="`discarded-${index}`" class="break-all text-amber-300">{{ target.host }} · {{ target.verdict }}</p>
+                <p v-if="step.targets_count > step.targets.length || step.discarded_count > step.discarded.length">Muestra limitada a 50 targets y 50 descartes por etapa.</p>
+              </div>
+              <p>Snapshot de la revisión, no de los resultados. PASSIVE_SOURCE indica consulta a una fuente externa, no permiso activo sobre ese host. Se guardan solo hosts: rutas, consultas, fragmentos y credenciales de URLs se omiten; distintas URLs pueden mostrar el mismo host. No autoriza repetir el job ni fija targets futuros.</p>
+            </details>
+            <p v-else class="text-slate-500">Sin plan revisado registrado: job anterior o iniciado sin vista previa.</p>
             <p v-if="job.origin === 'legacy-current'" class="text-amber-300">Registro anterior importado: solo se conservaba el último job; no se reconstruyen ejecuciones previas.</p>
             <p v-if="job.error" class="text-amber-300 break-words">{{ job.error }}</p>
           </li>

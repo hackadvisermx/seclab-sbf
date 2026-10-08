@@ -1,6 +1,6 @@
 # Fase 147: validación obligatoria de reportes y exportación
 
-Fecha: 2026-10-07. Base: `154ebfc`. Rama: `phase/147-report-scope-gate`. Worktree: `/Users/castr/tmp/t01-report-gate`. V3-03a; [PR #167](https://github.com/hackadvisermx/seclab-sbf/pull/167) hacia `bootstrap/baseline`.
+Fecha: 2026-10-07. Base: `154ebfc`. Rama: `phase/147-report-scope-gate`. Worktree: `/Users/castr/tmp/t01-report-gate`. V3-03a; [PR #167](https://github.com/hackadvisermx/seclab-sbf/pull/167) fusionado en `d88a0f9` hacia `bootstrap/baseline` con la excepción autorizada por el owner.
 
 ## Cambios
 

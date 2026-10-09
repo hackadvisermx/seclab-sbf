@@ -2215,6 +2215,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(authorization))
     recon_cli = load_module('recon_cli_decision_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_recon_cli_decision.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(recon_cli))
+    ci_linters = load_module('ci_linters_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_ci_linters.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(ci_linters))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

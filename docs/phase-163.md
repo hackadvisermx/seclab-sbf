@@ -40,3 +40,7 @@ make scan-image SCAN_IMAGE=seclab-sbf:full-phase163
 Es un resumen del pipeline controlado, sin firma ni garantía frente a edición manual por el operador. No guarda snapshots de bytes ni outputs anteriores, no vincula un finding a un job ni identifica herramientas/versiones. No registra jobs de terminal libre ni completa la timeline del engagement. Contadores globales no equivalen a resultados nuevos de todas las etapas ni cobertura de vulnerabilidades.
 
 Revert puede ignorar la tabla aditiva sin perder los archivos del workspace; no añade columnas que rompan INSERT legacy ni introduce nuevas dependencias. No cambia permisos, matcher ni ejecución de herramientas. Laboratorio vivo, proyectos e imagen full del owner intactos. Merge sujeto a PR, gates y CI aprobado del head exacto durante la autorización temporal de AGENTS.md.
+
+## Cierre confirmado
+
+PR #183 fusionado en `c221db38edc7765953b01548de376396e2462f30` el 2026-10-09 12:29:02 UTC, dentro de la autorización temporal del owner. CI `37929820943` aprobado para head exacto `cb0a2db7d3af963cee20fc8aa7fc2d8de620b1ad`. Baseline sincronizado y rama/worktree retirados; evidencia en `tmp/phase163` del checkout principal.

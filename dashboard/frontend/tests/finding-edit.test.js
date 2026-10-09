@@ -33,6 +33,102 @@ async function clickText(root, text) {
   const button = [...root.querySelectorAll('button')].find(b => b.textContent.trim().includes(text))
   assert.ok(button, `Missing button ${text}`); button.click(); await flush()
 }
+async function mountDecision(api, route) {
+  return mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }), ...api }, route)
+}
+const nextDecisionFixture = {
+  decision_job: { run_id: 'a'.repeat(32), status: 'blocked', stage: 'probe', dry_run: false },
+  next_step: { title: 'Revisar alcance tras el bloqueo', reason: 'Revisa el permiso antes de preparar otro plan.',
+    action: { view: 'scope', label: 'Revisar alcance y autorización' }, command: null },
+  prompt_available: false, prompt: '',
+}
+
+test('la siguiente decisión enlaza el bloqueo a Alcance sin comando ni prompt de ejecución', async () => {
+  let prompts = 0
+  const view = await mountDecision({ getNextStep: async (id, prompt) => { if (prompt) prompts++; return nextDecisionFixture } })
+  try {
+    await clickText(view.root, 'Metodología & Cobertura')
+    const card = view.root.querySelector('[data-testid="next-decision"]')
+    assert.match(card.textContent, /Revisar alcance tras el bloqueo/)
+    assert.match(card.textContent, /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/)
+    assert.equal(card.querySelector('code'), null)
+    const prompt = [...card.querySelectorAll('button')].find(el => el.textContent.includes('Generar Prompt'))
+    assert.equal(prompt.disabled, true)
+    prompt.click(); await flush(); assert.equal(prompts, 0)
+    await clickText(card, 'Revisar alcance y autorización')
+    assert.match(view.root.textContent, /Guardar Alcance/)
+  } finally { view.cleanup() }
+})
+
+test('una respuesta tardía no reemplaza la decisión nueva ni deja un comando durante la carga', async () => {
+  const requests = []
+  const view = await mountDecision({ getNextStep: () => new Promise(resolve => requests.push(resolve)) })
+  try {
+    await clickText(view.root, 'Metodología & Cobertura')
+    const card = view.root.querySelector('[data-testid="next-decision"]')
+    assert.match(card.textContent, /Consultando/)
+    assert.equal(card.querySelector('code'), null)
+    const latest = requests.pop()
+    latest(nextDecisionFixture); await flush()
+    for (const resolve of requests) resolve({ next_step: { title: 'Obsoleto', command: 'pt-recon' }, prompt: 'Old' })
+    await flush()
+    assert.match(card.textContent, /Revisar alcance tras el bloqueo/)
+    assert.doesNotMatch(card.textContent, /Obsoleto|pt-recon|Old/)
+  } finally { view.cleanup() }
+})
+
+test('pedir prompt revalida el job y retira un prompt anterior si ahora hay fallo', async () => {
+  let blocked = false
+  const view = await mountDecision({ getNextStep: async (id, prompt) => blocked ? nextDecisionFixture :
+    { next_step: { title: 'Paso legacy', command: 'pt-recon' }, prompt: prompt ? 'Prompt anterior' : '' } })
+  try {
+    await clickText(view.root, 'Metodología & Cobertura')
+    const card = view.root.querySelector('[data-testid="next-decision"]')
+    await clickText(card, 'Generar Prompt')
+    assert.match(card.textContent, /Prompt anterior/)
+    blocked = true
+    await clickText(card, 'Generar Prompt')
+    assert.match(card.textContent, /Revisar alcance tras el bloqueo/)
+    assert.doesNotMatch(card.textContent, /Prompt anterior|pt-recon/)
+    assert.equal([...card.querySelectorAll('button')].find(el => el.textContent.includes('Generar Prompt')).disabled, true)
+  } finally { view.cleanup() }
+})
+
+test('un error al actualizar la decisión retira la recomendación previa y permite reintentar', async () => {
+  let failure = false
+  const view = await mountDecision({ getNextStep: async () => {
+    if (failure) throw new Error('private backend details')
+    return { next_step: { title: 'Paso legacy', command: 'pt-recon' } }
+  } })
+  try {
+    await clickText(view.root, 'Metodología & Cobertura')
+    const card = view.root.querySelector('[data-testid="next-decision"]')
+    assert.match(card.textContent, /pt-recon/)
+    failure = true; await clickText(card, 'Actualizar decisión')
+    assert.match(card.textContent, /No se pudo consultar/)
+    assert.doesNotMatch(card.textContent, /pt-recon|private backend/)
+    failure = false; await clickText(card, 'Actualizar decisión')
+    assert.match(card.textContent, /pt-recon/)
+    assert.equal(card.querySelector('[role="alert"]'), null)
+  } finally { view.cleanup() }
+})
+test('cambiar proyecto descarta recomendaciones y prompts pendientes del proyecto anterior', async () => {
+  const route = reactive({ params: { id: 'fixture', type: 'engagement' } })
+  const pending = []
+  const view = await mountDecision({ getNextStep: id => id === 'fixture' ? new Promise(resolve => pending.push(resolve)) :
+    Promise.resolve({ ...nextDecisionFixture, next_step: { ...nextDecisionFixture.next_step, title: 'Decisión del otro proyecto' } }) }, route)
+  try {
+    await clickText(view.root, 'Metodología & Cobertura')
+    route.params.id = 'other'; await flush()
+    for (const resolve of pending) resolve({ next_step: { title: 'Proyecto anterior', command: 'pt-recon' }, prompt: 'Prompt anterior' })
+    await flush()
+    const card = view.root.querySelector('[data-testid="next-decision"]')
+    assert.match(card.textContent, /Decisión del otro proyecto/)
+    assert.doesNotMatch(card.textContent, /Proyecto anterior|Prompt anterior|pt-recon/)
+  } finally { view.cleanup() }
+})
+
 test('editar una ficha conserva Markdown completo, fija el slug y envía solo el cuerpo original', async () => {
   let saved
   const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [finding],

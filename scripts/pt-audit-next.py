@@ -11,6 +11,7 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 
 import argparse
 import datetime
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -35,13 +36,15 @@ def _get_audit_checklist_module():
     """Carga dinámicamente el módulo pt-audit-checklist si está disponible."""
     candidate_paths = [
         pathlib.Path(__file__).resolve().parent / "pt-audit-checklist.py",
+        pathlib.Path(__file__).resolve().parent / "pt-audit-checklist",
         pathlib.Path("/usr/local/bin/pt-audit-checklist"),
         pathlib.Path("./scripts/pt-audit-checklist.py"),
     ]
     for cp in candidate_paths:
         if cp.is_file():
             try:
-                spec = importlib.util.spec_from_file_location("pt_audit_checklist", cp)
+                spec = importlib.util.spec_from_file_location("pt_audit_checklist", cp,
+                    loader=importlib.machinery.SourceFileLoader("pt_audit_checklist", str(cp)))
                 if spec and spec.loader:
                     mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(mod)

@@ -1672,6 +1672,44 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("pt-eng close [nombre] [opciones]", plugin)
             self.assertIn("-f, --force", plugin)
 
+    def test_checklist_consumers_support_source_and_extensionless_installation(self):
+        import importlib.machinery
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary, patch.object(sys, 'path', list(sys.path)):
+            root = pathlib.Path(temporary)
+            project = root / 'fixture'
+            (project / 'recon').mkdir(parents=True)
+            from authorization_fixture import AUTHORIZATION_YAML
+            (project / 'target.yaml').write_text('scope:\n  in_scope:\n    domains: [example.test]\n' + AUTHORIZATION_YAML)
+            (project / 'recon/live_hosts.txt').write_text('https://example.test\n')
+            (project / 'notes.md').write_text('## Disciplina: fuzzing\n')
+            for suffix in ('.py', ''):
+                with self.subTest(suffix=suffix):
+                    install = root / ('source' if suffix else 'installed')
+                    install.mkdir()
+                    shutil.copyfile(REPO_ROOT / 'scripts/pt-audit-checklist.py', install / ('pt-audit-checklist' + suffix))
+                    modules = {}
+                    for name in ('pt-audit-next', 'pt-agent-context', 'pt-engagement-packer'):
+                        path = install / (name + suffix)
+                        shutil.copyfile(REPO_ROOT / 'scripts' / (name + '.py'), path)
+                        spec = importlib.util.spec_from_file_location(name, path,
+                            loader=importlib.machinery.SourceFileLoader(name, str(path)))
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        modules[name] = module
+                    expected = audit_checklist.AuditChecklistEvaluator(project).evaluate()
+                    context = modules['pt-agent-context'].collect_coverage_summary(project)
+                    self.assertEqual(context['coverage_score'], 25.0)
+                    self.assertEqual(context['completed_areas'], expected['completed_areas'])
+                    self.assertEqual([(row['id'], row['status']) for row in context['matrix']],
+                                     [(row['id'], row['status']) for row in expected['matrix']])
+                    self.assertEqual(modules['pt-audit-next'].determine_roadmap(project)[0]['id'], 'auth')
+                    readiness = expected['readiness']
+                    self.assertEqual(modules['pt-engagement-packer'].check_closure_readiness(project),
+                                     (readiness['ready_for_closure'], readiness['blocking_issues'], readiness['recommendations']))
+
     def test_methodology_next_step_recommender(self):
         """Verifica el recomendador de próximo paso metodológico y guía interactiva (pt-next)."""
         import tempfile

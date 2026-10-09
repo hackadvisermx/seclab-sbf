@@ -58,22 +58,32 @@ jobs:
           ignore-unfixed: false
           format: table
           version: v0.74.0
+      - name: Restore verified linter archives
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: ${{ runner.temp }}/ci-linter-cache
+          key: ci-linters-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('supply-chain/ci-linters.lock.json') }}
+      - name: Install pinned linters
+        run: |
+          python3 scripts/install-ci-linters.py --cache "$RUNNER_TEMP/ci-linter-cache" --destination "$RUNNER_TEMP/ci-linters"
+          python3 -m venv "$RUNNER_TEMP/ci-pyflakes"
+          "$RUNNER_TEMP/ci-pyflakes/bin/python" -m pip install --disable-pip-version-check --only-binary :all: --require-hashes -r .github/requirements-linters.txt
+          echo "$RUNNER_TEMP/ci-linters" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/ci-pyflakes/bin" >> "$GITHUB_PATH"
+      - name: Linter versions
+        run: |
+          actionlint -version
+          hadolint --version
+          shellcheck --version
+          pyflakes --version
       - name: Dockerfile lint base
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387
-        with:
-          dockerfile: images/base/Dockerfile
-          failure-threshold: warning
+        run: hadolint --failure-threshold warning images/base/Dockerfile
       - name: Dockerfile lint full
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387
-        with:
-          dockerfile: images/full/Dockerfile
-          failure-threshold: warning
+        run: hadolint --failure-threshold warning images/full/Dockerfile
       - name: Shell lint
-        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38
-        with:
-          scandir: scripts
+        run: python3 scripts/verify/check-ci-shell.py
       - name: Workflow lint
-        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
+        run: actionlint
       # Los comandos make citados en la documentación tienen que existir
       # como target. Se colaron seis que no, en el Inicio rápido del README.
       - name: Comandos documentados
@@ -119,7 +129,7 @@ jobs:
             --mount "type=bind,source=$PWD/dashboard/frontend,target=/source,readonly" \
             --mount "type=bind,source=$PWD/scripts/install-dashboard-npm.mjs,target=/install-dashboard-npm.mjs,readonly" \
             --workdir /tmp/frontend \
-            docker.io/library/node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 \
+            public.ecr.aws/docker/library/node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 \
             sh -ec '
               apt-get update
               apt-get install -y --no-install-recommends libpcre2-8-0=10.42-1+deb12u2

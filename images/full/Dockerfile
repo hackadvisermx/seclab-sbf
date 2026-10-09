@@ -11,10 +11,9 @@ ARG RUBY_VERSION=3.3.8
 ARG RUBY_SHA256=5ae28a87a59a3e4ad66bc2931d232dbab953d0aa8f6baf3bc4f8f80977c89cab
 ARG MSF_VERSION=6.5.5
 ARG MSF_COMMIT=c5429ba817d12d9d89069387142332435598e548
-# Dos toolchains de Go, como antes de fusionar: fzf se compilaba con
-# 1.25.13 y el resto con 1.26.8. GO_BUILDER solo lo usa fzf-builder;
-# naabu, upstream y go (bettercap, s3scanner) usan GO_UPSTREAM.
-ARG GO_BUILDER=docker.io/library/golang:1.25.13@sha256:cbff9d1a9041b316010f2da6b701b6c0d597718cb90928c85eb597334a0d23d4
+# GO_BUILDER solo lo usa fzf-builder; naabu, upstream y go
+# (bettercap, s3scanner) usan GO_UPSTREAM. Ambos usan Go 1.26.9.
+ARG GO_BUILDER=docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
 ARG BETTERCAP_VERSION=2.41.7
 ARG BETTERCAP_COMMIT=dfe56780bb342b6a6715c9557a2cefe1f13d805c
 ARG S3SCANNER_VERSION=3.1.1
@@ -27,7 +26,7 @@ ARG PSPY_VERSION=1.2.1
 ARG PSPY_COMMIT=f9e6a1590a4312b9faa093d8dc84e19567977a6d
 ARG SECLISTS_COMMIT=eccfbd405af82194e125a450a0076dbe4252d6f9
 ARG BASE_IMAGE=seclab-sbf:base
-ARG GO_UPSTREAM=docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
+ARG GO_UPSTREAM=docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
 ARG SUBFINDER_VERSION=2.16.0
 ARG SUBFINDER_COMMIT=b360529eebcd29345e44b3a9da3b2b0c04a13ff2
 ARG HTTPX_VERSION=1.11.0
@@ -912,6 +911,8 @@ COPY scripts/dashboard-service.sh /usr/local/bin/dashboard-service
 COPY scripts/pt-vault-bridge.py /usr/local/bin/pt-vault-bridge
 RUN chmod 0555 /usr/local/bin/dashboard-service /usr/local/bin/pt-vault-bridge \
  && chmod -R 0555 /usr/local/share/seclab/dashboard
+
+RUN rm -f /usr/bin/pebble
 
 ENV PATH="/opt/ruby/bin:/opt/nxc/bin:${PATH}"
 WORKDIR /workspace

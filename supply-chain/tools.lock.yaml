@@ -278,8 +278,8 @@ built_binaries:
     source: https://github.com/lc/gau
     commit: 5d4e1270e632732756fe98717520c43c86e8bd18
     tag: v2.2.4
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     cgo: false
     package: ./cmd/gau
     dependency_overrides:
@@ -291,8 +291,8 @@ built_binaries:
     version: 0.74.4
     source: https://github.com/junegunn/fzf
     commit: a140afeb4d733cad3c96a56bf6db7e26853b6757
-    builder: docker.io/library/golang:1.25.13@sha256:cbff9d1a9041b316010f2da6b701b6c0d597718cb90928c85eb597334a0d23d4
-    go: 1.25.13
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.25.0
     cgo: false
     dependency_overrides:
@@ -303,16 +303,16 @@ built_binaries:
     assets:
       linux/amd64:
         file: fzf
-        sha256: 634bdd2a61ec82ce5d893dd045bdbcf2532ce9e417a8506e81568b04b326e2cb
+        sha256: 18fd9af5aed3e7a0f265379a906b3b05d41d9de29da207ccaea2dd98f04f6c0a
       linux/arm64:
         file: fzf
-        sha256: 2cadb71a909bf08e54db3cc38116a64efd5cefbd4fb9286008f03ef88dcf5519
+        sha256: 13c8419a2edee4a12adbd1f3a5636b072f6ea3aaf76eb19242fc9aef654f62c7
   - name: subfinder
     version: 2.16.0
     source: https://github.com/projectdiscovery/subfinder
     commit: b360529eebcd29345e44b3a9da3b2b0c04a13ff2
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.25.0
     cgo: false
     package: ./cmd/subfinder
@@ -322,16 +322,16 @@ built_binaries:
     assets:
       linux/amd64:
         file: subfinder
-        sha256: ae8368ed6af742ef68b4720b330a173c0ab71a469e8948f85fe0422ba8885dc9
+        sha256: 585e6c34ebf32ffa4aa34d71f7180469b4a611cd26cc96a8c232c936a0bb91fe
       linux/arm64:
         file: subfinder
-        sha256: 713cd33e1ae335550681b34be0c1e9bcbdef47a4e892f4b8205a893f0ce7d93c
+        sha256: 961ecc7403d8694aa2842f8a480a044a7514112f6e1dab2bad2b6d26f96d6e19
   - name: httpx
     version: 1.11.0
     source: https://github.com/projectdiscovery/httpx
     commit: c5f67adce6c57c05a6837ebb4f0eba8e81fdcf00
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.26.0
     cgo: false
     package: ./cmd/httpx
@@ -341,16 +341,16 @@ built_binaries:
     assets:
       linux/amd64:
         file: httpx
-        sha256: 095c33c8e803d343173276c96427aa62fe6b344bf4776a79ce51a0b4b8b3c543
+        sha256: 1e7e420c9008eae128d9cddc475448988b922fb34ac7bda661fd594bae756054
       linux/arm64:
         file: httpx
-        sha256: f9b2beaae7f88692c976a7d26bfc647767a2d5fbbc832025df977a7e41285758
+        sha256: 82dfbdb383cd3a63a0cb0a86028fe7074e7f485e5ac8b2a208db4bf0b5417166
   - name: katana
     version: 1.7.0
     source: https://github.com/projectdiscovery/katana
     commit: 17b0af27a79098a1634c915ca7fca51ed1171e41
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.26
     cgo: false
     package: ./cmd/katana
@@ -361,16 +361,16 @@ built_binaries:
     assets:
       linux/amd64:
         file: katana
-        sha256: 8cfd7634755172867a6c4ac41e98c2d6c1e423154f11f69da20b4e8965f96974
+        sha256: 8b463429623b77d38df7078396489bc364ad38bcc2e3252e60faafbda9d44703
       linux/arm64:
         file: katana
-        sha256: d027f0cccb82f40753d3e360dfd72f58c7a7fb5c3bdb22f969c133fa6f512b50
+        sha256: 8a897cd6aca88adef2c1be02dfd0d2fb6e0a77e91b70684edfdab1f4ad9b4482
   - name: nuclei
     version: 3.11.1
     source: https://github.com/projectdiscovery/nuclei
     commit: a8c88feb4a1c8e961b7902534ce3af97e9d524a4
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.26
     cgo: false
     package: ./cmd/nuclei
@@ -383,16 +383,16 @@ built_binaries:
     assets:
       linux/amd64:
         file: nuclei
-        sha256: 571b1750011292afa587bebaae54d3a280ca2d8fc01b9e0becb01019378d1922
+        sha256: b88a3aac113a78f39e35fa2bbd43b426a439e48782363b4595f12e18977c57b2
       linux/arm64:
         file: nuclei
-        sha256: a2257bdbedf66df45ab9d6e0f6ff37ebd2b99e5d1fbabbbc6c6a657422894331
+        sha256: 58f52c603641a83983be4b2017d3d9b78865404cd56ad33f165c982ad92f9616
   - name: ffuf
     version: 2.2.0
     source: https://github.com/ffuf/ffuf
     commit: 0aa36bcfa45c255f0d719f7d5bc58f7cc9c93659
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.17
     cgo: false
     package: .
@@ -402,16 +402,16 @@ built_binaries:
     assets:
       linux/amd64:
         file: ffuf
-        sha256: c36876beba0b10a9c90432248ee8e38120e3d280eda353b39e9b432a3a883859
+        sha256: 1f458361e55687eecb3fabeea3f15f50b7c603b91ebf35ad36f5e39908ae1572
       linux/arm64:
         file: ffuf
-        sha256: 048fd4a4c6c07b13c1758ba4b00018976624502b061f43614cfad8d5bcce2060
+        sha256: cdc84566a1149405f3ce3ec689acdb239378ebce1fa84a3233d27836b9f6b698
   - name: gobuster
     version: 3.8.2
     source: https://github.com/OJ/gobuster
     commit: e8410cad6cacf08b82e2f610055f636f0be61c40
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.25
     cgo: false
     package: .
@@ -421,16 +421,16 @@ built_binaries:
     assets:
       linux/amd64:
         file: gobuster
-        sha256: 9e01c1854a2a17ab92d381c5e4c3639c0ea9ce708d3c10202277df1d3ad4b913
+        sha256: f9a8fbb5bf54aed735fbbb7cd49bde0d35ccc13659dbbdf1feb83334c384bb44
       linux/arm64:
         file: gobuster
-        sha256: 8154b1802209e9a483c05370b128d27dcdcb183c0ca6a01839867fe10c39ace8
+        sha256: 8e1b9a99349eafdcb7738952c047a7f47724b5db1171dc21ec5f83260865ae27
   - name: naabu
     version: 2.6.1
     source: https://github.com/projectdiscovery/naabu
     commit: 5a0ca8bde91b5bb16213e9e8b5c6871eac954bd8
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.24.0
     cgo: true
     cgo_cross:
@@ -443,17 +443,17 @@ built_binaries:
     assets:
       linux/amd64:
         file: naabu
-        sha256: acb5a5cf1a84fdbfeb8714e8879aa75be582426aed2b827468ffa4b5adcf860f
+        sha256: 430b97c8dedd864adcf0bee6c77e7b6e5366b244841008896913739ba2d27efb
       linux/arm64:
         file: naabu
-        sha256: d0d3834f5f6bf8b5c77deb0a86c109df0f26da7d6231e5e2bae551bd846becd3
+        sha256: 47c2d5970cf10fc9686e12c1927f879677095d5c3c2f44565460fdb0280e760a
   - name: dnsx
     version: 1.3.1
     source: https://github.com/projectdiscovery/dnsx
     commit: 01e315f216db7d36198ec326fac13dd7846b1bec
     tag: v1.3.1
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.25.0
     cgo: false
     package: ./cmd/dnsx
@@ -469,8 +469,8 @@ built_binaries:
     source: https://github.com/tomnomnom/anew
     commit: 26ebc8ce1f0bdbaaee2930ea7ab191ed0c0da261
     tag: v0.1.1
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.18
     cgo: false
     package: .
@@ -480,8 +480,8 @@ built_binaries:
     source: https://github.com/tomnomnom/waybackurls
     commit: 86aeb97852707e1a6fb3bcd33e61d5433a6476c5
     tag: v0.1.0
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.18
     cgo: false
     package: .
@@ -491,8 +491,8 @@ built_binaries:
     version: 0.1.0
     source: https://github.com/tomnomnom/gf
     commit: dcd4c361f9f5ba302294ed38b8ce278e8ba69006
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.18
     cgo: false
     package: .
@@ -502,8 +502,8 @@ built_binaries:
     source: https://github.com/tomnomnom/qsreplace
     commit: 320475befaf66d986400aa8c3ed9b43e0b6b5a02
     tag: v0.0.3
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.18
     cgo: false
     package: .
@@ -513,8 +513,8 @@ built_binaries:
     source: https://github.com/tomnomnom/assetfinder
     commit: 4e95d8701aae8cff1c27af2626eb22ba110ad583
     tag: v0.1.1
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.18
     cgo: false
     package: .
@@ -526,8 +526,8 @@ built_binaries:
     source: https://github.com/tomnomnom/httprobe
     commit: 7e8abdb4096ab224f21616478b699b4dfda9d409
     tag: v0.2
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.18
     cgo: false
     package: .
@@ -538,8 +538,8 @@ built_binaries:
     source: https://github.com/bettercap/bettercap
     commit: dfe56780bb342b6a6715c9557a2cefe1f13d805c
     tag: v2.41.7
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.23.0
     cgo: true
     cgo_reason: github.com/google/gousb v1.1.3 es dependencia directa y no tiene
@@ -575,8 +575,8 @@ built_binaries:
     source: https://github.com/sa7mon/s3scanner
     commit: 9c61311a2f7610e523cfc8194abb98ab96c584d2
     tag: v3.1.1
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.22.0
     cgo: false
     package: .
@@ -592,8 +592,8 @@ built_binaries:
     version: 1.2.1
     source: https://github.com/DominicBreuker/pspy
     commit: f9e6a1590a4312b9faa093d8dc84e19567977a6d
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     go_directive: 1.20
     cgo: false
     package: .
@@ -607,10 +607,10 @@ built_binaries:
     assets:
       linux/amd64:
         file: pspy
-        sha256: 0cad8b62f6693ce5f6dca8a467cb1af1bbb60fc34e8cb9145d2c9b40a2f5bced
+        sha256: e0c6ddbf8c2058c37fe92914cc9e0162f25683b5a27bae1f4e9ec1f61279d724
       linux/arm64:
         file: pspy
-        sha256: 7434a572496d55ba463d107c5adc19c0f1d3c7e410fa5cafd040d4be2b4d2e18
+        sha256: 11245602e17ed3d270b3c437cf876c9301f2257d154fc85f5546f8bcd54239b4
     verify: >-
       El stage comprueba git rev-parse HEAD contra el commit fijado y
       describe --tags --exact-match contra v1.2.1; el build falla si no coinciden.
@@ -621,8 +621,8 @@ built_binaries:
     version: 1.12.0
     source: https://github.com/jpillora/chisel
     commit: fe4f4fe7e6a849b4aa6d1b8ee47037e16033f42a
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     cgo: false
     package: .
     built_from_source: true
@@ -640,8 +640,8 @@ built_binaries:
     version: 0.9.2
     source: https://github.com/nicocha30/ligolo-ng
     commit: e543732f4be6dc899096ae322ae620bf010bfbfc
-    builder: docker.io/library/golang:1.26.8@sha256:6c2a5538f964f1c82f97ad14988bf05de100d922d159d0e398b54c7b0ca0c6c9
-    go: 1.26.8
+    builder: docker.io/library/golang:1.26.9@sha256:f1f0bcc2c524a3ced375fcb4d1ecb7aa371aa7070e112599aaca45cc02d0101b
+    go: 1.26.9
     cgo: false
     package: ./cmd/proxy
     built_from_source: true

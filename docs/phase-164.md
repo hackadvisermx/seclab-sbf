@@ -31,7 +31,7 @@ make scan-image SCAN_IMAGE=seclab-sbf:full-phase164
 - 183 Python, 195 backend y 118 frontend; audit 0. Siete pruebas nuevas de backend verifican prioridad ante archivos previos, seis estados, ausencia de prompts/datos privados, persistencia, aislamiento por proyecto/tipo, reconsulta durante generación, autenticación y estado indisponible. Cinco nuevas de frontend cubren enlace local, respuestas tardías, revalidación de prompt, errores/reintento y cambio de proyecto.
 - 3 UI y 5 integraciones Chromium con tester temporal, contraseña aleatoria y contenedor `--network none`. El caso extendido conserva dos resultados distintos y un bloqueo real, recarga, verifica run_id y ausencia de comando/prompt y navega a Alcance. Captura `next-decision.png` inspeccionada; recursos/credenciales de fixture eliminados al finalizar.
 - Imagen aislada `seclab-sbf:full-phase164`, hash de insumos `f10ff1fbd9e0b840`, idéntico al checkout. Build, smoke, Compose, Actionlint y gate CVE High/Critical aprobados bajo la política existente. CI del head exacto se registra al cerrar el PR. Sin dependencias ni excepciones nuevas.
-- Logs, reproducción y captura en `tmp/phase164` del checkout principal; no forman parte de la imagen. PR hacia `bootstrap/baseline` requerido antes de merge.
+- Logs, reproducción y captura en `tmp/phase164` del checkout principal; no forman parte de la imagen. Integración en [PR #184](https://github.com/hackadvisermx/seclab-sbf/pull/184) hacia `bootstrap/baseline`; cierre y CI del head exacto registrados en el PR.
 
 ## Compatibilidad, límites y reversión
 

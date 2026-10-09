@@ -22,7 +22,7 @@ Ejecuta UI e integración de forma secuencial: comparten el puerto 4199 y el dir
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase164
+make build-full BUILD_TAG=-phase165
 ```
 
 Después, desde `dashboard/frontend`:
@@ -62,3 +62,5 @@ Esto crea otro contenedor; no reinicia el que ya esté en uso. La suite real uti
 Configuración y instalación basadas en la [documentación oficial](https://playwright.dev/docs/intro); el [cierre gradual](https://playwright.dev/docs/test-webserver) permite eliminar el fixture de Docker.
 
 El asistente de siguiente decisión da prioridad al bloqueo persistido del último job, aun con archivos y resultados previos. La prueba recarga, verifica el run_id, ausencia de comando/prompt de ejecución y navegación a Alcance; captura `next-decision.png`. No ejecuta la acción recomendada ni consulta un proveedor IA.
+
+La prueba de sesión compara checklist, siguiente paso y contexto de los scripts instalados. Un host sintético y un marcador explícito de fuzzing dan 25% de cobertura, siguiente disciplina auth y contexto con 2/8 disciplinas. Comprueba la interfaz de cobertura y el inspector de contexto, captura `installed-checklist.png` y luego revoca la sesión. No inicia jobs ni envía contexto a un proveedor.

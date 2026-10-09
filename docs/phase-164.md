@@ -40,3 +40,7 @@ No cambia tablas, permisos, pipeline ni contratos CLI. Reutiliza el último job 
 La decisión de revisar persiste hasta que el último job cambia; abrir el panel no marca una revisión aceptada ni ejecuta un reintento. No crea una máquina de estados completa, eventos de aceptación humana, timeline, snapshots o procedencia finding/job. No intercepta terminal libre ni impide al operador usar otros controles del producto. Un job puede cambiar después de la lectura; la ejecución mantiene sus gates existentes de scope/plan. Revert restaura la recomendación anterior sin migración ni pérdida de jobs. Laboratorio vivo, imagen full y proyectos del owner intactos.
 
 Merge sujeto a PR, revisión del diff, gates y CI aprobado del head exacto. El owner renovó explícitamente 24 horas de permiso el 2026-10-09 14:56:00 UTC; la autorización vigente vence el 2026-10-10 14:56:00 UTC; después se requiere aprobación individual según AGENTS.md.
+
+## Cierre confirmado
+
+PR #184 fusionado en `4e6d05c49db1f67de594f5a1500e1d1128375894` el 2026-10-09 15:00:27 UTC bajo la autorización renovada. CI `37947971498` aprobado para head exacto `8fcd364b2355f99113e3d68e7a76a07e7ee63038`. Baseline sincronizado y rama/worktree retirados; evidencia en `tmp/phase164` del checkout principal.

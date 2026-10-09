@@ -559,7 +559,7 @@
           <h3 class="text-sm font-mono font-bold text-white">Historial de reconocimiento</h3>
           <button @click="loadReconHistory()" :disabled="reconHistoryBusy" class="px-3 py-1 rounded-sm border border-slate-700 text-cyan-300 text-xs disabled:opacity-50">Actualizar historial</button>
         </div>
-        <p class="text-xs text-slate-400">Conserva metadatos de jobs del dashboard. Los artefactos y la salida de arriba corresponden al workspace actual; este historial no guarda copias de outputs anteriores.</p>
+        <p class="text-xs text-slate-400">Conserva el plan revisado y un resumen de resultados por job del dashboard. Los artefactos y la salida de arriba corresponden al workspace actual; este historial no guarda copias de outputs anteriores.</p>
         <p v-if="reconHistoryError" role="alert" class="text-xs text-amber-300">{{ reconHistoryError }}</p>
         <p v-if="reconHistory.length === 0" class="text-xs text-slate-400">{{ reconHistoryBusy ? 'Cargando historial...' : 'Todavía no hay ejecuciones registradas.' }}</p>
         <ol v-else class="space-y-3 text-xs font-mono">
@@ -570,6 +570,20 @@
             </div>
             <p class="text-slate-400">Inicio: {{ new Date(job.started_at).toLocaleString() }} · Fin: {{ job.finished_at ? new Date(job.finished_at).toLocaleString() : 'Pendiente' }}</p>
             <p class="text-slate-500 break-all">Job: {{ job.run_id }} · Alcance de ejecución: {{ job.scope_revision || 'No registrado' }}</p>
+            <details v-if="job.result_summary" data-testid="recon-history-result" class="space-y-2 text-slate-400">
+              <summary class="cursor-pointer text-cyan-300">Resultados conservados al terminar</summary>
+              <p>Registrado: {{ new Date(job.result_summary.recorded_at).toLocaleString() }}</p>
+              <p v-if="job.result_summary.metrics_source === 'previous_artifacts'" class="text-amber-300">La ejecución no terminó correctamente. Estos conteos incluyen artefactos previos; no acreditan resultados nuevos del job.</p>
+              <p v-else>Conteos del workspace al terminar; pueden incluir etapas que no se ejecutaron en este job.</p>
+              <p>Subdominios: {{ job.result_summary.metrics.subdomains_count }} · Servicios web: {{ job.result_summary.metrics.live_hosts_count }} · URLs: {{ job.result_summary.metrics.urls_count }} · JavaScript: {{ job.result_summary.metrics.js_files_count }}</p>
+              <div v-for="step in job.result_summary.stages" :key="step.stage" class="border-l border-slate-700 pl-2 space-y-1">
+                <p class="text-slate-200">{{ historyStageLabel(step.stage) }} · {{ historyStatusLabel(step.failure_kind === 'scope_guard' ? 'blocked' : step.status) }}</p>
+                <p v-for="(count, name) in step.counts" :key="name">{{ historyResultCountLabel(name) }}: {{ count }}</p>
+                <p v-if="Object.keys(step.patterns).length">Clasificación local de URLs; coincidencias por patrón: {{ Object.entries(step.patterns).map(([name, count]) => name + ': ' + count).join(' · ') }}. No confirma vulnerabilidades.</p>
+              </div>
+            </details>
+            <p v-else-if="job.dry_run" class="text-slate-400">La simulación no genera resultados de artefactos.</p>
+            <p v-else-if="!['running', 'cancelling'].includes(job.status)" class="text-slate-500">Sin resumen de resultados conservado para este job.</p>
             <details v-if="job.reviewed_plan" data-testid="recon-history-review" class="space-y-2 text-slate-400">
               <summary class="cursor-pointer text-cyan-300">Plan revisado al iniciar</summary>
               <p>Validado: {{ new Date(job.reviewed_plan.checked_at).toLocaleString() }} · {{ job.reviewed_plan.dry_run ? 'SIMULACIÓN' : 'EJECUCIÓN' }}</p>
@@ -1832,6 +1846,10 @@ const reconHistoryError = ref('')
 let reconHistoryRefreshQueued = false
 const historyStatusLabel = status => ({ running: 'En ejecución', cancelling: 'Cancelación solicitada', completed: 'Completado', failed: 'Fallido', blocked: 'Bloqueado (Scope Guard)', simulated: 'Simulado', interrupted: 'Interrumpido', cancelled: 'Cancelado' })[status] || status
 const historyStageLabel = stage => ({ all: 'Todas las etapas', subdomains: 'Subdominios', probe: 'Sondeo HTTP/HTTPS', urls: 'URLs históricas', patterns: 'Patrones locales' })[stage] || stage
+const historyResultCountLabel = name => ({ total_raw: 'Resultados antes del filtro', in_scope_count: 'Dentro del alcance',
+  discarded_count: 'Descartados', new_count: 'Nuevos frente a la lista previa', live_hosts_count: 'Servicios web',
+  blocked_dns_count: 'Bloqueados por DNS', next_commands_count: 'Hosts con comandos sugeridos',
+  urls_count: 'URLs', js_files_count: 'Archivos JavaScript' })[name] || name
 
 const probeSortKey = ref('host')
 const probeSortDir = ref('asc')

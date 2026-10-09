@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional
 from app.config import SCRIPTS_DIR, WORKSPACE_DIR, RECON_DB_PATH
 from app.core.recon_jobs import ReconJobStore, ACTIVE_STATUSES
 from app.core.recon_review import reviewed_plan
+from app.core.recon_results import result_summary
+from app.core.artifact_snapshot import read_artifact_snapshot
 from app.core.workspace_paths import project_directory
 
 class ReconService:
@@ -200,11 +202,11 @@ class ReconService:
     @staticmethod
     def _completed_summary(target_dir, run_id):
         # A stale summary must never become provenance for a later job.
-        path = target_dir / 'recon' / 'summary.json'
         try:
-            if path.parent.is_symlink() or path.is_symlink() or path.stat().st_size > 2 * 1024 * 1024:
+            snapshot = read_artifact_snapshot(target_dir, 'recon/summary.json', include_bytes=True)
+            if snapshot['size'] > 2 * 1024 * 1024 or snapshot['preview_status'] != 'complete':
                 return None
-            summary = json.loads(path.read_text(encoding='utf-8'))
+            summary = json.loads(snapshot['_bytes'].decode('utf-8'))
             if isinstance(summary, dict) and summary.get('run_id') == run_id:
                 return summary
         except (OSError, ValueError, AttributeError):
@@ -384,13 +386,17 @@ class ReconService:
                     status = 'cancelled' if cancelled else (('simulated' if dry_run else 'completed') if proc.returncode == 0 else 'failed')
                     error = None if cancelled or proc.returncode == 0 else f'Código de salida: {proc.returncode}'
                     initial = self._initial_failure(failure_f, run_id, stage)
-                    outcome = initial or self._completed_summary(target_dir, run_id) or {}
+                    summary = self._completed_summary(target_dir, run_id) or {}
+                    outcome = initial or summary
                     reason = outcome.get('error')
                     if status == 'failed' and initial and outcome.get('failure_kind') == 'technical':
                         error = reason[:2000]
                     if status == 'failed' and outcome.get('status') == 'failed' and outcome.get('failure_kind') == 'scope_guard' and isinstance(reason, str) and reason.strip():
                         status, error = 'blocked', reason[:2000]
-                    self.store.finish(job_key, run_id, status, error, self._completed_scope_revision(target_dir, run_id))
+                    revision = summary.get('scope_revision')
+                    revision = revision if isinstance(revision, str) and re.fullmatch(r'[a-f0-9]{64}', revision) else None
+                    saved_result = None if initial else result_summary(summary, run_id, stage, status, dry_run)
+                    self.store.finish(job_key, run_id, status, error, revision, saved_result)
                     self._processes.pop(job_key, None)
         except Exception as error:
             with self._lock:

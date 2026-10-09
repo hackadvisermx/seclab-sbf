@@ -85,6 +85,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-02 — Estado del engagement y siguiente decisión válida (P0)
 
+**Entrega parcial V3-02e (fase 163).** El historial conserva un resumen acotado por job con conteos del workspace al terminar, estados/conteos de etapas, timestamp y revisión de alcance. UI diferencia métricas previas de resultados nuevos, y no inventa resultados para simulaciones, legacy o summaries inválidos/ajenos. Transacción SQLite y backup/deletion por proyecto mantienen el resumen aunque cambien los archivos actuales. Detalle en [phase-163.md](phase-163.md). No guarda snapshots de outputs ni completa eventos/timeline, procedencia finding/job o siguiente decisión del engagement.
+
 **Problema.** El avance en vivo de la fase 145 explica el job que corre, pero el usuario necesita retomar el hilo completo de decisiones entre sesiones y distinguir «terminado», «pendiente», «bloqueado», «fallido» y «cancelado».
 
 **Trabajo.** Definir estados y transiciones del engagement: borrador, revisión de alcance, simulación, revisión de activos, actividad permitida, triaje, reporte y cierre, ajustados al flujo real hallado en V3-00. Registrar eventos de decisión ligados a `engagement_id`, `stage_id`, `job_id` y versión del scope. La vista de inicio del engagement responde qué ocurrió, cuál es la siguiente decisión válida, qué debe revisar el operador y cuándo debe detenerse.

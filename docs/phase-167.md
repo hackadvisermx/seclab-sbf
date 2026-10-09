@@ -35,3 +35,5 @@ Por petición explícita del owner, el repositorio `hackadvisermx/seclab-sbf` pa
 Sin migración de proyectos ni cambios de comportamiento de las herramientas prometidos por la recompilación. Go 1.26.9 sí cambia bytes y metadatos de binarios, incluyendo fzf que antes usaba 1.25.13; se verifican comandos instalados. Revert restaura la toolchain anterior y reintroduce los CVEs conocidos. Laboratorio vivo y etiqueta full del owner intactos.
 
 Integración por PR hacia bootstrap/baseline, diff revisado, gates y CI aprobado del head exacto bajo la autorización renovada hasta 2026-10-10 14:56:00 UTC. La fase166 debe integrar este merge y repetir sus gates antes de fusionarse.
+
+PR [#187](https://github.com/hackadvisermx/seclab-sbf/pull/187) fusionado en `0e70e3d` el 2026-10-09 17:09:54 UTC; CI `37964014111`, intento 2, aprobado para head `1d98f83`. El cambio a público activó dependency-review; su primer intento detectó el grafo deshabilitado. Se habilitaron grafo/alertas de dependencias mediante la API oficial y el reintento pasó, sin omitir el chequeo.

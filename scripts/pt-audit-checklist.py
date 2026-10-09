@@ -26,6 +26,9 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seclab_findings import requires_finding_review, finding_status_from_markdown
+
 # Constantes de severidad y metodologías
 METHODOLOGY_AREAS = [
     {
@@ -188,13 +191,13 @@ class AuditChecklistEvaluator:
             return findings
 
         for md_file in sorted(self.evidence_dir.glob("*.md")):
-            if md_file.name.startswith("_") or md_file.name.startswith("."):
+            if md_file.name.startswith("_") or md_file.name.startswith(".") or md_file.name.lower() == "readme.md":
                 continue
             try:
                 content = md_file.read_text(encoding="utf-8")
                 meta, body = parse_simple_yaml_frontmatter(content)
                 title = meta.get("title", md_file.stem)
-                status = meta.get("status", "Borrador").strip()
+                status = finding_status_from_markdown(content)
                 cwe = meta.get("cwe", "").strip()
                 severity = meta.get("severity", "Medium").strip()
 
@@ -334,7 +337,7 @@ class AuditChecklistEvaluator:
         explicit_marker = area_id in discipline_markers
 
         # 3. Lógica específica por área (heurística, se mantiene como respaldo)
-        if explicit_marker:
+        if explicit_marker and (area_id != "triage" or not findings):
             status = "COMPLETED"
             marker_detail = f"Confirmado explícitamente por el operador (marcador '## Disciplina: {area_id}' en notes.md)"
             if matching_findings:
@@ -420,13 +423,13 @@ class AuditChecklistEvaluator:
 
         elif area_id == "triage":
             if findings:
-                unverified = [f for f in findings if f["status"].lower() in ("borrador", "unverified", "draft")]
+                unverified = [f for f in findings if requires_finding_review(f["status"])]
                 if not unverified and self.report_file.is_file():
                     status = "COMPLETED"
-                    details.append(f"Todos los {len(findings)} hallazgos confirmados y REPORT.md generado")
+                    details.append(f"Triaje resuelto para {len(findings)} ficha(s) y REPORT.md generado")
                 elif not unverified:
                     status = "IN_PROGRESS"
-                    details.append(f"{len(findings)} hallazgos confirmados; falta compilar REPORT.md")
+                    details.append(f"Triaje resuelto para {len(findings)} ficha(s); falta compilar REPORT.md")
                 else:
                     status = "IN_PROGRESS"
                     details.append(f"{len(unverified)} hallazgo(s) pendientes de verificación formal")
@@ -474,7 +477,7 @@ class AuditChecklistEvaluator:
         if not self.target_yaml.is_file() and not self.scope_txt.is_file():
             blocking_issues.append("No se encontró target.yaml ni scope.txt")
 
-        unverified_findings = [f["id"] for f in findings if f["status"].lower() in ("borrador", "unverified", "draft")]
+        unverified_findings = [f["id"] for f in findings if requires_finding_review(f["status"])]
         if unverified_findings:
             blocking_issues.append(f"Existen hallazgos sin verificar formalmente: {', '.join(unverified_findings)}")
 
@@ -511,8 +514,10 @@ class AuditChecklistEvaluator:
             "total_areas": total_areas,
             "total_findings": len(findings),
             "findings_summary": {
-                "verified": len([f for f in findings if f["status"].lower() in ("confirmado", "verified", "confirmed")]),
+                "verified": len([f for f in findings if f["status"] == "PROVEN"]),
                 "unverified": len(unverified_findings),
+                "disproved": sum(f["status"] == "DISPROVED" for f in findings),
+                "mitigated": sum(f["status"] == "MITIGATED" for f in findings),
             },
             "matrix": matrix,
             "readiness": {

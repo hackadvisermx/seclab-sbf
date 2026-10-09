@@ -1,3 +1,5 @@
+import re
+
 from seclab_artifacts import normalize_artifact_refs
 
 
@@ -21,6 +23,7 @@ def normalize_status(raw_status: str) -> str:
         "REMEDIATED": "MITIGATED",
         "DRAFT": "DRAFT",
         "BORRADOR": "DRAFT",
+        "UNVERIFIED": "DRAFT",
         "BLOCKED": "BLOCKED",
     }
     return status_map.get(raw, raw if raw else "CANDIDATE")
@@ -44,3 +47,21 @@ def validate_confirmation(metadata):
         raise ValueError("Para confirmar necesitas al menos un artefacto vinculado y revisado.")
     if not normalize_verification_rationale(metadata.get("verification_rationale")):
         raise ValueError("Para confirmar explica el motivo de verificación humana.")
+
+
+def requires_finding_review(raw_status):
+    return normalize_status(raw_status) not in {"PROVEN", "DISPROVED", "MITIGATED"}
+
+
+def finding_status_from_markdown(content: str) -> str:
+    match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)", content, re.DOTALL)
+    if match:
+        values = [line.split(":", 1)[1].strip() for line in match[1].splitlines()
+                  if line.startswith("status:")]
+        if len(values) == 1:
+            value = values[0]
+            if value.startswith(("'", '"')):
+                scalar = re.fullmatch(r"([\"'])(.*?)\1(?:\s+#.*)?\s*", value)
+                return normalize_status(scalar[2]) if scalar else "CANDIDATE"
+            return normalize_status(value.split(" #", 1)[0].strip())
+    return "CANDIDATE"

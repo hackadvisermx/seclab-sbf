@@ -41,5 +41,38 @@ with tempfile.TemporaryDirectory(prefix='checklist-parity-') as temporary:
     readiness = checklist['readiness']
     assert packer.check_closure_readiness(project) == (
         readiness['ready_for_closure'], readiness['blocking_issues'], readiness['recommendations'])
+    (project / 'evidence').mkdir()
+    (project / 'evidence/README.md').write_text('Fixture documentation')
+    (project / 'evidence/.hidden.md').write_text('Fixture hidden file')
+    (project / 'REPORT.md').write_text('Fixture report')
+    (project / 'notes.md').write_text(''.join('## Disciplina: ' + row['id'] + '\n' for row in checklist['matrix']))
+    target = project / 'target.yaml'
+    original_target = target.read_text()
+    finding = project / 'evidence/fixture.md'
+    for status, pending, normalized in [
+        (None, True, 'CANDIDATE'), ('CANDIDATE', True, 'CANDIDATE'),
+        ('UNVERIFIED', True, 'DRAFT'), ('BLOCKED', True, 'BLOCKED'),
+        ('UNKNOWN', True, 'UNKNOWN'), ('PROVEN', False, 'PROVEN'),
+        ('Confirmado', False, 'PROVEN'), ('DISPROVED', False, 'DISPROVED'),
+        ('REMEDIATED', False, 'MITIGATED')]:
+        content = '---\nid: FIXTURE\n' + ('status: "' + status + '" # fixture\n' if status else '') + '---\nstatus: draft in body'
+        finding.write_text(content)
+        result = command('pt-audit-checklist')
+        assert result['total_findings'] == 1, result
+        assert result['findings_summary']['unverified'] == int(pending), result
+        assert result['findings_summary']['verified'] == int(normalized == 'PROVEN'), result
+        assert result['readiness']['ready_for_closure'] == (not pending), result
+        assert result['matrix'][-1]['status'] == ('IN_PROGRESS' if pending else 'COMPLETED'), result
+        context = command('pt-agent-context')
+        assert context['findings']['items'][0]['status'] == normalized, context
+        next_steps = command('pt-next')
+        assert next_steps['next_step']['id'] == ('verify_findings' if pending else 'pack_and_close'), next_steps
+        assert packer.check_closure_readiness(project)[0] == (not pending)
+        if pending:
+            closed = subprocess.run(['python3', path, 'close', '-j', str(project)],
+                cwd=root, capture_output=True, text=True, timeout=20)
+            assert json.loads(closed.stdout)['status'] == 'blocked', closed.stdout
+            assert target.read_text() == original_target
+        assert finding.read_text() == content
 CHECK
-printf '%s\n' "installed_checklist=ok imagen=$image coverage=25 next=auth closure=shared"
+printf '%s\n' "installed_checklist=ok imagen=$image coverage=25 next=auth closure=shared triage=consistent"

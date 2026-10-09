@@ -1253,7 +1253,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("## 1. Alcance y Reglas de Compromiso", md)
             self.assertIn("## 2. Cobertura Metodológica & Checklist", md)
             self.assertIn("## 3. Superficie de Ataque y Reconocimiento", md)
-            self.assertIn("## 4. Matriz de Hallazgos Validados", md)
+            self.assertIn("## 4. Matriz de Hallazgos y Estados Declarados", md)
             self.assertIn("## 5. Trazabilidad de Auditoría", md)
             self.assertIn("## 6. Directivas de Agente: auth-agent.prompt.md", md)
             self.assertIn("VULN-01", md)
@@ -1348,6 +1348,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
                         self.assertEqual(len(hash_val), 64)
 
             # 4. Validar cierre formal de auditoría
+            self.assertEqual(engagement_packer.close_engagement(tmp)["status"], "blocked")
+            ev_file.write_text(ev_file.read_text().replace('status: "CANDIDATE"', 'status: "DISPROVED"'))
             close_res = engagement_packer.close_engagement(tmp)
             self.assertEqual(close_res["status"], "closed")
             self.assertTrue(close_res["target_yaml_updated"])
@@ -1671,6 +1673,74 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             plugin = (REPO_ROOT / "shell" / "pentest-lab" / "pentest-lab.plugin.zsh").read_text(encoding="utf-8")
             self.assertIn("pt-eng close [nombre] [opciones]", plugin)
             self.assertIn("-f, --force", plugin)
+
+    def test_finding_states_stay_consistent_through_triage_context_next_and_close(self):
+        import tempfile
+        from authorization_fixture import AUTHORIZATION_YAML
+        from seclab_findings import normalize_status
+        with tempfile.TemporaryDirectory() as temporary:
+            project = pathlib.Path(temporary)
+            (project / 'evidence').mkdir()
+            target = project / 'target.yaml'
+            original = 'engagement:\n  status: active\nscope:\n  in_scope:\n    domains: [example.test]\n' + AUTHORIZATION_YAML
+            target.write_text(original)
+            (project / 'REPORT.md').write_text('Fixture report')
+            (project / 'notes.md').write_text(''.join('## Disciplina: ' + row['id'] + '\n' for row in audit_checklist.METHODOLOGY_AREAS))
+            (project / 'evidence/README.md').write_text('Documentation')
+            (project / 'evidence/.hidden.md').write_text('Hidden')
+            empty = audit_checklist.AuditChecklistEvaluator(project).evaluate()
+            self.assertEqual(empty['total_findings'], 0)
+            self.assertEqual(empty['matrix'][-1]['status'], 'COMPLETED')
+            pending = [None, '', 'CANDIDATE', 'HIPOTESIS', 'DRAFT', 'Borrador', 'UNVERIFIED', 'BLOCKED', 'UNKNOWN', 'CONFIRMED']
+            resolved = ['PROVEN', 'VERIFIED', 'Confirmado', 'DISPROVED', 'FALSO POSITIVO', 'MITIGATED', 'REMEDIATED']
+            for state in pending + resolved:
+                with self.subTest(state=state):
+                    content = '---\nid: FIXTURE\n' + ('status: "' + state + '" # fixture\n' if state is not None else '') + '---\nBody contains status: draft and must remain literal'
+                    finding = project / 'evidence/fixture.md'
+                    finding.write_text(content)
+                    result = audit_checklist.AuditChecklistEvaluator(project).evaluate()
+                    review = state in pending
+                    self.assertEqual(result['total_findings'], 1)
+                    self.assertEqual(result['findings_summary']['unverified'], int(review))
+                    self.assertEqual(result['findings_summary']['verified'], int(normalize_status(state) == 'PROVEN'))
+                    self.assertEqual(result['readiness']['ready_for_closure'], not review)
+                    triage = result['matrix'][-1]
+                    self.assertEqual(triage['status'], 'IN_PROGRESS' if review else 'COMPLETED')
+                    self.assertNotIn('hallazgos confirmados', triage['details'])
+                    context = agent_context.generate_context_dict(project)
+                    self.assertEqual(context['findings']['items'][0]['status'], normalize_status(state))
+                    markdown = agent_context.format_markdown_context(context)
+                    self.assertIn('Estado declarado', markdown)
+                    self.assertIn('`' + normalize_status(state) + '`', markdown)
+                    steps = audit_next.determine_roadmap(project)
+                    self.assertEqual(any(row['id'] == 'verify_findings' for row in steps), review)
+                    self.assertEqual(any(row['id'] == 'pack_and_close' for row in steps), not review)
+                    expected = engagement_packer.check_closure_readiness(project)
+                    self.assertEqual(expected[0], not review)
+                    with patch.object(engagement_packer.pathlib.Path, 'is_file', autospec=True,
+                        side_effect=lambda path: False if path.name.startswith('pt-audit-checklist') else pathlib.Path.exists(path)):
+                        self.assertEqual(engagement_packer.check_closure_readiness(project)[0], not review)
+                    self.assertEqual(finding.read_text(), content)
+                    if review:
+                        self.assertEqual(engagement_packer.close_engagement(project)['status'], 'blocked')
+                        self.assertEqual(target.read_text(), original)
+            self.assertEqual(engagement_packer.close_engagement(project)['status'], 'closed')
+
+    def test_finding_status_reads_only_unambiguous_frontmatter_scalars(self):
+        from seclab_findings import finding_status_from_markdown
+        for header, expected in [
+            ('status: PROVEN # review', 'PROVEN'),
+            ('status: "PROVEN" # review', 'PROVEN'),
+            ("status: 'DISPROVED'", 'DISPROVED'),
+            ('status: "PROVEN # unknown"', 'PROVEN # UNKNOWN'),
+            ('status: "PROVEN', 'CANDIDATE'),
+            ('status: PROVEN\nstatus: CANDIDATE', 'CANDIDATE'),
+            ('title: Fixture', 'CANDIDATE'),
+        ]:
+            with self.subTest(header=header):
+                content = '---\r\n' + header.replace('\n', '\r\n') + '\r\n---\r\nstatus: PROVEN'
+                self.assertEqual(finding_status_from_markdown(content), expected)
+        self.assertEqual(finding_status_from_markdown('status: PROVEN'), 'CANDIDATE')
 
     def test_checklist_consumers_support_source_and_extensionless_installation(self):
         import importlib.machinery

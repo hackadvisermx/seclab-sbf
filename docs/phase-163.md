@@ -33,7 +33,7 @@ make scan-image SCAN_IMAGE=seclab-sbf:full-phase163
 - `make verify`: 183 Python; backend 188; frontend 113; audit 0. Las ocho pruebas nuevas de backend cubren persistencia/backup, filtrado de datos privados, schema inválido, orden/parsers de etapas, discrepancias de run/estado, métricas previas, ausencia de resultados legacy/simulados, corrupción, borrado aislado, atomicidad y finalizaciones tardías.
 - 3 UI y 5 integraciones Chromium aprobadas con tester temporal y `--network none`. La integración extendida usa lista vacía (sin sockets/DNS) para dos sondeos con conteos 1/3, agrega bloqueo sin permiso, recarga y verifica cada resumen. Captura `result-history.png` inspeccionada; fixture/credenciales eliminados al terminar.
 - Imagen aislada `seclab-sbf:full-phase163`, hash final de insumos `13d30a69d351851e`, idéntico al checkout. Build, smoke, Compose con `.env.example`, Actionlint y gate CVE High/Critical aprobados bajo política vigente; sin nuevas dependencias ni excepciones.
-- CI remoto del head exacto requerido antes del merge del PR.
+- Integración en [PR #183](https://github.com/hackadvisermx/seclab-sbf/pull/183) hacia `bootstrap/baseline`; estado y evidencia de CI del head exacto registrados en el PR. Merge requiere gates y CI aprobados durante la autorización temporal.
 
 ## Límites y reversión
 

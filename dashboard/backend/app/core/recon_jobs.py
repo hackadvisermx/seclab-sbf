@@ -1,5 +1,4 @@
 import datetime
-import hashlib
 import json
 import os
 import pathlib
@@ -8,20 +7,10 @@ import sqlite3
 import uuid
 from contextlib import closing
 from app.core.recon_results import validate_result_summary
+from app.core.recon_decision import outcome_revision, TERMINAL_STATUSES
 
 
 ACTIVE_STATUSES = ('running', 'cancelling')
-TERMINAL_STATUSES = ('completed', 'simulated', 'failed', 'blocked', 'cancelled', 'interrupted')
-
-
-def outcome_revision(job):
-    """Bind a review to the stored outcome, not to the mutable workspace."""
-    fields = ('engagement_type', 'engagement_id', 'run_id', 'status', 'stage', 'dry_run',
-              'started_at', 'finished_at', 'error', 'scope_revision', 'reviewed_plan', 'result_summary')
-    payload = {field: job.get(field) for field in fields}
-    payload['dry_run'] = bool(payload['dry_run'])
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=True,
-                                    separators=(',', ':')).encode()).hexdigest()
 
 
 def now():

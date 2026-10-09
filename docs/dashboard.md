@@ -272,3 +272,9 @@ Eliminar un reto o auditoría desde el dashboard mueve su carpeta completa a la 
 ### Catálogo OpenRouter y modelo base (fase 103)
 
 API Vault permite consultar el catálogo de la cuenta antes de guardar una nueva clave o al editar la existente. El selector **Modelo Inicial / Predeterminado** guarda `model_name` en el Vault. Chat adopta ese modelo al abrir y permite buscar/elegir otro; el Copiloto consulta la misma lista y conserva preferencias específicas previas. Claves antiguas guardadas como `custom_llm` con hostname de OpenRouter siguen funcionando sin migrar ni reemplazar sus secretos. «Online» valida la clave; saldo, límites y disponibilidad del modelo se comprueban al inferir. Si el modelo base ya no existe, elegir uno de la lista. Ver `docs/phase-103.md`.
+
+### Siguiente decisión desde la terminal
+
+`pt-next` también consulta el último job del dashboard para proyectos dentro de `WORKSPACE_DIR` (o `SECLAB_WORKSPACE_DIR`). La DB se obtiene de `SECLAB_DATA_DIR/recon-jobs.db`, con el mismo default instalado `/var/lib/seclab/dashboard`. Al usar un workspace o estado alternativos, configura ambas rutas. No crea ni migra esa DB. Sin DB/job, o fuera del workspace configurado, conserva la heurística previa.
+
+Si el job sigue activo, requiere revisión o el estado no puede leerse, la salida indica una acción local en el dashboard, sin comando ni prompt. `--all` no revela otras recomendaciones ejecutables mientras esa decisión esté pendiente y `--copy` no copia un comando/prompt inexistente. Una revisión vigente para preparar otro plan conserva estado y permisos del job original. Esta recomendación no ejecuta herramientas y puede quedar obsoleta después de la lectura; los gates se vuelven a aplicar al lanzar actividad.

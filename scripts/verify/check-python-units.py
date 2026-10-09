@@ -2213,6 +2213,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(scope_revision))
     authorization = load_module("authorization_tests", REPO_ROOT / "scripts" / "verify" / "test_authorization.py")
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(authorization))
+    recon_cli = load_module('recon_cli_decision_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_recon_cli_decision.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(recon_cli))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

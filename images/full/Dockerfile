@@ -877,6 +877,7 @@ COPY scripts/health/lab-healthcheck.sh /usr/local/bin/lab-healthcheck
 COPY scripts/seclab_scope.py /usr/local/bin/seclab_scope.py
 COPY scripts/seclab_artifacts.py /usr/local/bin/seclab_artifacts.py
 COPY scripts/seclab_findings.py /usr/local/bin/seclab_findings.py
+COPY scripts/seclab_recon_state.py /usr/local/bin/seclab_recon_state.py
 COPY scripts/seclab_recon_probe.py /usr/local/bin/seclab_recon_probe.py
 COPY scripts/pt-scope-validator.py /usr/local/bin/pt-scope-validator
 COPY scripts/pt-report-compiler.py /usr/local/bin/pt-report-compiler

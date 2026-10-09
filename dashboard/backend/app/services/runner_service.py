@@ -4,7 +4,7 @@ import pathlib
 import subprocess
 import sys
 from typing import Any, Dict, Optional
-from app.config import SCRIPTS_DIR, REPO_ROOT
+from app.config import SCRIPTS_DIR, REPO_ROOT, WORKSPACE_DIR, DATA_DIR
 from app.models.schemas import ScopeCheckResponse
 
 
@@ -100,7 +100,8 @@ class RunnerService:
         if prompt_mode:
             args.append("-p")
         cmd = [self.py_bin, str(script)] + args + [str(engagement_dir)]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ,
+            "WORKSPACE_DIR": str(WORKSPACE_DIR), "SECLAB_DATA_DIR": str(DATA_DIR)})
 
         try:
             return json.loads(proc.stdout)

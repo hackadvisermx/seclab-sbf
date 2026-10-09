@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_findings import requires_finding_review, finding_status_from_markdown
+from seclab_recon_state import project_recon_decision
 
 # Colores ANSI respetando NO_COLOR y TERM=dumb
 NO_COLOR = bool(os.environ.get("NO_COLOR")) or os.environ.get("TERM") == "dumb"
@@ -116,8 +117,22 @@ def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib
     return None
 
 
+def recon_roadmap(engagement_dir):
+    decision = project_recon_decision(engagement_dir)
+    if decision is None:
+        return None
+    step = dict(decision['next_step'])
+    step.update(priority='HIGH', skill='N/A', prompt_template='N/A', prompt_available=False)
+    step['decision_job'] = decision.get('decision_job')
+    step['outcome_review'] = decision.get('outcome_review')
+    return [step]
+
+
 def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
     """Analiza exhaustivamente el engagement y genera una lista ordenada de pasos pendientes."""
+    decision = recon_roadmap(engagement_dir)
+    if decision is not None:
+        return decision
     mod = _get_audit_checklist_module()
     if mod and hasattr(mod, "AuditChecklistEvaluator"):
         try:
@@ -389,6 +404,9 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
 
 def generate_llm_prompt(engagement_dir: pathlib.Path, step: Dict[str, Any]) -> str:
     """Genera un System Prompt + Contexto especializado listo para alimentar a un Agente LLM."""
+    if step.get('command') is None:
+        return ''
+
     eng_name = engagement_dir.name
     skill_name = step.get("skill", "recon-profiling")
     prompt_name = step.get("prompt_template", "recon-agent")
@@ -458,8 +476,11 @@ def format_terminal_output(engagement_dir: pathlib.Path, next_step: Dict[str, An
             marker = f"{C_GREEN}▶{C_RESET}" if is_current else " "
             prio_color = C_RED if s["priority"] == "CRITICAL" else (C_YELLOW if s["priority"] == "HIGH" else C_BLUE)
             lines.append(f"{marker} [{idx}] {prio_color}[{s['priority']}]{C_RESET} {C_BOLD}{s['title']}{C_RESET}")
-            lines.append(f"     Fase: {s['phase']} | Skill: `{s['skill']}`")
-            lines.append(f"     Comando: {C_CYAN}{s['command']}{C_RESET}")
+            lines.append(f"     Fase: {s['phase']}")
+            if s['command'] is None:
+                lines.append(f"     Acción local: {s.get('action', {}).get('label', 'Revisar historial')}")
+            else:
+                lines.append(f"     Skill: `{s['skill']}` | Comando: {C_CYAN}{s['command']}{C_RESET}")
         lines.append("-" * 80)
         lines.append("")
 
@@ -467,14 +488,22 @@ def format_terminal_output(engagement_dir: pathlib.Path, next_step: Dict[str, An
         f"{C_BOLD}Próximo Paso Recomendado:{C_RESET}",
         f"  {C_GREEN}●{C_RESET} {C_BOLD}{next_step['title']}{C_RESET} ({next_step['phase']})",
         f"  {C_YELLOW}Motivo:{C_RESET} {next_step['reason']}",
-        f"  {C_BLUE}Habilidad / Prompt:{C_RESET} `{next_step['skill']}` ({next_step['prompt_template']})",
-        f"  {C_CYAN}Comando Sugerido:{C_RESET} {C_BOLD}{next_step['command']}{C_RESET}",
-        "",
     ])
+    if next_step['command'] is None:
+        job = next_step.get('decision_job')
+        if job:
+            lines.append(f"  Job: {job['run_id']} | Estado: {job['status']} | Etapa: {job['stage']}")
+        lines.append(f"  Acción local en el dashboard: {next_step.get('action', {}).get('label', 'Revisar historial')}")
+    else:
+        lines.extend([
+            f"  {C_BLUE}Habilidad / Prompt:{C_RESET} `{next_step['skill']}` ({next_step['prompt_template']})",
+            f"  {C_CYAN}Comando Sugerido:{C_RESET} {C_BOLD}{next_step['command']}{C_RESET}",
+        ])
+    lines.append("")
 
     if next_step.get("ready_for_closure"):
         lines.append(f"{C_GREEN}[✓] ¡Auditoría lista para cierre! Ejecuta el comando sugerido para sellar.{C_RESET}\n")
-    else:
+    elif next_step.get("command") is not None:
         lines.append(f"Tip: Para obtener el prompt completo listo para LLM ejecuta: {C_CYAN}pt-next --prompt{C_RESET}\n")
 
     return "\n".join(lines)
@@ -514,6 +543,7 @@ def main() -> int:
         print(f"Error: No se pudieron determinar pasos para {eng_dir.name}", file=sys.stderr)
         return 1
 
+    all_steps = recon_roadmap(eng_dir) or all_steps
     next_step = all_steps[0]
 
     if args.json:
@@ -525,17 +555,22 @@ def main() -> int:
             "total_pending_steps": len(all_steps),
             "roadmap": all_steps if args.all else None,
         }
+        if next_step.get("command") is None:
+            out_dict.update(prompt_available=False, decision_job=next_step.get("decision_job"),
+                            outcome_review=next_step.get("outcome_review"))
         if args.prompt:
             out_dict["prompt"] = generate_llm_prompt(eng_dir, next_step)
         output_text = json.dumps(out_dict, indent=2, ensure_ascii=False)
-    elif args.prompt:
+    elif args.prompt and next_step.get("command") is not None:
         output_text = generate_llm_prompt(eng_dir, next_step)
     else:
         output_text = format_terminal_output(eng_dir, next_step, all_steps, show_all=args.all)
 
     print(output_text)
 
-    if args.copy:
+    if args.copy and next_step.get("command") is None:
+        print("[!] La decisión requiere revisión local; no hay comando ni prompt para copiar.", file=sys.stderr)
+    elif args.copy:
         copied = False
         text_to_copy = generate_llm_prompt(eng_dir, next_step) if args.prompt else next_step["command"]
         for cmd in (["pbcopy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):

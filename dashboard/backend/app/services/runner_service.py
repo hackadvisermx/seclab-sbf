@@ -140,7 +140,8 @@ class RunnerService:
         cmd = [self.py_bin, str(script), str(engagement_dir)]
         if skill_name:
             cmd.append(skill_name)
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ,
+            "WORKSPACE_DIR": str(WORKSPACE_DIR), "SECLAB_DATA_DIR": str(DATA_DIR)})
         return proc.stdout or proc.stderr
 
 

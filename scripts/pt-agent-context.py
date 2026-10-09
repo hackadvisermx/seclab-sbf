@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_findings import finding_status_from_markdown
+from seclab_recon_state import project_recon_context
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -557,7 +558,39 @@ def generate_context_dict(engagement_dir: pathlib.Path, skill_query: Optional[st
         if skill_info:
             context["active_skill"] = skill_info
 
+    context["recon_state"] = project_recon_context(engagement_dir)
+    decision = context["recon_state"]["decision"]
+    context["readiness"] = {
+        "ready_for_closure": bool(coverage_data.get("ready_for_closure")) and decision is None,
+        "recon_decision_required": decision is not None,
+        "blocking_issues": [*coverage_data.get("blocking_issues", []), *([decision["title"]] if decision else [])],
+        "basis": "file_checklist_and_current_job",
+    }
     return context
+
+
+def format_recon_state(state):
+    lines = ["### Estado persistido del reconocimiento", ""]
+    if state.get("availability") == "available":
+        job = state["job"]
+        mode = "simulación" if job["dry_run"] else "ejecución"
+        lines.append(f"- **Job:** `{job['run_id']}` · **Estado:** `{job['status']}` · **Etapa:** `{job['stage']}` · **Modo:** {mode}")
+        lines.append(f"- **Inicio UTC:** {job['started_at']} · **Fin UTC:** {job['finished_at'] or 'pendiente'}")
+        review = state.get("outcome_review")
+        if review:
+            lines.append(f"- **Revisión del operador:** {review['reviewed_at']}; preparar otro plan. Revisar no confirma resultados ni concede permisos.")
+    elif state.get("availability") == "unavailable":
+        lines.append("- **Estado del job:** no disponible; no se infiere que el reconocimiento haya terminado.")
+    else:
+        lines.append("- **Estado del job:** sin job persistido para este proyecto en el workspace configurado; no se infiere una ejecución desde los archivos.")
+    decision = state.get("decision")
+    if decision:
+        lines.append(f"- **Siguiente decisión local:** {decision['title']}. {decision['reason']}")
+        lines.append("- Prioriza esta revisión local antes de proponer otra actividad; esta decisión no ofrece un comando de ejecución.")
+    lines.append("- **Origen de los conteos y muestras:** archivos actuales del workspace, sin atribución a este job. Pueden proceder de ejecuciones anteriores; no prueban finalización, autorización ni aceptación de resultados.")
+    lines.append(f"- **Estado observado UTC:** {state.get('observed_at', 'no registrado')}. Puede cambiar después de esta lectura.")
+    lines.append("")
+    return lines
 
 
 def format_markdown_context(data: Dict[str, Any]) -> str:
@@ -576,6 +609,7 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
         f"# Contexto de Seguridad del Agente: {eng['name']}",
         f"> Directorio activo: `{eng['directory']}` | Timestamp: `{data['timestamp']}`",
         "",
+        *format_recon_state(data.get("recon_state", {})),
         "---",
         "",
         "## 1. Alcance y Reglas de Compromiso (Scope & Limits)",
@@ -635,7 +669,7 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
     in_prog = coverage.get("in_progress_areas", 0)
     tot = coverage.get("total_areas", 8)
     lines.append(f"- **Progreso Metodológico:** {completed}/{tot} disciplinas completadas, {in_prog} en curso (Puntaje: **{coverage.get('coverage_score', 0.0)}%**)")
-    ready = coverage.get("ready_for_closure", False)
+    ready = data.get("readiness", coverage).get("ready_for_closure", False)
     lines.append(f"- **Compuerta de Cierre:** {'Listo para cerrar' if ready else 'Requisitos de cierre pendientes'}")
 
     matrix = coverage.get("matrix", [])
@@ -647,7 +681,7 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
             status_badge = "COMPLETADO" if m["status"] == "COMPLETED" else ("EN CURSO" if m["status"] == "IN_PROGRESS" else "PENDIENTE")
             lines.append(f"| {m['name']} | `{m['skill']}` | {status_badge} | {m['findings_count']} |")
 
-    blocking = coverage.get("blocking_issues", [])
+    blocking = data.get("readiness", coverage).get("blocking_issues", [])
     if blocking:
         lines.append("")
         lines.append("- **Bloqueos para Cierre:**")
@@ -669,12 +703,12 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
     patterns = recon.get("patterns", {})
 
     lines.append(f"- **Subdominios Descubiertos:** {sub_count}")
-    lines.append(f"- **Servicios Web Activos:** {len(live_hosts)}")
+    lines.append(f"- **Servicios Web Registrados:** {len(live_hosts)}")
     if live_hosts:
         sample_hosts = live_hosts[:8]
         lines.append(f"  - Muestra: {', '.join(f'`{h}`' for h in sample_hosts)}{' ...' if len(live_hosts) > 8 else ''}")
     lines.append(f"- **URLs / Endpoints Indexados:** {urls_count}")
-    lines.append(f"- **Archivos JavaScript Analizados:** {js_count}")
+    lines.append(f"- **Archivos JavaScript Listados:** {js_count}")
 
     if patterns:
         pat_summary = ", ".join(f"{k}: {v}" for k, v in sorted(patterns.items()))

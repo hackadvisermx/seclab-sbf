@@ -2217,6 +2217,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(recon_cli))
     ci_linters = load_module('ci_linters_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_ci_linters.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(ci_linters))
+    context_recon = load_module('context_recon_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_context_recon_state.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(context_recon))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

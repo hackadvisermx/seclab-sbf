@@ -157,13 +157,46 @@ def read_current_job(project, workspace, database):
     return job
 
 
-def project_recon_decision(project):
+def project_current_job(project):
     root = pathlib.Path(os.environ.get('REPO_ROOT', pathlib.Path(__file__).resolve().parent.parent))
     workspace = os.environ.get('WORKSPACE_DIR', os.environ.get('SECLAB_WORKSPACE_DIR',
         '/workspace' if pathlib.Path('/workspace').exists() else str(root/'workspace')))
     data = pathlib.Path(os.environ.get('SECLAB_DATA_DIR', '/var/lib/seclab/dashboard'
         if pathlib.Path('/var/lib/seclab').exists() else str(root/'dashboard/backend/data')))
+    return read_current_job(project, workspace, data/'recon-jobs.db')
+
+
+def project_recon_decision(project):
     try:
-        return recon_decision(read_current_job(project, workspace, data/'recon-jobs.db'))
+        return recon_decision(project_current_job(project))
     except (OSError, ValueError, TypeError, sqlite3.Error):
         return unavailable_decision()
+
+
+def project_recon_context(project):
+    result = {'observed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'availability': 'not_recorded', 'job': None, 'outcome_review': None, 'decision': None,
+        'artifacts_origin': 'workspace_unattributed'}
+    try:
+        job = project_current_job(project)
+        if job is None:
+            return result
+        result['availability'] = 'available'
+        result['job'] = {key: job[key] for key in ('run_id', 'status', 'stage', 'dry_run')}
+        for key in ('started_at', 'finished_at'):
+            value = job[key]
+            result['job'][key] = (datetime.datetime.fromisoformat(value[:-1]+'+00:00'
+                if value.endswith('Z') else value).astimezone(datetime.timezone.utc).isoformat()) if value else None
+        if job.get('outcome_review'):
+            result['outcome_review'] = {key: job['outcome_review'][key] for key in ('reviewed_at', 'decision')}
+            value = result['outcome_review']['reviewed_at']
+            result['outcome_review']['reviewed_at'] = datetime.datetime.fromisoformat(
+                value[:-1]+'+00:00' if value.endswith('Z') else value).astimezone(datetime.timezone.utc).isoformat()
+        decision = recon_decision(job)
+        if decision:
+            result['decision'] = decision['next_step']
+        return result
+    except (OSError, ValueError, TypeError, OverflowError, sqlite3.Error):
+        result.update(availability='unavailable', job=None, outcome_review=None,
+            decision=unavailable_decision()['next_step'])
+        return result

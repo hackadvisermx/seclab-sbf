@@ -13,7 +13,9 @@ FULL_DIRS = ('images', 'scripts', 'shell', 'security', 'supply-chain',
              'skills', 'workspace-seed', 'dashboard/backend', 'dashboard/frontend')
 FULL_FILES = ('Makefile', '.dockerignore', '.tmux.conf')
 EXCLUDED_DIRS = {'__pycache__', 'node_modules', '.venv', '.git'}
-EXCLUDED_ROOTS = ('dashboard/frontend/dist', 'dashboard/backend/data')
+EXCLUDED_ROOTS = ('dashboard/frontend/dist', 'dashboard/backend/data',
+                  'dashboard/frontend/playwright-report', 'dashboard/frontend/test-results',
+                  'dashboard/frontend/blob-report', 'dashboard/frontend/e2e/.playwright-fixture')
 
 
 def selected_files(root, profile):

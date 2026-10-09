@@ -1,0 +1,45 @@
+import { test, expect } from '@playwright/test'
+import { readFile, writeFile } from 'node:fs/promises'
+import { verifyFindingStateParity } from '../finding-state-parity.mjs'
+
+test('usuario temporal consulta cobertura instalada coherente y revoca su sesión al salir', async ({ page }, testInfo) => {
+  const user = JSON.parse(await readFile(new URL('../.playwright-fixture/user.json', import.meta.url), 'utf8'))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'SecLab Dashboard' })).toBeVisible()
+  await page.getByLabel('Contraseña').fill(user.password)
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Cerrar sesión', exact: true })).toBeVisible()
+  const me = await page.request.get('/api/v1/auth/me')
+  expect(me.status()).toBe(200)
+  expect((await me.json()).username).toBe(user.username)
+  const cookies = await page.context().cookies()
+  expect(cookies.find(cookie => cookie.name === 'seclab_session')?.httpOnly).toBe(true)
+  const { workspace } = JSON.parse(await readFile(new URL('../.playwright-fixture/workspace.json', import.meta.url), 'utf8'))
+  const id = 'installed-checklist'
+  expect((await page.request.post('/api/v1/engagements', { data: { name: id, domain: 'example.test', type: 'engagement' } })).ok()).toBe(true)
+  const scope = await (await page.request.get(`/api/v1/scope/${id}`)).json()
+  scope.authorization = { reference: 'Fixture sin tráfico', valid_from: '2000-01-01T00:00:00Z',
+    valid_until: '2099-01-01T00:00:00Z', allow_passive: true, allow_active: true }
+  expect((await page.request.put(`/api/v1/scope/${id}`, { data: scope })).ok()).toBe(true)
+  await writeFile(`${workspace}/engagements/${id}/recon/live_hosts.txt`, 'https://example.test\n')
+  await writeFile(`${workspace}/engagements/${id}/notes.md`, '## Disciplina: fuzzing\n')
+  const checklist = await (await page.request.get(`/api/v1/checklist/${id}`)).json()
+  expect(checklist.coverage_score).toBe(25)
+  expect((await (await page.request.get(`/api/v1/checklist/${id}/next`)).json()).next_step.id).toBe('auth')
+  await page.goto(`/engagements/engagement/${id}`)
+  await page.getByRole('button', { name: /Metodología & Cobertura/ }).click()
+  await expect(page.getByText('25% Cobertura', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('next-decision')).toContainText('Auditoría de Matriz de Autorización, IDOR y JWT')
+  await page.getByRole('button', { name: /Copiloto Táctico/ }).click()
+  await page.getByRole('button', { name: 'Ver Contexto pt-context', exact: true }).click()
+  const context = page.locator('pre').filter({ hasText: 'Cobertura Metodológica & Checklist (25.0%)' })
+  await expect(context).toBeVisible()
+  await expect(context).toContainText('2/8 disciplinas completadas')
+  await expect(context).toContainText('Descubrimiento de Parámetros')
+  await page.screenshot({ path: testInfo.outputPath('installed-checklist.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Cerrar', exact: true }).click()
+  await verifyFindingStateParity(page, testInfo, workspace)
+  await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'SecLab Dashboard' })).toBeVisible()
+  expect((await page.request.get('/api/v1/auth/me')).status()).toBe(401)
+})

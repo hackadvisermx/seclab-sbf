@@ -78,7 +78,10 @@ class TestDashboardAuthentication(unittest.TestCase):
             self.assertEqual(self.client.get('/api/v1/reports/fixture/preview').json()['content'], '# Informe de prueba')
             download = self.client.get('/api/v1/reports/fixture/download')
             self.assertEqual(download.status_code, 200)
-            self.assertEqual(download.content, b'fixture archive')
+            import io, tarfile
+            self.assertNotEqual(download.content, b'fixture archive')
+            with tarfile.open(fileobj=io.BytesIO(download.content)) as archive:
+                self.assertIn('fixture/REPORT.md', archive.getnames())
             self.assertEqual(download.headers['cache-control'], 'no-store')
 
     def test_help_skills_do_not_follow_external_symlinks(self):

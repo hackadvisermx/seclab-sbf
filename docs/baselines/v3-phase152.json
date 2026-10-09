@@ -1,0 +1,56 @@
+{
+  "fixture_only": true,
+  "human_usability_measured": false,
+  "simulation": {
+    "status": "simulated",
+    "scope_revision_recorded": true,
+    "planned_probe_targets": [
+      "example.test"
+    ],
+    "discarded_probe_candidates": 2,
+    "workspace_unchanged": true,
+    "matcher": {
+      "example.test": "IN_SCOPE",
+      "child.example.test": "UNKNOWN",
+      "excluded.example.test": "OUT_OF_SCOPE",
+      "other.test": "UNKNOWN"
+    }
+  },
+  "resumption": {
+    "initial_status": "failed",
+    "checkpoint_scope_revision_recorded": true,
+    "checkpoint_completed_stages": [
+      "probe",
+      "subdomains"
+    ],
+    "resumed_status": "completed",
+    "subdomains_repeated": false,
+    "probe_repeated": false,
+    "checkpoint_remaining": false,
+    "probe_output_origin": "fixture; no se ejecutó sondeo real"
+  },
+  "reporting": {
+    "check_unknown_asset_exit": 1,
+    "check_excluded_asset_exit": 1,
+    "build_excluded_asset_exit": 1,
+    "export_excluded_asset_status": "blocked",
+    "excluded_asset_in_report": false,
+    "original_artifact_link_in_finding": false,
+    "report_claims_terminal_log_without_file": false,
+    "export_manifest_hashes_valid": true,
+    "original_outputs_omitted_by_export": [],
+    "closure_status": "closed"
+  },
+  "recognition_history": {
+    "fixture_only": true,
+    "runner_executed": false,
+    "jobs_retained": 3,
+    "statuses": [
+      "failed",
+      "simulated",
+      "completed"
+    ],
+    "all_ids_preserved_after_reopening": true,
+    "current_job_is_latest": true
+  }
+}

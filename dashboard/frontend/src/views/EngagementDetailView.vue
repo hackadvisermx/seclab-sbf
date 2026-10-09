@@ -55,6 +55,8 @@
       </div>
     </div>
 
+    <p v-if="reportError" role="alert" data-testid="report-error" class="text-xs font-mono text-rose-300">{{ reportError }}</p>
+
     <!-- Navegación por Pestañas Tácticas -->
     <div class="no-print flex items-center space-x-1 border-b border-[#1b253b] text-xs font-mono overflow-x-auto pb-1">
       <button
@@ -85,12 +87,42 @@
             </h2>
             <button
               @click="saveScopeConfig"
-              :disabled="isSavingScope"
+              :disabled="isSavingScope || scopeLoadState !== 'ready'"
               class="px-3 py-1 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold"
             >
               {{ isSavingScope ? 'Guardando...' : 'Guardar Alcance' }}
             </button>
           </div>
+
+          <p v-if="scopeLoadState === 'loading'" class="text-xs text-slate-400">Cargando contrato de alcance...</p>
+          <div v-if="scopeLoadState === 'error'" class="text-xs text-amber-300">
+            No se pudo cargar el contrato. Reintenta antes de editar o guardar.
+            <button @click="loadScope" class="ml-2 underline">Reintentar carga de alcance</button>
+          </div>
+          <fieldset :disabled="scopeLoadState !== 'ready'" class="space-y-3 border border-slate-700 rounded-sm p-3 text-xs font-mono">
+            <legend class="text-cyan-300 px-1">Autorización y vigencia</legend>
+            <p class="text-slate-400">Registra el permiso del responsable. SecLab comprueba esta declaración; no determina su validez legal. Las fechas se muestran en tu zona horaria.</p>
+            <label class="block text-slate-300">Referencia de autorización
+              <input v-model="authorizationForm.reference" type="text" class="mt-1 w-full bg-[#070b14] border border-slate-700 rounded-sm p-2" placeholder="Contrato, reglas del programa o permiso del laboratorio" />
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="block text-slate-300">Inicio
+                <input v-model="authorizationForm.valid_from" type="datetime-local" step="0.001" class="mt-1 w-full bg-[#070b14] border border-slate-700 rounded-sm p-2" />
+              </label>
+              <label class="block text-slate-300">Fin
+                <input v-model="authorizationForm.valid_until" type="datetime-local" step="0.001" class="mt-1 w-full bg-[#070b14] border border-slate-700 rounded-sm p-2" />
+              </label>
+            </div>
+            <label class="flex items-start gap-2 text-slate-300">
+              <input v-model="authorizationForm.allow_passive" type="checkbox" class="mt-0.5" />
+              <span>Permitir reconocimiento pasivo: consultas a fuentes externas sin contactar al objetivo.</span>
+            </label>
+            <label class="flex items-start gap-2 text-slate-300">
+              <input v-model="authorizationForm.allow_active" type="checkbox" class="mt-0.5" />
+              <span>Permitir reconocimiento activo: solicitudes HTTP/HTTPS a los targets dentro de alcance.</span>
+            </label>
+            <p class="text-amber-300">Guardar Alcance aplica estos permisos. Sin permiso vigente, el tráfico gestionado queda bloqueado; puedes simular. La terminal libre no está interceptada por Scope Guard.</p>
+          </fieldset>
 
           <!-- In-Scope -->
           <div class="space-y-3">
@@ -249,10 +281,11 @@
               </div>
             </div>
 
-            <div class="flex items-end">
+            <div class="flex flex-col justify-end gap-2">
+              <button @click="reviewReconPlan" :disabled="reconIsRunning || isReviewingRecon" class="px-3 py-2 border border-cyan-500/50 rounded-sm text-cyan-300 disabled:opacity-50">{{ isReviewingRecon ? "Revisando..." : "Revisar plan sin tráfico" }}</button>
               <button
                 @click="triggerReconPipeline"
-                :disabled="reconIsRunning || isStartingRecon"
+                :disabled="reconIsRunning || isStartingRecon || !reconPreview?.can_start"
                 class="w-full py-2 px-3 rounded-sm font-mono font-bold text-xs transition-all flex items-center justify-center space-x-2 shadow-lg cursor-pointer"
                 :class="reconIsRunning ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 shadow-cyan-500/20'"
               >
@@ -262,6 +295,27 @@
               </button>
             </div>
           </div>
+
+          <p v-if="reconPreviewError" role="alert" class="mt-3 text-xs text-amber-300">{{ reconPreviewError }}</p>
+          <p v-if="!reconPreview" class="mt-3 text-xs text-slate-400">Revisa el plan antes de iniciar. Cambiar etapa, modo o alcance requiere una nueva revisión.</p>
+          <section v-if="reconPreview" data-testid="recon-preview" class="mt-4 space-y-3 text-xs font-mono border border-slate-700 rounded-sm p-3">
+            <h3 class="text-cyan-300 font-bold">{{ reconPreview.dry_run ? 'SIMULACIÓN: sin tráfico ni resultados nuevos' : 'Plan de ejecución' }}</h3>
+            <p>Límites de sondeo activo: {{ reconPreview.operational_limits.max_requests_per_second }} intentos/s · {{ reconPreview.operational_limits.max_parallel_threads }} tareas · {{ reconPreview.operational_limits.max_probe_targets }} destinos máximo · timeout {{ reconPreview.operational_limits.probe_timeout_seconds }} s.</p>
+            <p class="text-slate-400">Las consultas pasivas usan los controles de cada herramienta. Esta revisión no resuelve DNS ni concede permisos; Scope Guard vuelve a validar antes de actuar. Redirecciones externas no se siguen.</p>
+            <div v-for="step in reconPreview.stages" :key="step.stage" class="space-y-1 border-t border-slate-800 pt-2">
+              <h4 class="text-slate-100">{{ historyStageLabel(step.stage) }} · {{ { passive: 'PASIVO', active: 'ACTIVO', local: 'LOCAL' }[step.interaction] }}</h4>
+              <p>{{ step.source }}</p>
+              <p>{{ step.targets_count }} targets conocidos · {{ step.discarded_count }} descartados por alcance.</p>
+              <p v-if="step.targets_pending" class="text-amber-300">Targets futuros pendientes: dependen de etapas anteriores. Descubrir un activo no lo autoriza.</p>
+              <ul class="break-all"><li v-for="target in step.targets" :key="target">{{ target }}<span v-if="step.target_reasons?.[target]" class="text-slate-400"> · {{ step.target_reasons[target] }}</span></li></ul>
+              <p v-if="step.targets_count > step.targets.length" class="text-slate-400">Se muestran los primeros {{ step.targets.length }} targets.</p>
+              <ul class="text-amber-300 break-all"><li v-for="row in step.discarded" :key="row.target">{{ row.target }} · {{ row.verdict }}: {{ row.reason }}</li></ul>
+              <p v-if="step.discarded_count > step.discarded.length">Se muestran los primeros {{ step.discarded.length }} descartes.</p>
+              <ul class="text-rose-300"><li v-for="reason in step.block_reasons" :key="reason">Bloqueado: {{ reason }}</li></ul>
+            </div>
+            <button v-if="!reconPreview.can_start" @click="activeTab = 'scope'; loadScope()" class="px-3 py-1 border border-amber-500/50 rounded-sm text-amber-300">Revisar alcance y autorización</button>
+            <details class="text-slate-400 break-all"><summary>Detalle de revisión</summary><p>Alcance: {{ reconPreview.scope_revision }}</p><p>Plan: {{ reconPreview.plan_revision }}</p><p>{{ reconPreview.generated_at }}</p></details>
+          </section>
 
           <!-- Mensaje / Feedback de Lanzamiento -->
           <button v-if="reconIsRunning" @click="cancelReconPipeline"
@@ -309,7 +363,35 @@
         </div>
       </div>
 
-      <div v-if="reconStatus.job?.status === 'failed' || reconStatus.summary?.status === 'failed'" class="p-3 rounded-sm border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
+      <div class="tactical-card space-y-3" data-testid="recon-live-progress">
+        <h2 class="text-sm font-bold text-cyan-300">Avance de la ejecución</h2>
+        <p class="text-xs text-slate-400">Actualización cada segundo. La salida es provisional; no autoriza objetivos ni confirma resultados. El resumen y los contadores se consolidan al finalizar.</p>
+        <template v-if="reconStatus.progress">
+          <div class="flex flex-wrap gap-3 text-xs font-mono">
+            <span>Etapa: {{ reconStageLabel(reconStatus.progress.stage) }}</span>
+            <span>Etapas terminadas: {{ reconStatus.progress.completed_stages?.length || 0 }}/{{ reconStatus.progress.total_stages || 1 }}</span>
+            <span>Estado: {{ reconJobLabel }}</span>
+          </div>
+          <div v-if="reconStatus.progress.command" class="rounded-sm bg-slate-950 p-3 space-y-2">
+            <p class="text-xs text-slate-400">Comando u operación: {{ reconCommandLabel }}</p>
+            <code class="block text-xs text-cyan-300 whitespace-pre-wrap break-all">{{ reconStatus.progress.command }}</code>
+            <p v-if="reconIsRunning && reconStatus.progress.command_status === 'running'" class="text-xs text-amber-300">En ejecución. Si la herramienta trabaja en silencio, la salida aparecerá cuando la emita.</p>
+          </div>
+          <pre v-if="reconStatus.progress.recent_output?.length" class="max-h-64 overflow-auto whitespace-pre-wrap break-all bg-slate-950 p-3 text-xs text-emerald-300" data-testid="recon-live-output">{{ reconStatus.progress.recent_output.join('\n') }}</pre>
+          <ol class="space-y-1 text-xs text-slate-400">
+            <li v-for="(event, index) in reconStatus.progress.events" :key="index">{{ new Date(event.at).toLocaleTimeString() }} · {{ reconEventLabel(event) }}</li>
+          </ol>
+        </template>
+        <p v-else class="text-xs text-slate-400">{{ ['running', 'cancelling'].includes(reconStatus.job?.status) ? 'Esperando el primer evento de esta ejecución…' : 'Inicia un reconocimiento para ver sus etapas, comandos y salida en vivo.' }}</p>
+      </div>
+
+      <div v-if="reconStatus.job?.status === 'blocked'" class="p-3 rounded-sm border border-amber-500/40 bg-amber-950/30 text-amber-300 text-xs font-mono space-y-2" role="alert" data-testid="recon-blocked">
+        <p>Reconocimiento bloqueado por Scope Guard.</p>
+        <p>{{ reconStatus.job.error }}</p>
+        <p>Revisa el alcance, los permisos y la vigencia declarados. Después simula un plan nuevo antes de ejecutarlo. Los archivos anteriores se conservan; este bloqueo no confirma una ejecución completa.</p>
+        <button @click="activeTab = 'scope'; loadScope()" class="px-3 py-1 border border-amber-500/40 rounded-sm">Revisar alcance y autorización</button>
+      </div>
+      <div v-if="reconStatus.job?.status === 'failed' || (reconStatus.job?.status === 'idle' && reconStatus.summary?.status === 'failed')" class="p-3 rounded-sm border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs font-mono" role="alert">
         El reconocimiento falló. Consulta la consola para ver la causa. Las métricas pueden incluir archivos de ejecuciones anteriores; no confirman una ejecución completa.
         <p v-if="reconStatus.job?.error" class="mt-1">{{ reconStatus.job.error }}</p>
       </div>
@@ -471,6 +553,73 @@
           </div>
         </div>
       </div>
+
+      <section class="tactical-card space-y-3" data-testid="recon-history">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-sm font-mono font-bold text-white">Historial de reconocimiento</h3>
+          <button @click="loadReconHistory()" :disabled="reconHistoryBusy" class="px-3 py-1 rounded-sm border border-slate-700 text-cyan-300 text-xs disabled:opacity-50">Actualizar historial</button>
+        </div>
+        <p class="text-xs text-slate-400">Conserva el plan revisado y un resumen de resultados por job del dashboard. Los artefactos y la salida de arriba corresponden al workspace actual; este historial no guarda copias de outputs anteriores.</p>
+        <p v-if="reconHistoryError" role="alert" class="text-xs text-amber-300">{{ reconHistoryError }}</p>
+        <p v-if="reconOutcomeError" role="alert" class="text-xs text-amber-300">{{ reconOutcomeError }}</p>
+        <p v-if="reconHistory.length === 0" class="text-xs text-slate-400">{{ reconHistoryBusy ? 'Cargando historial...' : 'Todavía no hay ejecuciones registradas.' }}</p>
+        <ol v-else class="space-y-3 text-xs font-mono">
+          <li v-for="job in reconHistory" :key="job.run_id" class="border border-slate-800 rounded-sm p-3 space-y-1">
+            <div class="flex flex-wrap justify-between gap-2 text-slate-100">
+              <span>{{ historyStageLabel(job.stage) }} · {{ job.dry_run ? 'SIMULACIÓN' : 'EJECUCIÓN' }}</span>
+              <span>{{ historyStatusLabel(job.status) }}</span>
+            </div>
+            <p class="text-slate-400">Inicio: {{ new Date(job.started_at).toLocaleString() }} · Fin: {{ job.finished_at ? new Date(job.finished_at).toLocaleString() : 'Pendiente' }}</p>
+            <p class="text-slate-500 break-all">Job: {{ job.run_id }} · Alcance de ejecución: {{ job.scope_revision || 'No registrado' }}</p>
+            <details v-if="job.result_summary" data-testid="recon-history-result" class="space-y-2 text-slate-400">
+              <summary class="cursor-pointer text-cyan-300">Resultados conservados al terminar</summary>
+              <p>Registrado: {{ new Date(job.result_summary.recorded_at).toLocaleString() }}</p>
+              <p v-if="job.result_summary.metrics_source === 'previous_artifacts'" class="text-amber-300">La ejecución no terminó correctamente. Estos conteos incluyen artefactos previos; no acreditan resultados nuevos del job.</p>
+              <p v-else>Conteos del workspace al terminar; pueden incluir etapas que no se ejecutaron en este job.</p>
+              <p>Subdominios: {{ job.result_summary.metrics.subdomains_count }} · Servicios web: {{ job.result_summary.metrics.live_hosts_count }} · URLs: {{ job.result_summary.metrics.urls_count }} · JavaScript: {{ job.result_summary.metrics.js_files_count }}</p>
+              <div v-for="step in job.result_summary.stages" :key="step.stage" class="border-l border-slate-700 pl-2 space-y-1">
+                <p class="text-slate-200">{{ historyStageLabel(step.stage) }} · {{ historyStatusLabel(step.failure_kind === 'scope_guard' ? 'blocked' : step.status) }}</p>
+                <p v-for="(count, name) in step.counts" :key="name">{{ historyResultCountLabel(name) }}: {{ count }}</p>
+                <p v-if="Object.keys(step.patterns).length">Clasificación local de URLs; coincidencias por patrón: {{ Object.entries(step.patterns).map(([name, count]) => name + ': ' + count).join(' · ') }}. No confirma vulnerabilidades.</p>
+              </div>
+            </details>
+            <p v-else-if="job.dry_run" class="text-slate-400">La simulación no genera resultados de artefactos.</p>
+            <p v-else-if="!['running', 'cancelling'].includes(job.status)" class="text-slate-500">Sin resumen de resultados conservado para este job.</p>
+            <details v-if="job.reviewed_plan" data-testid="recon-history-review" class="space-y-2 text-slate-400">
+              <summary class="cursor-pointer text-cyan-300">Plan revisado al iniciar</summary>
+              <p>Validado: {{ new Date(job.reviewed_plan.checked_at).toLocaleString() }} · {{ job.reviewed_plan.dry_run ? 'SIMULACIÓN' : 'EJECUCIÓN' }}</p>
+              <p class="break-all">Plan: {{ job.reviewed_plan.plan_revision }} · Alcance revisado: {{ job.reviewed_plan.scope_revision }}</p>
+              <p>Permisos declarados: pasivo {{ job.reviewed_plan.authorization.allow_passive ? 'sí' : 'no' }} · activo {{ job.reviewed_plan.authorization.allow_active ? 'sí' : 'no' }}. La simulación no otorga permisos.</p>
+              <p v-if="job.reviewed_plan.authorization.valid_from || job.reviewed_plan.authorization.valid_until">Ventana declarada: {{ job.reviewed_plan.authorization.valid_from || 'Sin inicio' }} → {{ job.reviewed_plan.authorization.valid_until || 'Sin fin' }}</p>
+              <p>Límites de sondeo: {{ job.reviewed_plan.operational_limits.max_requests_per_second }} intentos/s · {{ job.reviewed_plan.operational_limits.max_parallel_threads }} simultáneos · {{ job.reviewed_plan.operational_limits.max_probe_targets }} targets · {{ job.reviewed_plan.operational_limits.probe_timeout_seconds }} s por petición</p>
+              <div v-for="step in job.reviewed_plan.stages" :key="step.stage" class="border-l border-slate-700 pl-2 space-y-1">
+                <p>{{ historyStageLabel(step.stage) }} · {{ { passive: 'PASIVO', active: 'ACTIVO', local: 'LOCAL' }[step.interaction] }} · {{ step.targets_count }} targets revisados · {{ step.discarded_count }} descartados</p>
+                <p v-if="step.targets_pending" class="text-amber-300">Targets finales pendientes de etapas previas; el descubrimiento no amplía el alcance.</p>
+                <p v-for="(target, index) in step.targets" :key="`target-${index}`" class="break-all">{{ target.host }} · {{ target.verdict }}</p>
+                <p v-for="(target, index) in step.discarded" :key="`discarded-${index}`" class="break-all text-amber-300">{{ target.host }} · {{ target.verdict }}</p>
+                <p v-if="step.targets_count > step.targets.length || step.discarded_count > step.discarded.length">Muestra limitada a 50 targets y 50 descartes por etapa.</p>
+              </div>
+              <p>Snapshot de la revisión, no de los resultados. PASSIVE_SOURCE indica consulta a una fuente externa, no permiso activo sobre ese host. Se guardan solo hosts: rutas, consultas, fragmentos y credenciales de URLs se omiten; distintas URLs pueden mostrar el mismo host. No autoriza repetir el job ni fija targets futuros.</p>
+            </details>
+            <p v-else class="text-slate-500">Sin plan revisado registrado: job anterior o iniciado sin vista previa.</p>
+            <p v-if="job.origin === 'legacy-current'" class="text-amber-300">Registro anterior importado: solo se conservaba el último job; no se reconstruyen ejecuciones previas.</p>
+            <p v-if="job.error" class="text-amber-300 break-words">{{ job.error }}</p>
+            <div v-if="job.outcome_review" data-testid="recon-outcome-review" class="border-l border-cyan-700 pl-3 py-2 space-y-1 text-slate-300">
+              <p>Resultado revisado por el operador: {{ new Date(job.outcome_review.reviewed_at).toLocaleString() }}</p>
+              <p>Decisión registrada: preparar otro plan. Se conserva el estado {{ historyStatusLabel(job.status) }}; la revisión no confirma evidencia, completa etapas ni concede permisos.</p>
+            </div>
+            <div v-else-if="canReviewReconOutcome(job)" data-testid="recon-outcome-form" class="border-l border-slate-700 pl-3 py-2 space-y-3">
+              <p class="text-slate-400">Revisa el estado, motivo, plan y resumen disponibles. Registrar esta revisión prepara la siguiente decisión; no ejecuta otro job ni modifica el alcance.</p>
+              <label class="flex items-start gap-2 text-slate-200">
+                <input type="checkbox" :checked="reconOutcomeAcknowledged === job.outcome_revision" :disabled="reconOutcomeBusy" @change="reconOutcomeAcknowledged = $event.target.checked ? job.outcome_revision : ''" />
+                He revisado el resultado y quiero preparar otro plan
+              </label>
+              <button @click="reviewReconOutcome(job)" :disabled="reconOutcomeBusy || reconOutcomeAcknowledged !== job.outcome_revision" class="px-3 py-2 rounded-sm border border-cyan-700 bg-cyan-950 text-cyan-200 disabled:opacity-50">{{ reconOutcomeBusy ? 'Registrando revisión…' : 'Registrar revisión del resultado' }}</button>
+            </div>
+          </li>
+        </ol>
+        <button v-if="reconHistoryCursor" @click="loadReconHistory(true)" :disabled="reconHistoryBusy" class="text-xs text-cyan-300 underline disabled:opacity-50">Cargar ejecuciones anteriores</button>
+      </section>
     </div>
 
     <!-- TAB 2: HALLAZGOS & EVIDENCIAS (Evidence-First) -->
@@ -521,13 +670,13 @@
                 <span
                   v-if="f.frontmatter?.status"
                   class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold border"
-                  :class="getFindingStatusClass(f.frontmatter?.status)"
+                  :class="f.confirmation_error ? 'text-amber-300 border-amber-700' : getFindingStatusClass(f.frontmatter?.status)"
                 >
-                  {{ f.frontmatter?.status }}
+                  {{ f.confirmation_error ? 'Revisión pendiente (' + f.frontmatter?.status + ')' : f.frontmatter?.status }}
                 </span>
               </div>
               <span class="text-xs font-mono text-cyan-400 font-bold">
-                CVSS: {{ f.frontmatter?.cvss_score || 'N/A' }}
+                CVSS: {{ f.frontmatter?.cvss_score ?? 'N/A' }}
               </span>
             </div>
 
@@ -539,6 +688,13 @@
 
             <div class="mt-3 text-xs text-slate-300 font-sans line-clamp-3 bg-slate-900/50 p-2.5 rounded-sm border border-slate-800">
               {{ f.body }}
+            </div>
+            <p v-if="f.confirmation_error" class="text-xs text-amber-300">Confirmación pendiente de revisión: {{ f.confirmation_error }}</p>
+            <p v-if="f.verification_rationale" class="mt-2 text-xs text-slate-300 whitespace-pre-wrap">Motivo de verificación: {{ f.verification_rationale }}</p>
+            <p v-if="f.artifact_refs_error" class="text-xs text-amber-300">{{ f.artifact_refs_error }}</p>
+            <div v-for="reference in f.artifact_refs || []" :key="reference.path" class="mt-2 text-xs font-mono break-words" data-testid="finding-artifact-ref">
+              <button @click="openFindingArtifact(reference)" class="text-cyan-300 underline">Abrir {{ reference.path }}</button>
+              <code class="block break-all text-slate-400">{{ reference.sha256 }}</code>
             </div>
           </div>
 
@@ -599,6 +755,7 @@
               {{ checklistData.coverage_pct || 0 }}% Cobertura
             </span>
           </div>
+          <p class="text-xs text-slate-400">La cobertura resume lo documentado en el workspace y puede incluir ejecuciones anteriores. Para continuar, revisa la siguiente decisión y el estado del job.</p>
 
           <div v-if="checklistData.areas?.length > 0" class="space-y-4">
             <!-- Barra general segmentada (estilo OWASP WSTG Tracker): un vistazo a las 8 disciplinas -->
@@ -653,19 +810,31 @@
         </div>
 
         <!-- Recomendación Próximo Paso (pt-next) -->
-        <div class="tactical-card space-y-4">
+        <div class="tactical-card space-y-4" data-testid="next-decision">
           <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
             🧠 Asistente Táctico (pt-next)
           </h2>
           <div class="p-3 rounded-sm bg-slate-950 border border-cyan-500/30 text-xs font-mono text-cyan-300">
-            {{ nextStepData.recommendation || 'Analizando estado del proyecto...' }}
+            {{ nextStepLoading ? 'Consultando la siguiente decisión…' : nextStepData.next_step?.title || nextStepData.recommendation || 'No hay una recomendación disponible.' }}
+          </div>
+          <p v-if="nextStepError" role="alert" class="text-xs text-amber-300">{{ nextStepError }}</p>
+          <p v-if="nextStepData.decision_job" class="text-xs text-slate-400 break-all">Job {{ nextStepData.decision_job.run_id }} · {{ reconStageLabel(nextStepData.decision_job.stage) }} · {{ historyStatusLabel(nextStepData.decision_job.status) }}</p>
+          <p v-if="nextStepData.outcome_review" class="text-xs text-cyan-300">Revisión del operador registrada: {{ new Date(nextStepData.outcome_review.reviewed_at).toLocaleString() }}</p>
+          <p v-if="nextStepData.next_step?.reason" class="text-xs text-slate-300">{{ nextStepData.next_step.reason }}</p>
+          <button v-if="['scope', 'recon'].includes(nextStepData.next_step?.action?.view)" @click="openNextDecision" class="px-3 py-1 rounded-sm border border-cyan-500/40 text-cyan-300">{{ nextStepData.next_step.action.label }}</button>
+          <div v-if="nextStepData.next_step?.command" class="space-y-2 text-xs">
+            <p class="text-slate-400">Comando sugerido: revisa el objetivo y el alcance antes de usarlo.</p>
+            <code class="block whitespace-pre-wrap break-all text-cyan-300">{{ nextStepData.next_step.command }}</code>
+            <button @click="copyText(nextStepData.next_step.command)" class="px-3 py-1 rounded-sm bg-slate-800 text-cyan-300">Copiar comando</button>
           </div>
           <button
             @click="loadNextStepPrompt"
-            class="w-full py-2 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs font-mono font-bold"
+            :disabled="nextStepLoading || nextStepData.prompt_available === false || !!nextStepError"
+            class="w-full py-2 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs font-mono font-bold disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Generar Prompt Táctico para Agente
           </button>
+          <button @click="loadNextStep()" :disabled="nextStepLoading" class="text-xs text-cyan-300">Actualizar decisión</button>
           <div v-if="agentPrompt" class="p-2.5 rounded-sm bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto">
             <pre class="whitespace-pre-wrap">{{ agentPrompt }}</pre>
           </div>
@@ -922,7 +1091,7 @@
             <div class="text-right text-xs font-mono text-slate-400 print:text-slate-600">
               <div>Fecha de Emisión: <span class="text-slate-200 font-bold print:text-black">{{ reportCompiledDate }}</span></div>
               <div>Auditor Principal: <span class="text-cyan-400 font-bold print:text-black">tester (SecLab Operator)</span></div>
-              <div>Estado: <span class="text-emerald-400 font-bold print:text-emerald-700">CONFIRMADO</span></div>
+              <div>Estado: <span class="text-emerald-400 font-bold print:text-emerald-700">BORRADOR / PENDIENTE DE REVISIÓN</span></div>
             </div>
           </div>
 
@@ -1256,10 +1425,25 @@
                 <span class="text-cyan-400 font-bold">{{ selectedArtifact.rel_path }}</span>
                 <button
                   @click="copyText(selectedArtifactContent)"
-                  class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
+                  :disabled="!artifactSnapshot || !['complete', 'decoded_with_replacement'].includes(artifactSnapshot.preview_status)"
+                  class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 text-[10px]"
                 >
-                  Copiar Contenido
+                  Copiar Previsualización
                 </button>
+              </div>
+              <div v-if="artifactSnapshot" data-testid="artifact-fingerprint" class="space-y-2 text-slate-400 break-words">
+                <p v-if="expectedArtifactSha && artifactSnapshot.sha256 !== expectedArtifactSha" class="text-amber-300">La versión actual no coincide con la vinculada al hallazgo. Revisa la evidencia; el vínculo guardado no se ha cambiado.</p>
+                <p>{{ artifactSnapshot.size }} bytes · Modificado: {{ artifactSnapshot.modified }} (UTC)</p>
+                <div v-if="artifactSnapshot.sha256" class="space-y-1">
+                  <p>SHA-256 del archivo original en esta lectura:</p>
+                  <code class="block text-cyan-300 break-all">{{ artifactSnapshot.sha256 }}</code>
+                  <button @click="copyText(artifactSnapshot.sha256)" class="px-2 py-1 rounded-sm bg-slate-800 text-slate-300">Copiar SHA-256</button>
+                </div>
+                <p v-else class="text-amber-300">Huella no disponible: el archivo supera el límite de lectura de 32 MiB.</p>
+                <p v-if="artifactSnapshot.preview_status === 'decoded_with_replacement'" class="text-amber-300">La previsualización sustituye bytes que no son UTF-8. La huella corresponde a los bytes originales.</p>
+                <p v-if="artifactSnapshot.preview_status === 'too_large'" class="text-amber-300">Sin previsualización textual: el archivo supera 2 MiB.</p>
+                <p v-if="artifactSnapshot.preview_status === 'binary'" class="text-amber-300">Archivo binario; la huella identifica los bytes originales, sin previsualización textual.</p>
+                <p>La huella permite comparar esta versión; no acredita procedencia, autorización ni suficiencia de evidencia.</p>
               </div>
               <pre class="whitespace-pre-wrap text-slate-200 text-xs overflow-x-auto">{{ selectedArtifactContent }}</pre>
             </div>
@@ -1388,6 +1572,7 @@
               <label class="block text-xs font-mono text-slate-300 mb-1">Slug / Identificador:</label>
               <input
                 v-model="findingForm.slug"
+                :readonly="editingFinding"
                 type="text"
                 required
                 placeholder="idor-user-profile, sqli-login"
@@ -1409,6 +1594,7 @@
                 <option value="MITIGATED">MITIGATED (Mitigado)</option>
                 <option value="DRAFT">DRAFT (Borrador)</option>
               </select>
+              <p class="mt-1 text-[10px] text-slate-400">Las fichas nuevas comienzan como CANDIDATE. Elige PROVEN solo después de revisar la evidencia; los ejemplos de una plantilla no demuestran un hallazgo.</p>
             </div>
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Activo Afectado:</label>
@@ -1437,7 +1623,7 @@
             <div class="flex items-center justify-between">
               <span class="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">Calculadora CVSS 3.1</span>
               <span class="text-xs font-mono font-bold" :class="getSeverityClass(findingForm.severity)">
-                {{ findingForm.severity }} (Score: {{ findingForm.cvss_score || '5.0' }})
+                {{ findingForm.severity }} (Score: {{ findingForm.cvss_score ?? '5.0' }})
               </span>
             </div>
 
@@ -1473,10 +1659,28 @@
                   <option value="R">Required (R)</option>
                 </select>
               </div>
+              <div>
+                <label class="text-slate-400 block mb-0.5">Scope (S):</label>
+                <select v-model="cvssMetrics.S" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
+                  <option value="U">Unchanged (U)</option><option value="C">Changed (C)</option>
+                </select>
+              </div>
+              <div v-for="metric in ['C', 'I', 'A']" :key="metric">
+                <label class="text-slate-400 block mb-0.5">{{ { C: 'Confidentiality', I: 'Integrity', A: 'Availability' }[metric] }} ({{ metric }}):</label>
+                <select v-model="cvssMetrics[metric]" :data-testid="`cvss-${metric}`" @change="recalcCvss" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-1 text-slate-200">
+                  <option value="N">None (N)</option><option value="L">Low (L)</option><option value="H">High (H)</option>
+                </select>
+              </div>
             </div>
             <div class="text-[10px] font-mono text-slate-500">{{ findingForm.cvss_vector }}</div>
           </div>
 
+          <div v-if="editingFinding">
+            <label class="block text-xs font-mono text-slate-300 mb-1">Contenido completo de la ficha (Markdown):</label>
+            <textarea v-model="findingForm.body" rows="14" data-testid="finding-markdown" class="w-full bg-[#070b14] border border-slate-700 rounded-sm p-3 text-xs font-mono text-slate-100"></textarea>
+            <p class="text-xs text-slate-400">Conserva las secciones de evidencia, pasos y remediación. La fecha, autor y otros metadatos originales se mantienen.</p>
+          </div>
+          <template v-else>
           <div>
             <label class="block text-xs font-mono text-slate-300 mb-1">Descripción del Hallazgo:</label>
             <textarea
@@ -1528,6 +1732,38 @@
             />
           </div>
 
+          </template>
+
+          <section class="space-y-2 border-t border-slate-800 pt-3 text-xs" data-testid="finding-confirmation-editor">
+            <label for="finding-verification-rationale" class="block text-slate-300">Motivo de verificación humana</label>
+            <textarea id="finding-verification-rationale" v-model="findingForm.verification_rationale" maxlength="4000" rows="3" placeholder="Qué comprobaste, qué evidencia lo demuestra y por qué descarta otra explicación." class="w-full bg-[#070b14] border border-slate-700 p-2 text-slate-100"></textarea>
+            <p class="text-slate-400">Confirmar requiere activo, al menos un artefacto vinculado y este motivo. La aplicación comprueba integridad y alcance; tú decides si la evidencia demuestra el hallazgo.</p>
+            <p v-if="findingConfirmationIssue" role="alert" class="text-amber-300">{{ findingConfirmationIssue }}</p>
+          </section>
+
+          <section class="space-y-2 border-t border-slate-800 pt-3 text-xs" data-testid="finding-artifact-editor">
+            <h3 class="font-bold text-cyan-300">Artefactos vinculados</h3>
+            <p class="text-slate-400">Revisa y vincula una versión de recon/, fuzzing/ o screenshots/. El paquete incluirá los archivos seleccionados. Vincular no confirma el hallazgo.</p>
+            <div v-if="findingForm.artifact_refs_error" class="text-amber-300">
+              {{ findingForm.artifact_refs_error }}
+              <button type="button" @click="findingForm.artifact_refs_error = null; findingForm.artifact_refs = []" class="underline">Descartar referencias inválidas</button>
+            </div>
+            <div v-for="(reference, index) in findingForm.artifact_refs" :key="reference.path" class="flex gap-2 items-start">
+              <div class="min-w-0 flex-1 break-all text-slate-300">{{ reference.path }}<code class="block text-[10px]">{{ reference.sha256 }}</code></div>
+              <button type="button" @click="findingForm.artifact_refs.splice(index, 1)" class="text-rose-300">Quitar vínculo</button>
+            </div>
+            <label for="finding-artifact-path" class="block text-slate-300">Ruta del artefacto</label>
+            <input id="finding-artifact-path" v-model="findingArtifactPath" placeholder="recon/raw.txt" class="w-full bg-[#070b14] border border-slate-700 p-2 text-slate-100" />
+            <button type="button" @click="reviewFindingArtifact" :disabled="findingArtifactBusy || !findingArtifactPath" class="px-2 py-1 bg-slate-800 text-cyan-300 disabled:opacity-40">{{ findingArtifactBusy ? 'Leyendo artefacto...' : 'Revisar artefacto' }}</button>
+            <p v-if="findingArtifactError" role="alert" class="text-amber-300">{{ findingArtifactError }}</p>
+            <div v-if="findingArtifactDraft" class="space-y-2">
+              <code class="block break-all text-cyan-300">SHA-256: {{ findingArtifactDraft.sha256 }}</code>
+              <pre class="max-h-40 overflow-auto whitespace-pre-wrap text-slate-300">{{ findingArtifactDraft.content }}</pre>
+              <p v-if="findingArtifactDraft.preview_status !== 'complete'" class="text-amber-300">{{ { decoded_with_replacement: 'Texto con bytes sustituidos', binary: 'Archivo binario', too_large: 'Archivo mayor a 2 MiB' }[findingArtifactDraft.preview_status] || 'Previsualización parcial' }}. La huella corresponde al archivo original. Los binarios y el texto no UTF-8 no pueden incluirse en la exportación sanitizada.</p>
+              <button type="button" @click="addFindingArtifact" class="px-2 py-1 bg-cyan-700 text-white">Vincular versión revisada</button>
+            </div>
+          </section>
+
           <div class="pt-3 border-t border-slate-800 flex items-center justify-end space-x-3">
             <button
               type="button"
@@ -1538,6 +1774,7 @@
             </button>
             <button
               type="submit"
+              :disabled="!!findingForm.artifact_refs_error || !!findingConfirmationIssue"
               class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono"
             >
               Guardar Ficha
@@ -1550,10 +1787,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { renderReport } from '../report-security'
 import { splitIpsAndCidrs } from '../scope-utils'
+import { authorizationToForm, authorizationFromForm } from '../authorization-utils'
 import { normalizeProbeResults, sortProbeResults } from '../recon-results'
 import { api } from '../api'
 import DeleteProjectButton from '../components/DeleteProjectButton.vue'
@@ -1616,7 +1854,34 @@ const reconStatus = ref({
 })
 const reconStage = ref('all')
 const reconDryRun = ref(false)
+const reconPreview = ref(null)
+const reconPreviewError = ref('')
+const isReviewingRecon = ref(false)
+let reconPreviewRequest = 0
 const reconLogContent = ref('')
+const reconHistory = ref([])
+const reconHistoryCursor = ref(null)
+const reconHistoryBusy = ref(false)
+const reconHistoryError = ref('')
+let reconHistoryRefreshQueued = false
+const reconOutcomeAcknowledged = ref('')
+const reconOutcomeBusy = ref(false)
+const reconOutcomeError = ref('')
+let reconOutcomeRequest = 0
+let reconStatusRequest = 0
+const reconTerminalStatuses = ['completed', 'simulated', 'failed', 'blocked', 'cancelled', 'interrupted']
+function canReviewReconOutcome(job) {
+  const current = reconStatus.value.job
+  return !!job.finished_at && !!job.outcome_revision && reconTerminalStatuses.includes(job.status) &&
+    current?.run_id === job.run_id && current?.outcome_revision === job.outcome_revision && !current?.outcome_review
+}
+const historyStatusLabel = status => ({ running: 'En ejecución', cancelling: 'Cancelación solicitada', completed: 'Completado', failed: 'Fallido', blocked: 'Bloqueado (Scope Guard)', simulated: 'Simulado', interrupted: 'Interrumpido', cancelled: 'Cancelado' })[status] || status
+const historyStageLabel = stage => ({ all: 'Todas las etapas', subdomains: 'Subdominios', probe: 'Sondeo HTTP/HTTPS', urls: 'URLs históricas', patterns: 'Patrones locales' })[stage] || stage
+const historyResultCountLabel = name => ({ total_raw: 'Resultados antes del filtro', in_scope_count: 'Dentro del alcance',
+  discarded_count: 'Descartados', new_count: 'Nuevos frente a la lista previa', live_hosts_count: 'Servicios web',
+  blocked_dns_count: 'Bloqueados por DNS', next_commands_count: 'Hosts con comandos sugeridos',
+  urls_count: 'URLs', js_files_count: 'Archivos JavaScript' })[name] || name
+
 const probeSortKey = ref('host')
 const probeSortDir = ref('asc')
 const sortedProbeResults = computed(() => {
@@ -1669,15 +1934,33 @@ const isCancellingRecon = ref(false)
 const reconActionMsg = ref('')
 const reconActionSuccess = ref(true)
 let reconPollTimer = null
+let reconPollBusy = false
 
 const reconIsRunning = computed(() => ['running', 'cancelling'].includes(reconStatus.value.job?.status))
-const reconJobLabel = computed(() => ({ running: '● EJECUTANDO', cancelling: 'CANCELANDO', completed: 'COMPLETADO', failed: 'FALLIDO', simulated: 'SIMULADO', interrupted: 'INTERRUMPIDO', cancelled: 'CANCELADO' })[reconStatus.value.job?.status] || 'LISTO')
+const RECON_STAGE_LABELS = { subdomains: 'Subdominios', probe: 'Sondeo HTTP/HTTPS', urls: 'URLs históricas', patterns: 'Clasificación de patrones' }
+function reconStageLabel(stage) { return RECON_STAGE_LABELS[stage] || 'Preparando' }
+const reconCommandLabel = computed(() => {
+  const status = reconStatus.value.progress?.command_status
+  if (status === 'running' && !reconIsRunning.value) return 'Interrumpida'
+  return { running: 'En ejecución', completed: 'Terminada', failed: 'Fallida' }[status] || 'Preparando'
+})
+function reconEventLabel(event) {
+  if (event.event === 'command_start') return 'Inicia: ' + event.command
+  if (event.event === 'command_end') return event.command_status === 'completed' ? 'Operación terminada' : 'Operación fallida'
+  if (event.event === 'stage_start') return 'Inicia etapa: ' + reconStageLabel(event.stage)
+  if (event.event === 'stage_end') return (event.failure_kind === 'scope_guard' ? 'Bloqueó Scope Guard: ' : event.stage_status === 'failed' ? 'Falló etapa: ' : 'Terminó etapa: ') + reconStageLabel(event.stage)
+  return event.event === 'run_start' ? 'Reconocimiento iniciado' : 'Reconocimiento finalizado'
+}
+const reconJobLabel = computed(() => ({ running: '● EJECUTANDO', cancelling: 'CANCELANDO', completed: 'COMPLETADO', failed: 'FALLIDO', blocked: 'BLOQUEADO', simulated: 'SIMULADO', interrupted: 'INTERRUMPIDO', cancelled: 'CANCELADO' })[reconStatus.value.job?.status] || 'LISTO')
 
 // Artefactos del laboratorio (recon/, fuzzing/, loot/, etc.)
 const activeArtifactFolder = ref('recon')
 const artifactFiles = ref([])
 const selectedArtifact = ref(null)
 const selectedArtifactContent = ref('')
+const artifactSnapshot = ref(null)
+const expectedArtifactSha = ref(null)
+let artifactRequest = 0
 
 const capturedFlagsCount = computed(() => {
   if (flagsData.value.subtype === 'jeopardy') {
@@ -1719,12 +2002,14 @@ const tabs = computed(() => {
 
 // Scope
 const scopeData = ref({})
+const authorizationForm = ref(authorizationToForm())
 const inScopeDomainsText = ref('')
 const inScopeIpsText = ref('')
 const outScopeDomainsText = ref('')
 const outScopeNotesText = ref('')
 const hasScope = ref(false)
 const isSavingScope = ref(false)
+const scopeLoadState = ref('loading')
 
 const scopeTestInput = ref('')
 const scopeTestResult = ref(null)
@@ -1732,10 +2017,11 @@ const scopeTestResult = ref(null)
 // Findings
 const findings = ref([])
 const showFindingModal = ref(false)
+const editingFinding = ref(false)
 const findingForm = ref({
   slug: '',
   title: '',
-  status: 'PROVEN',
+  status: 'CANDIDATE',
   severity: 'MEDIUM',
   cvss_score: 5.3,
   cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N',
@@ -1746,7 +2032,22 @@ const findingForm = ref({
   http_request: '',
   http_response: '',
   remediation: '',
+  artifact_refs: [],
+  artifact_refs_error: null,
+  verification_rationale: '',
 })
+const findingConfirmationIssue = computed(() => {
+  if (!['PROVEN', 'VERIFIED', 'CONFIRMADO'].includes((findingForm.value.status || '').trim().toUpperCase())) return ''
+  if (!findingForm.value.asset?.trim() || findingForm.value.asset.trim().toUpperCase() === 'N/A') return 'Indica el activo autorizado antes de confirmar.'
+  if (!findingForm.value.artifact_refs?.length) return 'Vincula al menos un artefacto revisado antes de confirmar.'
+  if (!findingForm.value.verification_rationale?.trim()) return 'Explica el motivo de verificación humana antes de confirmar.'
+  return ''
+})
+const findingArtifactPath = ref('')
+const findingArtifactDraft = ref(null)
+const findingArtifactError = ref('')
+const findingArtifactBusy = ref(false)
+let findingArtifactRequest = 0
 
 const cvssMetrics = ref({
   AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N'
@@ -1759,6 +2060,9 @@ const logContent = ref('')
 const checklistData = ref({})
 const nextStepData = ref({})
 const agentPrompt = ref('')
+const nextStepLoading = ref(false)
+const nextStepError = ref('')
+let nextStepRequest = 0
 
 // Notes
 const notesContent = ref('')
@@ -1766,23 +2070,13 @@ const isSavingNotes = ref(false)
 
 // Report & Pack
 const reportContent = ref('')
+const reportError = ref('')
 const isCompiling = ref(false)
 const isPacking = ref(false)
 const reportViewMode = ref('executive')
 
 const reportStats = computed(() => {
   const stats = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
-  if (findings.value && findings.value.length > 0) {
-    for (const f of findings.value) {
-      const sev = (f.severity || f.frontmatter?.severity || '').toUpperCase()
-      if (sev === 'CRITICAL') stats.critical++
-      else if (sev === 'HIGH') stats.high++
-      else if (sev === 'MEDIUM') stats.medium++
-      else if (sev === 'LOW') stats.low++
-      else stats.info++
-    }
-    return stats
-  }
   if (reportContent.value) {
     const crit = reportContent.value.match(/Crítica:\*\*\s*(\d+)/i)
     const high = reportContent.value.match(/Alta:\*\*\s*(\d+)/i)
@@ -1800,7 +2094,7 @@ const reportStats = computed(() => {
 
 const reportCompiledDate = computed(() => {
   if (reportContent.value) {
-    const match = reportContent.value.match(/Fecha:\*\*\s*([^\n]+)/i)
+    const match = reportContent.value.match(/Fecha de Emisión:\*\*\s*([^\n]+)/i)
     if (match) return match[1].trim()
   }
   return new Date().toISOString().split('T')[0]
@@ -1875,9 +2169,12 @@ function getFindingStatusClass(status) {
 }
 
 async function loadScope() {
+  invalidateReconPreview()
+  scopeLoadState.value = 'loading'
   try {
     const data = await api.getScope(engId.value, engType.value)
     scopeData.value = data
+    authorizationForm.value = authorizationToForm(data.authorization)
     hasScope.value = !!data.scope
     const inScope = data.scope?.in_scope || {}
     const outScope = data.scope?.out_of_scope || {}
@@ -1885,12 +2182,15 @@ async function loadScope() {
     inScopeIpsText.value = [...(inScope.ips || []), ...(inScope.cidrs || [])].join('\n')
     outScopeDomainsText.value = (outScope.domains || []).join('\n')
     outScopeNotesText.value = (outScope.notes || []).join('\n')
+    scopeLoadState.value = 'ready'
   } catch (err) {
+    scopeLoadState.value = 'error'
     console.error('Error al cargar alcance:', err)
   }
 }
 
 async function saveScopeConfig() {
+  if (scopeLoadState.value !== 'ready') return
   isSavingScope.value = true
   try {
     const { ips: inScopeIps, cidrs: inScopeCidrs } = splitIpsAndCidrs(inScopeIpsText.value)
@@ -1900,6 +2200,7 @@ async function saveScopeConfig() {
     const existingOutScope = scopeData.value.scope?.out_of_scope || {}
     const payload = {
       ...scopeData.value,
+      authorization: authorizationFromForm(authorizationForm.value),
       scope: {
         in_scope: {
           domains: inScopeDomainsText.value.split('\n').map(s => s.trim()).filter(Boolean),
@@ -1944,10 +2245,16 @@ async function loadFindings() {
 }
 
 function openNewFindingModal() {
+  findingArtifactPath.value = ''
+  findingArtifactDraft.value = null
+  findingArtifactError.value = ''
+  findingArtifactRequest++
+  editingFinding.value = false
+  cvssMetrics.value = { AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N' }
   findingForm.value = {
     slug: '',
     title: '',
-    status: 'PROVEN',
+    status: 'CANDIDATE',
     severity: 'MEDIUM',
     cvss_score: 5.3,
     cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N',
@@ -1958,25 +2265,42 @@ function openNewFindingModal() {
     http_request: '',
     http_response: '',
     remediation: '',
+    artifact_refs: [],
+    artifact_refs_error: null,
+    verification_rationale: '',
   }
   showFindingModal.value = true
 }
 
 function editFinding(f) {
+  findingArtifactPath.value = ''
+  findingArtifactDraft.value = null
+  findingArtifactError.value = ''
+  findingArtifactRequest++
+  editingFinding.value = true
   findingForm.value = {
     slug: f.slug,
     title: f.frontmatter?.title || '',
-    status: f.frontmatter?.status || 'PROVEN',
+    status: ['VERIFIED', 'CONFIRMADO'].includes((f.frontmatter?.status || '').trim().toUpperCase()) ? 'PROVEN' : f.frontmatter?.status || 'CANDIDATE',
     severity: f.frontmatter?.severity || 'MEDIUM',
-    cvss_score: f.frontmatter?.cvss_score || 5.0,
+    cvss_score: f.frontmatter?.cvss_score ?? 5.0,
     cvss_vector: f.frontmatter?.cvss_vector || '',
     cwe: f.frontmatter?.cwe || '',
     asset: f.frontmatter?.asset || '',
-    description: f.body || '',
+    body: f.body || '',
+    description: '',
     steps_to_reproduce: '',
     http_request: '',
     http_response: '',
     remediation: '',
+    artifact_refs: (f.artifact_refs || []).map(reference => ({ ...reference })),
+    artifact_refs_error: f.artifact_refs_error || null,
+    verification_rationale: f.verification_rationale || '',
+  }
+  cvssMetrics.value = { AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N' }
+  for (const metric of findingForm.value.cvss_vector.split('/').slice(1)) {
+    const [name, value] = metric.split(':')
+    if (name in cvssMetrics.value) cvssMetrics.value[name] = value
   }
   showFindingModal.value = true
 }
@@ -1993,8 +2317,10 @@ async function recalcCvss() {
 }
 
 async function submitFinding() {
+  if (findingForm.value.artifact_refs_error || findingConfirmationIssue.value) return
   try {
-    await api.saveFinding(engId.value, findingForm.value, engType.value)
+    const { artifact_refs_error, ...payload } = findingForm.value
+    await api.saveFinding(engId.value, payload, engType.value)
     showFindingModal.value = false
     await loadFindings()
   } catch (err) {
@@ -2036,19 +2362,38 @@ async function loadChecklist() {
       areas: res.matrix || res.areas || [],
       coverage_pct: res.coverage_score ?? res.coverage_pct ?? 0,
     }
-    nextStepData.value = await api.getNextStep(engId.value, false, engType.value)
   } catch (err) {
     console.error('Error al cargar checklist:', err)
   }
 }
 
-async function loadNextStepPrompt() {
+async function loadNextStep(prompt = false) {
+  const request = ++nextStepRequest
+  const project = engId.value, type = engType.value
+  nextStepLoading.value = true
+  nextStepError.value = ''
+  nextStepData.value = {}
+  agentPrompt.value = ''
   try {
-    const res = await api.getNextStep(engId.value, true, engType.value)
-    agentPrompt.value = res.prompt || res.raw || JSON.stringify(res, null, 2)
+    const res = await api.getNextStep(project, prompt, type)
+    if (request !== nextStepRequest || project !== engId.value || type !== engType.value) return
+    nextStepData.value = res
+    if (prompt && res.prompt_available !== false) agentPrompt.value = res.prompt || ''
   } catch (err) {
-    agentPrompt.value = err.message
+    if (request === nextStepRequest) nextStepError.value = 'No se pudo consultar la siguiente decisión. Reintenta antes de usar una recomendación.'
+  } finally {
+    if (request === nextStepRequest) nextStepLoading.value = false
   }
+}
+
+async function loadNextStepPrompt() {
+  await loadNextStep(true)
+}
+
+function openNextDecision() {
+  const view = nextStepData.value.next_step?.action?.view
+  if (view === 'scope') { activeTab.value = view; loadScope() }
+  if (view === 'recon') { activeTab.value = view; loadReconStatus(); loadReconLog(); loadReconHistory() }
 }
 
 async function loadNotes() {
@@ -2073,13 +2418,18 @@ async function saveNotes() {
 
 async function compileReportAction() {
   isCompiling.value = true
+  reportError.value = ''
   try {
     const res = await api.compileReport(engId.value, engType.value)
-    reportContent.value = res.content || res.log
+    if (!res.success) {
+      reportError.value = res.log || 'Reporte bloqueado; revisa alcance y evidencia.'
+      return
+    }
+    reportContent.value = res.content
     activeTab.value = 'report'
     await loadReport()
   } catch (err) {
-    alert('Error al compilar reporte: ' + err.message)
+    reportError.value = 'Error al compilar reporte: ' + err.message
   } finally {
     isCompiling.value = false
   }
@@ -2320,37 +2670,161 @@ async function deleteCredAction(credId) {
 }
 
 async function selectArtifactFolder(folder) {
+  const request = ++artifactRequest
+  const projectId = engId.value
+  const projectType = engType.value
   activeArtifactFolder.value = folder
   selectedArtifact.value = null
   selectedArtifactContent.value = ''
+  artifactSnapshot.value = null
+  expectedArtifactSha.value = null
+  artifactFiles.value = []
   try {
-    artifactFiles.value = await api.getArtifacts(engId.value, folder, engType.value)
+    const files = await api.getArtifacts(projectId, folder, projectType)
+    if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
+    artifactFiles.value = files
   } catch (err) {
+    if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
     console.error('Error al listar artefactos:', err)
     artifactFiles.value = []
   }
 }
 
-async function loadArtifactPreview(file) {
+async function loadArtifactPreview(file, expectedHash = null) {
+  const request = ++artifactRequest
+  const projectId = engId.value
+  const projectType = engType.value
   selectedArtifact.value = file
+  expectedArtifactSha.value = expectedHash
   selectedArtifactContent.value = 'Cargando contenido...'
+  artifactSnapshot.value = null
   try {
-    const res = await api.getArtifactContent(engId.value, file.rel_path, engType.value)
+    const res = await api.getArtifactContent(projectId, file.rel_path, projectType)
+    if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
+    artifactSnapshot.value = res
     selectedArtifactContent.value = res.content
   } catch (err) {
+    if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
     selectedArtifactContent.value = 'Error al leer archivo: ' + err.message
   }
 }
 
-async function loadReconStatus() {
+async function openFindingArtifact(reference) {
+  activeTab.value = 'artifacts'
+  const request = artifactRequest + 1
+  await selectArtifactFolder(reference.path.split('/')[0])
+  if (request !== artifactRequest) return
+  await loadArtifactPreview({ rel_path: reference.path, name: reference.path.split('/').at(-1) }, reference.sha256)
+}
+
+async function reviewFindingArtifact() {
+  const request = ++findingArtifactRequest
+  const projectId = engId.value
+  const projectType = engType.value
+  const path = findingArtifactPath.value
+  findingArtifactDraft.value = null
+  findingArtifactError.value = ''
+  if (!/^(recon|fuzzing|screenshots)\/[a-zA-Z0-9._/-]{1,230}$/.test(path) || path.split('/').some(part => ['', '.', '..'].includes(part))) {
+    findingArtifactError.value = 'Usa una ruta canónica de recon/, fuzzing/ o screenshots/ con nombre ASCII sin espacios.'
+    return
+  }
+  findingArtifactBusy.value = true
   try {
-    const res = await api.getReconStatus(engId.value, engType.value)
+    const snapshot = await api.getArtifactContent(projectId, path, projectType)
+    if (request !== findingArtifactRequest || !showFindingModal.value || projectId !== engId.value || projectType !== engType.value) return
+    if (snapshot.fingerprint_status !== 'available' || !/^[a-f0-9]{64}$/.test(snapshot.sha256 || '')) throw new Error('El artefacto no tiene una huella disponible para vincular.')
+    findingArtifactDraft.value = { ...snapshot, rel_path: path }
+  } catch (error) {
+    if (request === findingArtifactRequest) findingArtifactError.value = error.message
+  } finally {
+    if (request === findingArtifactRequest) findingArtifactBusy.value = false
+  }
+}
+
+function addFindingArtifact() {
+  const snapshot = findingArtifactDraft.value
+  if (!snapshot || snapshot.rel_path !== findingArtifactPath.value) return
+  if (findingForm.value.artifact_refs.length >= 10 || findingForm.value.artifact_refs.some(reference => reference.path === snapshot.rel_path)) {
+    findingArtifactError.value = 'Máximo 10 vínculos sin rutas duplicadas. Quita el vínculo anterior para reemplazarlo.'
+    return
+  }
+  findingForm.value.artifact_refs.push({ path: snapshot.rel_path, sha256: snapshot.sha256 })
+  findingArtifactPath.value = ''
+}
+
+watch([findingArtifactPath, showFindingModal, engId, engType], () => {
+  findingArtifactRequest++
+  findingArtifactDraft.value = null
+  findingArtifactError.value = ''
+  findingArtifactBusy.value = false
+})
+
+async function loadReconHistory(append = false) {
+  if (reconHistoryBusy.value) {
+    if (!append) reconHistoryRefreshQueued = true
+    return
+  }
+  reconHistoryBusy.value = true
+  reconHistoryError.value = ''
+  const projectId = engId.value
+  const projectType = engType.value
+  try {
+    const result = await api.getReconHistory(projectId, projectType, append ? reconHistoryCursor.value : null)
+    if (projectId !== engId.value || projectType !== engType.value) return
+    const jobs = Array.isArray(result.jobs) ? result.jobs : []
+    reconHistory.value = append ? [...new Map([...reconHistory.value, ...jobs].map(job => [job.run_id, job])).values()] : jobs
+    reconHistoryCursor.value = result.next_cursor || null
+  } catch (error) {
+    if (projectId !== engId.value || projectType !== engType.value) return
+    reconHistoryError.value = error.message || 'No se pudo cargar el historial.'
+  } finally {
+    reconHistoryBusy.value = false
+    if (reconHistoryRefreshQueued) {
+      reconHistoryRefreshQueued = false
+      loadReconHistory()
+    }
+  }
+}
+
+async function loadReconStatus() {
+  const request = ++reconStatusRequest
+  const project = engId.value, type = engType.value
+  try {
+    const res = await api.getReconStatus(project, type)
+    if (request !== reconStatusRequest || project !== engId.value || type !== engType.value) return
+    const previous = reconStatus.value.job
     reconStatus.value = res
+    if (previous?.outcome_revision !== res.job?.outcome_revision) reconOutcomeAcknowledged.value = ''
+    if (previous?.status && (previous.run_id !== res.job?.run_id || previous.outcome_revision !== res.job?.outcome_revision ||
+        previous.outcome_review?.reviewed_at !== res.job?.outcome_review?.reviewed_at)) loadReconHistory()
     if (['running', 'cancelling'].includes(res.job?.status)) {
       startReconPolling()
     }
   } catch (err) {
     console.error('Error al cargar estado de recon:', err)
+  }
+}
+
+async function reviewReconOutcome(job) {
+  if (reconOutcomeBusy.value || !canReviewReconOutcome(job) || reconOutcomeAcknowledged.value !== job.outcome_revision) return
+  const request = ++reconOutcomeRequest
+  const project = engId.value, type = engType.value
+  reconOutcomeBusy.value = true
+  reconOutcomeError.value = ''
+  try {
+    await api.reviewReconOutcome(project, { run_id: job.run_id, expected_revision: job.outcome_revision }, type)
+    if (request !== reconOutcomeRequest || project !== engId.value || type !== engType.value) return
+    invalidateReconPreview()
+    await Promise.all([loadReconStatus(), loadReconHistory(), loadNextStep()])
+  } catch (error) {
+    if (request !== reconOutcomeRequest || project !== engId.value || type !== engType.value) return
+    reconOutcomeError.value = error.message || 'No se pudo registrar la revisión. Actualiza el historial.'
+    await Promise.all([loadReconStatus(), loadReconHistory(), loadNextStep()])
+  } finally {
+    if (request === reconOutcomeRequest) {
+      reconOutcomeAcknowledged.value = ''
+      reconOutcomeBusy.value = false
+    }
   }
 }
 
@@ -2366,12 +2840,16 @@ async function loadReconLog() {
 function startReconPolling() {
   if (reconPollTimer) return
   reconPollTimer = setInterval(async () => {
-    await loadReconStatus()
-    await loadReconLog()
-    if (!['running', 'cancelling'].includes(reconStatus.value.job?.status)) {
-      stopReconPolling()
+    if (reconPollBusy) return
+    reconPollBusy = true
+    try {
+      await loadReconStatus()
+      await loadReconLog()
+      if (!['running', 'cancelling'].includes(reconStatus.value.job?.status)) stopReconPolling()
+    } finally {
+      reconPollBusy = false
     }
-  }, 3000)
+  }, 1000)
 }
 
 function stopReconPolling() {
@@ -2386,6 +2864,7 @@ async function cancelReconPipeline() {
   reconActionMsg.value = ''
   try {
     const res = await api.cancelRecon(engId.value, engType.value)
+    invalidateReconPreview()
     reconActionSuccess.value = true
     reconActionMsg.value = res.message
     await loadReconStatus()
@@ -2399,27 +2878,80 @@ async function cancelReconPipeline() {
   }
 }
 
+function invalidateReconPreview() {
+  reconPreviewRequest++
+  reconPreview.value = null
+  reconPreviewError.value = ''
+  isReviewingRecon.value = false
+}
+
+async function reviewReconPlan() {
+  const request = ++reconPreviewRequest
+  reconPreview.value = null
+  reconPreviewError.value = ''
+  isReviewingRecon.value = true
+  try {
+    const result = await api.previewRecon(engId.value, { stage: reconStage.value, dry_run: reconDryRun.value }, engType.value)
+    if (request !== reconPreviewRequest) return
+    if (!Array.isArray(result.stages) || typeof result.can_start !== 'boolean' || !result.plan_revision) throw new Error('Vista previa incompleta; reintenta la revisión.')
+    reconPreview.value = result
+  } catch (err) {
+    if (request === reconPreviewRequest) reconPreviewError.value = err.message || 'No se pudo revisar el plan.'
+  } finally {
+    if (request === reconPreviewRequest) isReviewingRecon.value = false
+  }
+}
+
+watch([engId, engType, reconStage, reconDryRun], invalidateReconPreview)
+
 async function triggerReconPipeline() {
+  if (!reconPreview.value?.can_start) return
+  const expectedPlan = reconPreview.value.plan_revision
   isStartingRecon.value = true
   reconActionMsg.value = ''
   try {
     const res = await api.runRecon(
       engId.value,
-      { stage: reconStage.value, dry_run: reconDryRun.value },
+      { stage: reconStage.value, dry_run: reconDryRun.value, expected_plan: expectedPlan },
       engType.value
     )
+    invalidateReconPreview()
     reconActionSuccess.value = true
     reconActionMsg.value = res.message || 'Pipeline iniciado correctamente.'
     await loadReconStatus()
     await loadReconLog()
     startReconPolling()
   } catch (err) {
+    invalidateReconPreview()
     reconActionSuccess.value = false
     reconActionMsg.value = err.message || 'Error al iniciar reconocimiento'
   } finally {
     isStartingRecon.value = false
   }
 }
+
+watch([engId, engType], () => {
+  reconOutcomeRequest++
+  reconStatusRequest++
+  reconOutcomeAcknowledged.value = ''
+  reconOutcomeBusy.value = false
+  reconOutcomeError.value = ''
+  reconStatus.value = { summary: {}, configured_domains: [], discarded_out_of_scope: [], probe_results: [] }
+  stopReconPolling()
+  loadReconStatus()
+  loadNextStep()
+  selectArtifactFolder('recon')
+  reconHistory.value = []
+  reconHistoryCursor.value = null
+  reconHistoryError.value = ''
+  loadReconHistory()
+})
+
+watch(activeTab, tab => { if (tab === 'checklist') loadNextStep() })
+watch(() => [reconStatus.value.job?.run_id, reconStatus.value.job?.status, reconStatus.value.job?.outcome_revision,
+  reconStatus.value.job?.outcome_review?.reviewed_at], (current, previous) => {
+  if (current.some((value, index) => value !== previous[index])) loadNextStep()
+})
 
 onMounted(() => {
   initCopilotModel()
@@ -2428,6 +2960,7 @@ onMounted(() => {
   loadFindings()
   loadLogs()
   loadChecklist()
+  loadNextStep()
   loadNotes()
   loadReport()
   loadFlags()
@@ -2435,9 +2968,15 @@ onMounted(() => {
   selectArtifactFolder('recon')
   loadReconStatus()
   loadReconLog()
+  loadReconHistory()
 })
 
 onUnmounted(() => {
+  reconOutcomeRequest++
+  reconStatusRequest++
+  nextStepRequest++
+  findingArtifactRequest++
+  artifactRequest++
   stopReconPolling()
 })
 </script>

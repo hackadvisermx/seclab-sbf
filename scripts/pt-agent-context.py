@@ -11,6 +11,7 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 
 import argparse
 import datetime
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -19,6 +20,9 @@ import re
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Tuple
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seclab_findings import finding_status_from_markdown
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -280,14 +284,14 @@ def collect_recon_summary(engagement_dir: pathlib.Path) -> Dict[str, Any]:
 
 
 def collect_findings(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
-    """Carga y estructura todos los hallazgos validados en evidence/."""
+    """Carga y estructura las fichas y sus estados declarados en evidence/."""
     ev_dir = engagement_dir / "evidence"
     if not ev_dir.is_dir():
         return []
 
     findings: List[Dict[str, Any]] = []
     for f in sorted(ev_dir.glob("*.md")):
-        if f.name.startswith("_") or f.name.lower() == "readme.md":
+        if f.name.startswith(("_", ".")) or f.name.lower() == "readme.md":
             continue
         try:
             content = f.read_text(encoding="utf-8")
@@ -317,7 +321,7 @@ def collect_findings(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
                 "asset": meta.get("asset", "N/A"),
                 "cwe": meta.get("cwe", "CWE-Unknown"),
                 "cvss_score": cvss_score,
-                "status": meta.get("status", "Confirmado"),
+                "status": finding_status_from_markdown(content),
             })
         except Exception:
             continue
@@ -453,13 +457,15 @@ def _get_audit_checklist_module():
     """Carga dinámicamente el módulo pt-audit-checklist si está disponible."""
     candidate_paths = [
         pathlib.Path(__file__).resolve().parent / "pt-audit-checklist.py",
+        pathlib.Path(__file__).resolve().parent / "pt-audit-checklist",
         pathlib.Path("/usr/local/bin/pt-audit-checklist"),
         pathlib.Path("./scripts/pt-audit-checklist.py"),
     ]
     for cp in candidate_paths:
         if cp.is_file():
             try:
-                spec = importlib.util.spec_from_file_location("pt_audit_checklist", cp)
+                spec = importlib.util.spec_from_file_location("pt_audit_checklist", cp,
+                    loader=importlib.machinery.SourceFileLoader("pt_audit_checklist", str(cp)))
                 if spec and spec.loader:
                     mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(mod)
@@ -679,7 +685,7 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
         "",
         "---",
         "",
-        "## 4. Matriz de Hallazgos Validados (Evidence-First)",
+        "## 4. Matriz de Hallazgos y Estados Declarados (Evidence-First)",
         "",
     ])
     total_findings = findings.get("total", 0)
@@ -690,12 +696,12 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
 
     items = findings.get("items", [])
     if items:
-        lines.append("| ID | Severidad | Activo | CWE | Título |")
-        lines.append("|---|---|---|---|---|")
+        lines.append("| ID | Estado declarado | Severidad | Activo | CWE | Título |")
+        lines.append("|---|---|---|---|---|---|")
         for it in items:
-            lines.append(f"| `{it['id']}` | **{it['severity']}** | `{it['asset']}` | {it['cwe']} | {it['title']} |")
+            lines.append(f"| `{it['id']}` | `{it['status']}` | **{it['severity']}** | `{it['asset']}` | {it['cwe']} | {it['title']} |")
     else:
-        lines.append("_No hay hallazgos validados aún en `evidence/`._")
+        lines.append("_No hay fichas registradas aún en `evidence/`._")
 
     # Auditoría
     lines.extend([

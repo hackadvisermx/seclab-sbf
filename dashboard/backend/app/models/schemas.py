@@ -101,7 +101,7 @@ class FindingFrontmatter(BaseModel):
     asset: Optional[str] = None
     date: Optional[str] = None
     author: Optional[str] = "tester"
-    status: Optional[str] = "PROVEN"  # PROVEN, CANDIDATE, DISPROVED, VERIFIED, DRAFT, REMEDIATED, FALSE_POSITIVE
+    status: Optional[str] = "CANDIDATE"  # PROVEN, CANDIDATE, DISPROVED, VERIFIED, DRAFT, REMEDIATED, FALSE_POSITIVE
 
 
 class FindingDetail(BaseModel):
@@ -110,6 +110,10 @@ class FindingDetail(BaseModel):
     frontmatter: FindingFrontmatter
     body: str  # Contenido markdown (descripción, pasos, pruebas HTTP, mitigación)
     engagement_id: str
+    artifact_refs: List[Dict[str, str]] = Field(default_factory=list)
+    artifact_refs_error: Optional[str] = None
+    verification_rationale: str = ""
+    confirmation_error: Optional[str] = None
 
 
 class FindingCreate(BaseModel):
@@ -120,12 +124,15 @@ class FindingCreate(BaseModel):
     cvss_score: Optional[float] = None
     cwe: Optional[str] = None
     asset: Optional[str] = None
-    status: Optional[str] = "PROVEN"
+    status: Optional[str] = "CANDIDATE"
     description: Optional[str] = None
     steps_to_reproduce: Optional[str] = None
     http_request: Optional[str] = None
     http_response: Optional[str] = None
     remediation: Optional[str] = None
+    body: Optional[str] = None
+    artifact_refs: Optional[List[Dict[str, str]]] = None
+    verification_rationale: Optional[str] = Field(default=None, max_length=4000)
 
 
 # ==============================================================================

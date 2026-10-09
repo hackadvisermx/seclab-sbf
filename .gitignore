@@ -32,3 +32,7 @@ dashboard/frontend/node_modules/
 dashboard/frontend/dist/
 dashboard/*.pid
 dashboard/backend/data/
+dashboard/frontend/playwright-report/
+dashboard/frontend/test-results/
+dashboard/frontend/blob-report/
+dashboard/frontend/e2e/.playwright-fixture/

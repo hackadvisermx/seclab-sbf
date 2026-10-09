@@ -68,4 +68,9 @@ pt-forward status >/dev/null 2>&1 || test $? -eq 1
   exit 1
 }
 
+/bin/sh "$(dirname "$0")/check-subfinder-readonly.sh" "$image"
+/bin/sh "$(dirname "$0")/check-recon-shell.sh" "$image"
+/bin/sh "$(dirname "$0")/check-finding-defaults.sh" "$image"
+/bin/sh "$(dirname "$0")/check-installed-checklist.sh" "$image"
+
 printf '%s\n' "smoke_test=ok imagen=$image"

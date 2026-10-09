@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from app.services.workspace_sync import workspace_service
+from app.core.artifact_snapshot import ArtifactChangedError
 
 router = APIRouter(prefix="/loot", tags=["Botín, Banderas & Artefactos"])
 
@@ -51,6 +52,8 @@ def get_artifact_content(eng_id: str, path: str = Query(...), type: str = Query(
     """Lee el contenido textual de un artefacto generado."""
     try:
         return workspace_service.get_artifact_content(eng_id, path, type)
+    except ArtifactChangedError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

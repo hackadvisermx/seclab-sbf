@@ -9,7 +9,7 @@ import ssl
 import subprocess
 import threading
 import time
-from seclab_scope import ScopeError, check_scope, normalize_target
+from seclab_scope import ScopeError, check_scope, normalize_target, require_authorization
 
 
 def operational_limits(data):
@@ -112,17 +112,21 @@ class PinnedConnection(http.client.HTTPConnection):
 
 
 class ProbeClient:
-    def __init__(self, scope_data, limits):
+    def __init__(self, scope_data, limits, before_request=None):
+        self.before_request = before_request
         self.scope_data = scope_data
         self.limits = limits
         self.forbidden = local_network_addresses()
         self.limiter = RateLimiter(limits['max_requests_per_second'])
 
     def probe_host(self, host):
+        if self.before_request:
+            self.before_request(host)
         observations = []
         verdict, reason = check_scope(host, self.scope_data)
         if verdict != 'IN_SCOPE':
             return [{'host': host, 'status': 'blocked', 'reason': reason}]
+        require_authorization(self.scope_data, 'active')
         try:
             resolved = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
             addresses = sorted({normalize_target(item[4][0]) for item in resolved})
@@ -138,6 +142,9 @@ class ProbeClient:
                 observations.append({'host': host, 'url': url, 'status': 'blocked', 'reason': 'Endpoint excluido del alcance.'})
                 continue
             self.limiter.wait()
+            require_authorization(self.scope_data, 'active')
+            if self.before_request:
+                self.before_request(url + "/")
             connection = PinnedConnection(host, address, port, self.limits['probe_timeout_seconds'], tls=scheme == 'https')
             timer = threading.Timer(self.limits['probe_timeout_seconds'], connection.expire)
             timer.daemon = True
@@ -158,9 +165,17 @@ class ProbeClient:
                 connection.close()
         return observations
 
-    def probe(self, hosts):
+    def probe(self, hosts, on_result=None):
         if len(hosts) > self.limits['max_probe_targets']:
             raise ScopeError('Demasiados objetivos para max_probe_targets; no se inició el sondeo.')
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.limits['max_parallel_threads']) as executor:
-            groups = list(executor.map(self.probe_host, hosts))
+            if on_result is None:
+                groups = list(executor.map(self.probe_host, hosts))
+            else:
+                futures = {executor.submit(self.probe_host, host): index for index, host in enumerate(hosts)}
+                groups = [None] * len(hosts)
+                for future in concurrent.futures.as_completed(futures):
+                    rows = future.result()
+                    groups[futures[future]] = rows
+                    on_result(rows)
         return [observation for group in groups for observation in group]

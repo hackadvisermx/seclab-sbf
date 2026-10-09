@@ -918,6 +918,59 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("check-text", copilot_source)
         self.assertIn("Validación de Alcance (Scope Guard)", copilot_source)
 
+    def test_report_current_risk_uses_only_confirmed_active_evidence(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            (root / "target.yaml").write_text("scope:\n  in_scope:\n    domains: [example.test]\n  out_of_scope:\n    domains: []\n")
+            import hashlib
+            (root / "recon").mkdir()
+            (root / "recon/raw.txt").write_bytes(b"Fixture de verificacion")
+            refs = json.dumps([{"path": "recon/raw.txt", "sha256": hashlib.sha256(b"Fixture de verificacion").hexdigest()}])
+            cases = [("PROVEN", "LOW"), ("candidate", "CRITICAL"), ("DISPROVED", "CRITICAL"),
+                     ("mitigado", "HIGH"), ("DRAFT", "HIGH"), ("BLOCKED", "CRITICAL"), ("custom", "CRITICAL")]
+            for number, (status, severity) in enumerate(cases):
+                (evidence / f"{number}.md").write_text(f"---\nid: VULN-{number}\ntitle: Evidence {number}\nstatus: {status}\nseverity: {severity}\nasset: example.test\nartifact_refs: {refs}\nverification_rationale: \"Operador reviso el fixture\"\n---\nOriginal body {number}\n## 2. Pasos\n## 5. Remediación")
+            report = report_compiler.build_report(root).read_text()
+            self.assertIn("**1 hallazgos confirmados activos**", report)
+            self.assertIn("**Postura General de Riesgo:** **Bajo**", report)
+            self.assertIn("**Crítica:** 0", report)
+            self.assertIn("**Históricos mitigados (excluidos del riesgo actual):** 1", report)
+            self.assertIn("**Otros registros no confirmados activos (excluidos del riesgo actual):** 5", report)
+            self.assertIn("Borrador compilado / Pendiente de revisión", report)
+            self.assertNotIn("Finalizado / Reportado", report)
+            for number in range(len(cases)):
+                self.assertIn(f"Original body {number}", report)
+            (evidence / "0.md").unlink()
+            report = report_compiler.build_report(root).read_text()
+            self.assertIn("**0 hallazgos confirmados activos**", report)
+            self.assertIn("Sin hallazgos confirmados activos", report)
+            for path in evidence.glob("*.md"):
+                path.unlink()
+            self.assertIn("**0 hallazgos confirmados activos**", report_compiler.build_report(root).read_text())
+
+    def test_report_reads_dashboard_and_legacy_cvss_vectors(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "zero.md"
+            for field in ("cvss_vector", "cvss_v31"):
+                vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N"
+                path.write_text(f"---\ntitle: Zero\nseverity: INFO\ncvss_score: 0\n{field}: {vector}\n---\nBody")
+                finding = report_compiler.parse_evidence_file(path)
+                self.assertEqual(finding["cvss_score"], 0.0)
+                self.assertEqual(finding["cvss_v31"], vector)
+
+    def test_report_recognizes_dashboard_reproduction_heading(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "dashboard.md"
+            path.write_text('---\ntitle: Synthetic fixture\nasset: https://example.test/profile\n---\n\n## Pasos para Reproducir\n1. Revisar petición sintética\n\n```http\nGET /profile HTTP/1.1\nHost: example.test\n```\n\n## Remediación y Mitigación\nRevisar permisos.\n')
+            self.assertTrue(report_compiler.parse_evidence_file(path)["has_poc"])
+            path.write_text(path.read_text().replace("## Pasos para Reproducir", "## Descripción"))
+            self.assertFalse(report_compiler.parse_evidence_file(path)["has_poc"])
+
     def test_finding_manager_and_report_compiler(self):
         """Verifica la plantilla evidence.md, compilador de reportes y linter Evidence-First."""
         # 1. Validar plantilla de evidencia
@@ -929,7 +982,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertEqual(parsed["severity"], "HIGH")
         self.assertEqual(parsed["cvss_score"], 6.5)
         self.assertEqual(parsed["cwe"], "CWE-639")
-        self.assertEqual(parsed["status"], "PROVEN")
+        self.assertEqual(parsed["status"], "CANDIDATE")
         self.assertTrue(parsed["has_negative_control"])
         self.assertTrue(parsed["has_bounded_proof"])
         self.assertTrue(parsed["has_poc"])
@@ -964,7 +1017,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("# Informe de Auditoría de Seguridad:", content)
             self.assertIn("## 1. Resumen Ejecutivo", content)
             self.assertIn("## 2. Alcance y Límites Operacionales", content)
-            self.assertIn("## 3. Matriz Consolidada de Hallazgos", content)
+            self.assertIn("## 3. Matriz Consolidada de Evidencias", content)
             self.assertIn("## 4. Detalle Técnico de Hallazgos", content)
             self.assertIn("VULN-01", content)
             self.assertIn("CWE-639", content)
@@ -1014,7 +1067,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         # 2b. Validar la biblioteca de plantillas de hallazgo reutilizables (fase 121 / backlog A16):
         # cada plantilla debe ser YAML valido para pt-report-compiler Y conservar los placeholders
         # literales exactos que el sed de `pt-finding new --template` sustituye (VULN-01, el titulo
-        # generico, severity "High", status "PROVEN", la URL de ejemplo y YYYY-MM-DD); si cambian,
+        # generico, severity "High", status "CANDIDATE", la URL de ejemplo y YYYY-MM-DD); si cambian,
         # la sustitucion queda rota en silencio sin que ningun comando lo avise.
         findings_templates_dir = REPO_ROOT / "workspace-seed" / "templates" / "findings"
         self.assertTrue(findings_templates_dir.is_dir(), "workspace-seed/templates/findings no existe")
@@ -1030,14 +1083,14 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn('id: "VULN-01"', raw, f"{name}: falta el placeholder id VULN-01")
             self.assertIn("Título de la Vulnerabilidad o Hallazgo", raw, f"{name}: falta el placeholder de titulo")
             self.assertIn('severity: "High"', raw, f"{name}: falta el placeholder severity High")
-            self.assertIn('status: "PROVEN"', raw, f"{name}: falta el placeholder status PROVEN")
+            self.assertIn('status: "CANDIDATE"', raw, f"{name}: falta el placeholder status CANDIDATE")
             self.assertIn("https://api.example.com/v1/users/1234/profile", raw, f"{name}: falta la URL de ejemplo sustituible")
             self.assertIn("YYYY-MM-DD", raw, f"{name}: falta el placeholder de fecha")
 
             parsed = report_compiler.parse_evidence_file(tmpl_path)
             self.assertEqual(parsed["id"], "VULN-01")
             self.assertEqual(parsed["severity"], "HIGH")
-            self.assertEqual(parsed["status"], "PROVEN")
+            self.assertEqual(parsed["status"], "CANDIDATE")
             self.assertEqual(parsed["cwe"], expected["cwe"], f"{name}: CWE inesperado")
             self.assertEqual(parsed["cvss_score"], expected["cvss_score"], f"{name}: CVSS inesperado")
             self.assertTrue(parsed["has_negative_control"], f"{name}: falta seccion de control negativo")
@@ -1200,7 +1253,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("## 1. Alcance y Reglas de Compromiso", md)
             self.assertIn("## 2. Cobertura Metodológica & Checklist", md)
             self.assertIn("## 3. Superficie de Ataque y Reconocimiento", md)
-            self.assertIn("## 4. Matriz de Hallazgos Validados", md)
+            self.assertIn("## 4. Matriz de Hallazgos y Estados Declarados", md)
             self.assertIn("## 5. Trazabilidad de Auditoría", md)
             self.assertIn("## 6. Directivas de Agente: auth-agent.prompt.md", md)
             self.assertIn("VULN-01", md)
@@ -1295,6 +1348,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
                         self.assertEqual(len(hash_val), 64)
 
             # 4. Validar cierre formal de auditoría
+            self.assertEqual(engagement_packer.close_engagement(tmp)["status"], "blocked")
+            ev_file.write_text(ev_file.read_text().replace('status: "CANDIDATE"', 'status: "DISPROVED"'))
             close_res = engagement_packer.close_engagement(tmp)
             self.assertEqual(close_res["status"], "closed")
             self.assertTrue(close_res["target_yaml_updated"])
@@ -1619,6 +1674,112 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("pt-eng close [nombre] [opciones]", plugin)
             self.assertIn("-f, --force", plugin)
 
+    def test_finding_states_stay_consistent_through_triage_context_next_and_close(self):
+        import tempfile
+        from authorization_fixture import AUTHORIZATION_YAML
+        from seclab_findings import normalize_status
+        with tempfile.TemporaryDirectory() as temporary:
+            project = pathlib.Path(temporary)
+            (project / 'evidence').mkdir()
+            target = project / 'target.yaml'
+            original = 'engagement:\n  status: active\nscope:\n  in_scope:\n    domains: [example.test]\n' + AUTHORIZATION_YAML
+            target.write_text(original)
+            (project / 'REPORT.md').write_text('Fixture report')
+            (project / 'notes.md').write_text(''.join('## Disciplina: ' + row['id'] + '\n' for row in audit_checklist.METHODOLOGY_AREAS))
+            (project / 'evidence/README.md').write_text('Documentation')
+            (project / 'evidence/.hidden.md').write_text('Hidden')
+            empty = audit_checklist.AuditChecklistEvaluator(project).evaluate()
+            self.assertEqual(empty['total_findings'], 0)
+            self.assertEqual(empty['matrix'][-1]['status'], 'COMPLETED')
+            pending = [None, '', 'CANDIDATE', 'HIPOTESIS', 'DRAFT', 'Borrador', 'UNVERIFIED', 'BLOCKED', 'UNKNOWN', 'CONFIRMED']
+            resolved = ['PROVEN', 'VERIFIED', 'Confirmado', 'DISPROVED', 'FALSO POSITIVO', 'MITIGATED', 'REMEDIATED']
+            for state in pending + resolved:
+                with self.subTest(state=state):
+                    content = '---\nid: FIXTURE\n' + ('status: "' + state + '" # fixture\n' if state is not None else '') + '---\nBody contains status: draft and must remain literal'
+                    finding = project / 'evidence/fixture.md'
+                    finding.write_text(content)
+                    result = audit_checklist.AuditChecklistEvaluator(project).evaluate()
+                    review = state in pending
+                    self.assertEqual(result['total_findings'], 1)
+                    self.assertEqual(result['findings_summary']['unverified'], int(review))
+                    self.assertEqual(result['findings_summary']['verified'], int(normalize_status(state) == 'PROVEN'))
+                    self.assertEqual(result['readiness']['ready_for_closure'], not review)
+                    triage = result['matrix'][-1]
+                    self.assertEqual(triage['status'], 'IN_PROGRESS' if review else 'COMPLETED')
+                    self.assertNotIn('hallazgos confirmados', triage['details'])
+                    context = agent_context.generate_context_dict(project)
+                    self.assertEqual(context['findings']['items'][0]['status'], normalize_status(state))
+                    markdown = agent_context.format_markdown_context(context)
+                    self.assertIn('Estado declarado', markdown)
+                    self.assertIn('`' + normalize_status(state) + '`', markdown)
+                    steps = audit_next.determine_roadmap(project)
+                    self.assertEqual(any(row['id'] == 'verify_findings' for row in steps), review)
+                    self.assertEqual(any(row['id'] == 'pack_and_close' for row in steps), not review)
+                    expected = engagement_packer.check_closure_readiness(project)
+                    self.assertEqual(expected[0], not review)
+                    with patch.object(engagement_packer.pathlib.Path, 'is_file', autospec=True,
+                        side_effect=lambda path: False if path.name.startswith('pt-audit-checklist') else pathlib.Path.exists(path)):
+                        self.assertEqual(engagement_packer.check_closure_readiness(project)[0], not review)
+                    self.assertEqual(finding.read_text(), content)
+                    if review:
+                        self.assertEqual(engagement_packer.close_engagement(project)['status'], 'blocked')
+                        self.assertEqual(target.read_text(), original)
+            self.assertEqual(engagement_packer.close_engagement(project)['status'], 'closed')
+
+    def test_finding_status_reads_only_unambiguous_frontmatter_scalars(self):
+        from seclab_findings import finding_status_from_markdown
+        for header, expected in [
+            ('status: PROVEN # review', 'PROVEN'),
+            ('status: "PROVEN" # review', 'PROVEN'),
+            ("status: 'DISPROVED'", 'DISPROVED'),
+            ('status: "PROVEN # unknown"', 'PROVEN # UNKNOWN'),
+            ('status: "PROVEN', 'CANDIDATE'),
+            ('status: PROVEN\nstatus: CANDIDATE', 'CANDIDATE'),
+            ('title: Fixture', 'CANDIDATE'),
+        ]:
+            with self.subTest(header=header):
+                content = '---\r\n' + header.replace('\n', '\r\n') + '\r\n---\r\nstatus: PROVEN'
+                self.assertEqual(finding_status_from_markdown(content), expected)
+        self.assertEqual(finding_status_from_markdown('status: PROVEN'), 'CANDIDATE')
+
+    def test_checklist_consumers_support_source_and_extensionless_installation(self):
+        import importlib.machinery
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary, patch.object(sys, 'path', list(sys.path)):
+            root = pathlib.Path(temporary)
+            project = root / 'fixture'
+            (project / 'recon').mkdir(parents=True)
+            from authorization_fixture import AUTHORIZATION_YAML
+            (project / 'target.yaml').write_text('scope:\n  in_scope:\n    domains: [example.test]\n' + AUTHORIZATION_YAML)
+            (project / 'recon/live_hosts.txt').write_text('https://example.test\n')
+            (project / 'notes.md').write_text('## Disciplina: fuzzing\n')
+            for suffix in ('.py', ''):
+                with self.subTest(suffix=suffix):
+                    install = root / ('source' if suffix else 'installed')
+                    install.mkdir()
+                    shutil.copyfile(REPO_ROOT / 'scripts/pt-audit-checklist.py', install / ('pt-audit-checklist' + suffix))
+                    modules = {}
+                    for name in ('pt-audit-next', 'pt-agent-context', 'pt-engagement-packer'):
+                        path = install / (name + suffix)
+                        shutil.copyfile(REPO_ROOT / 'scripts' / (name + '.py'), path)
+                        spec = importlib.util.spec_from_file_location(name, path,
+                            loader=importlib.machinery.SourceFileLoader(name, str(path)))
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        modules[name] = module
+                    expected = audit_checklist.AuditChecklistEvaluator(project).evaluate()
+                    context = modules['pt-agent-context'].collect_coverage_summary(project)
+                    self.assertEqual(context['coverage_score'], 25.0)
+                    self.assertEqual(context['completed_areas'], expected['completed_areas'])
+                    self.assertEqual([(row['id'], row['status']) for row in context['matrix']],
+                                     [(row['id'], row['status']) for row in expected['matrix']])
+                    self.assertEqual(modules['pt-audit-next'].determine_roadmap(project)[0]['id'], 'auth')
+                    readiness = expected['readiness']
+                    self.assertEqual(modules['pt-engagement-packer'].check_closure_readiness(project),
+                                     (readiness['ready_for_closure'], readiness['blocking_issues'], readiness['recommendations']))
+
     def test_methodology_next_step_recommender(self):
         """Verifica el recomendador de próximo paso metodológico y guía interactiva (pt-next)."""
         import tempfile
@@ -1633,6 +1794,8 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertEqual(steps_scope[0]["discipline"], "recon")
             self.assertIn("target.yaml", steps_scope[0]["reason"])
 
+            (eng_path / "target.yaml").write_text("scope:\n  in_scope:\n    domains: []\n")
+            self.assertEqual(audit_next.determine_roadmap(eng_path)[0]["id"], "scope")
             # 2. Caso B: target.yaml sembrado -> Recomienda recon
             target_file = eng_path / "target.yaml"
             target_file.write_text(
@@ -1645,6 +1808,9 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
                 "      - next.test\n",
                 encoding="utf-8",
             )
+            self.assertEqual(audit_next.determine_roadmap(eng_path)[0]["id"], "authorization")
+            from authorization_fixture import AUTHORIZATION_YAML
+            target_file.write_text(target_file.read_text() + AUTHORIZATION_YAML)
             steps_recon = audit_next.determine_roadmap(eng_path)
             self.assertEqual(steps_recon[0]["id"], "recon")
             self.assertEqual(steps_recon[0]["skill"], "recon-profiling")
@@ -1691,6 +1857,13 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             self.assertIn("next-test", term_out)
             self.assertIn("Próximo Paso Recomendado", term_out)
 
+            import subprocess
+            result = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/pt-audit-next.py"), "-j", "-p", str(eng_path)], capture_output=True, text=True, check=True)
+            payload = json.loads(result.stdout)
+            self.assertIn("SYSTEM PROMPT", payload["prompt"])
+            self.assertTrue(payload["next_step"]["title"])
+            plain_json = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/pt-audit-next.py"), "-j", str(eng_path)], capture_output=True, text=True, check=True)
+            self.assertNotIn("prompt", json.loads(plain_json.stdout))
             # 6. Validar integración en Dockerfile y plugin Zsh
             dockerfile = (REPO_ROOT / "images" / "full" / "Dockerfile").read_text(encoding="utf-8")
             self.assertIn("pt-next", dockerfile)
@@ -1728,6 +1901,17 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         self.assertIn("pt-callback", html_content)
         self.assertIn("HERRAMIENTAS", html_content)
 
+        self.assertNotIn("pt-callback listen", html_content)
+        self.assertNotIn("pt-callback trigger", html_content)
+        self.assertNotIn("pt-scope check target.yaml", html_content)
+        self.assertIn("pt-eng new ${nombre} --domain ${target}", html_content)
+        output = io.StringIO()
+        with patch("sys.stdout", output):
+            guide_helper.imprimir_plan_wizard("example-audit", "example.test")
+        self.assertIn("pt-eng new example-audit --domain example.test", output.getvalue())
+        self.assertIn("--dry-run", output.getvalue())
+        with self.assertRaises(ValueError):
+            guide_helper.imprimir_plan_wizard("bad;touch", "example.test")
         # 3. Comprobar presencia de la guía en workspace-seed
         seed_guia = REPO_ROOT / "workspace-seed" / "guia.html"
         self.assertTrue(seed_guia.is_file(), "workspace-seed/guia.html no existe")
@@ -2023,6 +2207,12 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(build_inputs))
     dashboard_backup = load_module('dashboard_backup_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_dashboard_backup.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(dashboard_backup))
+    report_safety = load_module("report_safety_tests", REPO_ROOT / "scripts" / "verify" / "test_report_safety.py")
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(report_safety))
+    scope_revision = load_module("scope_revision_tests", REPO_ROOT / "scripts" / "verify" / "test_scope_revision.py")
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(scope_revision))
+    authorization = load_module("authorization_tests", REPO_ROOT / "scripts" / "verify" / "test_authorization.py")
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(authorization))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

@@ -15,6 +15,37 @@ class TestScopeValidation(unittest.TestCase):
         self.workspace = WorkspaceSyncService(self.root / "workspace")
         self.workspace.create_engagement("sample")
 
+    def test_initial_scope_is_empty_without_a_target(self):
+        data = self.workspace.get_target_yaml("sample")
+        self.assertFalse(any(data["scope"]["in_scope"].values()))
+        self.assertFalse(any(data["scope"]["out_of_scope"].values()))
+        self.assertEqual(data["engagement"]["tos_reference"], "")
+
+    def test_initial_domain_does_not_authorize_subdomains_or_add_examples(self):
+        from seclab_scope import check_scope
+        self.workspace.create_engagement("exact", domain="example.test")
+        data = self.workspace.get_target_yaml("exact")
+        self.assertEqual(data["scope"]["in_scope"]["domains"], ["example.test"])
+        self.assertEqual(data["scope"]["in_scope"]["endpoints"], [])
+        self.assertEqual(check_scope("example.test", data)[0], "IN_SCOPE")
+        self.assertEqual(check_scope("sub.example.test", data)[0], "UNKNOWN")
+        self.assertFalse(any(data["scope"]["out_of_scope"].values()))
+
+    def test_explicit_wildcard_and_ip_are_preserved(self):
+        from seclab_scope import check_scope
+        for name, target in (("wild", "*.example.test"), ("v4", "192.0.2.1"), ("v6", "2001:db8::1")):
+            self.workspace.create_engagement(name, domain=target)
+            data = self.workspace.get_target_yaml(name)
+            expected = "sub.example.test" if name == "wild" else target
+            self.assertEqual(check_scope(expected, data)[0], "IN_SCOPE")
+            self.assertEqual(sum(len(values) for values in data["scope"]["in_scope"].values()), 1)
+
+    def test_invalid_initial_target_fails_before_creating_project(self):
+        from app.services.workspace_sync import ScopeValidationError
+        with self.assertRaises(ScopeValidationError):
+            self.workspace.create_engagement("invalid", domain="https://example.test/api")
+        self.assertFalse((self.root / "workspace" / "engagements" / "invalid").exists())
+
     def _scope_payload(self, **overrides):
         payload = self.workspace.get_target_yaml("sample")
         payload["scope"] = {

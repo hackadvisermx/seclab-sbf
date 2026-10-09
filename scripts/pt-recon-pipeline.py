@@ -11,22 +11,26 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 
 import argparse
 import datetime
+import hashlib
 import ipaddress
 import json
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import socket
 import subprocess
 import sys
+import tempfile
+import time
 import urllib.request
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_scope import (ScopeError, normalize_target, is_ip, domain_matches,
-                          parse_simple_yaml_lists, load_scope_rules, load_target_yaml, load_scope_txt, check_scope)
+                          parse_simple_yaml_lists, load_scope_rules, load_target_yaml, load_scope_txt, check_scope, authorization_contract, require_authorization)
 
 from seclab_recon_probe import ProbeClient, operational_limits
 
@@ -154,14 +158,103 @@ class StageError(RuntimeError):
 
 
 class ReconPipeline:
-    def __init__(self, engagement_dir: pathlib.Path, dry_run: bool = False):
+    def __init__(self, engagement_dir: pathlib.Path, dry_run: bool = False, live: bool = False):
         self.engagement_dir = engagement_dir.resolve()
         self.recon_dir = self.engagement_dir / "recon"
         self.patterns_dir = self.recon_dir / "patterns"
         self.dry_run = dry_run
+        self.live = live and not dry_run
+        self.progress = {'run_id': os.environ.get('SECLAB_RECON_RUN_ID'), 'stage': None,
+                         'command': None, 'command_status': None, 'completed_stages': [],
+                         'recent_output': [], 'events': []}
         self.scope_data = load_scope_rules(self.engagement_dir)
         self.limits = operational_limits(self.scope_data)
+        self.scope_contract = self._contract(self.scope_data)
+        self.scope_revision = self._revision(self.scope_contract)
         self.tools = detect_tools()
+
+    @staticmethod
+    def _contract(data):
+        return {'scope': data['scope'], 'operational_limits': operational_limits(data),
+                'authorization': authorization_contract(data)}
+
+    @staticmethod
+    def _revision(contract):
+        return hashlib.sha256(json.dumps(contract, sort_keys=True, ensure_ascii=False,
+                                        separators=(',', ':')).encode('utf-8')).hexdigest()
+
+    def preview(self, stage='all', simulate=False):
+        stages = ['subdomains', 'probe', 'urls', 'patterns'] if stage == 'all' else [stage]
+        if any(value not in ('subdomains', 'probe', 'urls', 'patterns') for value in stages):
+            raise ScopeError('Etapa de reconocimiento no válida.')
+        hosts_input = self._read_lines('subdomains.txt')
+        urls_input = self._read_lines('urls_all.txt')
+        bases = sorted({value[2:] if value.startswith('*.') else value for value in self.get_in_scope_domains()})
+        plan = []
+        for name in stages:
+            pending = stage == 'all' and name in ('probe', 'patterns')
+            discarded = []
+            if name in ('subdomains', 'urls'):
+                targets = bases
+                interaction = 'passive' if bases else 'local'
+                source = 'Dominios base consultados en fuentes externas; no reciben tráfico directo.'
+            else:
+                if name == 'probe':
+                    targets, discarded = self.filter_domains_by_scope(hosts_input)
+                else:
+                    targets = []
+                    for value in sorted(set(urls_input)):
+                        verdict, reason = check_scope(value, self.scope_data)
+                        if verdict == 'IN_SCOPE':
+                            targets.append(value)
+                        else:
+                            discarded.append({'target': value, 'verdict': verdict, 'reason': reason})
+                interaction = 'active' if name == 'probe' else 'local'
+                source = 'recon/subdomains.txt' if name == 'probe' else 'recon/urls_all.txt'
+            reasons = []
+            if not simulate and interaction != 'local' and (targets or pending):
+                try:
+                    require_authorization(self.scope_data, interaction)
+                except ScopeError as error:
+                    reasons.append(str(error))
+            if name == 'probe' and len(targets) > self.limits['max_probe_targets']:
+                reasons.append('Demasiados objetivos para max_probe_targets; revisa la lista.')
+            if not simulate:
+                if name == 'probe' and not pending and not (self.recon_dir / 'subdomains.txt').is_file():
+                    reasons.append('Falta recon/subdomains.txt; ejecuta subdominios o prepara una lista autorizada.')
+                if name == 'patterns' and not pending and not (self.recon_dir / 'urls_all.txt').is_file():
+                    reasons.append('Falta recon/urls_all.txt para clasificar patrones.')
+                tools = {'subdomains': ('subfinder', 'assetfinder', 'findomain'), 'urls': ('gau', 'waybackurls')}.get(name)
+                if tools and targets and not any(self.tools.get(tool) for tool in tools):
+                    reasons.append('No hay herramientas disponibles para esta etapa; reconstruye la imagen.')
+                if name == 'patterns' and (targets or pending) and not self.tools.get('gf'):
+                    reasons.append('gf no está disponible; reconstruye la imagen.')
+                if name == 'subdomains' and not bases and not hosts_input and not self.scope_data['scope']['in_scope'].get('ips'):
+                    reasons.append('No hay dominios ni IPs explícitas; para CIDR prepara una lista autorizada.')
+            target_reasons = {target: (('Consulta pasiva derivada de reglas: ' + ', '.join(rule for rule in self.get_in_scope_domains() if rule.lstrip('*.') == target)) if name in ('subdomains', 'urls') else check_scope(target, self.scope_data)[1]) for target in targets[:50]}
+            plan.append({'stage': name, 'interaction': interaction, 'source': source,
+                         'targets': targets[:50], 'target_reasons': target_reasons, 'targets_count': len(targets),
+                         'discarded': discarded[:50], 'discarded_count': len(discarded),
+                         'targets_pending': pending, 'block_reasons': reasons})
+        revision = self._revision({'engagement': str(self.engagement_dir), 'scope_revision': self.scope_revision, 'stage': stage,
+                                   'dry_run': simulate, 'hosts': hosts_input, 'urls': urls_input})
+        return {'success': True, 'stage': stage, 'dry_run': simulate,
+                'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'authorization': {**{key: value for key, value in self.scope_contract['authorization'].items() if key != 'reference'},
+                                  'reference_present': bool(self.scope_contract['authorization']['reference'])},
+                'scope_revision': self.scope_revision, 'plan_revision': revision,
+                'operational_limits': self.limits, 'stages': plan,
+                'can_start': not any(row['block_reasons'] for row in plan)}
+
+    def revalidate_scope(self, target=None):
+        current = load_scope_rules(self.engagement_dir)
+        if self._revision(self._contract(current)) != self.scope_revision:
+            raise ScopeError('El alcance o sus límites cambiaron durante el reconocimiento; no se iniciarán nuevas acciones. Simula y ejecuta un plan nuevo.')
+        if target is not None:
+            require_authorization(current, 'active')
+            verdict, reason = check_scope(target, current)
+            if verdict != 'IN_SCOPE':
+                raise ScopeError(f'Acción bloqueada por alcance para {target}: {verdict} ({reason}).')
 
     def prepare_directories(self):
         if not self.dry_run:
@@ -200,14 +293,75 @@ class ReconPipeline:
             temporary.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
             temporary.replace(path)
 
-    def _tool(self, name, arguments, timeout=180):
+    def _emit(self, event, **fields):
+        if not self.live:
+            return
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        if event == 'command_start':
+            self.progress.update(recent_output=[], command_started_at=now)
+        output = fields.pop('output', None)
+        self.progress.update(fields, updated_at=now)
+        if output is not None:
+            lines = [line[:2000] for line in output.splitlines() if line.strip()]
+            self.progress['recent_output'] = (self.progress['recent_output'] + lines)[-80:]
+            for line in lines:
+                print(line, flush=True)
+        else:
+            self.progress['events'] = (self.progress['events'] + [{'event': event, 'at': now, **fields}])[-32:]
+            print(f"[RECON] {event}: " + str(fields.get('command') or fields.get('stage') or fields.get('status') or ''), flush=True)
+        temporary = self.recon_dir / '.progress.json.tmp'
+        temporary.write_text(json.dumps(self.progress, ensure_ascii=False), encoding='utf-8')
+        temporary.replace(self.recon_dir / 'progress.json')
+
+    def _stream_tool(self, command, timeout):
+        with tempfile.NamedTemporaryFile(delete=False) as out, tempfile.NamedTemporaryFile(delete=False) as err:
+            try:
+                with open(out.name, 'rb') as output_reader, open(err.name, 'rb') as error_reader:
+                    pathlib.Path(out.name).unlink()
+                    pathlib.Path(err.name).unlink()
+                    proc = subprocess.Popen(command, stdout=out, stderr=err)
+                    deadline = time.monotonic() + timeout
+                    try:
+                        while True:
+                            finished = proc.poll() is not None
+                            for reader in (output_reader, error_reader):
+                                chunk = reader.read()
+                                if chunk:
+                                    self._emit('output', output=chunk.decode('utf-8', errors='replace'))
+                            if finished:
+                                break
+                            if time.monotonic() >= deadline:
+                                raise subprocess.TimeoutExpired(command, timeout)
+                            time.sleep(0.1)
+                    finally:
+                        if proc.poll() is None:
+                            proc.kill()
+                        proc.wait()
+                    output_reader.seek(0)
+                    error_reader.seek(0)
+                    return subprocess.CompletedProcess(command, proc.returncode,
+                        output_reader.read().decode('utf-8', errors='replace'), error_reader.read().decode('utf-8', errors='replace'))
+            finally:
+                pathlib.Path(out.name).unlink(missing_ok=True)
+                pathlib.Path(err.name).unlink(missing_ok=True)
+
+    def _tool(self, name, arguments, timeout=180, interaction='passive'):
+        self.revalidate_scope()
+        require_authorization(load_scope_rules(self.engagement_dir), interaction)
+        command = [self.tools[name], *arguments]
+        self._emit('command_start', command=shlex.join(command), command_status='running')
         try:
-            result = subprocess.run([self.tools[name], *arguments], capture_output=True, text=True, timeout=timeout, check=False)
+            result = self._stream_tool(command, timeout) if self.live else subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
+            self._emit('command_end', command_status='failed')
             raise StageError(f'{name}: tiempo agotado; los resultados anteriores se conservan.') from None
         except OSError:
+            self._emit('command_end', command_status='failed')
             raise StageError(f'{name}: no se pudo ejecutar; los resultados anteriores se conservan.') from None
+        self._emit('command_end', command_status='completed' if result.returncode == 0 else 'failed', exit_code=result.returncode)
         if result.returncode != 0:
+            if name == 'subfinder' and 'Could not create provider config file' in (result.stderr or ''):
+                raise StageError('subfinder: no se pudo preparar provider-config.yaml; reconstruye la imagen con la configuración precargada. No se usan resultados parciales.')
             raise StageError(f'{name}: código de salida {result.returncode}; no se usan resultados parciales.')
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
@@ -219,6 +373,8 @@ class ReconPipeline:
         bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in domains})
         if self.dry_run:
             return {'stage': 'subdomains', 'status': 'simulated', 'planned_passive_queries': bases}
+        if bases:
+            require_authorization(load_scope_rules(self.engagement_dir), 'passive')
         available = [name for name in ('subfinder', 'assetfinder', 'findomain') if self.tools.get(name)]
         if bases and not available:
             raise StageError('No hay enumeradores pasivos disponibles; no se inventaron subdominios.')
@@ -250,8 +406,15 @@ class ReconPipeline:
             raise StageError('Demasiados objetivos para max_probe_targets; no se inició el sondeo.')
         if self.dry_run:
             return {'stage': 'probe', 'status': 'simulated', 'planned_targets': hosts, 'discarded': discarded}
+        if hosts:
+            require_authorization(load_scope_rules(self.engagement_dir), 'active')
         previous_live = set(self._read_lines('live_hosts.txt'))
-        observations = ProbeClient(self.scope_data, self.limits).probe(hosts) if hosts else []
+        self._emit('command_start', command=f'Sondeo HTTP interno: GET / por HTTP y HTTPS; {len(hosts)} hosts autorizados', command_status='running')
+        self.revalidate_scope()
+        client = ProbeClient(self.scope_data, self.limits, before_request=self.revalidate_scope)
+        observations = client.probe(hosts, on_result=lambda rows: self._emit('output', output='\n'.join(
+            f"{row.get('url', row.get('host'))}: {row['status']} {row.get('http_status', '')}" for row in rows))) if self.live else client.probe(hosts)
+        self._emit('command_end', command_status='completed')
         live = sorted({row['url'] for row in observations if row['status'] == 'response'})
         new_live = sorted(set(live) - previous_live)
         self._write_lines('live_hosts.txt', live)
@@ -289,6 +452,8 @@ class ReconPipeline:
         bases = sorted({domain[2:] if domain.startswith('*.') else domain for domain in self.get_in_scope_domains()})
         if self.dry_run:
             return {'stage': 'urls', 'status': 'simulated', 'planned_passive_queries': bases}
+        if bases:
+            require_authorization(load_scope_rules(self.engagement_dir), 'passive')
         available = [name for name in ('gau', 'waybackurls') if self.tools.get(name)]
         if bases and not available:
             raise StageError('No hay herramientas de URLs históricas; no se inventaron URLs.')
@@ -319,7 +484,7 @@ class ReconPipeline:
             temporary.write_text(''.join(url + '\n' for url in urls), encoding='utf-8')
             outputs = {}
             for pattern in DEFAULT_GF_PATTERNS:
-                matches = self._tool('gf', [pattern, str(temporary)], 60) if urls else []
+                matches = self._tool('gf', [pattern, str(temporary)], 60, interaction='local') if urls else []
                 outputs[pattern] = sorted({value for value in matches if check_scope(value, self.scope_data)[0] == 'IN_SCOPE'})
             for pattern, matches in outputs.items():
                 self._write_lines('patterns/' + pattern + '.txt', matches)
@@ -331,12 +496,16 @@ class ReconPipeline:
     def generate_summary(self, results):
         failed = any(result.get('status') == 'failed' for result in results.values())
         resumable_from = next((name for name, result in results.items() if result.get('status') == 'failed'), None)
+        failure = results.get(resumable_from, {})
         summary = {'engagement': self.engagement_dir.name,
                    'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                    'in_scope_domains': self.get_in_scope_domains(), 'stages_executed': list(results),
                    'status': 'failed' if failed else 'simulated' if self.dry_run else 'completed',
+                   'failure_kind': failure.get('failure_kind'), 'error': failure.get('error'),
                    'resumable_from': resumable_from,
                    'dry_run': self.dry_run, 'operational_limits': self.limits,
+                   'run_id': self.progress['run_id'],
+                   'scope_revision': self.scope_revision, 'scope_contract': self.scope_contract,
                    'stage_results': results, 'tools_available': {name: bool(path) for name, path in self.tools.items()},
                    'metrics_source': 'none' if self.dry_run else 'previous_artifacts' if failed else 'artifacts',
                    'subdomains_count': 0, 'subdomains_discarded_out_of_scope': 0, 'subdomains_new_count': 0,
@@ -372,30 +541,42 @@ class ReconPipeline:
         if stage == 'all' and resume and not self.dry_run:
             checkpoint = self._load_checkpoint()
             if checkpoint:
+                if checkpoint.get('scope_revision') != self.scope_revision:
+                    raise ScopeError('El checkpoint no corresponde al alcance actual. Simula y reinicia sin --resume; se conservan los artefactos anteriores.')
                 results.update(checkpoint['completed'])
         elif stage != 'all' and not self.dry_run:
             # Una etapa manual rompe el orden que asume la cadena automática;
             # el checkpoint de "all" ya no es fiable para reanudar.
             checkpoint_path.unlink(missing_ok=True)
         failed_stage = None
+        self.progress['completed_stages'] = list(results)
+        self._emit('run_start', status='running', selected_stage=stage, total_stages=4 if stage == 'all' else 1)
         for name, action in (('subdomains', self.run_subdomain_enumeration), ('probe', self.run_live_probing),
                              ('urls', self.run_url_harvesting), ('patterns', self.run_pattern_classification)):
             if stage not in ('all', name):
                 continue
             if name in results and results[name].get('status') != 'failed':
                 continue
+            self._emit('stage_start', stage=name, stage_status='running', command=None, command_status=None, recent_output=[])
             try:
+                self.revalidate_scope()
                 results[name] = action()
+                results[name]['interaction'] = 'simulation' if self.dry_run else {'subdomains': 'passive', 'probe': 'active', 'urls': 'passive', 'patterns': 'local'}[name]
+                self.progress['completed_stages'].append(name)
+                self._emit('stage_end', stage=name, stage_status=results[name]['status'])
             except (StageError, ScopeError, OSError) as error:
-                results[name] = {'stage': name, 'status': 'failed', 'error': str(error)}
+                failure_kind = 'scope_guard' if isinstance(error, ScopeError) else 'technical'
+                results[name] = {'stage': name, 'status': 'failed', 'error': str(error), 'failure_kind': failure_kind}
                 failed_stage = name
+                self._emit('stage_end', stage=name, stage_status='failed', error=str(error), failure_kind=failure_kind)
                 break
         summary = self.generate_summary(results)
+        self._emit('run_end', status=summary['status'])
         if stage == 'all' and not self.dry_run:
             if failed_stage:
                 completed = {name: result for name, result in results.items() if result.get('status') != 'failed'}
                 self._write_lines('.checkpoint.json', [json.dumps(
-                    {'completed': completed, 'failed_stage': failed_stage,
+                    {'completed': completed, 'failed_stage': failed_stage, 'scope_revision': self.scope_revision,
                      'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat()},
                     ensure_ascii=False)])
             else:
@@ -411,6 +592,26 @@ class ReconPipeline:
         return {'summary': summary, 'stage_results': results, 'dry_run': self.dry_run}
 
 
+def retry_command(eng_dir, summary):
+    options = '--resume' if (eng_dir / 'recon' / '.checkpoint.json').is_file() else '--stage ' + shlex.quote(summary['resumable_from'])
+    return f'pt-recon {shlex.quote(str(eng_dir))} {options}'
+
+
+def record_initial_failure(error, stage):
+    descriptor = os.environ.get('SECLAB_RECON_FAILURE_FD')
+    if not descriptor:
+        return
+    try:
+        payload = {'schema_version': 1, 'run_id': os.environ.get('SECLAB_RECON_RUN_ID'),
+                   'stage': stage, 'status': 'failed',
+                   'failure_kind': 'scope_guard' if isinstance(error, ScopeError) else 'technical',
+                   'error': str(error)[:2000]}
+        with os.fdopen(os.dup(int(descriptor)), 'wb') as output:
+            output.write(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+    except (OSError, ValueError):
+        pass
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """Ejecuta el pipeline de reconocimiento."""
     if args.resume and args.stage != 'all':
@@ -423,9 +624,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        pipeline = ReconPipeline(eng_dir, dry_run=args.dry_run)
+        pipeline = ReconPipeline(eng_dir, dry_run=args.dry_run, live=not args.json)
+        if args.expected_plan and pipeline.preview(args.stage, args.dry_run)['plan_revision'] != args.expected_plan:
+            raise ScopeError('El plan revisado cambió; vuelve a revisar la vista previa antes de iniciar.')
         res = pipeline.run_all(stage=args.stage, resume=args.resume)
     except (ScopeError, OSError) as error:
+        record_initial_failure(error, args.stage)
         sys.stderr.write(f"Error: {error}\n")
         return 1
 
@@ -459,8 +663,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         if result.get("error"):
             print("  Error: " + result["error"])
     if summary.get("resumable_from") and not args.dry_run:
-        print(f"  Para reintentar solo desde la etapa fallida: pt-recon run {eng_dir.name} --resume\n")
+        print(f"  Para reintentar la etapa fallida: {retry_command(eng_dir, summary)}\n")
     return 1 if summary["status"] == "failed" else 0
+
+
+def cmd_preview(args):
+    directory = resolve_engagement_dir(args.target)
+    if not directory:
+        raise ScopeError('No se pudo localizar el engagement para revisar el plan.')
+    result = ReconPipeline(directory, dry_run=True).preview(args.stage, args.dry_run)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -500,7 +713,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         if pats:
             print(f"  Patrones de riesgo gf:    {', '.join(pats)}")
     if summary.get("resumable_from"):
-        print(f"  Pendiente de reanudar en: {summary['resumable_from']} (pt-recon run {eng_dir.name} --resume)")
+        print(f"  Pendiente de reintentar en: {summary['resumable_from']} ({retry_command(eng_dir, summary)})")
     print()
     return 0
 
@@ -571,7 +784,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Con --stage all (por defecto): omite las etapas que ya completaron en el intento anterior y continúa desde la que falló.",
     )
     p_run.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado.")
+    p_run.add_argument('--expected-plan', default=None, help='Revisión de la vista previa que debe conservarse al iniciar.')
     p_run.set_defaults(func=cmd_run)
+
+    p_preview = subparsers.add_parser('preview', help='Revisa targets, permisos y límites sin tráfico ni escritura de artefactos.')
+    p_preview.add_argument('target')
+    p_preview.add_argument('--stage', choices=['all', 'subdomains', 'probe', 'urls', 'patterns'], default='all')
+    p_preview.add_argument('--dry-run', action='store_true')
+    p_preview.set_defaults(func=cmd_preview)
 
     # Subcomando: status
     p_status = subparsers.add_parser("status", help="Muestra métricas del reconocimiento activo.")

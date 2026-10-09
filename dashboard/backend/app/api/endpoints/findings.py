@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import FindingDetail, FindingCreate
-from app.services.workspace_sync import workspace_service
+from app.services.workspace_sync import workspace_service, FindingUpdateError
 
 router = APIRouter(prefix="/findings", tags=["Hallazgos & Evidencias"])
 
@@ -30,7 +30,8 @@ def calculate_cvss_score(payload: Dict[str, str]):
 
     iss = 1 - ((1 - cia_weights.get(c, 0.0)) * (1 - cia_weights.get(i, 0.0)) * (1 - cia_weights.get(a, 0.0)))
 
-    if impact <= 0 if (impact := (7.52 * (iss - 0.029) - 3.25 * ((iss - 0.02) ** 15)) if scope_changed else (6.42 * iss)) else False:
+    impact = (7.52 * (iss - 0.029) - 3.25 * ((iss - 0.02) ** 15)) if scope_changed else 6.42 * iss
+    if impact <= 0:
         base_score = 0.0
     else:
         if not scope_changed:
@@ -39,7 +40,8 @@ def calculate_cvss_score(payload: Dict[str, str]):
             base_score = min(1.08 * (impact + 8.22 * av_weights.get(av, 0.85) * ac_weights.get(ac, 0.77) * pr_weight * ui_weights.get(ui, 0.85)), 10.0)
 
     import math
-    rounded_score = math.ceil(base_score * 10) / 10
+    scaled_score = round(base_score * 100000)
+    rounded_score = scaled_score / 100000 if scaled_score % 10000 == 0 else (math.floor(scaled_score / 10000) + 1) / 10
 
     if rounded_score >= 9.0:
         sev = "CRITICAL"
@@ -74,7 +76,10 @@ def get_single_finding(eng_id: str, slug: str, type: str = Query("engagement")):
 @router.post("/{eng_id}", response_model=FindingDetail)
 def create_or_update_finding(eng_id: str, payload: FindingCreate, type: str = Query("engagement")):
     """Crea o actualiza una ficha en evidence/<slug>.md bajo el estándar Evidence-First."""
-    return workspace_service.save_finding(eng_id, payload, type)
+    try:
+        return workspace_service.save_finding(eng_id, payload, type)
+    except FindingUpdateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.delete("/{eng_id}/{slug}")

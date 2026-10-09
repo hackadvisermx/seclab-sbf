@@ -113,17 +113,24 @@ class RunnerService:
     def pack_engagement(self, engagement_dir: str, sanitize: bool = True, output_path: Optional[str] = None) -> Dict[str, Any]:
         """Empaqueta y calcula hashes SHA-256 usando pt-engagement-packer.py."""
         script = self._script("pt-engagement-packer.py", "pt-engagement-packer")
-        cmd = [self.py_bin, str(script), "pack", str(engagement_dir)]
+        cmd = [self.py_bin, str(script), "pack", str(engagement_dir), "-j"]
         if sanitize:
             cmd.append("--sanitize")
         if output_path:
             cmd.extend(["-o", str(output_path)])
 
         proc = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            result = json.loads(proc.stdout)
+        except (ValueError, TypeError):
+            result = {}
+        if not isinstance(result, dict):
+            result = {}
         return {
-            "success": proc.returncode == 0,
+            "success": proc.returncode == 0 and result.get("status") == "success",
             "stdout": proc.stdout,
             "stderr": proc.stderr,
+            "archive_path": result.get("archive_path") if proc.returncode == 0 else None,
         }
 
     def get_agent_context(self, engagement_dir: str, skill_name: Optional[str] = None) -> str:

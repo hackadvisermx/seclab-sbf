@@ -3,10 +3,12 @@ import json
 import pathlib
 import re
 import sys
+import uuid
 import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
 from app.core.project_trash import ProjectTrash
+from app.core.artifact_snapshot import read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs, normalize_status, normalize_verification_rationale, validate_confirmation
 from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
@@ -20,12 +22,57 @@ class ScopeValidationError(ValueError):
     """Alcance inválido: target.yaml no se escribe hasta corregirlo."""
 
 
-def _validate_scope_payload(data: Dict[str, Any]) -> None:
-    """Valida scope/operational_limits con las mismas reglas que pt-scope-validator
-    antes de persistir target.yaml, para no dejar en disco un archivo que luego
-    haría fallar pt-scope o el pipeline de reconocimiento."""
-    if not isinstance(data, dict) or "scope" not in data:
-        return
+class FindingUpdateError(ValueError):
+    pass
+
+
+def _finding_refs(metadata):
+    try:
+        return {'artifact_refs': normalize_artifact_refs(metadata.get('artifact_refs', []))}
+    except ValueError as error:
+        return {'artifact_refs': [], 'artifact_refs_error': str(error)}
+
+
+def _finding_review(metadata):
+    rationale = ''
+    error = None
+    try:
+        rationale = normalize_verification_rationale(metadata.get('verification_rationale'))
+        validate_confirmation(metadata)
+    except ValueError as exc:
+        error = str(exc)
+    return {'verification_rationale': rationale, 'confirmation_error': error}
+
+
+def _validate_finding_confirmation(directory, metadata):
+    try:
+        validate_confirmation(metadata)
+        if normalize_status(metadata.get('status')) == 'PROVEN':
+            validate_artifact_refs(directory, metadata.get('artifact_refs', []))
+            module = _scope_module()
+            data = module.load_target_yaml(directory / 'target.yaml')
+            verdict, _ = module.check_scope(metadata['asset'], data)
+            if verdict != 'IN_SCOPE':
+                raise ValueError('El activo confirmado debe estar dentro del alcance vigente.')
+    except (OSError, ValueError) as error:
+        raise FindingUpdateError('No se confirmó ni guardó la ficha: ' + str(error)) from error
+
+
+def _finding_markdown(metadata, body):
+    fields = dict(metadata)
+    has_references = 'artifact_refs' in fields
+    references = fields.pop('artifact_refs', None)
+    has_rationale = 'verification_rationale' in fields
+    rationale = fields.pop('verification_rationale', None)
+    header = yaml.dump(fields, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    if has_references:
+        header += 'artifact_refs: ' + json.dumps(normalize_artifact_refs(references), ensure_ascii=True) + '\n'
+    if has_rationale:
+        header += 'verification_rationale: ' + json.dumps(normalize_verification_rationale(rationale), ensure_ascii=True) + '\n'
+    return '---\n' + header + '---\n\n' + body
+
+
+def _scope_module():
     scripts_dir = str(SCRIPTS_DIR)
     if scripts_dir not in sys.path:
         sys.path.insert(0, scripts_dir)
@@ -33,25 +80,32 @@ def _validate_scope_payload(data: Dict[str, Any]) -> None:
         import seclab_scope
     except ImportError as exc:
         raise ScopeValidationError(f"No se pudo cargar el validador de alcance: {exc}") from exc
+    return seclab_scope
+
+
+def _validate_scope_payload(data: Dict[str, Any]) -> None:
+    if not isinstance(data, dict) or not ({"scope", "authorization"} & set(data)):
+        return
+    module = _scope_module()
     try:
-        seclab_scope.validate_scope(data)
-    except seclab_scope.ScopeError as exc:
+        module.validate_scope(data)
+    except module.ScopeError as exc:
         raise ScopeValidationError(str(exc)) from exc
 
 
-def _parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
-    """Extrae metadatos YAML frontmatter y cuerpo markdown."""
-    frontmatter = {}
-    body = content
-    if content.startswith("---"):
-        parts = content.split("---", 2)
-        if len(parts) >= 3:
-            try:
-                frontmatter = yaml.safe_load(parts[1]) or {}
-            except Exception:
-                pass
-            body = parts[2].strip()
-    return frontmatter, body
+def _parse_frontmatter(content: str, strict: bool = False) -> Tuple[Dict[str, Any], str]:
+    match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)(.*)\Z", content, re.DOTALL)
+    if not match:
+        if strict and content.startswith("---"):
+            raise FindingUpdateError("Frontmatter inválido; no se sobrescribió la ficha.")
+        return {}, content
+    try:
+        metadata = yaml.safe_load(match[1]) or {}
+    except yaml.YAMLError as error:
+        if strict:
+            raise FindingUpdateError("Metadatos YAML inválidos; no se sobrescribió la ficha.") from error
+        metadata = {}
+    return metadata, match[2].strip()
 
 
 class WorkspaceSyncService:
@@ -189,6 +243,11 @@ class WorkspaceSyncService:
             target_dir = self._resolve_dir(clean_name, eng_type)
             if target_dir.exists():
                 raise ValueError("Ya existe un proyecto con ese nombre.")
+            scope_module = _scope_module()
+            try:
+                initial_scope = scope_module.initial_scope(domain)
+            except scope_module.ScopeError as error:
+                raise ScopeValidationError(str(error)) from error
             target_dir.mkdir(parents=True, exist_ok=False)
 
             for folder in ("recon", "fuzzing", "evidence", "loot", "screenshots"):
@@ -196,7 +255,7 @@ class WorkspaceSyncService:
 
             # Sembrar target.yaml
             now_date = datetime.date.today().isoformat()
-            sample_domain = domain or f"{clean_name}.local"
+            sample_domain = (domain or "").strip()
             sample_client = client or ("Plataforma CTF" if eng_type == "reto" else clean_name.capitalize())
 
             clean_subtype = (subtype or "machine") if eng_type == "reto" else None
@@ -209,28 +268,16 @@ class WorkspaceSyncService:
                     "created_at": now_date,
                     "auditor": "tester",
                     "client": sample_client,
-                    "tos_reference": "Autorización expresa / Reglas de Laboratorio",
-                    "emergency_contact": "security@local.internal",
+                    "tos_reference": "",
+                    "emergency_contact": "",
                 },
                 "network": {
                     "vpn_profile": "none",
                     "assigned_ip": "",
                     "gateway_dns": "",
                 },
-                "scope": {
-                    "in_scope": {
-                        "domains": [sample_domain, f"*.{sample_domain}"],
-                        "ips": [],
-                        "cidrs": [],
-                        "endpoints": [f"https://{sample_domain}/api"],
-                    },
-                    "out_of_scope": {
-                        "domains": [f"status.{sample_domain}"],
-                        "ips": [],
-                        "cidrs": [],
-                        "notes": ["Sistemas de terceros y pasarelas fuera de alcance"],
-                    },
-                },
+                "scope": initial_scope,
+                "authorization": scope_module.default_authorization(),
                 "operational_limits": {
                     "max_requests_per_second": 1,
                     "max_parallel_threads": 1,
@@ -332,13 +379,13 @@ class WorkspaceSyncService:
                     title=fm_data.get("title", slug.replace("-", " ").capitalize()),
                     severity=str(fm_data.get("severity", "MEDIUM")).upper(),
                     cvss_score=float(fm_data.get("cvss_score")) if fm_data.get("cvss_score") is not None else None,
-                    cvss_vector=fm_data.get("cvss_vector"),
+                    cvss_vector=fm_data.get("cvss_vector", fm_data.get("cvss_v31")),
                     cwe=fm_data.get("cwe"),
                     owasp=fm_data.get("owasp"),
                     asset=fm_data.get("asset"),
                     date=str(fm_data.get("date", datetime.date.today().isoformat())),
                     author=fm_data.get("author", "tester"),
-                    status=str(fm_data.get("status", "PROVEN")).upper(),
+                    status=str(fm_data.get("status") or "CANDIDATE").strip().upper() or "CANDIDATE",
                 )
                 findings.append(
                     FindingDetail(
@@ -347,6 +394,8 @@ class WorkspaceSyncService:
                         frontmatter=fm,
                         body=body,
                         engagement_id=eng_id,
+                        **_finding_refs(fm_data),
+                        **_finding_review(fm_data),
                     )
                 )
             except Exception:
@@ -366,13 +415,13 @@ class WorkspaceSyncService:
             title=fm_data.get("title", slug.replace("-", " ").capitalize()),
             severity=str(fm_data.get("severity", "MEDIUM")).upper(),
             cvss_score=float(fm_data.get("cvss_score")) if fm_data.get("cvss_score") is not None else None,
-            cvss_vector=fm_data.get("cvss_vector"),
+            cvss_vector=fm_data.get("cvss_vector", fm_data.get("cvss_v31")),
             cwe=fm_data.get("cwe"),
             owasp=fm_data.get("owasp"),
             asset=fm_data.get("asset"),
             date=str(fm_data.get("date", datetime.date.today().isoformat())),
             author=fm_data.get("author", "tester"),
-            status=str(fm_data.get("status", "PROVEN")).upper(),
+            status=str(fm_data.get("status") or "CANDIDATE").strip().upper() or "CANDIDATE",
         )
         return FindingDetail(
             slug=slug,
@@ -380,28 +429,70 @@ class WorkspaceSyncService:
             frontmatter=fm,
             body=body,
             engagement_id=eng_id,
+            **_finding_refs(fm_data),
+            **_finding_review(fm_data),
         )
 
     def save_finding(self, eng_id: str, finding_create: FindingCreate, eng_type: str = "engagement") -> FindingDetail:
         """Crea o actualiza una ficha en evidence/<slug>.md preservando el formato Evidence-First."""
         if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", finding_create.slug):
             raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
-        ev_dir = self._resolve_dir(eng_id, eng_type) / "evidence"
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        ev_dir = target_dir / "evidence"
+        references = None
+        if 'artifact_refs' in finding_create.model_fields_set:
+            try:
+                references = validate_artifact_refs(target_dir, finding_create.artifact_refs)
+            except (OSError, ValueError) as error:
+                raise FindingUpdateError('No se guardó la ficha: ' + str(error)) from error
         ev_dir.mkdir(parents=True, exist_ok=True)
         file_path = ev_dir / f"{finding_create.slug}.md"
+
+        if file_path.exists():
+            if finding_create.body is None:
+                raise FindingUpdateError("Para editar una ficha existente debes conservar su cuerpo Markdown completo.")
+            fm, _ = _parse_frontmatter(file_path.read_text(encoding="utf-8"), strict=True)
+            if not isinstance(fm, dict):
+                raise FindingUpdateError("Los metadatos de la ficha no son válidos; no se sobrescribió.")
+            for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status", "verification_rationale"):
+                if field in finding_create.model_fields_set:
+                    value = getattr(finding_create, field)
+                    if field in ("severity", "status") and value is not None:
+                        value = value.upper()
+                    fm[field] = value
+            if references is not None:
+                fm['artifact_refs'] = references
+            _validate_finding_confirmation(target_dir, fm)
+            try:
+                content = _finding_markdown(fm, finding_create.body)
+            except ValueError as error:
+                raise FindingUpdateError(str(error)) from error
+            temporary = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                temporary.write_text(content, encoding="utf-8")
+                temporary.chmod(file_path.stat().st_mode & 0o777)
+                temporary.replace(file_path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            return self.get_finding(eng_id, finding_create.slug, eng_type)
 
         now_date = datetime.date.today().isoformat()
         fm = {
             "title": finding_create.title,
             "severity": finding_create.severity.upper(),
-            "cvss_score": finding_create.cvss_score or 5.0,
+            "cvss_score": finding_create.cvss_score if finding_create.cvss_score is not None else 5.0,
             "cvss_vector": finding_create.cvss_vector or "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
             "cwe": finding_create.cwe or "CWE-200",
             "asset": finding_create.asset or "",
             "date": now_date,
             "author": "tester",
-            "status": (finding_create.status or "PROVEN").upper(),
+            "status": (finding_create.status or "CANDIDATE").strip().upper() or "CANDIDATE",
         }
+        if references is not None:
+            fm['artifact_refs'] = references
+        if 'verification_rationale' in finding_create.model_fields_set:
+            fm['verification_rationale'] = finding_create.verification_rationale
+        _validate_finding_confirmation(target_dir, fm)
 
         body_parts = []
         body_parts.append(f"## Descripción\n{finding_create.description or 'Detalles de la vulnerabilidad.'}\n")
@@ -418,7 +509,10 @@ class WorkspaceSyncService:
         body_parts.append(f"## Remediación y Mitigación\n{finding_create.remediation or 'Implementar validación estricta de entradas y principio de mínimo privilegio.'}\n")
 
         markdown_body = "\n".join(body_parts)
-        file_content = f"---\n{yaml.dump(fm, default_flow_style=False, sort_keys=False, allow_unicode=True)}---\n\n{markdown_body}"
+        try:
+            file_content = _finding_markdown(fm, markdown_body)
+        except ValueError as error:
+            raise FindingUpdateError(str(error)) from error
 
         file_path.write_text(file_content, encoding="utf-8")
 
@@ -428,6 +522,8 @@ class WorkspaceSyncService:
             frontmatter=FindingFrontmatter(**fm),
             body=markdown_body,
             engagement_id=eng_id,
+            **_finding_refs(fm),
+            **_finding_review(fm),
         )
 
     def delete_finding(self, eng_id: str, slug: str, eng_type: str = "engagement") -> bool:
@@ -505,7 +601,7 @@ class WorkspaceSyncService:
             except Exception:
                 credentials = []
 
-        cred_id = cred.get("id") or f"cred-{int(datetime.datetime.now().timestamp())}"
+        cred_id = cred.get("id") or f"cred-{uuid.uuid4().hex}"
         cred["id"] = cred_id
         cred["captured_at"] = cred.get("captured_at") or datetime.date.today().isoformat()
 
@@ -674,27 +770,7 @@ class WorkspaceSyncService:
 
     def get_artifact_content(self, eng_id: str, rel_path: str, eng_type: str = "engagement") -> Dict[str, Any]:
         """Lee el contenido de un archivo de artefacto de forma segura contra path traversal."""
-        target_dir = self._resolve_dir(eng_id, eng_type).resolve()
-        requested_path = (target_dir / rel_path).resolve()
-
-        if not requested_path.is_relative_to(target_dir) or not requested_path.is_file():
-            raise FileNotFoundError("Archivo de artefacto no encontrado o acceso denegado")
-
-        size = requested_path.stat().st_size
-        if size > 2 * 1024 * 1024:
-            content = f"[Archivo demasiado grande para previsualizar: {size} bytes]"
-        else:
-            try:
-                content = requested_path.read_text(encoding="utf-8", errors="replace")
-            except Exception as e:
-                content = f"[No se pudo decodificar archivo de texto: {str(e)}]"
-
-        return {
-            "name": requested_path.name,
-            "rel_path": rel_path,
-            "size": size,
-            "content": content,
-        }
+        return read_artifact_snapshot(self._resolve_dir(eng_id, eng_type), rel_path)
 
 
 workspace_service = WorkspaceSyncService()

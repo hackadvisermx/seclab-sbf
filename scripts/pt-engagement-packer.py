@@ -12,6 +12,7 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 import argparse
 import datetime
 import hashlib
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -22,6 +23,10 @@ import sys
 import tarfile
 import zipfile
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seclab_artifacts import read_artifact_snapshot, HASH_LIMIT
+from seclab_findings import requires_finding_review, finding_status_from_markdown
 
 # Patrones para sanitización automática de credenciales
 RE_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b")
@@ -128,29 +133,20 @@ def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib
     return None
 
 
-def ensure_report_built(engagement_dir: pathlib.Path) -> Optional[pathlib.Path]:
-    """Verifica si REPORT.md existe o lo compila automáticamente con pt-report-compiler."""
-    rep_file = engagement_dir / "REPORT.md"
-    if rep_file.is_file():
-        return rep_file
-
+def ensure_report_built(engagement_dir: pathlib.Path, artifact_reference_output=None) -> pathlib.Path:
+    """Recompila con el alcance y las fichas actuales antes de cada exportación."""
     compiler_path = pathlib.Path(__file__).resolve().parent / "pt-report-compiler.py"
     if not compiler_path.is_file():
         compiler_path = pathlib.Path("/usr/local/bin/pt-report-compiler")
-
-    if compiler_path.is_file():
-        spec = importlib.util.spec_from_file_location("report_compiler", compiler_path)
-        if spec and spec.loader:
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            try:
-                mod.build_report(engagement_dir)
-                if rep_file.is_file():
-                    return rep_file
-            except Exception:
-                pass
-
-    return rep_file if rep_file.is_file() else None
+    if not compiler_path.is_file():
+        raise ValueError("Reporte bloqueado: falta pt-report-compiler; reconstruye la imagen.")
+    spec = importlib.util.spec_from_file_location("report_compiler", compiler_path,
+            loader=importlib.machinery.SourceFileLoader("report_compiler", str(compiler_path)))
+    if not spec or not spec.loader:
+        raise ValueError("Reporte bloqueado: no se pudo cargar pt-report-compiler.")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.build_report(engagement_dir, artifact_reference_output=artifact_reference_output)
 
 
 def pack_engagement(
@@ -160,7 +156,10 @@ def pack_engagement(
     archive_format: str = "tar.gz",
 ) -> Dict[str, Any]:
     """Empaqueta los entregables del engagement con manifiesto SHA-256 y sanitización opcional."""
-    report_file = ensure_report_built(engagement_dir)
+    if (engagement_dir / "REPORT.md").is_symlink():
+        raise ValueError("Fuente de exportación no permitida: REPORT.md")
+    references = {}
+    report_file = ensure_report_built(engagement_dir, references)
     eng_name = engagement_dir.name
     now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
 
@@ -181,11 +180,27 @@ def pack_engagement(
     manifest_entries: List[str] = []
     total_redactions = 0
     packed_files: List[str] = []
+    source_records = []
+    source_hashes = {}
+
+    def read_source(source):
+        if source.is_symlink() or not source.resolve().is_relative_to(engagement_dir.resolve()):
+            raise ValueError(f"Fuente de exportación no permitida: {source.name}")
+        payload = source.read_bytes()
+        source_hashes[str(source)] = hashlib.sha256(payload).hexdigest()
+        return payload.decode("utf-8")
+
+    def record_source(source, destination, relative):
+        original_hash = source_hashes[str(source)]
+        export_hash = compute_sha256(destination)
+        source_records.append({"path": relative, "original_sha256": original_hash,
+                               "export_sha256": export_hash,
+                               "content_changed": original_hash != export_hash})
 
     try:
         # 1. REPORT.md
         if report_file and report_file.is_file():
-            rep_text = report_file.read_text(encoding="utf-8")
+            rep_text = read_source(report_file)
             if sanitize:
                 rep_text, red = sanitize_text(rep_text)
                 total_redactions += red
@@ -194,12 +209,13 @@ def pack_engagement(
             sha = compute_sha256(stg_rep)
             manifest_entries.append(f"{sha}  REPORT.md")
             packed_files.append("REPORT.md")
+            record_source(report_file, stg_rep, "REPORT.md")
 
         # 2. target.yaml y scope.txt
         for cfg_name in ("target.yaml", "scope.txt", "notes.md"):
             src_cfg = engagement_dir / cfg_name
             if src_cfg.is_file():
-                cfg_text = src_cfg.read_text(encoding="utf-8")
+                cfg_text = read_source(src_cfg)
                 if sanitize and cfg_name == "notes.md":
                     cfg_text, red = sanitize_text(cfg_text)
                     total_redactions += red
@@ -208,6 +224,7 @@ def pack_engagement(
                 sha = compute_sha256(stg_cfg)
                 manifest_entries.append(f"{sha}  {cfg_name}")
                 packed_files.append(cfg_name)
+                record_source(src_cfg, stg_cfg, cfg_name)
 
         # 3. evidence/*.md
         src_ev_dir = engagement_dir / "evidence"
@@ -217,7 +234,7 @@ def pack_engagement(
             for ev_file in sorted(src_ev_dir.glob("*.md")):
                 if ev_file.name.startswith("_"):
                     continue
-                ev_text = ev_file.read_text(encoding="utf-8")
+                ev_text = read_source(ev_file)
                 if sanitize:
                     ev_text, red = sanitize_text(ev_text)
                     total_redactions += red
@@ -227,21 +244,80 @@ def pack_engagement(
                 rel_path = f"evidence/{ev_file.name}"
                 manifest_entries.append(f"{sha}  {rel_path}")
                 packed_files.append(rel_path)
+                record_source(ev_file, dest_ev, rel_path)
 
         # 4. recon/ resúmenes
         src_recon = engagement_dir / "recon"
         if src_recon.is_dir():
             stg_recon = staging_dir / "recon"
             stg_recon.mkdir(parents=True, exist_ok=True)
-            for recon_candidate in ("live_hosts.txt", "subdomains.txt", "summary.json"):
+            for recon_candidate in ("live_hosts.txt", "subdomains.txt", "summary.json",
+                                    "probe_observations.jsonl", "recon.log", "urls_all.txt", "js_files.txt"):
                 rf = src_recon / recon_candidate
                 if rf.is_file():
                     rf_dest = stg_recon / recon_candidate
-                    shutil.copy2(rf, rf_dest)
+                    if rf.is_symlink() or not rf.resolve().is_relative_to(engagement_dir.resolve()):
+                        raise ValueError(f"Fuente de exportación no permitida: recon/{recon_candidate}")
+                    content = read_source(rf)
+                    if sanitize:
+                        content, red = sanitize_text(content)
+                        total_redactions += red
+                    rf_dest.write_text(content, encoding="utf-8")
                     sha = compute_sha256(rf_dest)
                     rel_path = f"recon/{recon_candidate}"
                     manifest_entries.append(f"{sha}  {rel_path}")
                     packed_files.append(rel_path)
+                    record_source(rf, rf_dest, rel_path)
+
+        terminal_log = engagement_dir / "terminal.log"
+        if terminal_log.is_file():
+            if terminal_log.is_symlink() or not terminal_log.resolve().is_relative_to(engagement_dir.resolve()):
+                raise ValueError("Fuente de exportación no permitida: terminal.log")
+            content = read_source(terminal_log)
+            if sanitize:
+                content, red = sanitize_text(content)
+                total_redactions += red
+            destination = staging_dir / "terminal.log"
+            destination.write_text(content, encoding="utf-8")
+            manifest_entries.append(f"{compute_sha256(destination)}  terminal.log")
+            packed_files.append("terminal.log")
+            record_source(terminal_log, destination, "terminal.log")
+
+        source_manifest = staging_dir / "source-manifest.json"
+        total = 0
+        for relative, expected_hash in references.items():
+            snapshot = read_artifact_snapshot(engagement_dir, relative, include_bytes=True)
+            total += snapshot['size']
+            if total > HASH_LIMIT or snapshot['sha256'] != expected_hash:
+                raise ValueError('Artefacto vinculado cambiado o fuera del límite: ' + relative)
+            payload = snapshot['_bytes']
+            if sanitize and (snapshot['preview_status'] in ('binary', 'decoded_with_replacement') or b'\0' in payload):
+                raise ValueError('No se puede sanitizar el artefacto vinculado binario: ' + relative)
+            destination = staging_dir / relative
+            if relative in packed_files:
+                original = next(row['original_sha256'] for row in source_records if row['path'] == relative)
+                if original != expected_hash:
+                    raise ValueError('Artefacto cambió al exportar: ' + relative)
+                continue
+            if sanitize:
+                try:
+                    text = payload.decode('utf-8')
+                except UnicodeDecodeError:
+                    raise ValueError('No se puede sanitizar el artefacto vinculado no UTF-8: ' + relative) from None
+                text, red = sanitize_text(text)
+                total_redactions += red
+                payload = text.encode('utf-8')
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(payload)
+            manifest_entries.append(f'{compute_sha256(destination)}  {relative}')
+            packed_files.append(relative)
+            source_records.append({'path': relative, 'original_sha256': expected_hash,
+                                   'export_sha256': compute_sha256(destination),
+                                   'content_changed': expected_hash != compute_sha256(destination)})
+        source_manifest.write_text(json.dumps({"schema_version": 1, "sanitized": sanitize,
+            "files": source_records}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        manifest_entries.append(f"{compute_sha256(source_manifest)}  source-manifest.json")
+        packed_files.append("source-manifest.json")
 
         # 5. Generar manifest.sha256
         manifest_file = staging_dir / "manifest.sha256"
@@ -290,13 +366,15 @@ def check_closure_readiness(engagement_dir: pathlib.Path) -> Tuple[bool, List[st
     # 1. Intentar delegar a AuditChecklistEvaluator si está disponible
     candidate_checklist_paths = [
         pathlib.Path(__file__).resolve().parent / "pt-audit-checklist.py",
+        pathlib.Path(__file__).resolve().parent / "pt-audit-checklist",
         pathlib.Path("/usr/local/bin/pt-audit-checklist"),
         pathlib.Path("./scripts/pt-audit-checklist.py"),
     ]
     for cp in candidate_checklist_paths:
         if cp.is_file():
             try:
-                spec = importlib.util.spec_from_file_location("pt_audit_checklist", cp)
+                spec = importlib.util.spec_from_file_location("pt_audit_checklist", cp,
+                    loader=importlib.machinery.SourceFileLoader("pt_audit_checklist", str(cp)))
                 if spec and spec.loader:
                     mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(mod)
@@ -325,22 +403,20 @@ def check_closure_readiness(engagement_dir: pathlib.Path) -> Tuple[bool, List[st
     finding_count = 0
     if ev_dir.is_dir():
         for f in sorted(ev_dir.glob("*.md")):
-            if f.name.startswith("_") or f.name.lower() == "readme.md":
+            if f.name.startswith(("_", ".")) or f.name.lower() == "readme.md":
                 continue
             finding_count += 1
             try:
                 content = f.read_text(encoding="utf-8")
-                status = "Confirmado"
+                status = finding_status_from_markdown(content)
                 fid = f.stem.upper()
                 if content.startswith("---"):
                     parts = content.split("---", 2)
                     if len(parts) >= 3:
                         for line in parts[1].splitlines():
-                            if line.strip().startswith("status:"):
-                                status = line.split(":", 1)[1].strip().strip("'\"")
-                            elif line.strip().startswith("id:"):
+                            if line.strip().startswith("id:"):
                                 fid = line.split(":", 1)[1].strip().strip("'\"")
-                if status.lower() in ("borrador", "unverified", "draft"):
+                if requires_finding_review(status):
                     unverified.append(fid)
             except Exception:
                 pass
@@ -488,7 +564,14 @@ def main() -> int:
 
     if args.subcommand == "pack":
         out_p = pathlib.Path(args.output).resolve() if args.output else None
-        res = pack_engagement(eng_dir, output_path=out_p, sanitize=args.sanitize, archive_format=args.format)
+        try:
+            res = pack_engagement(eng_dir, output_path=out_p, sanitize=args.sanitize, archive_format=args.format)
+        except (ValueError, OSError, ImportError) as error:
+            if args.json:
+                print(json.dumps({"status": "blocked", "message": str(error)}, ensure_ascii=False))
+            else:
+                print(f"[!] Exportación bloqueada: {error}", file=sys.stderr)
+            return 1
         if args.json:
             print(json.dumps(res, indent=2))
         else:

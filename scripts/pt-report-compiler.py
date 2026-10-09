@@ -9,12 +9,18 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 """
 
 import datetime
+import importlib.machinery
 import importlib.util
 import os
 import pathlib
 import re
+import json
 import sys
 from typing import Any, Dict, List, Optional, Tuple
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seclab_artifacts import validate_artifact_refs
+from seclab_findings import normalize_status, normalize_verification_rationale, validate_confirmation
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -51,6 +57,9 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
                 if ":" in line_str:
                     key, val = line_str.split(":", 1)
                     key = key.strip()
+                    if key in ('artifact_refs', 'verification_rationale'):
+                        metadata[key] = val.strip()
+                        continue
                     val = val.strip().strip("'\"")
                     # Manejo de comentarios inline
                     if " #" in val:
@@ -58,29 +67,6 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
                     metadata[key] = val
 
     return metadata, body
-
-
-def normalize_status(raw_status: str) -> str:
-    """Normaliza estados heterogeneos de hallazgos al ciclo Evidence-First."""
-    raw = str(raw_status or "").strip().upper()
-    status_map = {
-        "PROVEN": "PROVEN",
-        "CONFIRMADO": "PROVEN",
-        "VERIFIED": "PROVEN",
-        "CANDIDATE": "CANDIDATE",
-        "HIPOTESIS": "CANDIDATE",
-        "DISPROVED": "DISPROVED",
-        "FALSO_POSITIVO": "DISPROVED",
-        "FALSO POSITIVO": "DISPROVED",
-        "FALSE_POSITIVE": "DISPROVED",
-        "MITIGATED": "MITIGATED",
-        "MITIGADO": "MITIGATED",
-        "REMEDIATED": "MITIGATED",
-        "DRAFT": "DRAFT",
-        "BORRADOR": "DRAFT",
-        "BLOCKED": "BLOCKED",
-    }
-    return status_map.get(raw, raw if raw else "PROVEN")
 
 
 def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
@@ -111,7 +97,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         except ValueError:
             cvss_score = 0.0
 
-    normalized_status = normalize_status(meta.get("status", "PROVEN"))
+    normalized_status = normalize_status(meta.get("status"))
 
     has_negative_control = (
         "## 2b. Control Negativo" in body
@@ -130,7 +116,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         "id": finding_id,
         "title": title,
         "severity": severity,
-        "cvss_v31": meta.get("cvss_v31", ""),
+        "cvss_v31": meta.get("cvss_vector", meta.get("cvss_v31", "")),
         "cvss_score": cvss_score,
         "cwe": meta.get("cwe", "CWE-Unknown"),
         "asset": meta.get("asset", "N/A"),
@@ -139,25 +125,33 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         "date": meta.get("date", datetime.date.today().isoformat()),
         "audit_log": meta.get("audit_log", "terminal.log"),
         "body": body.strip(),
-        "has_poc": "```bash" in body or "curl " in body or "## 2. Pasos" in body,
+        "artifact_refs_raw": meta.get('artifact_refs', []),
+        "verification_rationale_raw": meta.get("verification_rationale", '""'),
+        "has_poc": "```bash" in body or "curl " in body or "## 2. Pasos" in body or "## Pasos para Reproducir" in body,
         "has_negative_control": has_negative_control,
         "has_bounded_proof": has_bounded_proof,
         "has_remediation": "## 5. Remediaci" in body or "## Remediaci" in body,
     }
 
 
-def get_findings(evidence_dir: pathlib.Path) -> List[Dict[str, Any]]:
+def get_findings(evidence_dir: pathlib.Path, strict: bool = False) -> List[Dict[str, Any]]:
     """Carga y ordena todos los hallazgos en el directorio de evidencia."""
     if not evidence_dir.is_dir():
         return []
 
+    if strict and evidence_dir.is_symlink():
+        raise ValueError("El directorio de evidencia no puede ser un enlace simbólico.")
     findings = []
     for f in sorted(evidence_dir.glob("*.md")):
         if f.name.startswith("_") or f.name.lower() == "readme.md":
             continue
         try:
+            if strict and f.is_symlink():
+                raise ValueError("La ficha no puede ser un enlace simbólico.")
             findings.append(parse_evidence_file(f))
         except Exception as e:
+            if strict:
+                raise ValueError(f"No se pudo leer la ficha {f.name}: {e}") from e
             print(f"[!] Advertencia: No se pudo parsear {f}: {e}", file=sys.stderr)
 
     # Ordenar por severidad descendente y luego por CVSS score
@@ -202,7 +196,8 @@ def load_scope_validator():
     if not script_path.is_file():
         script_path = pathlib.Path("/usr/local/bin/pt-scope-validator")
     if script_path.is_file():
-        spec = importlib.util.spec_from_file_location("pt_scope_validator", script_path)
+        spec = importlib.util.spec_from_file_location("pt_scope_validator", script_path,
+            loader=importlib.machinery.SourceFileLoader("pt_scope_validator", str(script_path)))
         if spec and spec.loader:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
@@ -210,62 +205,91 @@ def load_scope_validator():
     return None
 
 
-def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[str]]:
-    """Verifica la validez y disciplina evidence-first de los hallazgos.
+class ReportValidationError(ValueError):
+    def __init__(self, issues):
+        self.issues = issues
+        super().__init__("Reporte bloqueado: " + "; ".join(issues))
 
-    Devuelve (ok, issues, duplicate_warnings): `issues` son fallos que deben
-    corregirse (determinan `ok`); `duplicate_warnings` son posibles duplicados
-    por causa raíz (ver find_duplicate_groups) y son solo advertencias — no
-    hacen fallar la verificación, porque consolidar o no es una decisión del
-    operador, no un hecho automático.
-    """
+
+def review_report_inputs(engagement_dir: pathlib.Path):
     evidence_dir = engagement_dir / "evidence"
-    if not evidence_dir.is_dir():
-        return False, [f"El directorio de evidencia no existe: {evidence_dir}"], []
-
-    findings = get_findings(evidence_dir)
-    if not findings:
-        return True, ["No se encontraron fichas de evidencia (.md) en el directorio."], []
-
     issues: List[str] = []
-    scope_val = load_scope_validator()
-    target_yaml = engagement_dir / "target.yaml"
-    scope_data = None
-    if scope_val and target_yaml.is_file():
+    findings = []
+    if not evidence_dir.is_dir():
+        issues.append(f"El directorio de evidencia no existe: {evidence_dir}")
+    else:
         try:
-            scope_data = scope_val.load_target_yaml(target_yaml)
-        except Exception:
-            pass
+            findings = get_findings(evidence_dir, strict=True)
+        except (OSError, ValueError) as error:
+            issues.append(str(error))
+
+    scope_val = None
+    scope_data = {}
+    try:
+        scope_val = load_scope_validator()
+        if scope_val is None:
+            issues.append("Scope Guard no está disponible; reconstruye la imagen del laboratorio.")
+        else:
+            scope_data = scope_val.load_target_yaml(engagement_dir / "target.yaml")
+    except Exception as error:
+        issues.append(f"No se pudo validar target.yaml: {error}")
 
     for f in findings:
         prefix = f"[{f['file']}]"
+        try:
+            f['artifact_refs'] = validate_artifact_refs(engagement_dir, f['artifact_refs_raw'])
+        except (OSError, ValueError) as error:
+            issues.append(f'{prefix} Evidencia vinculada no válida: {error}')
+        try:
+            f['verification_rationale'] = normalize_verification_rationale(json.loads(f['verification_rationale_raw']))
+            validate_confirmation({'status': f['status'], 'asset': f['asset'],
+                                   'artifact_refs': f.get('artifact_refs', []),
+                                   'verification_rationale': f['verification_rationale']})
+        except (ValueError, TypeError) as error:
+            issues.append(f'{prefix} Confirmación no válida: {error}')
         if not f["title"]:
             issues.append(f"{prefix} Falta el título de la vulnerabilidad.")
-        if f["severity"] not in SEVERITY_ORDER:
-            issues.append(f"{prefix} Severidad inválida '{f['severity']}'. Debe ser Critical, High, Medium, Low o Info.")
         if not f["has_poc"]:
             issues.append(f"{prefix} Criterio Evidence-First incumplido: falta sección de PoC o comandos curl reproducibles.")
         if not f["has_remediation"]:
             issues.append(f"{prefix} Falta sección de recomendación o remediación técnica.")
+        asset = str(f["asset"]).strip()
+        if not asset or asset.upper() == "N/A":
+            issues.append(f"{prefix} Falta el activo; indica un objetivo autorizado en target.yaml.")
+        elif scope_val and scope_data:
+            try:
+                verdict, reason = scope_val.check_scope(asset, scope_data)
+                if verdict == "OUT_OF_SCOPE":
+                    issues.append(f"{prefix} ALERTA CRITICA: El activo evaluado '{asset}' esta marcado FUERA DE ALCANCE ({reason})")
+                elif verdict != "IN_SCOPE":
+                    issues.append(f"{prefix} Activo '{asset}' sin alcance confirmado ({verdict}: {reason}). Revisa target.yaml.")
+            except Exception as error:
+                issues.append(f"{prefix} No se pudo validar el activo: {error}")
 
-        # Verificar activo contra target.yaml si está disponible
-        if scope_val and scope_data and f["asset"] and f["asset"] != "N/A":
-            verdict, reason = scope_val.check_scope(f["asset"], scope_data)
-            if verdict == "OUT_OF_SCOPE":
-                issues.append(f"{prefix} ALERTA CRITICA: El activo evaluado '{f['asset']}' esta marcado FUERA DE ALCANCE ({reason})")
-
-    duplicate_warnings = [format_duplicate_warning(group) for group in find_duplicate_groups(findings)]
-
-    return len(issues) == 0, issues, duplicate_warnings
+    duplicates = [format_duplicate_warning(group) for group in find_duplicate_groups(findings)]
+    return findings, scope_data, issues, duplicates
 
 
-def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None) -> pathlib.Path:
+def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[str]]:
+    """Devuelve (ok, issues, duplicate_warnings); los duplicados no bloquean."""
+    findings, _, issues, duplicates = review_report_inputs(engagement_dir)
+    if not findings and not issues:
+        return True, ["No se encontraron fichas de evidencia (.md) en el directorio."], duplicates
+    return not issues, issues, duplicates
+
+
+def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None, artifact_reference_output=None) -> pathlib.Path:
     """Compila el informe final REPORT.md a partir de target.yaml y evidence/*.md."""
     if output_path is None:
         output_path = engagement_dir / "REPORT.md"
 
-    evidence_dir = engagement_dir / "evidence"
-    findings = get_findings(evidence_dir)
+    findings, target_data, issues, _ = review_report_inputs(engagement_dir)
+    if issues:
+        raise ReportValidationError(issues)
+    if artifact_reference_output is not None:
+        for finding in findings:
+            for reference in finding.get('artifact_refs', []):
+                artifact_reference_output[reference['path']] = reference['sha256']
 
     # Intentar leer metadatos de target.yaml
     eng_name = engagement_dir.name
@@ -273,28 +297,23 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
     vpn_profile = "none"
     auditor = "tester"
     date_str = datetime.date.today().isoformat()
-    scope_val = load_scope_validator()
-    target_yaml = engagement_dir / "target.yaml"
-    target_data: Dict[str, Any] = {}
+    eng_meta = target_data.get("engagement", {})
+    eng_name = eng_meta.get("name", eng_name)
+    client = eng_meta.get("client", client)
+    auditor = eng_meta.get("auditor", auditor)
+    vpn_profile = target_data.get("network", {}).get("vpn_profile", vpn_profile)
 
-    if scope_val and target_yaml.is_file():
-        try:
-            target_data = scope_val.load_target_yaml(target_yaml)
-            eng_meta = target_data.get("engagement", {})
-            eng_name = eng_meta.get("name", eng_name)
-            client = eng_meta.get("client", client)
-            auditor = eng_meta.get("auditor", auditor)
-            vpn_profile = target_data.get("network", {}).get("vpn_profile", vpn_profile)
-        except Exception:
-            pass
+    confirmed = [f for f in findings if f["status"] == "PROVEN"]
+    historical = sum(f["status"] == "MITIGATED" for f in findings)
+    unconfirmed = len(findings) - len(confirmed) - historical
 
-    # Conteo por severidad
+    # Solo evidencia confirmada activa determina el riesgo actual.
     counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
-    for f in findings:
+    for f in confirmed:
         counts[f["severity"]] = counts.get(f["severity"], 0) + 1
 
-    total_vulns = len(findings)
-    overall_posture = "Bajo"
+    total_vulns = len(confirmed)
+    overall_posture = "Bajo" if confirmed else "Sin hallazgos confirmados activos"
     if counts["CRITICAL"] > 0:
         overall_posture = "Crítico"
     elif counts["HIGH"] > 0:
@@ -311,21 +330,24 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         f"- **Auditor Responsable:** {auditor}",
         f"- **Perfil de Conexión:** {vpn_profile}",
         f"- **Postura General de Riesgo:** **{overall_posture}**",
-        "- **Estado:** Finalizado / Reportado",
+        "- **Estado:** Borrador compilado / Pendiente de revisión",
         "",
         "---",
         "",
         "## 1. Resumen Ejecutivo",
         "",
-        f"Durante el periodo de evaluación sobre el objetivo **{eng_name}**, se llevaron a cabo pruebas técnicas autorizadas "
-        "bajo enfoque de caja negra/gris, siguiendo los lineamientos metodológicos de OWASP y PTES con trazabilidad continua. "
-        f"Se identificaron un total de **{total_vulns} hallazgos confirmados** distribuidos de la siguiente manera:",
+        f"Este borrador consolida las fichas de **{eng_name}** frente al alcance declarado en `target.yaml`. "
+        "Los estados son declaraciones del operador y requieren revisión humana; la compilación no acredita "
+        "autorización legal, ejecución de una metodología ni suficiencia de la evidencia. "
+        f"Las fichas registran **{total_vulns} hallazgos confirmados activos** distribuidos de la siguiente manera:",
         "",
         f"- **Crítica:** {counts['CRITICAL']}",
         f"- **Alta:** {counts['HIGH']}",
         f"- **Media:** {counts['MEDIUM']}",
         f"- **Baja:** {counts['LOW']}",
         f"- **Informativa:** {counts['INFO']}",
+        f"- **Históricos mitigados (excluidos del riesgo actual):** {historical}",
+        f"- **Otros registros no confirmados activos (excluidos del riesgo actual):** {unconfirmed}",
         "",
         "---",
         "",
@@ -347,7 +369,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         for ep in in_s.get("endpoints", []):
             lines.append(f"- `[endpoint]` {ep}")
         if not any(in_s.values()):
-            lines.append("- (Definido en scope.txt o sin restricciones listadas)")
+            lines.append("- Sin activos autorizados declarados; no se permite inferir alcance.")
 
         if any(out_s.values()):
             lines.append("\n### Exclusiones Estrictas (Out-of-Scope):")
@@ -364,7 +386,9 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
     lines.extend([
         "---",
         "",
-        "## 3. Matriz Consolidada de Hallazgos",
+        "## 3. Matriz Consolidada de Evidencias",
+        "",
+        "Incluye todos los registros para trazabilidad. Solo PROVEN se cuenta como hallazgo confirmado activo; MITIGATED es histórico y los demás estados no acreditan riesgo actual.",
         "",
         "| ID | Vulnerabilidad / Hallazgo | Severidad | CVSS v3.1 | Activo Afectado | Estado |",
         "|---|---|---|---|---|---|",
@@ -399,10 +423,14 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
                 f"### {f['id']}: {f['title']}",
                 "",
                 f"- **Severidad:** {f['severity'].capitalize()} (Score: {f['cvss_score']})",
+                f"- **Estado de evidencia:** {f['status']}",
+                *([f"- **Motivo de verificación declarado:** {f['verification_rationale']}"] if f.get('verification_rationale') else []),
                 f"- **Vector CVSS:** `{f['cvss_v31']}`",
                 f"- **CWE:** {f['cwe']}",
                 f"- **Activo:** `{f['asset']}`",
-                f"- **Auditoría Forense:** Registro sellado en `{f['audit_log']}`",
+                f"- **Registro referido por la ficha:** `{f['audit_log']}` (vínculo e integridad no verificados)",
+                *[f"- **Artefacto vinculado:** [{reference['path']}](./{reference['path']}) · SHA-256 `{reference['sha256']}`"
+                  for reference in f.get('artifact_refs', [])],
                 "",
                 f"{f['body']}",
                 "",
@@ -423,8 +451,11 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         "",
         "## 6. Trazabilidad Forense",
         "",
-        f"El registro determinista y continuo de todas las acciones de terminal asociadas a esta evaluación "
-        f"permanece archivado en `{engagement_dir / 'terminal.log'}` para fines de auditoría y no repudio.",
+        "El registro `terminal.log` está disponible en el engagement; no se acredita que sea completo ni sellado."
+        if (engagement_dir / 'terminal.log').is_file() and not (engagement_dir / 'terminal.log').is_symlink()
+        else "No hay un registro local `terminal.log` disponible; no se acredita trazabilidad de la terminal.",
+        "En el export, `source-manifest.json` relaciona hashes de archivos originales y de sus copias entregadas. "
+        "Los hashes permiten comparar contenido; no constituyen una firma ni prueban procedencia por sí solos.",
         "",
     ])
 
@@ -493,7 +524,11 @@ def main() -> int:
         out_file = None
         if len(sys.argv) >= 4:
             out_file = pathlib.Path(sys.argv[3]).resolve()
-        res_file = build_report(eng_dir, out_file)
+        try:
+            res_file = build_report(eng_dir, out_file)
+        except (ValueError, OSError) as error:
+            print(f"[!] {error}", file=sys.stderr)
+            return 1
         print(f"[+] Reporte compilado exitosamente en: {res_file}")
         findings = get_findings(evidence_dir)
         print(f"    Total de hallazgos consolidados: {len(findings)}")

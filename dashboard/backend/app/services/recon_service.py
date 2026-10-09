@@ -3,12 +3,17 @@ import signal
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import threading
+import tempfile
 from typing import Any, Dict, List, Optional
 from app.config import SCRIPTS_DIR, WORKSPACE_DIR, RECON_DB_PATH
 from app.core.recon_jobs import ReconJobStore, ACTIVE_STATUSES
+from app.core.recon_review import reviewed_plan
+from app.core.recon_results import result_summary
+from app.core.artifact_snapshot import read_artifact_snapshot
 from app.core.workspace_paths import project_directory
 
 class ReconService:
@@ -166,7 +171,17 @@ class ReconService:
         except Exception:
             pass
 
+        progress = None
+        progress_path = recon_dir / 'progress.json'
+        try:
+            candidate = json.loads(progress_path.read_text(encoding='utf-8'))
+            if isinstance(candidate, dict) and job.get('run_id') and candidate.get('run_id') == job['run_id']:
+                progress = candidate
+        except (OSError, ValueError):
+            pass
+
         return {
+            "progress": progress,
             "engagement_id": engagement_id,
             "engagement_type": engagement_type,
             "job": job,
@@ -177,6 +192,60 @@ class ReconService:
             "recent_logs": recent_logs,
             "has_recon_data": summary_path.is_file() or (recon_dir / "subdomains.txt").is_file(),
         }
+
+    def get_history(self, engagement_id, engagement_type='engagement', limit=25, before=None):
+        if not self.get_target_dir(engagement_id, engagement_type):
+            return {'error': 'Proyecto no encontrado.'}
+        return {'engagement_id': engagement_id, 'engagement_type': engagement_type,
+                **self.store.history((engagement_type, engagement_id), limit, before)}
+
+    def review_outcome(self, engagement_id, run_id, expected_revision, engagement_type='engagement'):
+        with self._lock:
+            if not self.get_target_dir(engagement_id, engagement_type):
+                return {'success': False, 'code': 404, 'error': 'Proyecto no encontrado.'}
+            try:
+                job = self.store.review_outcome((engagement_type, engagement_id), run_id, expected_revision)
+            except RuntimeError as error:
+                return {'success': False, 'code': 409, 'error': str(error)}
+            return {'success': True, 'job': job}
+
+    @staticmethod
+    def _completed_summary(target_dir, run_id):
+        # A stale summary must never become provenance for a later job.
+        try:
+            snapshot = read_artifact_snapshot(target_dir, 'recon/summary.json', include_bytes=True)
+            if snapshot['size'] > 2 * 1024 * 1024 or snapshot['preview_status'] != 'complete':
+                return None
+            summary = json.loads(snapshot['_bytes'].decode('utf-8'))
+            if isinstance(summary, dict) and summary.get('run_id') == run_id:
+                return summary
+        except (OSError, ValueError, AttributeError):
+            pass
+        return None
+
+    @classmethod
+    def _completed_scope_revision(cls, target_dir, run_id):
+        summary = cls._completed_summary(target_dir, run_id) or {}
+        revision = summary.get('scope_revision')
+        return revision if isinstance(revision, str) and re.fullmatch(r'[a-f0-9]{64}', revision) else None
+
+    @staticmethod
+    def _initial_failure(source, run_id, stage):
+        try:
+            source.seek(0)
+            raw = source.read(16385)
+            if len(raw) > 16384:
+                return None
+            result = json.loads(raw)
+            if (isinstance(result, dict) and result.get('schema_version') == 1
+                    and result.get('run_id') == run_id and result.get('stage') == stage
+                    and result.get('status') == 'failed'
+                    and result.get('failure_kind') in ('scope_guard', 'technical')
+                    and isinstance(result.get('error'), str) and result['error'].strip()):
+                return result
+        except (OSError, ValueError, UnicodeError):
+            pass
+        return None
 
     def get_log(self, engagement_id: str, lines: int = 200, engagement_type: str = "engagement") -> str:
         """Retorna el contenido del archivo de bitácora recon.log."""
@@ -192,16 +261,46 @@ class ReconService:
         except Exception:
             return ""
 
+    def preview_pipeline(self, engagement_id, stage='all', dry_run=False, engagement_type='engagement'):
+        if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
+            return {'success': False, 'error': 'Etapa de reconocimiento no válida.'}
+        target = self.get_target_dir(engagement_id, engagement_type)
+        if target is None:
+            return {'success': False, 'error': 'Directorio del engagement no encontrado.'}
+        command = [self.py_bin, str(self.pipeline_script), 'preview', str(target), '--stage', stage]
+        if dry_run:
+            command.append('--dry-run')
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            if result.returncode:
+                return {'success': False, 'error': (result.stderr or 'No se pudo revisar el plan.')[:2000]}
+            preview = json.loads(result.stdout)
+            if not isinstance(preview, dict) or preview.get('success') is not True or not isinstance(preview.get('plan_revision'), str):
+                raise ValueError('Contrato de vista previa inválido.')
+            return preview
+        except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+            return {'success': False, 'error': 'No se pudo revisar el plan: ' + str(error)[:500]}
+
     def run_pipeline(
         self,
         engagement_id: str,
         stage: str = "all",
         dry_run: bool = False,
         engagement_type: str = "engagement",
+        expected_plan: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Inicia el pipeline de reconocimiento en un hilo en segundo plano."""
         if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
             return {"success": False, "error": "Etapa de reconocimiento no válida."}
+        review = None
+        if expected_plan:
+            preview = self.preview_pipeline(engagement_id, stage, dry_run, engagement_type)
+            if not preview.get('success') or preview.get('plan_revision') != expected_plan or not preview.get('can_start'):
+                return {'success': False, 'error': 'El plan cambió o está bloqueado; revisa targets, permisos y límites antes de iniciar.'}
+            try:
+                review = reviewed_plan(preview)
+            except (KeyError, TypeError, ValueError):
+                return {'success': False, 'error': 'La revisión está incompleta; vuelve a revisar antes de iniciar.'}
         with self._lock:
             if self._closing:
                 return {'success': False, 'error': 'El dashboard se está cerrando.'}
@@ -213,11 +312,11 @@ class ReconService:
             recon_dir.mkdir(parents=True, exist_ok=True)
             log_path = recon_dir / 'recon.log'
             try:
-                job = self.store.begin(job_key, stage, dry_run)
-            except RuntimeError as error:
+                job = self.store.begin(job_key, stage, dry_run, reviewed_plan=review)
+            except (RuntimeError, ValueError) as error:
                 return {'success': False, 'error': str(error), 'job': self.store.get(job_key)}
             thread = threading.Thread(target=self._execute_pipeline_worker,
-                args=(job_key, target_dir, stage, dry_run, log_path, job['run_id']), daemon=True)
+                args=(job_key, target_dir, stage, dry_run, log_path, job['run_id'], expected_plan), daemon=True)
             self._threads[job_key] = thread
             try:
                 thread.start()
@@ -261,13 +360,15 @@ class ReconService:
             self.store.delete(key)
             return entry
 
-    def _execute_pipeline_worker(self, job_key, target_dir, stage, dry_run, log_path, run_id):
+    def _execute_pipeline_worker(self, job_key, target_dir, stage, dry_run, log_path, run_id, expected_plan=None):
         cmd = [self.py_bin, str(self.pipeline_script), 'run', str(target_dir), '--stage', stage]
+        if expected_plan:
+            cmd.extend(['--expected-plan', expected_plan])
         if dry_run:
             cmd.append('--dry-run')
         proc = None
         try:
-            with open(log_path, 'a', encoding='utf-8') as log_f:
+            with tempfile.TemporaryFile() as failure_f, open(log_path, 'a', encoding='utf-8') as log_f:
                 with self._lock:
                     job = self.store.get(job_key)
                     if not job or job['run_id'] != run_id:
@@ -279,7 +380,9 @@ class ReconService:
                     log_f.flush()
                     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, bufsize=1, start_new_session=True,
-                        pass_fds=(() if self._lease is None else (self._lease,)))
+                        env={**os.environ, 'SECLAB_RECON_RUN_ID': run_id,
+                             'SECLAB_RECON_FAILURE_FD': str(failure_f.fileno())},
+                        pass_fds=((failure_f.fileno(),) if self._lease is None else (self._lease, failure_f.fileno())))
                     self._processes[job_key] = proc
                 if proc.stdout:
                     with proc.stdout:
@@ -292,7 +395,18 @@ class ReconService:
                     cancelled = job and job['status'] == 'cancelling'
                     status = 'cancelled' if cancelled else (('simulated' if dry_run else 'completed') if proc.returncode == 0 else 'failed')
                     error = None if cancelled or proc.returncode == 0 else f'Código de salida: {proc.returncode}'
-                    self.store.finish(job_key, run_id, status, error)
+                    initial = self._initial_failure(failure_f, run_id, stage)
+                    summary = self._completed_summary(target_dir, run_id) or {}
+                    outcome = initial or summary
+                    reason = outcome.get('error')
+                    if status == 'failed' and initial and outcome.get('failure_kind') == 'technical':
+                        error = reason[:2000]
+                    if status == 'failed' and outcome.get('status') == 'failed' and outcome.get('failure_kind') == 'scope_guard' and isinstance(reason, str) and reason.strip():
+                        status, error = 'blocked', reason[:2000]
+                    revision = summary.get('scope_revision')
+                    revision = revision if isinstance(revision, str) and re.fullmatch(r'[a-f0-9]{64}', revision) else None
+                    saved_result = None if initial else result_summary(summary, run_id, stage, status, dry_run)
+                    self.store.finish(job_key, run_id, status, error, revision, saved_result)
                     self._processes.pop(job_key, None)
         except Exception as error:
             with self._lock:

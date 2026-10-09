@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_scope import (ScopeError, normalize_target, is_ip, domain_matches,
-                          parse_simple_yaml_lists, load_target_yaml, load_scope_txt, check_scope)
+                          parse_simple_yaml_lists, load_target_yaml, load_scope_txt, check_scope, authorization_contract)
 
 
 # Patrones para extraer objetivos mencionados en texto libre (p. ej. la respuesta
@@ -139,6 +139,11 @@ def main() -> int:
         return 0
 
     elif action == "show":
+        authorization = authorization_contract(data)
+        print("AUTORIZACIÓN DECLARADA (no acredita validez legal):")
+        print(f"  Referencia: {authorization['reference'] or 'pendiente'}")
+        print(f"  Vigencia: {authorization['valid_from'] or 'pendiente'} -> {authorization['valid_until'] or 'pendiente'}")
+        print(f"  Pasivo: {authorization['allow_passive']} | Activo: {authorization['allow_active']}")
         scope = data.get("scope", {})
         in_s = scope.get("in_scope", {})
         out_s = scope.get("out_of_scope", {})

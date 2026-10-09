@@ -201,6 +201,13 @@ class ProxyService:
         """Enruta consultas con failover dinámico entre proveedores activos del Vault."""
         candidates = []
 
+        if not req.provider and profile == "local":
+            entry = vault_service.get_key_entry("custom_llm")
+            if (not entry or not entry.get("is_active") or not entry.get("api_key")
+                    or not entry.get("base_url") or is_openrouter_url(entry["base_url"])):
+                raise ValueError("El perfil local requiere un endpoint custom_llm activo; no se enviará el contexto a otro proveedor.")
+            candidates.append(("custom_llm", req.model or entry.get("model_name") or "local-model"))
+
         # 1. Si se solicitó un proveedor específico
         if req.provider:
             candidates.append((req.provider, req.model))
@@ -208,13 +215,9 @@ class ProxyService:
                 custom_entry = vault_service.get_key_entry("custom_llm")
                 if custom_entry and custom_entry.get("is_active") and is_openrouter_url(custom_entry.get("base_url")):
                     candidates.append(("custom_llm", req.model))
-            elif req.provider == "custom_llm":
-                openrouter_entry = vault_service.get_key_entry("openrouter")
-                if openrouter_entry and openrouter_entry.get("is_active"):
-                    candidates.append(("openrouter", req.model))
 
         # 2. Si se solicitó un modelo específico sin proveedor explícito
-        elif req.model:
+        elif req.model and not candidates:
             # Si el modelo tiene formato "vendor/model" (común en OpenRouter), enrutar preferentemente a OpenRouter si está activo
             if "/" in req.model:
                 openrouter_entry = vault_service.get_key_entry("openrouter")
@@ -233,7 +236,7 @@ class ProxyService:
                     candidates.append((k.provider, req.model or k.model_name))
 
         # 3. Si se solicita un perfil específico (quick, deep, local)
-        elif profile and profile in PROFILE_DEFAULTS:
+        elif not candidates and profile and profile in PROFILE_DEFAULTS:
             for prov, mod in PROFILE_DEFAULTS[profile]:
                 entry = vault_service.get_key_entry(prov)
                 if entry and entry.get("is_active"):

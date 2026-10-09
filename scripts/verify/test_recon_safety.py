@@ -4,6 +4,7 @@ import os
 import pathlib
 import re
 import socket
+import shlex
 import ssl
 import subprocess
 import sys
@@ -11,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+from authorization_fixture import AUTHORIZATION_FIXTURE, AUTHORIZATION_YAML
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import Mock, patch
@@ -26,11 +28,34 @@ spec.loader.exec_module(pipeline)
 
 
 def rules():
-    return {'scope': {'in_scope': {'domains': ['example.test', '*.example.test']},
+    return {'authorization': dict(AUTHORIZATION_FIXTURE), 'scope': {'in_scope': {'domains': ['example.test', '*.example.test']},
                       'out_of_scope': {'domains': ['excluded.example.test']}}}
 
 
 class ReconScopeSafetyTests(unittest.TestCase):
+    def test_initial_scope_error_uses_optional_private_channel_without_workspace_writes(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as channel:
+            root = pathlib.Path(directory)
+            config = root / 'target.yaml'
+            config.write_text('scope: [invalid')
+            command = [sys.executable, str(SCRIPTS / 'pt-recon-pipeline.py'), 'run', str(root), '--stage', 'probe', '--json']
+            result = subprocess.run(command, capture_output=True, text=True,
+                env={**os.environ, 'SECLAB_RECON_RUN_ID': 'fixture', 'SECLAB_RECON_FAILURE_FD': str(channel.fileno())},
+                pass_fds=(channel.fileno(),))
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, '')
+            channel.seek(0)
+            outcome = json.load(channel)
+            self.assertEqual(outcome['run_id'], 'fixture')
+            self.assertEqual(outcome['stage'], 'probe')
+            self.assertEqual(outcome['failure_kind'], 'scope_guard')
+            self.assertTrue(outcome['error'])
+            self.assertEqual(list(root.iterdir()), [config])
+            unavailable = subprocess.run(command, capture_output=True, text=True,
+                env={**os.environ, 'SECLAB_RECON_FAILURE_FD': 'invalid'})
+            self.assertEqual((unavailable.returncode, unavailable.stdout, unavailable.stderr),
+                             (result.returncode, result.stdout, result.stderr))
+
     def test_exact_and_wildcard_scope_have_distinct_boundaries(self):
         data = rules()
         data['scope']['in_scope']['domains'] = ['*.example.test']
@@ -107,13 +132,75 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = pathlib.Path(self.temporary.name)
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    domains: [example.test, "*.example.test"]\n  out_of_scope:\n    domains: [excluded.example.test]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    domains: [example.test, "*.example.test"]\n  out_of_scope:\n    domains: [excluded.example.test]\n' + AUTHORIZATION_YAML)
         self.recon = self.root / 'recon'
         self.recon.mkdir()
 
     def make_pipeline(self, dry_run=False):
         with patch.object(pipeline, 'detect_tools', return_value={}):
             return pipeline.ReconPipeline(self.root, dry_run)
+
+    def test_preview_is_read_only_and_never_opens_network_or_runs_tools(self):
+        self.recon.joinpath('subdomains.txt').write_text('example.test\nexcluded.example.test\nevil.test\n')
+        self.recon.joinpath('urls_all.txt').write_text('https://example.test/profile?id=1\nhttps://excluded.example.test/a\nhttps://excluded.example.test/b\n')
+        before = {str(path): path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        instance = self.make_pipeline()
+        with patch.object(socket, 'socket', side_effect=AssertionError('network')), patch.object(socket, 'getaddrinfo', side_effect=AssertionError('DNS')), patch.object(pipeline.subprocess, 'run', side_effect=AssertionError('tool')):
+            result = instance.preview('probe')
+            local = instance.preview('patterns', True)
+        self.assertEqual(local['stages'][0]['targets'], ['https://example.test/profile?id=1'])
+        self.assertEqual(local['stages'][0]['discarded_count'], 2)
+        self.assertTrue(result['can_start'])
+        self.assertEqual(result['stages'][0]['targets'], ['example.test'])
+        self.assertEqual(result['stages'][0]['discarded_count'], 2)
+        self.assertEqual(before, {str(path): path.read_bytes() for path in self.root.rglob('*') if path.is_file()})
+
+    def test_preview_permissions_simulation_pending_targets_and_bounded_lists(self):
+        config = self.root / 'target.yaml'
+        config.write_text(config.read_text().replace('allow_active: true', 'allow_active: false'))
+        self.recon.joinpath('subdomains.txt').write_text(''.join(f'host{number}.example.test\n' for number in range(70)))
+        result = self.make_pipeline().preview('probe')
+        self.assertFalse(result['can_start'])
+        self.assertFalse(result['authorization']['allow_active'])
+        self.assertTrue(result['authorization']['reference_present'])
+        self.assertNotIn('reference', result['authorization'])
+        self.assertEqual(result['stages'][0]['targets_count'], 70)
+        self.assertEqual(len(result['stages'][0]['targets']), 50)
+        self.assertTrue(self.make_pipeline().preview('probe', True)['can_start'])
+        complete = self.make_pipeline().preview('all')
+        self.assertTrue(complete['stages'][1]['targets_pending'])
+        self.assertTrue(complete['stages'][3]['targets_pending'])
+
+    def test_preview_revision_changes_with_scope_or_input_and_cli_rejects_stale_plan(self):
+        self.recon.joinpath('subdomains.txt').write_text('example.test\n')
+        original = self.make_pipeline().preview('probe', True)
+        self.assertEqual(original['plan_revision'], self.make_pipeline().preview('probe', True)['plan_revision'])
+        with tempfile.TemporaryDirectory() as other:
+            clone = pathlib.Path(other)
+            (clone / 'recon').mkdir()
+            (clone / 'target.yaml').write_bytes((self.root / 'target.yaml').read_bytes())
+            (clone / 'recon/subdomains.txt').write_text('example.test\n')
+            self.assertNotEqual(original['plan_revision'], pipeline.ReconPipeline(clone, True).preview('probe', True)['plan_revision'])
+        self.recon.joinpath('subdomains.txt').write_text('child.example.test\n')
+        changed = self.make_pipeline().preview('probe', True)
+        self.assertNotEqual(original['plan_revision'], changed['plan_revision'])
+        result = subprocess.run([sys.executable, str(SCRIPTS / 'pt-recon-pipeline.py'), 'run', str(self.root), '--stage', 'probe', '--dry-run', '--expected-plan', original['plan_revision']], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('plan revisado cambió', result.stderr)
+        self.assertFalse((self.recon / 'summary.json').exists())
+        config = self.root / 'target.yaml'
+        config.write_text(config.read_text().replace('allow_active: true', 'allow_active: false'))
+        self.assertNotEqual(changed['plan_revision'], self.make_pipeline().preview('probe', True)['plan_revision'])
+
+    def test_local_pattern_classification_does_not_require_passive_permission(self):
+        config = self.root / 'target.yaml'
+        config.write_text(config.read_text().replace('allow_passive: true', 'allow_passive: false'))
+        self.recon.joinpath('urls_all.txt').write_text('https://example.test/profile?id=1\n')
+        instance = self.make_pipeline()
+        instance.tools['gf'] = 'fixture-gf'
+        with patch.object(pipeline.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')):
+            result = instance.run_all('patterns')
+        self.assertEqual(result['summary']['status'], 'completed', result['summary'].get('error'))
 
     def test_scope_filter_runs_before_probe_constructor_or_dns(self):
         self.recon.joinpath('subdomains.txt').write_text('example.test\nexcluded.example.test\nevil.test\nhttps://user@example.test\n')
@@ -147,6 +234,69 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(previous.read_text(), 'https://previous.example.test\n')
         self.assertFalse(self.recon.joinpath('subdomains.txt').exists())
 
+    def test_live_tool_publishes_output_before_exit_and_preserves_artifacts_on_failure(self):
+        tool = self.root / 'slow-tool'
+        tool.write_text(f'#!{sys.executable}\nimport time\nprint("candidate.example.test", flush=True)\ntime.sleep(1)\nraise SystemExit(2)\n')
+        tool.chmod(0o755)
+        self.recon.joinpath('subdomains.txt').write_text('previous.example.test\n')
+        engine = self.make_pipeline()
+        engine.live = True
+        engine.tools = {'subfinder': str(tool)}
+        errors = []
+        def execute():
+            try:
+                engine._tool('subfinder', [])
+            except pipeline.StageError as error:
+                errors.append(str(error))
+        worker = threading.Thread(target=execute)
+        worker.start()
+        self.addCleanup(worker.join)
+        deadline = time.monotonic() + 3
+        progress = {}
+        while time.monotonic() < deadline:
+            path = self.recon / 'progress.json'
+            if path.exists():
+                progress = json.loads(path.read_text())
+                if 'candidate.example.test' in progress['recent_output']:
+                    break
+            time.sleep(.01)
+        self.assertTrue(worker.is_alive(), 'output must be visible while the tool is still running')
+        self.assertEqual(progress['command_status'], 'running')
+        self.assertIn('candidate.example.test', progress['recent_output'])
+        worker.join(3)
+        self.assertTrue(errors)
+        self.assertEqual(json.loads((self.recon / 'progress.json').read_text())['command_status'], 'failed')
+        self.assertEqual(self.recon.joinpath('subdomains.txt').read_text(), 'previous.example.test\n')
+
+    def test_live_tool_timeout_kills_child_and_bounds_output_history(self):
+        tool = self.root / 'timeout-tool'
+        tool.write_text(f'#!{sys.executable}\nimport os,time\nprint(os.getpid(), flush=True)\ntime.sleep(10)\n')
+        tool.chmod(0o755)
+        engine = self.make_pipeline()
+        engine.live = True
+        engine.tools = {'subfinder': str(tool)}
+        with self.assertRaises(pipeline.StageError):
+            engine._tool('subfinder', [], timeout=1.5)
+        data = json.loads((self.recon / 'progress.json').read_text())
+        pid = int(data['recent_output'][0])
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
+        engine._emit('output', output='\n'.join(str(n) for n in range(100)))
+        self.assertEqual(len(json.loads((self.recon / 'progress.json').read_text())['recent_output']), 80)
+
+    def test_probe_live_callback_reports_fast_host_before_slow_one_without_reordering_results(self):
+        client = probe.ProbeClient(rules(), probe.operational_limits(rules()))
+        client.limits['max_parallel_threads'] = 2
+        def result(host):
+            if host == 'slow':
+                time.sleep(.2)
+            return [{'host': host, 'status': 'response'}]
+        reported = []
+        with patch.object(client, 'probe_host', side_effect=result):
+            rows = client.probe(['slow', 'fast'], on_result=lambda rows: reported.append(rows[0]['host']))
+        self.assertEqual(reported, ['fast', 'slow'])
+        self.assertEqual([row['host'] for row in rows], ['slow', 'fast'])
+
     def test_tool_failure_or_timeout_discards_partial_stdout(self):
         self.recon.joinpath('subdomains.txt').write_text('previous.example.test\n')
         for outcome in [subprocess.CompletedProcess([], 2, 'invented.example.test\n', 'error'),
@@ -158,13 +308,26 @@ class ReconPipelineSafetyTests(unittest.TestCase):
             self.assertEqual(result['summary']['status'], 'failed')
             self.assertEqual(self.recon.joinpath('subdomains.txt').read_text(), 'previous.example.test\n')
 
+    def test_subfinder_missing_provider_config_reports_action_without_partial_results(self):
+        self.recon.joinpath('subdomains.txt').write_text('previous.example.test\n')
+        engine = self.make_pipeline()
+        engine.tools = {'subfinder': '/fixture/subfinder'}
+        failure = subprocess.CompletedProcess([], 1, 'invented.example.test\n', 'Could not create provider config file: read-only file system')
+        with patch.object(pipeline.subprocess, 'run', return_value=failure):
+            result = engine.run_all('subdomains')
+        error = result['stage_results']['subdomains']['error']
+        self.assertIn('provider-config.yaml', error)
+        self.assertIn('reconstruye la imagen', error)
+        self.assertEqual(self.recon.joinpath('subdomains.txt').read_text(), 'previous.example.test\n')
+        self.assertEqual(result['summary']['status'], 'failed')
+
     def test_subdomains_new_file_tracks_only_items_absent_from_previous_run(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         result = self.make_pipeline().run_all('subdomains')
         self.assertEqual(result['summary']['subdomains_new_count'], 1)
         self.assertEqual(self.recon.joinpath('subdomains_new.txt').read_text(), '10.0.0.1\n')
 
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1", "10.0.0.2"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1", "10.0.0.2"]\n' + AUTHORIZATION_YAML)
         result = self.make_pipeline().run_all('subdomains')
         self.assertEqual(result['summary']['subdomains_new_count'], 1)
         self.assertEqual(self.recon.joinpath('subdomains_new.txt').read_text(), '10.0.0.2\n')
@@ -202,7 +365,7 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(self.recon.joinpath('live_hosts_new.txt').read_text(), '')
 
     def test_resume_skips_completed_stages_and_retries_only_the_failed_one(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         engine = self.make_pipeline()
         with patch.object(pipeline, 'ProbeClient') as client:
             client.return_value.probe.side_effect = OSError('fallo simulado de red')
@@ -226,13 +389,13 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertFalse(self.recon.joinpath('.checkpoint.json').exists())
 
     def test_resume_without_a_checkpoint_behaves_like_a_fresh_run(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         result = self.make_pipeline().run_all('all', resume=True)
         self.assertEqual(result['summary']['status'], 'completed')
         self.assertEqual(result['stage_results']['subdomains']['subdomains'], ['10.0.0.1'])
 
     def test_manual_single_stage_run_invalidates_the_checkpoint(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         engine = self.make_pipeline()
         with patch.object(pipeline, 'ProbeClient') as client:
             client.return_value.probe.side_effect = OSError('fallo simulado')
@@ -289,7 +452,7 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(self.recon.joinpath('next_commands.txt').read_text(), '')
 
     def test_run_all_sends_notification_with_status_on_success_and_failure(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         with patch.object(pipeline, 'send_notification') as notify:
             self.make_pipeline().run_all('subdomains')
             notify.assert_called_once()
@@ -307,7 +470,7 @@ class ReconPipelineSafetyTests(unittest.TestCase):
             self.assertEqual(notify.call_args.kwargs['level'], 'error')
 
     def test_run_all_does_not_send_notification_during_dry_run(self):
-        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n')
+        self.root.joinpath('target.yaml').write_text('scope:\n  in_scope:\n    ips: ["10.0.0.1"]\n' + AUTHORIZATION_YAML)
         with patch.object(pipeline, 'send_notification') as notify:
             self.make_pipeline(dry_run=True).run_all('all')
         notify.assert_not_called()
@@ -324,6 +487,14 @@ class ReconPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(result['summary']['status'], 'simulated')
         self.assertEqual(result['summary']['live_hosts_count'], 0)
         self.assertNotIn('subdomains', result['stage_results']['subdomains'])
+
+    def test_retry_command_uses_checkpoint_or_selected_stage_and_quotes_project_path(self):
+        summary = {'resumable_from': 'subdomains'}
+        self.assertEqual(shlex.split(pipeline.retry_command(self.root, summary)), ['pt-recon', str(self.root), '--stage', 'subdomains'])
+        self.recon.joinpath('.checkpoint.json').write_text('{}')
+        self.assertEqual(shlex.split(pipeline.retry_command(self.root, summary)), ['pt-recon', str(self.root), '--resume'])
+        other = self.root / 'path with spaces'
+        self.assertEqual(shlex.split(pipeline.retry_command(other, summary)), ['pt-recon', str(other), '--stage', 'subdomains'])
 
     def test_cli_failure_is_nonzero_and_status_is_read_only(self):
         result = subprocess.run([sys.executable, str(SCRIPTS / 'pt-recon-pipeline.py'), 'run', str(self.root), '--stage', 'probe', '--json'], capture_output=True, text=True)

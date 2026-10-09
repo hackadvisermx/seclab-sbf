@@ -56,6 +56,43 @@ test('vista previa sin job y revisión obsoleta rechazada antes de simular', asy
   await expect(review).not.toContainText('changed.test')
   expect((await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs[0].reviewed_plan).toEqual(saved.reviewed_plan)
   await page.screenshot({ path: testInfo.outputPath('review-history.png'), fullPage: true })
+  const urls = `${workspace}/engagements/${id}/recon/urls_all.txt`
+  await writeFile(input, '')
+  async function launchAndFinish() {
+    const response = await page.request.post(`/api/v1/recon/${id}/run`, { data: { stage: 'probe' } })
+    expect(response.ok()).toBe(true)
+    const run = (await response.json()).job.run_id
+    await expect.poll(async () => {
+      const jobs = (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs
+      return jobs.find(job => job.run_id === run)?.status
+    }).not.toBe('running')
+    return (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs.find(job => job.run_id === run)
+  }
+  await writeFile(urls, 'https://example.test/fixture-one\n')
+  const first = await launchAndFinish()
+  expect(first.status).toBe('completed')
+  expect(first.result_summary.metrics.urls_count).toBe(1)
+  await writeFile(urls, 'https://example.test/fixture-one\nhttps://example.test/fixture-two\nhttps://example.test/fixture-three\n')
+  const second = await launchAndFinish()
+  expect(second.status).toBe('completed')
+  expect(second.result_summary.metrics.urls_count).toBe(3)
+  await writeFile(input, 'example.test\n')
+  const blocked = await launchAndFinish()
+  expect(blocked.status).toBe('blocked')
+  expect(blocked.result_summary.metrics_source).toBe('previous_artifacts')
+  const retained = (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs
+  expect(retained.find(job => job.run_id === first.run_id).result_summary).toEqual(first.result_summary)
+  expect(retained.find(job => job.run_id === saved.run_id).result_summary).toBeNull()
+  await page.reload()
+  await page.getByRole('button', { name: /Reconocimiento/ }).filter({ hasText: '📡' }).click()
+  for (const [job, count] of [[first, 1], [second, 3], [blocked, 3]]) {
+    const row = history.getByRole('listitem').filter({ hasText: job.run_id })
+    await row.getByText('Resultados conservados al terminar', { exact: true }).click()
+    await expect(row.getByTestId('recon-history-result')).toContainText(`URLs: ${count}`)
+  }
+  await expect(history.getByRole('listitem').filter({ hasText: blocked.run_id })).toContainText('artefactos previos; no acreditan resultados nuevos')
+  await page.getByTestId('recon-history').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: testInfo.outputPath('result-history.png'), fullPage: true })
 })
 
 test('scope inválido al arrancar queda bloqueado y conserva resultados anteriores', async ({ page }, testInfo) => {
@@ -78,6 +115,7 @@ test('scope inválido al arrancar queda bloqueado y conserva resultados anterior
   await expect(page.getByText('Reconocimiento bloqueado por Scope Guard.', { exact: true })).toBeVisible({ timeout: 20000 })
   const result = (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs[0]
   expect(result.status).toBe('blocked')
+  expect(result.result_summary).toBeNull()
   expect(result.error).not.toBe('Código de salida: 1')
   expect(await readFile(summary, 'utf8')).toBe(original)
   await page.reload()

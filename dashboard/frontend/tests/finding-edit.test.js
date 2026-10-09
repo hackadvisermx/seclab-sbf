@@ -184,6 +184,32 @@ test('historial muestra estados, origen legado y páginas sin duplicar jobs', as
   } finally { view.cleanup() }
 })
 
+test('historial conserva resultados por job separados del workspace actual y distingue métricas previas', async () => {
+  const snapshot = (count, source) => ({ recorded_at: '2026-10-09T12:00:00Z', metrics_source: source,
+    metrics: { subdomains_count: 0, live_hosts_count: 0, urls_count: count, js_files_count: 0 },
+    stages: [{ stage: 'urls', status: source === 'artifacts' ? 'completed' : 'failed',
+      counts: source === 'artifacts' ? { urls_count: count, js_files_count: 0 } : {}, patterns: {} }] })
+  const jobs = [{ run_id: 'earlier', status: 'completed', stage: 'urls', result_summary: snapshot(2, 'artifacts') },
+    { run_id: 'blocked', status: 'blocked', stage: 'urls', result_summary: snapshot(5, 'previous_artifacts') },
+    { run_id: 'simulation', status: 'simulated', stage: 'urls', dry_run: true, result_summary: null },
+    { run_id: 'legacy', status: 'completed', stage: 'probe', result_summary: null }]
+  const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
+    getLoot: async () => ({ credentials: [], files: [] }),
+    getReconStatus: async () => ({ job: { status: 'completed' }, summary: { urls_count: 999 } }),
+    getReconHistory: async () => ({ jobs, next_cursor: null }) })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const rows = view.root.querySelector('[data-testid=recon-history]').querySelectorAll('li')
+    assert.match(rows[0].textContent, /URLs: 2/)
+    assert.match(rows[0].textContent, /pueden incluir etapas que no se ejecutaron/)
+    assert.doesNotMatch(rows[0].textContent, /999|URLs: 5/)
+    assert.match(rows[1].textContent, /URLs: 5/)
+    assert.match(rows[1].textContent, /artefactos previos; no acreditan resultados nuevos/)
+    assert.match(rows[2].textContent, /simulación no genera resultados/)
+    assert.match(rows[3].textContent, /Sin resumen de resultados conservado/)
+  } finally { view.cleanup() }
+})
+
 test('historial comunica fallo de API y permite recuperar con reintento explícito', async () => {
   let unavailable = true
   const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],

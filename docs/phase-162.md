@@ -33,6 +33,7 @@ make scan-image SCAN_IMAGE=seclab-sbf:full-phase162
 - 3 UI Chromium y 5 integraciones con backend instalado, tester temporal y `--network none` aprobadas. Capturas `confirmation-gate.png` y `legacy-review-pending.png` inspeccionadas. Se corrigió la prueba para esperar la respuesta de guardado y el cierre del formulario antes de consultar el listado; el título previo permanecía visible durante la petición. Fixture y credenciales eliminados al terminar.
 - Imagen aislada `seclab-sbf:full-phase162`, hash final de insumos `c87297afe2d83cf1`, idéntico al checkout. Build, smoke, Compose con `.env.example`, Actionlint y gate CVE High/Critical aprobados bajo política vigente, sin nuevas dependencias ni excepciones.
 - Integración en [PR #182](https://github.com/hackadvisermx/seclab-sbf/pull/182) hacia `bootstrap/baseline`; estado y evidencia de CI del head exacto registrados en el PR. El merge requiere comprobarlos conforme a la autorización temporal.
+- Merge confirmado en `999ae8106a91d62391ca74f864aadf871dcd8e61` el 2026-10-09 00:38:29 UTC. CI `37865534256` aprobado para head `1cfa3936d617a8547fac2f030fc9320adfaea5c0`; rama/worktree retirados y baseline sincronizado.
 
 ## Límites y reversión
 

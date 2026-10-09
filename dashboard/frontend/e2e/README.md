@@ -22,7 +22,7 @@ Ejecuta UI e integración de forma secuencial: comparten el puerto 4199 y el dir
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase162
+make build-full BUILD_TAG=-phase163
 ```
 
 Después, desde `dashboard/frontend`:
@@ -38,6 +38,8 @@ El dashboard solo implementa la identidad `tester`. Cada ejecución crea una con
 La prueba de auditoría recorre el wizard, verifica dominio exacto y confirmación, ejecuta una simulación, declara referencia/vigencia sin permisos de tráfico y comprueba bloqueo activo en la vista previa y en un job iniciado directamente por API (para verificar el control del backend). El helper publica la ruta privada del workspace en `workspace.json`; la prueba escribe únicamente `example.test` en la lista de hosts del proyecto recién creado, sin ejecutar descubrimiento. Comprueba dos jobs distintos en el historial tras recargar, crea una ficha CANDIDATE con petición/respuesta sintéticas, compila con cero confirmados, revisa el Markdown y verifica rechazo de PROVEN sin referencias/motivo. Revisa y vincula el archivo sintético, explica el motivo de verificación y declara PROVEN explícitamente para comprobar el reporte con un confirmado sintético. Descarga el paquete y verifica entradas/hashes del source-manifest; guardar confirmado con `outside.test` se rechaza; guardarlo como candidato bloquea recompilación y descarga incluso si existe un reporte previo. Estas pruebas no acreditan suficiencia probatoria ni vínculo estructurado job → finding.
 
 Otra prueba comprueba la vista previa sin crear jobs, el bloqueo por permiso ausente, la invalidación al cambiar modo y el rechazo de una lista modificada tras la revisión. Tras revisar de nuevo, permite simular y comprueba que el historial conserva la revisión original después de cambiar la lista y recargar. Captura `review-history.png` en el directorio local de resultados.
+
+Esa prueba también ejecuta dos sondeos con una lista vacía: no hay targets, sockets ni DNS. Cambia solo la lista sintética de URLs del workspace entre ambos y comprueba que el historial conserva conteos distintos (1 y 3), estados y scope por job al recargar. Un tercer sondeo con un host explícito sin permiso activo queda bloqueado antes de tráfico y conserva un resumen marcado como artefactos previos. La simulación y el bloqueo inicial con summary antiguo no reciben resultados inventados. Captura `result-history.png`; son conteos y estados, sin snapshots ni procedencia completa de outputs.
 
 La auditoría sintética captura `confirmation-gate.png` cuando PROVEN aún carece de motivo. Al final añade una ficha VERIFIED antigua sin vínculos/motivo en el workspace temporal: verifica “Revisión pendiente”, ausencia de modificación al leer y rechazo de reporte/descarga. Captura `legacy-review-pending.png`. Estas comprobaciones validan requisitos e integridad, no la verdad o suficiencia de una afirmación del operador.
 

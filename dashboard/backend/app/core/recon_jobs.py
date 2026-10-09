@@ -6,6 +6,7 @@ import re
 import sqlite3
 import uuid
 from contextlib import closing
+from app.core.recon_results import validate_result_summary
 
 
 ACTIVE_STATUSES = ('running', 'cancelling')
@@ -45,6 +46,10 @@ class ReconJobStore:
                 engagement_type TEXT NOT NULL, engagement_id TEXT NOT NULL,
                 run_id TEXT NOT NULL, reviewed_plan TEXT NOT NULL,
                 PRIMARY KEY (engagement_type, engagement_id, run_id))""")
+            conn.execute("""CREATE TABLE IF NOT EXISTS recon_job_results (
+                engagement_type TEXT NOT NULL, engagement_id TEXT NOT NULL,
+                run_id TEXT NOT NULL, result_summary TEXT NOT NULL,
+                PRIMARY KEY (engagement_type, engagement_id, run_id))""")
             # Only the last legacy row is known; never reconstruct older jobs.
             conn.execute("""INSERT OR IGNORE INTO recon_job_history
                 SELECT engagement_type, engagement_id, run_id, status, stage, dry_run,
@@ -65,6 +70,11 @@ class ReconJobStore:
                     recon_job_history.engagement_type=recon_job_reviews.engagement_type
                     AND recon_job_history.engagement_id=recon_job_reviews.engagement_id
                     AND recon_job_history.run_id=recon_job_reviews.run_id)""")
+            conn.execute("""DELETE FROM recon_job_results WHERE NOT EXISTS (
+                SELECT 1 FROM recon_job_history WHERE
+                    recon_job_history.engagement_type=recon_job_results.engagement_type
+                    AND recon_job_history.engagement_id=recon_job_results.engagement_id
+                    AND recon_job_history.run_id=recon_job_results.run_id)""")
         self.path.chmod(0o600)
 
     def connect(self):
@@ -89,6 +99,14 @@ class ReconJobStore:
                 result['reviewed_plan'] = plan if isinstance(plan, dict) and plan.get('schema_version') == 1 else None
             except (ValueError, TypeError):
                 result['reviewed_plan'] = None
+        if 'result_summary' in result and result['result_summary'] is not None:
+            try:
+                if len(result['result_summary']) > 16384:
+                    raise ValueError('Resumen de resultados demasiado grande.')
+                result['result_summary'] = validate_result_summary(json.loads(result['result_summary']),
+                    result['run_id'], result['stage'], result['status'], result['scope_revision'], result['dry_run'])
+            except (ValueError, TypeError, KeyError, OverflowError):
+                result['result_summary'] = None
         return result
 
     def get(self, key):
@@ -99,9 +117,11 @@ class ReconJobStore:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError('El límite de historial debe estar entre 1 y 100.')
         with closing(self.connect()) as conn:
-            query = '''SELECT h.*, r.reviewed_plan FROM recon_job_history h
+            query = '''SELECT h.*, r.reviewed_plan, s.result_summary FROM recon_job_history h
                 LEFT JOIN recon_job_reviews r ON h.engagement_type=r.engagement_type
                     AND h.engagement_id=r.engagement_id AND h.run_id=r.run_id
+                LEFT JOIN recon_job_results s ON h.engagement_type=s.engagement_type
+                    AND h.engagement_id=s.engagement_id AND h.run_id=s.run_id
                 WHERE h.engagement_type=? AND h.engagement_id=?'''
             args = list(key)
             if before:
@@ -137,13 +157,22 @@ class ReconJobStore:
                     WHERE engagement_type=? AND engagement_id=?""", (payload, *key))
         return self.get(key)
 
-    def finish(self, key, run_id, status, error=None, scope_revision=None):
+    def finish(self, key, run_id, status, error=None, scope_revision=None, result_summary=None):
         if status not in ('completed', 'simulated', 'failed', 'blocked', 'cancelled', 'interrupted'):
             raise ValueError('Estado final de reconocimiento no válido.')
         if scope_revision is not None and (not isinstance(scope_revision, str) or not re.fullmatch(r'[a-f0-9]{64}', scope_revision)):
             raise ValueError('Revisión de alcance no válida.')
         timestamp = now()
         with closing(self.connect()) as conn, conn:
+            payload = None
+            if result_summary is not None:
+                current = conn.execute('SELECT stage, dry_run FROM recon_jobs WHERE engagement_type=? AND engagement_id=? AND run_id=?', (*key, run_id)).fetchone()
+                if current is None:
+                    return
+                validate_result_summary(result_summary, run_id, current['stage'], status, scope_revision, bool(current['dry_run']))
+                payload = json.dumps(result_summary, ensure_ascii=True, separators=(',', ':'))
+                if len(payload) > 16384:
+                    raise ValueError('Resumen de resultados demasiado grande.')
             changed = conn.execute("""UPDATE recon_jobs SET status=?, finished_at=?, error=?
                 WHERE engagement_type=? AND engagement_id=? AND run_id=? AND status IN ('running', 'cancelling')""",
                          (status, timestamp, error, *key, run_id)).rowcount
@@ -151,6 +180,8 @@ class ReconJobStore:
                 conn.execute("""UPDATE recon_job_history SET status=?, finished_at=?, error=?, scope_revision=?
                     WHERE run_id=? AND engagement_type=? AND engagement_id=?""",
                     (status, timestamp, error, scope_revision, run_id, *key))
+                if payload is not None:
+                    conn.execute('INSERT INTO recon_job_results VALUES (?, ?, ?, ?)', (*key, run_id, payload))
 
     def request_cancel(self, key):
         with closing(self.connect()) as conn, conn:
@@ -179,3 +210,4 @@ class ReconJobStore:
             conn.execute('DELETE FROM recon_jobs WHERE engagement_type=? AND engagement_id=?', key)
             conn.execute('DELETE FROM recon_job_history WHERE engagement_type=? AND engagement_id=?', key)
             conn.execute('DELETE FROM recon_job_reviews WHERE engagement_type=? AND engagement_id=?', key)
+            conn.execute('DELETE FROM recon_job_results WHERE engagement_type=? AND engagement_id=?', key)

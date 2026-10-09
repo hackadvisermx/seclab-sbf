@@ -21,6 +21,9 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seclab_findings import requires_finding_review, finding_status_from_markdown
+
 # Colores ANSI respetando NO_COLOR y TERM=dumb
 NO_COLOR = bool(os.environ.get("NO_COLOR")) or os.environ.get("TERM") == "dumb"
 C_RESET = "" if NO_COLOR else "\033[0m"
@@ -321,11 +324,11 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
     unverified_findings = []
     if ev_dir.is_dir():
         for f in sorted(ev_dir.glob("*.md")):
-            if f.name.startswith("_") or f.name.lower() == "readme.md":
+            if f.name.startswith(("_", ".")) or f.name.lower() == "readme.md":
                 continue
             try:
                 txt = f.read_text(encoding="utf-8")
-                if "status: borrador" in txt.lower() or "status: unverified" in txt.lower() or "status: draft" in txt.lower():
+                if requires_finding_review(finding_status_from_markdown(txt)):
                     unverified_findings.append(f.name)
             except Exception:
                 pass
@@ -334,12 +337,12 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
         steps.append({
             "id": "verify_findings",
             "phase": "9. Triaje Evidence-First",
-            "title": "Verificación Formal de Hallazgos en Borrador",
+            "title": "Revisar Fichas Pendientes de Triaje",
             "discipline": "triage",
             "skill": "triage-gatekeeper",
             "prompt_template": "triage-agent",
             "priority": "CRITICAL",
-            "reason": f"Existen {len(unverified_findings)} hallazgo(s) en borrador ({', '.join(unverified_findings[:3])}) que requieren PoC reproducible y petición/respuesta crudas.",
+            "reason": f"Existen {len(unverified_findings)} ficha(s) pendientes ({', '.join(unverified_findings[:3])}) que requieren revisión humana: confirmar con evidencia y motivo, descartar o resolver explícitamente.",
             "command": f"pt-finding check",
             "ready_for_closure": False,
         })
@@ -347,7 +350,7 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
     # 10. Compilación de REPORT.md
     findings_count = 0
     if ev_dir.is_dir():
-        findings_count = len([f for f in ev_dir.glob("*.md") if not f.name.startswith("_") and f.name.lower() != "readme.md"])
+        findings_count = len([f for f in ev_dir.glob("*.md") if not f.name.startswith(("_", ".")) and f.name.lower() != "readme.md"])
 
     if not report_file.is_file() and findings_count > 0:
         steps.append({
@@ -367,7 +370,7 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
     readiness = eval_data.get("readiness", {})
     ready_for_closure = readiness.get("ready_for_closure", False)
 
-    if not steps or ready_for_closure:
+    if ready_for_closure:
         steps.append({
             "id": "pack_and_close",
             "phase": "11. Empaquetado y Cierre",

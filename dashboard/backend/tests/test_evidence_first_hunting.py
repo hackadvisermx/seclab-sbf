@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import pathlib
 import tempfile
 import unittest
@@ -20,6 +21,7 @@ class TestEvidenceFirstHunting(unittest.TestCase):
             name="hunting-lab",
             eng_type="engagement",
             client="Target Security Lab",
+            domain="api.target.local",
         )
 
     def test_new_finding_defaults_to_candidate_without_implicit_confirmation(self):
@@ -43,12 +45,16 @@ class TestEvidenceFirstHunting(unittest.TestCase):
             self.assertEqual(path.read_bytes(), original)
 
     def test_save_finding_with_proven_status(self):
+        raw = self.ws_path / 'engagements/hunting-lab/recon/raw.txt'
+        raw.write_bytes(b'Fixture HTTP')
         finding_data = FindingCreate(
             slug="idor-user-profile",
             title="Insecure Direct Object Reference en Perfil",
             severity="HIGH",
             cvss_score=8.1,
             status="PROVEN",
+            artifact_refs=[{'path': 'recon/raw.txt', 'sha256': hashlib.sha256(b'Fixture HTTP').hexdigest()}],
+            verification_rationale='Operador comparo respuestas y control negativo sinteticos',
             asset="https://api.target.local/v1/users/42/profile",
             description="Lectura no autorizada de datos personales de otro usuario.",
             steps_to_reproduce="1. Iniciar sesión como Usuario B.\n2. Modificar id a 42 (Usuario A).\n3. Validar con control negativo.",

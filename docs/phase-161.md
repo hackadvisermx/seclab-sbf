@@ -33,7 +33,7 @@ make scan-image SCAN_IMAGE=seclab-sbf:full-phase161
 - `make verify`: 180 Python; 174 backend; 110 frontend; audit 0. Pruebas nuevas cubren preservación/omisión/remoción, metadata inválida, referencias duplicadas/traversal/ausentes/cambiadas, bloqueo antes de sobrescribir reporte, hashes y sanitización, binarios convencionales/seleccionados y cambio después de validación.
 - 3 UI Chromium con API simulada y 5 integraciones con backend instalado, tester temporal y red deshabilitada. La integración extendida revisa/vincula, guarda/recarga, compila con cero confirmados, descarga/verifica hashes y bloquea al mutar el archivo. Captura `linked-artifact-changed.png` inspeccionada; temporal y credenciales eliminados al terminar.
 - Imagen aislada `seclab-sbf:full-phase161`, hash de insumos finales `b0f9704b4f544565`. Build, smoke, Compose `.env.example`, Actionlint y gate CVE High/Critical aprobados bajo política vigente, sin nuevas dependencias ni excepciones. Laboratorio vivo intacto.
-- CI remoto del head exacto pendiente al crear el PR.
+- PR #181 fusionado en `a655678b878d64caf9e30e7a9c2cc8557a0d9255` el 2026-10-08 23:37:15 UTC. CI `37860195141` aprobado para head `7fb54a47ba255c80e56540343ae39b0409392194`; rama/worktree retirados y baseline sincronizado.
 
 ## Límites, compatibilidad y reversión
 

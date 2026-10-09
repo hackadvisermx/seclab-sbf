@@ -22,7 +22,7 @@ Ejecuta UI e integración de forma secuencial: comparten el puerto 4199 y el dir
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase161
+make build-full BUILD_TAG=-phase162
 ```
 
 Después, desde `dashboard/frontend`:
@@ -35,9 +35,11 @@ El runner arranca un contenedor propio como tester, rootfs de solo lectura, sin 
 
 El dashboard solo implementa la identidad `tester`. Cada ejecución crea una contraseña aleatoria para esa identidad en el backend desechable. No hay API de alta de usuarios ni se añaden identidades distintas a producción. La prueba de autenticación realiza login real, verifica `/auth/me` y cookie HttpOnly, hace logout y comprueba que la sesión dejó de ser válida.
 
-La prueba de auditoría recorre el wizard, verifica dominio exacto y confirmación, ejecuta una simulación, declara referencia/vigencia sin permisos de tráfico y comprueba bloqueo activo en la vista previa y en un job iniciado directamente por API (para verificar el control del backend). El helper publica la ruta privada del workspace en `workspace.json`; la prueba escribe únicamente `example.test` en la lista de hosts del proyecto recién creado, sin ejecutar descubrimiento. Comprueba dos jobs distintos en el historial tras recargar, crea una ficha CANDIDATE con petición/respuesta sintéticas, compila con cero confirmados, revisa el Markdown y declara PROVEN explícitamente para comprobar el reporte con un confirmado sintético. Descarga el paquete y verifica entradas/hashes del source-manifest; un activo `outside.test` bloquea recompilación y descarga incluso si existe un reporte previo. Estas pruebas no acreditan suficiencia probatoria ni vínculo estructurado job → finding.
+La prueba de auditoría recorre el wizard, verifica dominio exacto y confirmación, ejecuta una simulación, declara referencia/vigencia sin permisos de tráfico y comprueba bloqueo activo en la vista previa y en un job iniciado directamente por API (para verificar el control del backend). El helper publica la ruta privada del workspace en `workspace.json`; la prueba escribe únicamente `example.test` en la lista de hosts del proyecto recién creado, sin ejecutar descubrimiento. Comprueba dos jobs distintos en el historial tras recargar, crea una ficha CANDIDATE con petición/respuesta sintéticas, compila con cero confirmados, revisa el Markdown y verifica rechazo de PROVEN sin referencias/motivo. Revisa y vincula el archivo sintético, explica el motivo de verificación y declara PROVEN explícitamente para comprobar el reporte con un confirmado sintético. Descarga el paquete y verifica entradas/hashes del source-manifest; guardar confirmado con `outside.test` se rechaza; guardarlo como candidato bloquea recompilación y descarga incluso si existe un reporte previo. Estas pruebas no acreditan suficiencia probatoria ni vínculo estructurado job → finding.
 
 Otra prueba comprueba la vista previa sin crear jobs, el bloqueo por permiso ausente, la invalidación al cambiar modo y el rechazo de una lista modificada tras la revisión. Tras revisar de nuevo, permite simular y comprueba que el historial conserva la revisión original después de cambiar la lista y recargar. Captura `review-history.png` en el directorio local de resultados.
+
+La auditoría sintética captura `confirmation-gate.png` cuando PROVEN aún carece de motivo. Al final añade una ficha VERIFIED antigua sin vínculos/motivo en el workspace temporal: verifica “Revisión pendiente”, ausencia de modificación al leer y rechazo de reporte/descarga. Captura `legacy-review-pending.png`. Estas comprobaciones validan requisitos e integridad, no la verdad o suficiencia de una afirmación del operador.
 
 Requisitos de integración: Docker local, imagen construida, Chromium instalado y `tar` en el host. `socat` ya forma parte de la imagen. La suite no llama proveedores de IA ni servicios externos.
 

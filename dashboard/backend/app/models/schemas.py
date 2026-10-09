@@ -112,6 +112,8 @@ class FindingDetail(BaseModel):
     engagement_id: str
     artifact_refs: List[Dict[str, str]] = Field(default_factory=list)
     artifact_refs_error: Optional[str] = None
+    verification_rationale: str = ""
+    confirmation_error: Optional[str] = None
 
 
 class FindingCreate(BaseModel):
@@ -130,6 +132,7 @@ class FindingCreate(BaseModel):
     remediation: Optional[str] = None
     body: Optional[str] = None
     artifact_refs: Optional[List[Dict[str, str]]] = None
+    verification_rationale: Optional[str] = Field(default=None, max_length=4000)
 
 
 # ==============================================================================

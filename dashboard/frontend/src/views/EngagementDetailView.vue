@@ -643,9 +643,9 @@
                 <span
                   v-if="f.frontmatter?.status"
                   class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold border"
-                  :class="getFindingStatusClass(f.frontmatter?.status)"
+                  :class="f.confirmation_error ? 'text-amber-300 border-amber-700' : getFindingStatusClass(f.frontmatter?.status)"
                 >
-                  {{ f.frontmatter?.status }}
+                  {{ f.confirmation_error ? 'Revisión pendiente (' + f.frontmatter?.status + ')' : f.frontmatter?.status }}
                 </span>
               </div>
               <span class="text-xs font-mono text-cyan-400 font-bold">
@@ -662,6 +662,8 @@
             <div class="mt-3 text-xs text-slate-300 font-sans line-clamp-3 bg-slate-900/50 p-2.5 rounded-sm border border-slate-800">
               {{ f.body }}
             </div>
+            <p v-if="f.confirmation_error" class="text-xs text-amber-300">Confirmación pendiente de revisión: {{ f.confirmation_error }}</p>
+            <p v-if="f.verification_rationale" class="mt-2 text-xs text-slate-300 whitespace-pre-wrap">Motivo de verificación: {{ f.verification_rationale }}</p>
             <p v-if="f.artifact_refs_error" class="text-xs text-amber-300">{{ f.artifact_refs_error }}</p>
             <div v-for="reference in f.artifact_refs || []" :key="reference.path" class="mt-2 text-xs font-mono break-words" data-testid="finding-artifact-ref">
               <button @click="openFindingArtifact(reference)" class="text-cyan-300 underline">Abrir {{ reference.path }}</button>
@@ -1698,6 +1700,13 @@
 
           </template>
 
+          <section class="space-y-2 border-t border-slate-800 pt-3 text-xs" data-testid="finding-confirmation-editor">
+            <label for="finding-verification-rationale" class="block text-slate-300">Motivo de verificación humana</label>
+            <textarea id="finding-verification-rationale" v-model="findingForm.verification_rationale" maxlength="4000" rows="3" placeholder="Qué comprobaste, qué evidencia lo demuestra y por qué descarta otra explicación." class="w-full bg-[#070b14] border border-slate-700 p-2 text-slate-100"></textarea>
+            <p class="text-slate-400">Confirmar requiere activo, al menos un artefacto vinculado y este motivo. La aplicación comprueba integridad y alcance; tú decides si la evidencia demuestra el hallazgo.</p>
+            <p v-if="findingConfirmationIssue" role="alert" class="text-amber-300">{{ findingConfirmationIssue }}</p>
+          </section>
+
           <section class="space-y-2 border-t border-slate-800 pt-3 text-xs" data-testid="finding-artifact-editor">
             <h3 class="font-bold text-cyan-300">Artefactos vinculados</h3>
             <p class="text-slate-400">Revisa y vincula una versión de recon/, fuzzing/ o screenshots/. El paquete incluirá los archivos seleccionados. Vincular no confirma el hallazgo.</p>
@@ -1731,7 +1740,7 @@
             </button>
             <button
               type="submit"
-              :disabled="!!findingForm.artifact_refs_error"
+              :disabled="!!findingForm.artifact_refs_error || !!findingConfirmationIssue"
               class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono"
             >
               Guardar Ficha
@@ -1976,6 +1985,14 @@ const findingForm = ref({
   remediation: '',
   artifact_refs: [],
   artifact_refs_error: null,
+  verification_rationale: '',
+})
+const findingConfirmationIssue = computed(() => {
+  if (!['PROVEN', 'VERIFIED', 'CONFIRMADO'].includes((findingForm.value.status || '').trim().toUpperCase())) return ''
+  if (!findingForm.value.asset?.trim() || findingForm.value.asset.trim().toUpperCase() === 'N/A') return 'Indica el activo autorizado antes de confirmar.'
+  if (!findingForm.value.artifact_refs?.length) return 'Vincula al menos un artefacto revisado antes de confirmar.'
+  if (!findingForm.value.verification_rationale?.trim()) return 'Explica el motivo de verificación humana antes de confirmar.'
+  return ''
 })
 const findingArtifactPath = ref('')
 const findingArtifactDraft = ref(null)
@@ -2198,6 +2215,7 @@ function openNewFindingModal() {
     remediation: '',
     artifact_refs: [],
     artifact_refs_error: null,
+    verification_rationale: '',
   }
   showFindingModal.value = true
 }
@@ -2211,7 +2229,7 @@ function editFinding(f) {
   findingForm.value = {
     slug: f.slug,
     title: f.frontmatter?.title || '',
-    status: f.frontmatter?.status || 'CANDIDATE',
+    status: ['VERIFIED', 'CONFIRMADO'].includes((f.frontmatter?.status || '').trim().toUpperCase()) ? 'PROVEN' : f.frontmatter?.status || 'CANDIDATE',
     severity: f.frontmatter?.severity || 'MEDIUM',
     cvss_score: f.frontmatter?.cvss_score ?? 5.0,
     cvss_vector: f.frontmatter?.cvss_vector || '',
@@ -2225,6 +2243,7 @@ function editFinding(f) {
     remediation: '',
     artifact_refs: (f.artifact_refs || []).map(reference => ({ ...reference })),
     artifact_refs_error: f.artifact_refs_error || null,
+    verification_rationale: f.verification_rationale || '',
   }
   cvssMetrics.value = { AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N' }
   for (const metric of findingForm.value.cvss_vector.split('/').slice(1)) {
@@ -2246,7 +2265,7 @@ async function recalcCvss() {
 }
 
 async function submitFinding() {
-  if (findingForm.value.artifact_refs_error) return
+  if (findingForm.value.artifact_refs_error || findingConfirmationIssue.value) return
   try {
     const { artifact_refs_error, ...payload } = findingForm.value
     await api.saveFinding(engId.value, payload, engType.value)

@@ -41,6 +41,12 @@ with tempfile.TemporaryDirectory(prefix='recon-cli-decision-') as temporary:
         assert result['decision_job']==recon_decision(store.get(key))['decision_job'], result
         assert result['next_step']['command'] is None and result['prompt']=='' and not result['prompt_available'], result
         assert len(result['roadmap'])==1 and 'SECRET' not in str(result), result
+        context_run=subprocess.run(['python3','/usr/local/bin/pt-agent-context',str(project),'-j'],capture_output=True,text=True,check=True,timeout=10)
+        context=json.loads(context_run.stdout)
+        state=context['recon_state']
+        assert state['job']['run_id']==job['run_id'] and state['job']['status']==status, state
+        assert state['decision']==recon_decision(store.get(key))['next_step'], state
+        assert state['artifacts_origin']=='workspace_unattributed' and 'SECRET' not in str(state), state
         assert (data/'recon-jobs.db').read_bytes()==before
         if status not in ('running','cancelling'):
             current=store.get(key)
@@ -48,7 +54,10 @@ with tempfile.TemporaryDirectory(prefix='recon-cli-decision-') as temporary:
             reviewed=cli()
             assert reviewed['next_step']['id']=='recon_prepare_plan', reviewed
             assert reviewed['outcome_review']==store.get(key)['outcome_review'], reviewed
+            reviewed_context=json.loads(subprocess.run(['python3','/usr/local/bin/pt-agent-context',str(project),'-j'],capture_output=True,text=True,check=True,timeout=10).stdout)['recon_state']
+            assert reviewed_context['decision']['id']=='recon_prepare_plan', reviewed_context
+            assert reviewed_context['job']['status']==status and reviewed_context['outcome_review']['decision']=='prepare_new_plan', reviewed_context
             assert store.get(key)['status']==status
         assert hashlib.sha256((project/'target.yaml').read_bytes()).hexdigest()==target_hash
 CHECK
-printf '%s\n' "installed_recon_cli=ok imagen=$image decision=shared read_only=yes commands=none prompts=none"
+printf '%s\n' "installed_recon_cli=ok imagen=$image decision=shared context=shared read_only=yes commands=none prompts=none"

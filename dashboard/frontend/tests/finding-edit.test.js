@@ -10,7 +10,7 @@ const { createApp, nextTick, reactive } = await import('vue')
 const require = createRequire(import.meta.url)
 const vueUrl = pathToFileURL(require.resolve('vue/dist/vue.runtime.esm-bundler.js')).href
 const body = '## Descripción\nOriginal\n\n## Control negativo\nPrueba personalizada\n\n```http\nGET / HTTP/1.1\n```'
-const finding = { slug: 'legacy', filename: 'legacy.md', frontmatter: { title: 'Original', severity: 'INFO', status: 'PROVEN', cvss_score: 0, cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N' }, body }
+const finding = { slug: 'legacy', filename: 'legacy.md', frontmatter: { title: 'Original', severity: 'INFO', status: 'PROVEN', asset: 'example.test', cvss_score: 0, cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N' }, artifact_refs: [{ path: 'recon/valid.txt', sha256: 'c'.repeat(64) }], verification_rationale: 'Operador reviso el fixture', body }
 async function flush() { await nextTick(); await new Promise(r => setTimeout(r, 0)); await nextTick() }
 async function mount(api, route = { params: { id: 'fixture', type: 'engagement' } }) {
   globalThis.fixtureFindingRoute = route
@@ -504,7 +504,57 @@ test('respuesta tardía del revisor no vincula otra ruta y referencias inválida
     resolveRead({ content: 'stale', sha256: 'a'.repeat(64), fingerprint_status: 'available' }); await flush()
     assert.doesNotMatch(section.textContent, /stale|Vincular versión revisada/)
     await clickText(section, 'Descartar referencias inválidas')
+    await clickText(view.root, 'Guardar Ficha'); assert.equal(writes, 0)
+    const status = [...view.root.querySelectorAll('select')].find(el => el.querySelector('option[value="CANDIDATE"]'))
+    status.value = 'CANDIDATE'; status.dispatchEvent(new window.Event('change', { bubbles: true })); await flush()
     await clickText(view.root, 'Guardar Ficha'); assert.equal(writes, 1)
+  } finally { view.cleanup() }
+})
+
+test('confirmar exige activo, vínculo y motivo y conserva la decisión explícita', async () => {
+  let saved
+  const view = await mount({ getLoot: async () => ({ credentials: [], files: [] }), getArtifacts: async () => [], getVaultKeys: async () => [],
+    getFindings: async () => [{ ...finding, frontmatter: { ...finding.frontmatter, status: 'CANDIDATE', asset: '' }, artifact_refs: [], verification_rationale: '' }],
+    getArtifactContent: async () => ({ content: 'fixture', sha256: 'b'.repeat(64), fingerprint_status: 'available', preview_status: 'complete' }),
+    saveFinding: async (id, payload) => { saved = JSON.parse(JSON.stringify(payload)) } })
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Editar')
+    const form = view.root.querySelector('[data-testid="finding-markdown"]').closest('form')
+    const status = [...form.querySelectorAll('select')].find(el => el.querySelector('option[value="CANDIDATE"]'))
+    status.value = 'PROVEN'; status.dispatchEvent(new window.Event('change', { bubbles: true })); await flush()
+    assert.match(form.textContent, /Indica el activo autorizado/)
+    await clickText(view.root, 'Guardar Ficha'); assert.equal(saved, undefined)
+    const asset = form.querySelector('input[placeholder="api.target.local/v1/profile"]')
+    asset.value = 'example.test'; asset.dispatchEvent(new window.Event('input', { bubbles: true })); await flush()
+    assert.match(form.textContent, /Vincula al menos un artefacto/)
+    const path = form.querySelector('#finding-artifact-path')
+    path.value = 'recon/raw.txt'; path.dispatchEvent(new window.Event('input', { bubbles: true })); await flush()
+    await clickText(form, 'Revisar artefacto'); await clickText(form, 'Vincular versión revisada')
+    assert.match(form.textContent, /Explica el motivo de verificación/)
+    const rationale = form.querySelector('#finding-verification-rationale')
+    rationale.value = 'Operador comparó el control sintético'; rationale.dispatchEvent(new window.Event('input', { bubbles: true })); await flush()
+    await clickText(view.root, 'Guardar Ficha')
+    assert.equal(saved.status, 'PROVEN')
+    assert.equal(saved.verification_rationale, rationale.value)
+    assert.equal(saved.body, body)
+  } finally { view.cleanup() }
+})
+
+test('confirmación antigua incompleta muestra revisión pendiente y permite volver a candidato', async () => {
+  let saved
+  const view = await mount({ getLoot: async () => ({ credentials: [], files: [] }), getArtifacts: async () => [], getVaultKeys: async () => [],
+    getFindings: async () => [{ ...finding, artifact_refs: [], verification_rationale: '', confirmation_error: 'Falta evidencia vinculada' }],
+    saveFinding: async (id, payload) => { saved = JSON.parse(JSON.stringify(payload)) } })
+  try {
+    await clickText(view.root, 'Hallazgos')
+    assert.match(view.root.textContent, /Revisión pendiente \(PROVEN\)/)
+    await clickText(view.root, 'Editar')
+    await clickText(view.root, 'Guardar Ficha'); assert.equal(saved, undefined)
+    const status = [...view.root.querySelectorAll('select')].find(el => el.querySelector('option[value="CANDIDATE"]'))
+    status.value = 'CANDIDATE'; status.dispatchEvent(new window.Event('change', { bubbles: true })); await flush()
+    await clickText(view.root, 'Guardar Ficha')
+    assert.equal(saved.status, 'CANDIDATE')
+    assert.equal(saved.body, body)
   } finally { view.cleanup() }
 })
 

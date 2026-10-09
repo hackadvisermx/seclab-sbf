@@ -1,4 +1,5 @@
 import pathlib
+import hashlib
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -12,10 +13,13 @@ class TestFindingEdit(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.service = WorkspaceSyncService(pathlib.Path(self.temp.name))
-        self.service.create_engagement('fixture')
+        self.service.create_engagement('fixture', domain='example.test')
+        artifact = self.service._resolve_dir('fixture') / 'recon/raw.txt'
+        artifact.write_bytes(b'fixture')
         self.path = self.service._resolve_dir('fixture') / 'evidence/legacy.md'
         self.metadata = {'title': 'Original --- título', 'status': 'PROVEN', 'severity': 'HIGH', 'date': '2025-01-01',
-                         'author': 'auditora', 'id': 'VULN-42', 'owasp': 'A01', 'custom': {'nested': ['kept']},
+                         'asset': 'example.test', 'artifact_refs': [{'path': 'recon/raw.txt', 'sha256': hashlib.sha256(b'fixture').hexdigest()}],
+                         'verification_rationale': 'Operadora reviso el fixture', 'author': 'auditora', 'id': 'VULN-42', 'owasp': 'A01', 'custom': {'nested': ['kept']},
                          'cvss_v31': 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'}
         self.body = '## Descripción\nOriginal\n\n## Control negativo\nPrueba personalizada\n\n```http\nGET / HTTP/1.1\n```\n\n## Remediación\nCorrección real'
         self.path.write_text('---\n' + yaml.safe_dump(self.metadata, allow_unicode=True) + '---\n\n' + self.body)

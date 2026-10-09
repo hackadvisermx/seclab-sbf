@@ -8,7 +8,7 @@ import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
 from app.core.project_trash import ProjectTrash
-from app.core.artifact_snapshot import read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs
+from app.core.artifact_snapshot import read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs, normalize_status, normalize_verification_rationale, validate_confirmation
 from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
@@ -33,13 +33,42 @@ def _finding_refs(metadata):
         return {'artifact_refs': [], 'artifact_refs_error': str(error)}
 
 
+def _finding_review(metadata):
+    rationale = ''
+    error = None
+    try:
+        rationale = normalize_verification_rationale(metadata.get('verification_rationale'))
+        validate_confirmation(metadata)
+    except ValueError as exc:
+        error = str(exc)
+    return {'verification_rationale': rationale, 'confirmation_error': error}
+
+
+def _validate_finding_confirmation(directory, metadata):
+    try:
+        validate_confirmation(metadata)
+        if normalize_status(metadata.get('status')) == 'PROVEN':
+            validate_artifact_refs(directory, metadata.get('artifact_refs', []))
+            module = _scope_module()
+            data = module.load_target_yaml(directory / 'target.yaml')
+            verdict, _ = module.check_scope(metadata['asset'], data)
+            if verdict != 'IN_SCOPE':
+                raise ValueError('El activo confirmado debe estar dentro del alcance vigente.')
+    except (OSError, ValueError) as error:
+        raise FindingUpdateError('No se confirmó ni guardó la ficha: ' + str(error)) from error
+
+
 def _finding_markdown(metadata, body):
     fields = dict(metadata)
     has_references = 'artifact_refs' in fields
     references = fields.pop('artifact_refs', None)
+    has_rationale = 'verification_rationale' in fields
+    rationale = fields.pop('verification_rationale', None)
     header = yaml.dump(fields, default_flow_style=False, sort_keys=False, allow_unicode=True)
     if has_references:
         header += 'artifact_refs: ' + json.dumps(normalize_artifact_refs(references), ensure_ascii=True) + '\n'
+    if has_rationale:
+        header += 'verification_rationale: ' + json.dumps(normalize_verification_rationale(rationale), ensure_ascii=True) + '\n'
     return '---\n' + header + '---\n\n' + body
 
 
@@ -366,6 +395,7 @@ class WorkspaceSyncService:
                         body=body,
                         engagement_id=eng_id,
                         **_finding_refs(fm_data),
+                        **_finding_review(fm_data),
                     )
                 )
             except Exception:
@@ -400,6 +430,7 @@ class WorkspaceSyncService:
             body=body,
             engagement_id=eng_id,
             **_finding_refs(fm_data),
+            **_finding_review(fm_data),
         )
 
     def save_finding(self, eng_id: str, finding_create: FindingCreate, eng_type: str = "engagement") -> FindingDetail:
@@ -423,7 +454,7 @@ class WorkspaceSyncService:
             fm, _ = _parse_frontmatter(file_path.read_text(encoding="utf-8"), strict=True)
             if not isinstance(fm, dict):
                 raise FindingUpdateError("Los metadatos de la ficha no son válidos; no se sobrescribió.")
-            for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status"):
+            for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status", "verification_rationale"):
                 if field in finding_create.model_fields_set:
                     value = getattr(finding_create, field)
                     if field in ("severity", "status") and value is not None:
@@ -431,6 +462,7 @@ class WorkspaceSyncService:
                     fm[field] = value
             if references is not None:
                 fm['artifact_refs'] = references
+            _validate_finding_confirmation(target_dir, fm)
             try:
                 content = _finding_markdown(fm, finding_create.body)
             except ValueError as error:
@@ -458,6 +490,9 @@ class WorkspaceSyncService:
         }
         if references is not None:
             fm['artifact_refs'] = references
+        if 'verification_rationale' in finding_create.model_fields_set:
+            fm['verification_rationale'] = finding_create.verification_rationale
+        _validate_finding_confirmation(target_dir, fm)
 
         body_parts = []
         body_parts.append(f"## Descripción\n{finding_create.description or 'Detalles de la vulnerabilidad.'}\n")
@@ -474,7 +509,10 @@ class WorkspaceSyncService:
         body_parts.append(f"## Remediación y Mitigación\n{finding_create.remediation or 'Implementar validación estricta de entradas y principio de mínimo privilegio.'}\n")
 
         markdown_body = "\n".join(body_parts)
-        file_content = _finding_markdown(fm, markdown_body)
+        try:
+            file_content = _finding_markdown(fm, markdown_body)
+        except ValueError as error:
+            raise FindingUpdateError(str(error)) from error
 
         file_path.write_text(file_content, encoding="utf-8")
 
@@ -485,6 +523,7 @@ class WorkspaceSyncService:
             body=markdown_body,
             engagement_id=eng_id,
             **_finding_refs(fm),
+            **_finding_review(fm),
         )
 
     def delete_finding(self, eng_id: str, slug: str, eng_type: str = "engagement") -> bool:

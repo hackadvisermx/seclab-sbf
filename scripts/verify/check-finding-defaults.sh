@@ -19,7 +19,14 @@ pt-finding new generic --title 'Fixture / sin confirmar' --asset example.test
 for template_name in idor xss-reflected missing-rate-limit; do
   pt-finding new "$template_name" --template "$template_name" --asset example.test
 done
-pt-finding new explicit --status proven --asset example.test
+for confirmed_status in proven verified confirmado ' PROVEN '; do
+  if pt-finding new explicit --status "$confirmed_status" --asset example.test; then
+    printf 'confirmación sin evidencia fue aceptada\n' >&2
+    exit 1
+  fi
+  test ! -f evidence/explicit.md
+done
+pt-finding new explicit --status disproved --asset example.test
 pt-finding new after-explicit --asset example.test
 # A workspace seeded before phase 151 can still contain PROVEN placeholders.
 sed -i 's/status: "CANDIDATE"/status: "PROVEN"/' "$fixture/templates/evidence.md"
@@ -34,11 +41,11 @@ import pathlib, sys, yaml
 root = pathlib.Path(sys.argv[1]) / 'evidence'
 for path in root.glob('*.md'):
     metadata = yaml.safe_load(path.read_text().split('---\n', 2)[1])
-    expected = 'PROVEN' if path.stem == 'explicit' else 'CANDIDATE'
+    expected = 'DISPROVED' if path.stem == 'explicit' else 'CANDIDATE'
     assert metadata['status'] == expected, (path.name, metadata['status'], expected)
     assert metadata['asset'] == 'example.test', (path.name, metadata['asset'])
 assert len(list(root.glob('*.md'))) == 8
 assert 'Fixture / sin confirmar' in (root / 'generic.md').read_text()
 ASSERT
 CHECK
-printf '%s\n' "finding_defaults=ok imagen=$image candidate=default explicit_status=preserved"
+printf '%s\n' "finding_defaults=ok imagen=$image candidate=default explicit_status=preserved confirmation=guarded"

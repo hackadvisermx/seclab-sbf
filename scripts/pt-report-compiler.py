@@ -14,11 +14,13 @@ import importlib.util
 import os
 import pathlib
 import re
+import json
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_artifacts import validate_artifact_refs
+from seclab_findings import normalize_status, normalize_verification_rationale, validate_confirmation
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -55,7 +57,7 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
                 if ":" in line_str:
                     key, val = line_str.split(":", 1)
                     key = key.strip()
-                    if key == 'artifact_refs':
+                    if key in ('artifact_refs', 'verification_rationale'):
                         metadata[key] = val.strip()
                         continue
                     val = val.strip().strip("'\"")
@@ -65,31 +67,6 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
                     metadata[key] = val
 
     return metadata, body
-
-
-def normalize_status(raw_status: str) -> str:
-    """Normaliza estados heterogeneos de hallazgos al ciclo Evidence-First."""
-    raw = str(raw_status or "").strip().upper()
-    status_map = {
-        "PROVEN": "PROVEN",
-        "CONFIRMADO": "PROVEN",
-        "VERIFIED": "PROVEN",
-        "CANDIDATE": "CANDIDATE",
-        "NULL": "CANDIDATE",
-        "~": "CANDIDATE",
-        "HIPOTESIS": "CANDIDATE",
-        "DISPROVED": "DISPROVED",
-        "FALSO_POSITIVO": "DISPROVED",
-        "FALSO POSITIVO": "DISPROVED",
-        "FALSE_POSITIVE": "DISPROVED",
-        "MITIGATED": "MITIGATED",
-        "MITIGADO": "MITIGATED",
-        "REMEDIATED": "MITIGATED",
-        "DRAFT": "DRAFT",
-        "BORRADOR": "DRAFT",
-        "BLOCKED": "BLOCKED",
-    }
-    return status_map.get(raw, raw if raw else "CANDIDATE")
 
 
 def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
@@ -149,6 +126,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         "audit_log": meta.get("audit_log", "terminal.log"),
         "body": body.strip(),
         "artifact_refs_raw": meta.get('artifact_refs', []),
+        "verification_rationale_raw": meta.get("verification_rationale", '""'),
         "has_poc": "```bash" in body or "curl " in body or "## 2. Pasos" in body or "## Pasos para Reproducir" in body,
         "has_negative_control": has_negative_control,
         "has_bounded_proof": has_bounded_proof,
@@ -262,6 +240,13 @@ def review_report_inputs(engagement_dir: pathlib.Path):
             f['artifact_refs'] = validate_artifact_refs(engagement_dir, f['artifact_refs_raw'])
         except (OSError, ValueError) as error:
             issues.append(f'{prefix} Evidencia vinculada no válida: {error}')
+        try:
+            f['verification_rationale'] = normalize_verification_rationale(json.loads(f['verification_rationale_raw']))
+            validate_confirmation({'status': f['status'], 'asset': f['asset'],
+                                   'artifact_refs': f.get('artifact_refs', []),
+                                   'verification_rationale': f['verification_rationale']})
+        except (ValueError, TypeError) as error:
+            issues.append(f'{prefix} Confirmación no válida: {error}')
         if not f["title"]:
             issues.append(f"{prefix} Falta el título de la vulnerabilidad.")
         if not f["has_poc"]:
@@ -439,6 +424,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
                 "",
                 f"- **Severidad:** {f['severity'].capitalize()} (Score: {f['cvss_score']})",
                 f"- **Estado de evidencia:** {f['status']}",
+                *([f"- **Motivo de verificación declarado:** {f['verification_rationale']}"] if f.get('verification_rationale') else []),
                 f"- **Vector CVSS:** `{f['cvss_v31']}`",
                 f"- **CWE:** {f['cwe']}",
                 f"- **Activo:** `{f['asset']}`",

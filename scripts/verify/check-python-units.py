@@ -925,10 +925,14 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
             evidence = root / "evidence"
             evidence.mkdir()
             (root / "target.yaml").write_text("scope:\n  in_scope:\n    domains: [example.test]\n  out_of_scope:\n    domains: []\n")
+            import hashlib
+            (root / "recon").mkdir()
+            (root / "recon/raw.txt").write_bytes(b"Fixture de verificacion")
+            refs = json.dumps([{"path": "recon/raw.txt", "sha256": hashlib.sha256(b"Fixture de verificacion").hexdigest()}])
             cases = [("PROVEN", "LOW"), ("candidate", "CRITICAL"), ("DISPROVED", "CRITICAL"),
                      ("mitigado", "HIGH"), ("DRAFT", "HIGH"), ("BLOCKED", "CRITICAL"), ("custom", "CRITICAL")]
             for number, (status, severity) in enumerate(cases):
-                (evidence / f"{number}.md").write_text(f"---\nid: VULN-{number}\ntitle: Evidence {number}\nstatus: {status}\nseverity: {severity}\nasset: example.test\n---\nOriginal body {number}\n## 2. Pasos\n## 5. Remediación")
+                (evidence / f"{number}.md").write_text(f"---\nid: VULN-{number}\ntitle: Evidence {number}\nstatus: {status}\nseverity: {severity}\nasset: example.test\nartifact_refs: {refs}\nverification_rationale: \"Operador reviso el fixture\"\n---\nOriginal body {number}\n## 2. Pasos\n## 5. Remediación")
             report = report_compiler.build_report(root).read_text()
             self.assertIn("**1 hallazgos confirmados activos**", report)
             self.assertIn("**Postura General de Riesgo:** **Bajo**", report)

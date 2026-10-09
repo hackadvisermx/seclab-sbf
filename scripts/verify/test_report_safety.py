@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tarfile
 import hashlib
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -37,8 +38,12 @@ class ReportSafetyTests(unittest.TestCase):
         self.finding('example.test')
 
     def finding(self, asset):
+        artifact = self.root / 'recon/confirmation.txt'
+        artifact.parent.mkdir(exist_ok=True)
+        artifact.write_bytes(b'Fixture de verificacion')
+        refs = json.dumps([{'path': 'recon/confirmation.txt', 'sha256': hashlib.sha256(artifact.read_bytes()).hexdigest()}])
         (self.root / 'evidence/finding.md').write_text(
-            f'---\nid: VULN-TEST\ntitle: Fixture\nasset: {asset}\nstatus: PROVEN\n---\n'
+            f'---\nid: VULN-TEST\ntitle: Fixture\nasset: {asset}\nstatus: PROVEN\nartifact_refs: {refs}\nverification_rationale: "Operador reviso el fixture sintetico"\n---\n'
             '## 2. Pasos\nFixture de reproducción.\n## 5. Remediación\nFixture.\n', encoding='utf-8')
 
     def cli(self, action, output=None):
@@ -53,7 +58,7 @@ class ReportSafetyTests(unittest.TestCase):
         artifact.write_bytes(payload)
         reference = {'path': path, 'sha256': hashlib.sha256(payload).hexdigest()}
         finding = self.root / 'evidence/finding.md'
-        finding.write_text(finding.read_text().replace('status: PROVEN\n', 'status: PROVEN\nartifact_refs: ' + json.dumps([reference]) + '\n'))
+        finding.write_text(re.sub(r'^artifact_refs: .*$', 'artifact_refs: ' + json.dumps([reference]), finding.read_text(), flags=re.M))
         return artifact, reference
 
     def test_linked_version_is_rendered_and_changed_missing_or_invalid_refs_block(self):
@@ -74,7 +79,7 @@ class ReportSafetyTests(unittest.TestCase):
                       json.dumps([dict(reference, path='../outside')]), json.dumps([dict(reference, sha256='wrong')])]:
             self.finding('example.test')
             path = self.root / 'evidence/finding.md'
-            path.write_text(path.read_text().replace('status: PROVEN\n', 'status: PROVEN\nartifact_refs: ' + value + '\n'))
+            path.write_text(re.sub(r'^artifact_refs: .*$', 'artifact_refs: ' + value, path.read_text(), flags=re.M))
             self.assertEqual(self.cli('check').returncode, 1, value)
 
     def test_selected_artifact_is_exported_with_hashes_and_sanitization(self):
@@ -123,6 +128,44 @@ class ReportSafetyTests(unittest.TestCase):
             packer.pack_engagement(self.root, destination)
         self.assertEqual(destination.read_bytes(), b'prior bundle')
         self.assertFalse(list(self.root.glob('.staging_pack*')))
+
+    def test_every_confirmed_alias_requires_review_and_preserves_prior_report_and_bundle(self):
+        prior = report.build_report(self.root).read_bytes()
+        destination = self.root / 'prior.tar.gz'
+        destination.write_bytes(b'prior bundle')
+        for status in ['PROVEN', 'VERIFIED', 'CONFIRMADO']:
+            for field, value in [('artifact_refs', '[]'), ('verification_rationale', '"  "'), ('verification_rationale', 'null')]:
+                with self.subTest(status=status, field=field):
+                    self.finding('example.test')
+                    path = self.root / 'evidence/finding.md'
+                    text = path.read_text().replace('status: PROVEN', 'status: ' + status)
+                    path.write_text(re.sub(r'^' + field + r': .*$', lambda _: field + ': ' + value, text, flags=re.M))
+                    self.assertFalse(report.check_findings(self.root)[0])
+                    self.assertEqual(self.cli('build').returncode, 1)
+                    with self.assertRaises(ValueError):
+                        packer.pack_engagement(self.root, destination)
+                    self.assertEqual((self.root / 'REPORT.md').read_bytes(), prior)
+                    self.assertEqual(destination.read_bytes(), b'prior bundle')
+
+    def test_unconfirmed_states_remain_supported_without_refs_or_review(self):
+        path = self.root / 'evidence/finding.md'
+        for status in ['CANDIDATE', 'DISPROVED', 'MITIGATED', 'DRAFT']:
+            self.finding('example.test')
+            text = path.read_text().replace('status: PROVEN', 'status: ' + status)
+            path.write_text(re.sub(r'^(artifact_refs|verification_rationale): .*\n', '', text, flags=re.M))
+            self.assertIn('**0 hallazgos confirmados activos**', report.build_report(self.root).read_text())
+            self.assertEqual(path.read_text(), re.sub(r'^(artifact_refs|verification_rationale): .*\n', '', text, flags=re.M))
+
+    def test_verification_rationale_json_preserves_quotes_unicode_and_newlines_and_rejects_invalid_types(self):
+        path = self.root / 'evidence/finding.md'
+        rationale = 'Revisión humana: "á"\nComparación con control sintético.'
+        for value in [json.dumps(rationale), '[]', '{}', '"' + 'a' * 4001 + '"', 'invalid-json']:
+            self.finding('example.test')
+            path.write_text(re.sub(r'^verification_rationale: .*$', lambda _: 'verification_rationale: ' + value, path.read_text(), flags=re.M))
+            if value == json.dumps(rationale):
+                self.assertIn(rationale, report.build_report(self.root).read_text())
+            else:
+                self.assertFalse(report.check_findings(self.root)[0])
 
     def test_missing_empty_or_null_status_never_confirms_a_finding(self):
         path = self.root / 'evidence/finding.md'

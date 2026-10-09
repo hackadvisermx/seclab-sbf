@@ -2,7 +2,7 @@
 
 ## Autorización temporal del owner
 
-El owner autoriza merges sin preguntar por PR durante 24 horas desde el 2026-10-08 19:09:04 UTC hasta el 2026-10-09 19:09:04 UTC (13:09:04, America/Mexico_City). Esta instrucción explícita sustituye durante esa ventana los requisitos de aprobación individual de este archivo y del backlog. Cada fase sigue requiriendo PR hacia baseline, revisión del diff, pruebas/gates locales y CI aprobados del head exacto. Al vencer la ventana vuelve la aprobación individual. No autoriza reiniciar el laboratorio vivo, modificar proyectos del owner ni publicar imágenes/desplegar.
+El owner renovó explícitamente otras 24 horas de permiso para merges sin preguntar (mensaje «Tienes otras 24 horas de permiso para hacer merge, sin preguntar», registrado el 2026-10-09 14:56:00 UTC). La autorización vigente va desde el 2026-10-09 14:56:00 UTC hasta el 2026-10-10 14:56:00 UTC (08:56:00, America/Mexico_City) y sustituye la ventana anterior. Esta instrucción explícita sustituye durante esa ventana los requisitos de aprobación individual de este archivo y del backlog. Cada fase sigue requiriendo PR hacia baseline, revisión del diff, pruebas/gates locales y CI aprobados del head exacto. Al vencer la ventana vuelve la aprobación individual. No autoriza reiniciar el laboratorio vivo, modificar proyectos del owner ni publicar imágenes/desplegar.
 
 ## Estado del repositorio
 

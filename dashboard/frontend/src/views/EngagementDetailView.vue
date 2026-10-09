@@ -561,6 +561,7 @@
         </div>
         <p class="text-xs text-slate-400">Conserva el plan revisado y un resumen de resultados por job del dashboard. Los artefactos y la salida de arriba corresponden al workspace actual; este historial no guarda copias de outputs anteriores.</p>
         <p v-if="reconHistoryError" role="alert" class="text-xs text-amber-300">{{ reconHistoryError }}</p>
+        <p v-if="reconOutcomeError" role="alert" class="text-xs text-amber-300">{{ reconOutcomeError }}</p>
         <p v-if="reconHistory.length === 0" class="text-xs text-slate-400">{{ reconHistoryBusy ? 'Cargando historial...' : 'Todavía no hay ejecuciones registradas.' }}</p>
         <ol v-else class="space-y-3 text-xs font-mono">
           <li v-for="job in reconHistory" :key="job.run_id" class="border border-slate-800 rounded-sm p-3 space-y-1">
@@ -603,6 +604,18 @@
             <p v-else class="text-slate-500">Sin plan revisado registrado: job anterior o iniciado sin vista previa.</p>
             <p v-if="job.origin === 'legacy-current'" class="text-amber-300">Registro anterior importado: solo se conservaba el último job; no se reconstruyen ejecuciones previas.</p>
             <p v-if="job.error" class="text-amber-300 break-words">{{ job.error }}</p>
+            <div v-if="job.outcome_review" data-testid="recon-outcome-review" class="border-l border-cyan-700 pl-3 py-2 space-y-1 text-slate-300">
+              <p>Resultado revisado por el operador: {{ new Date(job.outcome_review.reviewed_at).toLocaleString() }}</p>
+              <p>Decisión registrada: preparar otro plan. Se conserva el estado {{ historyStatusLabel(job.status) }}; la revisión no confirma evidencia, completa etapas ni concede permisos.</p>
+            </div>
+            <div v-else-if="canReviewReconOutcome(job)" data-testid="recon-outcome-form" class="border-l border-slate-700 pl-3 py-2 space-y-3">
+              <p class="text-slate-400">Revisa el estado, motivo, plan y resumen disponibles. Registrar esta revisión prepara la siguiente decisión; no ejecuta otro job ni modifica el alcance.</p>
+              <label class="flex items-start gap-2 text-slate-200">
+                <input type="checkbox" :checked="reconOutcomeAcknowledged === job.outcome_revision" :disabled="reconOutcomeBusy" @change="reconOutcomeAcknowledged = $event.target.checked ? job.outcome_revision : ''" />
+                He revisado el resultado y quiero preparar otro plan
+              </label>
+              <button @click="reviewReconOutcome(job)" :disabled="reconOutcomeBusy || reconOutcomeAcknowledged !== job.outcome_revision" class="px-3 py-2 rounded-sm border border-cyan-700 bg-cyan-950 text-cyan-200 disabled:opacity-50">{{ reconOutcomeBusy ? 'Registrando revisión…' : 'Registrar revisión del resultado' }}</button>
+            </div>
           </li>
         </ol>
         <button v-if="reconHistoryCursor" @click="loadReconHistory(true)" :disabled="reconHistoryBusy" class="text-xs text-cyan-300 underline disabled:opacity-50">Cargar ejecuciones anteriores</button>
@@ -806,6 +819,7 @@
           </div>
           <p v-if="nextStepError" role="alert" class="text-xs text-amber-300">{{ nextStepError }}</p>
           <p v-if="nextStepData.decision_job" class="text-xs text-slate-400 break-all">Job {{ nextStepData.decision_job.run_id }} · {{ reconStageLabel(nextStepData.decision_job.stage) }} · {{ historyStatusLabel(nextStepData.decision_job.status) }}</p>
+          <p v-if="nextStepData.outcome_review" class="text-xs text-cyan-300">Revisión del operador registrada: {{ new Date(nextStepData.outcome_review.reviewed_at).toLocaleString() }}</p>
           <p v-if="nextStepData.next_step?.reason" class="text-xs text-slate-300">{{ nextStepData.next_step.reason }}</p>
           <button v-if="['scope', 'recon'].includes(nextStepData.next_step?.action?.view)" @click="openNextDecision" class="px-3 py-1 rounded-sm border border-cyan-500/40 text-cyan-300">{{ nextStepData.next_step.action.label }}</button>
           <div v-if="nextStepData.next_step?.command" class="space-y-2 text-xs">
@@ -1850,6 +1864,17 @@ const reconHistoryCursor = ref(null)
 const reconHistoryBusy = ref(false)
 const reconHistoryError = ref('')
 let reconHistoryRefreshQueued = false
+const reconOutcomeAcknowledged = ref('')
+const reconOutcomeBusy = ref(false)
+const reconOutcomeError = ref('')
+let reconOutcomeRequest = 0
+let reconStatusRequest = 0
+const reconTerminalStatuses = ['completed', 'simulated', 'failed', 'blocked', 'cancelled', 'interrupted']
+function canReviewReconOutcome(job) {
+  const current = reconStatus.value.job
+  return !!job.finished_at && !!job.outcome_revision && reconTerminalStatuses.includes(job.status) &&
+    current?.run_id === job.run_id && current?.outcome_revision === job.outcome_revision && !current?.outcome_review
+}
 const historyStatusLabel = status => ({ running: 'En ejecución', cancelling: 'Cancelación solicitada', completed: 'Completado', failed: 'Fallido', blocked: 'Bloqueado (Scope Guard)', simulated: 'Simulado', interrupted: 'Interrumpido', cancelled: 'Cancelado' })[status] || status
 const historyStageLabel = stage => ({ all: 'Todas las etapas', subdomains: 'Subdominios', probe: 'Sondeo HTTP/HTTPS', urls: 'URLs históricas', patterns: 'Patrones locales' })[stage] || stage
 const historyResultCountLabel = name => ({ total_raw: 'Resultados antes del filtro', in_scope_count: 'Dentro del alcance',
@@ -2762,16 +2787,44 @@ async function loadReconHistory(append = false) {
 }
 
 async function loadReconStatus() {
+  const request = ++reconStatusRequest
+  const project = engId.value, type = engType.value
   try {
-    const res = await api.getReconStatus(engId.value, engType.value)
+    const res = await api.getReconStatus(project, type)
+    if (request !== reconStatusRequest || project !== engId.value || type !== engType.value) return
     const previous = reconStatus.value.job
     reconStatus.value = res
-    if (previous?.status && (previous.run_id !== res.job?.run_id || previous.status !== res.job?.status)) loadReconHistory()
+    if (previous?.outcome_revision !== res.job?.outcome_revision) reconOutcomeAcknowledged.value = ''
+    if (previous?.status && (previous.run_id !== res.job?.run_id || previous.outcome_revision !== res.job?.outcome_revision ||
+        previous.outcome_review?.reviewed_at !== res.job?.outcome_review?.reviewed_at)) loadReconHistory()
     if (['running', 'cancelling'].includes(res.job?.status)) {
       startReconPolling()
     }
   } catch (err) {
     console.error('Error al cargar estado de recon:', err)
+  }
+}
+
+async function reviewReconOutcome(job) {
+  if (reconOutcomeBusy.value || !canReviewReconOutcome(job) || reconOutcomeAcknowledged.value !== job.outcome_revision) return
+  const request = ++reconOutcomeRequest
+  const project = engId.value, type = engType.value
+  reconOutcomeBusy.value = true
+  reconOutcomeError.value = ''
+  try {
+    await api.reviewReconOutcome(project, { run_id: job.run_id, expected_revision: job.outcome_revision }, type)
+    if (request !== reconOutcomeRequest || project !== engId.value || type !== engType.value) return
+    invalidateReconPreview()
+    await Promise.all([loadReconStatus(), loadReconHistory(), loadNextStep()])
+  } catch (error) {
+    if (request !== reconOutcomeRequest || project !== engId.value || type !== engType.value) return
+    reconOutcomeError.value = error.message || 'No se pudo registrar la revisión. Actualiza el historial.'
+    await Promise.all([loadReconStatus(), loadReconHistory(), loadNextStep()])
+  } finally {
+    if (request === reconOutcomeRequest) {
+      reconOutcomeAcknowledged.value = ''
+      reconOutcomeBusy.value = false
+    }
   }
 }
 
@@ -2878,6 +2931,14 @@ async function triggerReconPipeline() {
 }
 
 watch([engId, engType], () => {
+  reconOutcomeRequest++
+  reconStatusRequest++
+  reconOutcomeAcknowledged.value = ''
+  reconOutcomeBusy.value = false
+  reconOutcomeError.value = ''
+  reconStatus.value = { summary: {}, configured_domains: [], discarded_out_of_scope: [], probe_results: [] }
+  stopReconPolling()
+  loadReconStatus()
   loadNextStep()
   selectArtifactFolder('recon')
   reconHistory.value = []
@@ -2887,8 +2948,9 @@ watch([engId, engType], () => {
 })
 
 watch(activeTab, tab => { if (tab === 'checklist') loadNextStep() })
-watch(() => [reconStatus.value.job?.run_id, reconStatus.value.job?.status], (current, previous) => {
-  if (current[0] !== previous[0] || current[1] !== previous[1]) loadNextStep()
+watch(() => [reconStatus.value.job?.run_id, reconStatus.value.job?.status, reconStatus.value.job?.outcome_revision,
+  reconStatus.value.job?.outcome_review?.reviewed_at], (current, previous) => {
+  if (current.some((value, index) => value !== previous[index])) loadNextStep()
 })
 
 onMounted(() => {
@@ -2910,6 +2972,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  reconOutcomeRequest++
+  reconStatusRequest++
   nextStepRequest++
   findingArtifactRequest++
   artifactRequest++

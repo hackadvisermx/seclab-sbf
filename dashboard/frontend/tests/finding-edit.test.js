@@ -306,6 +306,104 @@ test('historial conserva resultados por job separados del workspace actual y dis
   } finally { view.cleanup() }
 })
 
+const reviewableJob = () => ({ run_id: 'a'.repeat(32), status: 'blocked', stage: 'probe', dry_run: false,
+  started_at: '2026-10-09T00:00:00Z', finished_at: '2026-10-09T00:01:00Z',
+  outcome_revision: 'b'.repeat(64), outcome_review: null })
+
+test('registrar revisión exige decisión explícita y conserva bloqueo sin ejecutar ni cambiar alcance', async () => {
+  let job = reviewableJob(), reviews = 0, launches = 0, saves = 0
+  const view = await mountDecision({ getReconStatus: async () => ({ job }),
+    getReconHistory: async () => ({ jobs: [job], next_cursor: null }),
+    getNextStep: async () => nextDecisionFixture,
+    runRecon: async () => { launches++ }, updateScope: async () => { saves++ },
+    reviewReconOutcome: async (id, payload, type) => {
+      assert.equal(id, 'fixture'); assert.equal(type, 'engagement')
+      assert.deepEqual(payload, { run_id: job.run_id, expected_revision: job.outcome_revision })
+      reviews++
+      job = { ...job, outcome_review: { reviewed_at: '2026-10-09T00:02:00Z', decision: 'prepare_new_plan' } }
+      return { success: true, job }
+    } })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const form = view.root.querySelector('[data-testid=recon-outcome-form]')
+    const button = form.querySelector('button')
+    assert.equal(button.disabled, true)
+    button.click(); await flush(); assert.equal(reviews, 0)
+    const checkbox = form.querySelector('input')
+    checkbox.checked = true; checkbox.dispatchEvent(new window.Event('change')); await flush()
+    assert.equal(button.disabled, false)
+    button.click(); await flush(); await flush()
+    const review = view.root.querySelector('[data-testid=recon-outcome-review]')
+    assert.match(review.textContent, /Resultado revisado por el operador/)
+    assert.match(review.textContent, /Se conserva el estado Bloqueado/)
+    assert.equal(reviews, 1); assert.equal(launches, 0); assert.equal(saves, 0)
+    assert.equal(view.root.querySelector('[data-testid=recon-outcome-form]'), null)
+  } finally { view.cleanup() }
+})
+
+test('un resultado obsoleto o activo no ofrece revisión y un rechazo obliga a revisar de nuevo', async () => {
+  let job = reviewableJob(), reviews = 0
+  const view = await mountDecision({ getReconStatus: async () => ({ job }),
+    getReconHistory: async () => ({ jobs: [job], next_cursor: null }),
+    reviewReconOutcome: async () => { reviews++; throw new Error('El job cambió. Actualiza el historial.') } })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const form = view.root.querySelector('[data-testid=recon-outcome-form]')
+    form.querySelector('input').checked = true
+    form.querySelector('input').dispatchEvent(new window.Event('change')); await flush()
+    form.querySelector('button').click(); await flush(); await flush()
+    assert.match(view.root.querySelector('[data-testid=recon-history]').textContent, /El job cambió/)
+    assert.equal(view.root.querySelector('[data-testid=recon-outcome-review]'), null)
+    assert.equal(view.root.querySelector('[data-testid=recon-outcome-form] button').disabled, true)
+    assert.equal(reviews, 1)
+    job = { ...job, status: 'running', finished_at: null }
+    await clickText(view.root, 'Actualizar historial')
+    assert.equal(view.root.querySelector('[data-testid=recon-outcome-form]'), null)
+    job = { ...reviewableJob(), outcome_revision: 'c'.repeat(64) }
+    await clickText(view.root, 'Actualizar historial')
+    assert.equal(view.root.querySelector('[data-testid=recon-outcome-form]'), null)
+  } finally { view.cleanup() }
+})
+
+test('una revisión que termina tras cambiar proyecto no aparece ni refresca el proyecto nuevo', async () => {
+  const first = reviewableJob(), calls = []
+  let finish
+  const route = reactive({ params: { id: 'first', type: 'engagement' } })
+  const view = await mountDecision({ getReconStatus: async id => ({ job: id === 'first' ? first : null }),
+    getReconHistory: async id => { calls.push(id); return { jobs: id === 'first' ? [first] : [], next_cursor: null } },
+    reviewReconOutcome: async () => new Promise(resolve => { finish = resolve }) }, route)
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const form = view.root.querySelector('[data-testid=recon-outcome-form]')
+    form.querySelector('input').checked = true
+    form.querySelector('input').dispatchEvent(new window.Event('change')); await flush()
+    form.querySelector('button').click(); await flush()
+    route.params.id = 'second'; await flush(); await flush()
+    const count = calls.length
+    finish({ success: true, job: { ...first, outcome_review: { reviewed_at: '2026-10-09T00:02:00Z' } } })
+    await flush(); await flush()
+    assert.equal(calls.length, count)
+    assert.equal(view.root.querySelector('[data-testid=recon-outcome-review]'), null)
+    assert.match(view.root.querySelector('[data-testid=recon-history]').textContent, /Todavía no hay ejecuciones/)
+  } finally { view.cleanup() }
+})
+
+test('un estado tardío de otro proyecto no habilita ni retira la revisión del proyecto actual', async () => {
+  const old = reviewableJob(), current = { ...reviewableJob(), run_id: 'c'.repeat(32), outcome_revision: 'd'.repeat(64) }
+  let finishOld
+  const route = reactive({ params: { id: 'first', type: 'engagement' } })
+  const view = await mountDecision({ getReconStatus: async id => id === 'first' ? new Promise(resolve => { finishOld = resolve }) : { job: current },
+    getReconHistory: async id => ({ jobs: [id === 'first' ? old : current], next_cursor: null }) }, route)
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    route.params.id = 'second'; await flush(); await flush()
+    assert.ok(view.root.querySelector('[data-testid=recon-outcome-form]'))
+    finishOld({ job: old }); await flush(); await flush()
+    assert.ok(view.root.querySelector('[data-testid=recon-outcome-form]'))
+    assert.doesNotMatch(view.root.querySelector('[data-testid=recon-history]').textContent, /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/)
+  } finally { view.cleanup() }
+})
+
 test('historial comunica fallo de API y permite recuperar con reintento explícito', async () => {
   let unavailable = true
   const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],

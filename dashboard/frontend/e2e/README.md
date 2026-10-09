@@ -22,7 +22,7 @@ Ejecuta UI e integración de forma secuencial: comparten el puerto 4199 y el dir
 Construir primero la imagen aislada desde la raíz del repositorio:
 
 ```sh
-make build-full BUILD_TAG=-phase163
+make build-full BUILD_TAG=-phase164
 ```
 
 Después, desde `dashboard/frontend`:
@@ -60,3 +60,5 @@ PLAYWRIGHT_LAB_IMAGE=seclab-sbf:full npm run test:e2e:integration
 Esto crea otro contenedor; no reinicia el que ya esté en uso. La suite real utiliza el frontend instalado en la imagen elegida. Solo Chromium está configurado por ahora. Los reportes/trazas/capturas son locales e ignorados por Git. No se agregó ejecución de navegador a CI en esta entrega.
 
 Configuración y instalación basadas en la [documentación oficial](https://playwright.dev/docs/intro); el [cierre gradual](https://playwright.dev/docs/test-webserver) permite eliminar el fixture de Docker.
+
+El asistente de siguiente decisión da prioridad al bloqueo persistido del último job, aun con archivos y resultados previos. La prueba recarga, verifica el run_id, ausencia de comando/prompt de ejecución y navegación a Alcance; captura `next-decision.png`. No ejecuta la acción recomendada ni consulta un proveedor IA.

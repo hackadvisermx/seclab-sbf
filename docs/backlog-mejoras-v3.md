@@ -85,6 +85,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-02 — Estado del engagement y siguiente decisión válida (P0)
 
+**Entrega parcial V3-02f (fase 164).** La siguiente decisión del dashboard prioriza el último job persistido: espera/progreso durante ejecución y cancelación pendiente, revisión de alcance ante bloqueo, y revisión de job/log ante fallo, cancelación o interrupción. Esos estados no ofrecen comando ni prompt de ejecución; la UI refresca y descarta respuestas tardías. La cobertura aclara que puede incluir archivos de ejecuciones anteriores. Detalle en [phase-164.md](phase-164.md). CLI directo y cobertura siguen su heurística anterior; no añade reconocimiento de revisión humana ni completa la máquina de estados/timeline.
+
 **Entrega parcial V3-02e (fase 163).** El historial conserva un resumen acotado por job con conteos del workspace al terminar, estados/conteos de etapas, timestamp y revisión de alcance. UI diferencia métricas previas de resultados nuevos, y no inventa resultados para simulaciones, legacy o summaries inválidos/ajenos. Transacción SQLite y backup/deletion por proyecto mantienen el resumen aunque cambien los archivos actuales. Detalle en [phase-163.md](phase-163.md). No guarda snapshots de outputs ni completa eventos/timeline, procedencia finding/job o siguiente decisión del engagement.
 
 **Problema.** El avance en vivo de la fase 145 explica el job que corre, pero el usuario necesita retomar el hilo completo de decisiones entre sesiones y distinguir «terminado», «pendiente», «bloqueado», «fallido» y «cancelado».

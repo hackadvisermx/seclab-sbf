@@ -742,6 +742,7 @@
               {{ checklistData.coverage_pct || 0 }}% Cobertura
             </span>
           </div>
+          <p class="text-xs text-slate-400">La cobertura resume lo documentado en el workspace y puede incluir ejecuciones anteriores. Para continuar, revisa la siguiente decisión y el estado del job.</p>
 
           <div v-if="checklistData.areas?.length > 0" class="space-y-4">
             <!-- Barra general segmentada (estilo OWASP WSTG Tracker): un vistazo a las 8 disciplinas -->
@@ -796,14 +797,17 @@
         </div>
 
         <!-- Recomendación Próximo Paso (pt-next) -->
-        <div class="tactical-card space-y-4">
+        <div class="tactical-card space-y-4" data-testid="next-decision">
           <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
             🧠 Asistente Táctico (pt-next)
           </h2>
           <div class="p-3 rounded-sm bg-slate-950 border border-cyan-500/30 text-xs font-mono text-cyan-300">
-            {{ nextStepData.next_step?.title || nextStepData.recommendation || 'No hay una recomendación disponible.' }}
+            {{ nextStepLoading ? 'Consultando la siguiente decisión…' : nextStepData.next_step?.title || nextStepData.recommendation || 'No hay una recomendación disponible.' }}
           </div>
+          <p v-if="nextStepError" role="alert" class="text-xs text-amber-300">{{ nextStepError }}</p>
+          <p v-if="nextStepData.decision_job" class="text-xs text-slate-400 break-all">Job {{ nextStepData.decision_job.run_id }} · {{ reconStageLabel(nextStepData.decision_job.stage) }} · {{ historyStatusLabel(nextStepData.decision_job.status) }}</p>
           <p v-if="nextStepData.next_step?.reason" class="text-xs text-slate-300">{{ nextStepData.next_step.reason }}</p>
+          <button v-if="['scope', 'recon'].includes(nextStepData.next_step?.action?.view)" @click="openNextDecision" class="px-3 py-1 rounded-sm border border-cyan-500/40 text-cyan-300">{{ nextStepData.next_step.action.label }}</button>
           <div v-if="nextStepData.next_step?.command" class="space-y-2 text-xs">
             <p class="text-slate-400">Comando sugerido: revisa el objetivo y el alcance antes de usarlo.</p>
             <code class="block whitespace-pre-wrap break-all text-cyan-300">{{ nextStepData.next_step.command }}</code>
@@ -811,10 +815,12 @@
           </div>
           <button
             @click="loadNextStepPrompt"
-            class="w-full py-2 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs font-mono font-bold"
+            :disabled="nextStepLoading || nextStepData.prompt_available === false || !!nextStepError"
+            class="w-full py-2 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs font-mono font-bold disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Generar Prompt Táctico para Agente
           </button>
+          <button @click="loadNextStep()" :disabled="nextStepLoading" class="text-xs text-cyan-300">Actualizar decisión</button>
           <div v-if="agentPrompt" class="p-2.5 rounded-sm bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto">
             <pre class="whitespace-pre-wrap">{{ agentPrompt }}</pre>
           </div>
@@ -2029,6 +2035,9 @@ const logContent = ref('')
 const checklistData = ref({})
 const nextStepData = ref({})
 const agentPrompt = ref('')
+const nextStepLoading = ref(false)
+const nextStepError = ref('')
+let nextStepRequest = 0
 
 // Notes
 const notesContent = ref('')
@@ -2328,19 +2337,38 @@ async function loadChecklist() {
       areas: res.matrix || res.areas || [],
       coverage_pct: res.coverage_score ?? res.coverage_pct ?? 0,
     }
-    nextStepData.value = await api.getNextStep(engId.value, false, engType.value)
   } catch (err) {
     console.error('Error al cargar checklist:', err)
   }
 }
 
-async function loadNextStepPrompt() {
+async function loadNextStep(prompt = false) {
+  const request = ++nextStepRequest
+  const project = engId.value, type = engType.value
+  nextStepLoading.value = true
+  nextStepError.value = ''
+  nextStepData.value = {}
+  agentPrompt.value = ''
   try {
-    const res = await api.getNextStep(engId.value, true, engType.value)
-    agentPrompt.value = res.prompt || res.raw || JSON.stringify(res, null, 2)
+    const res = await api.getNextStep(project, prompt, type)
+    if (request !== nextStepRequest || project !== engId.value || type !== engType.value) return
+    nextStepData.value = res
+    if (prompt && res.prompt_available !== false) agentPrompt.value = res.prompt || ''
   } catch (err) {
-    agentPrompt.value = err.message
+    if (request === nextStepRequest) nextStepError.value = 'No se pudo consultar la siguiente decisión. Reintenta antes de usar una recomendación.'
+  } finally {
+    if (request === nextStepRequest) nextStepLoading.value = false
   }
+}
+
+async function loadNextStepPrompt() {
+  await loadNextStep(true)
+}
+
+function openNextDecision() {
+  const view = nextStepData.value.next_step?.action?.view
+  if (view === 'scope') { activeTab.value = view; loadScope() }
+  if (view === 'recon') { activeTab.value = view; loadReconStatus(); loadReconLog(); loadReconHistory() }
 }
 
 async function loadNotes() {
@@ -2850,11 +2878,17 @@ async function triggerReconPipeline() {
 }
 
 watch([engId, engType], () => {
+  loadNextStep()
   selectArtifactFolder('recon')
   reconHistory.value = []
   reconHistoryCursor.value = null
   reconHistoryError.value = ''
   loadReconHistory()
+})
+
+watch(activeTab, tab => { if (tab === 'checklist') loadNextStep() })
+watch(() => [reconStatus.value.job?.run_id, reconStatus.value.job?.status], (current, previous) => {
+  if (current[0] !== previous[0] || current[1] !== previous[1]) loadNextStep()
 })
 
 onMounted(() => {
@@ -2864,6 +2898,7 @@ onMounted(() => {
   loadFindings()
   loadLogs()
   loadChecklist()
+  loadNextStep()
   loadNotes()
   loadReport()
   loadFlags()
@@ -2875,6 +2910,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  nextStepRequest++
   findingArtifactRequest++
   artifactRequest++
   stopReconPolling()

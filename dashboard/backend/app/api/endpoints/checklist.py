@@ -1,8 +1,18 @@
+import sqlite3
 from fastapi import APIRouter, HTTPException, Query
 from app.services.workspace_sync import workspace_service
 from app.services.runner_service import runner_service
+from app.services.recon_service import recon_service
+from app.core.recon_decision import recon_decision
 
 router = APIRouter(prefix="/checklist", tags=["Metodología & Cobertura"])
+
+
+def current_decision(key):
+    try:
+        return recon_decision(recon_service.store.get(key))
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail="No se pudo consultar el estado del reconocimiento. Reintenta antes de continuar.") from None
 
 
 @router.get("/{eng_id}")
@@ -20,4 +30,9 @@ def get_engagement_next_step(eng_id: str, prompt: bool = Query(False), type: str
     target_dir = workspace_service._resolve_dir(eng_id, type)
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail="Directorio del engagement no encontrado")
-    return runner_service.get_audit_next_step(str(target_dir), prompt_mode=prompt)
+    key = (type, eng_id)
+    decision = current_decision(key)
+    if decision:
+        return decision
+    result = runner_service.get_audit_next_step(str(target_dir), prompt_mode=prompt)
+    return current_decision(key) or result

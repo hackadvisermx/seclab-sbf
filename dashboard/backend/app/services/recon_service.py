@@ -199,6 +199,16 @@ class ReconService:
         return {'engagement_id': engagement_id, 'engagement_type': engagement_type,
                 **self.store.history((engagement_type, engagement_id), limit, before)}
 
+    def review_outcome(self, engagement_id, run_id, expected_revision, engagement_type='engagement'):
+        with self._lock:
+            if not self.get_target_dir(engagement_id, engagement_type):
+                return {'success': False, 'code': 404, 'error': 'Proyecto no encontrado.'}
+            try:
+                job = self.store.review_outcome((engagement_type, engagement_id), run_id, expected_revision)
+            except RuntimeError as error:
+                return {'success': False, 'code': 409, 'error': str(error)}
+            return {'success': True, 'job': job}
+
     @staticmethod
     def _completed_summary(target_dir, run_id):
         # A stale summary must never become provenance for a later job.

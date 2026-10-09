@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -10,6 +11,17 @@ from app.core.recon_results import validate_result_summary
 
 
 ACTIVE_STATUSES = ('running', 'cancelling')
+TERMINAL_STATUSES = ('completed', 'simulated', 'failed', 'blocked', 'cancelled', 'interrupted')
+
+
+def outcome_revision(job):
+    """Bind a review to the stored outcome, not to the mutable workspace."""
+    fields = ('engagement_type', 'engagement_id', 'run_id', 'status', 'stage', 'dry_run',
+              'started_at', 'finished_at', 'error', 'scope_revision', 'reviewed_plan', 'result_summary')
+    payload = {field: job.get(field) for field in fields}
+    payload['dry_run'] = bool(payload['dry_run'])
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=True,
+                                    separators=(',', ':')).encode()).hexdigest()
 
 
 def now():
@@ -50,6 +62,10 @@ class ReconJobStore:
                 engagement_type TEXT NOT NULL, engagement_id TEXT NOT NULL,
                 run_id TEXT NOT NULL, result_summary TEXT NOT NULL,
                 PRIMARY KEY (engagement_type, engagement_id, run_id))""")
+            conn.execute("""CREATE TABLE IF NOT EXISTS recon_job_outcome_reviews (
+                engagement_type TEXT NOT NULL, engagement_id TEXT NOT NULL,
+                run_id TEXT NOT NULL, job_revision TEXT NOT NULL, reviewed_at TEXT NOT NULL,
+                PRIMARY KEY (engagement_type, engagement_id, run_id))""")
             # Only the last legacy row is known; never reconstruct older jobs.
             conn.execute("""INSERT OR IGNORE INTO recon_job_history
                 SELECT engagement_type, engagement_id, run_id, status, stage, dry_run,
@@ -75,6 +91,11 @@ class ReconJobStore:
                     recon_job_history.engagement_type=recon_job_results.engagement_type
                     AND recon_job_history.engagement_id=recon_job_results.engagement_id
                     AND recon_job_history.run_id=recon_job_results.run_id)""")
+            conn.execute("""DELETE FROM recon_job_outcome_reviews WHERE NOT EXISTS (
+                SELECT 1 FROM recon_job_history WHERE
+                    recon_job_history.engagement_type=recon_job_outcome_reviews.engagement_type
+                    AND recon_job_history.engagement_id=recon_job_outcome_reviews.engagement_id
+                    AND recon_job_history.run_id=recon_job_outcome_reviews.run_id)""")
         self.path.chmod(0o600)
 
     def connect(self):
@@ -93,6 +114,21 @@ class ReconJobStore:
             return None
         result = dict(row)
         result['dry_run'] = bool(result['dry_run'])
+        revision = outcome_revision(result)
+        reviewed_revision = result.pop('outcome_review_revision', None)
+        reviewed_at = result.pop('outcome_reviewed_at', None)
+        result['outcome_revision'] = revision
+        result['outcome_review'] = None
+        if (result['status'] in TERMINAL_STATUSES and result.get('finished_at')
+                and reviewed_revision == revision and isinstance(reviewed_at, str)):
+            try:
+                timestamp = datetime.datetime.fromisoformat(reviewed_at)
+                if timestamp.utcoffset() != datetime.timedelta(0):
+                    raise ValueError('Revisión sin timestamp UTC.')
+                result['outcome_review'] = {'job_revision': revision,
+                    'reviewed_at': reviewed_at, 'decision': 'prepare_new_plan'}
+            except ValueError:
+                pass
         if 'reviewed_plan' in result and result['reviewed_plan'] is not None:
             try:
                 plan = json.loads(result['reviewed_plan'])
@@ -109,19 +145,49 @@ class ReconJobStore:
                 result['result_summary'] = None
         return result
 
+    CURRENT_QUERY = '''SELECT c.*, h.scope_revision, h.origin, r.reviewed_plan, s.result_summary,
+        o.job_revision AS outcome_review_revision, o.reviewed_at AS outcome_reviewed_at
+        FROM recon_jobs c
+        LEFT JOIN recon_job_history h ON c.engagement_type=h.engagement_type
+            AND c.engagement_id=h.engagement_id AND c.run_id=h.run_id
+        LEFT JOIN recon_job_reviews r ON c.engagement_type=r.engagement_type
+            AND c.engagement_id=r.engagement_id AND c.run_id=r.run_id
+        LEFT JOIN recon_job_results s ON c.engagement_type=s.engagement_type
+            AND c.engagement_id=s.engagement_id AND c.run_id=s.run_id
+        LEFT JOIN recon_job_outcome_reviews o ON c.engagement_type=o.engagement_type
+            AND c.engagement_id=o.engagement_id AND c.run_id=o.run_id
+        WHERE c.engagement_type=? AND c.engagement_id=?'''
+
     def get(self, key):
         with closing(self.connect()) as conn:
-            return self.job(conn.execute('SELECT * FROM recon_jobs WHERE engagement_type=? AND engagement_id=?', key).fetchone())
+            return self.job(conn.execute(self.CURRENT_QUERY, key).fetchone())
+
+    def review_outcome(self, key, run_id, expected_revision):
+        with closing(self.connect()) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            job = self.job(conn.execute(self.CURRENT_QUERY, key).fetchone())
+            if (not job or job['run_id'] != run_id or job['status'] not in TERMINAL_STATUSES
+                    or not job['finished_at'] or job.get('origin') not in ('dashboard', 'legacy-current')
+                    or job['outcome_revision'] != expected_revision):
+                raise RuntimeError('El job cambió o sigue activo. Actualiza el historial y revisa el resultado actual.')
+            if job['outcome_review'] is None:
+                conn.execute('INSERT OR REPLACE INTO recon_job_outcome_reviews VALUES (?, ?, ?, ?, ?)',
+                             (*key, run_id, expected_revision, now()))
+            return self.job(conn.execute(self.CURRENT_QUERY, key).fetchone())
 
     def history(self, key, limit=25, before=None):
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError('El límite de historial debe estar entre 1 y 100.')
         with closing(self.connect()) as conn:
-            query = '''SELECT h.*, r.reviewed_plan, s.result_summary FROM recon_job_history h
+            query = '''SELECT h.*, r.reviewed_plan, s.result_summary,
+                o.job_revision AS outcome_review_revision, o.reviewed_at AS outcome_reviewed_at
+                FROM recon_job_history h
                 LEFT JOIN recon_job_reviews r ON h.engagement_type=r.engagement_type
                     AND h.engagement_id=r.engagement_id AND h.run_id=r.run_id
                 LEFT JOIN recon_job_results s ON h.engagement_type=s.engagement_type
                     AND h.engagement_id=s.engagement_id AND h.run_id=s.run_id
+                LEFT JOIN recon_job_outcome_reviews o ON h.engagement_type=o.engagement_type
+                    AND h.engagement_id=o.engagement_id AND h.run_id=o.run_id
                 WHERE h.engagement_type=? AND h.engagement_id=?'''
             args = list(key)
             if before:
@@ -158,7 +224,7 @@ class ReconJobStore:
         return self.get(key)
 
     def finish(self, key, run_id, status, error=None, scope_revision=None, result_summary=None):
-        if status not in ('completed', 'simulated', 'failed', 'blocked', 'cancelled', 'interrupted'):
+        if status not in TERMINAL_STATUSES:
             raise ValueError('Estado final de reconocimiento no válido.')
         if scope_revision is not None and (not isinstance(scope_revision, str) or not re.fullmatch(r'[a-f0-9]{64}', scope_revision)):
             raise ValueError('Revisión de alcance no válida.')
@@ -211,3 +277,4 @@ class ReconJobStore:
             conn.execute('DELETE FROM recon_job_history WHERE engagement_type=? AND engagement_id=?', key)
             conn.execute('DELETE FROM recon_job_reviews WHERE engagement_type=? AND engagement_id=?', key)
             conn.execute('DELETE FROM recon_job_results WHERE engagement_type=? AND engagement_id=?', key)
+            conn.execute('DELETE FROM recon_job_outcome_reviews WHERE engagement_type=? AND engagement_id=?', key)

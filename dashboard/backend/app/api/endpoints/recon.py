@@ -1,3 +1,4 @@
+import sqlite3
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -10,6 +11,24 @@ class ReconRunRequest(BaseModel):
     stage: Literal['all', 'subdomains', 'probe', 'urls', 'patterns'] = "all"
     dry_run: bool = False
     expected_plan: str | None = Field(default=None, pattern='^[a-f0-9]{64}$')
+
+
+class ReconOutcomeReviewRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    run_id: str = Field(pattern='^[a-f0-9]{32}$')
+    expected_revision: str = Field(pattern='^[a-f0-9]{64}$')
+
+
+@router.post("/{id}/review")
+def review_recon_outcome(id: str, req: ReconOutcomeReviewRequest,
+                        type: str = Query('engagement', pattern='^(engagement|reto)$')):
+    try:
+        result = recon_service.review_outcome(id, req.run_id, req.expected_revision, type)
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='No se pudo registrar la revisión. Actualiza el historial antes de continuar.') from None
+    if not result.get('success'):
+        raise HTTPException(status_code=result['code'], detail=result['error'])
+    return result
 
 
 @router.get("/{id}/status")

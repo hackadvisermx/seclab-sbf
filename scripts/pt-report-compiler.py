@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_artifacts import validate_artifact_refs
-from seclab_findings import normalize_status, normalize_verification_rationale, validate_confirmation
+from seclab_findings import normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -111,6 +111,8 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     )
 
     return {
+        "finding_id_raw": meta.get("finding_id"),
+        "has_finding_id": "finding_id" in meta,
         "file": file_path.name,
         "path": file_path,
         "id": finding_id,
@@ -234,8 +236,17 @@ def review_report_inputs(engagement_dir: pathlib.Path):
     except Exception as error:
         issues.append(f"No se pudo validar target.yaml: {error}")
 
+    identities = set()
     for f in findings:
         prefix = f"[{f['file']}]"
+        try:
+            f['finding_id'] = normalize_finding_id(f['finding_id_raw']) if f['has_finding_id'] else None
+            if f['finding_id'] is not None:
+                if f['finding_id'] in identities:
+                    raise ValueError('Identidad de hallazgo duplicada; revisa las fichas copiadas.')
+                identities.add(f['finding_id'])
+        except ValueError as error:
+            issues.append(f'{prefix} {error}')
         try:
             f['artifact_refs'] = validate_artifact_refs(engagement_dir, f['artifact_refs_raw'])
         except (OSError, ValueError) as error:
@@ -424,6 +435,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
                 "",
                 f"- **Severidad:** {f['severity'].capitalize()} (Score: {f['cvss_score']})",
                 f"- **Estado de evidencia:** {f['status']}",
+                f"- **Identidad persistente:** `{f['finding_id']}`" if f.get('finding_id') else "- **Identidad persistente:** no registrada (ficha anterior).",
                 *([f"- **Motivo de verificación declarado:** {f['verification_rationale']}"] if f.get('verification_rationale') else []),
                 f"- **Vector CVSS:** `{f['cvss_v31']}`",
                 f"- **CWE:** {f['cwe']}",

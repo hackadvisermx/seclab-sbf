@@ -37,15 +37,23 @@ _SECLAB_PLUGIN_DIR="$fixture/absent/plugin"
 rm "$fixture/templates/evidence.md"
 pt-finding new fallback --asset example.test
 python3 - "$PWD" <<'ASSERT'
-import pathlib, sys, yaml
+import pathlib, sys, uuid, yaml
 root = pathlib.Path(sys.argv[1]) / 'evidence'
+identities = set()
 for path in root.glob('*.md'):
     metadata = yaml.safe_load(path.read_text().split('---\n', 2)[1])
+    identity = metadata['finding_id']
+    assert uuid.UUID(hex=identity).version == 4
+    assert identity not in identities
+    identities.add(identity)
     expected = 'DISPROVED' if path.stem == 'explicit' else 'CANDIDATE'
     assert metadata['status'] == expected, (path.name, metadata['status'], expected)
     assert metadata['asset'] == 'example.test', (path.name, metadata['asset'])
 assert len(list(root.glob('*.md'))) == 8
 assert 'Fixture / sin confirmar' in (root / 'generic.md').read_text()
+original = root / 'generic.md'
+original.rename(root / 'renamed.md')
+assert yaml.safe_load((root / 'renamed.md').read_text().split('---\n', 2)[1])['finding_id'] in identities
 ASSERT
 CHECK
 printf '%s\n' "finding_defaults=ok imagen=$image candidate=default explicit_status=preserved confirmation=guarded"

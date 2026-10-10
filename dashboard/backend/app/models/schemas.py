@@ -105,6 +105,8 @@ class FindingFrontmatter(BaseModel):
 
 
 class FindingDetail(BaseModel):
+    finding_id: Optional[str] = None
+    identity_error: Optional[str] = None
     slug: str
     filename: str
     frontmatter: FindingFrontmatter
@@ -117,6 +119,7 @@ class FindingDetail(BaseModel):
 
 
 class FindingCreate(BaseModel):
+    finding_id: Optional[str] = None
     slug: str
     title: str
     severity: str = "MEDIUM"

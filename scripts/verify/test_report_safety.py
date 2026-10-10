@@ -7,6 +7,7 @@ import sys
 import tarfile
 import hashlib
 import re
+import uuid
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -60,6 +61,34 @@ class ReportSafetyTests(unittest.TestCase):
         finding = self.root / 'evidence/finding.md'
         finding.write_text(re.sub(r'^artifact_refs: .*$', 'artifact_refs: ' + json.dumps([reference]), finding.read_text(), flags=re.M))
         return artifact, reference
+
+    def test_finding_identity_survives_rename_and_blocks_corruption_or_collision(self):
+        identity = uuid.uuid4().hex
+        finding = self.root / 'evidence/finding.md'
+        finding.write_text(finding.read_text().replace('id: VULN-TEST', 'id: VULN-TEST\nfinding_id: "' + identity + '"'))
+        self.assertIn(identity, report.build_report(self.root).read_text())
+        finding = finding.rename(finding.with_name('renamed.md'))
+        self.assertIn(identity, report.build_report(self.root).read_text())
+        previous = (self.root / 'REPORT.md').read_bytes()
+        duplicate = finding.with_name('copy.md')
+        duplicate.write_bytes(finding.read_bytes())
+        self.assertFalse(report.check_findings(self.root)[0])
+        with self.assertRaises(report.ReportValidationError):
+            report.build_report(self.root)
+        self.assertEqual((self.root / 'REPORT.md').read_bytes(), previous)
+        duplicate.unlink()
+        finding.write_text(finding.read_text().replace(identity, 'bad-id'))
+        self.assertFalse(report.check_findings(self.root)[0])
+        with self.assertRaises(report.ReportValidationError):
+            report.build_report(self.root)
+        self.assertEqual((self.root / 'REPORT.md').read_bytes(), previous)
+
+    def test_legacy_report_does_not_invent_identity_or_modify_finding(self):
+        finding = self.root / 'evidence/finding.md'
+        before = finding.read_bytes()
+        text = report.build_report(self.root).read_text()
+        self.assertIn('Identidad persistente:** no registrada', text)
+        self.assertEqual(finding.read_bytes(), before)
 
     def test_linked_version_is_rendered_and_changed_missing_or_invalid_refs_block(self):
         artifact, reference = self.link_fixture()

@@ -1,4 +1,5 @@
 import re
+import uuid
 
 from seclab_artifacts import normalize_artifact_refs
 
@@ -65,3 +66,10 @@ def finding_status_from_markdown(content: str) -> str:
                 return normalize_status(scalar[2]) if scalar else "CANDIDATE"
             return normalize_status(value.split(" #", 1)[0].strip())
     return "CANDIDATE"
+
+
+def normalize_finding_id(value):
+    if (not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{32}', value)
+            or uuid.UUID(hex=value).version != 4):
+        raise ValueError('Identidad de hallazgo inválida: se requiere UUID v4 hexadecimal en minúsculas.')
+    return value

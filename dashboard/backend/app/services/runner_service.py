@@ -8,6 +8,14 @@ from app.config import SCRIPTS_DIR, REPO_ROOT, WORKSPACE_DIR, DATA_DIR
 from app.models.schemas import ScopeCheckResponse
 
 
+CONTEXT_TIMEOUT_SECONDS = 15
+MAX_CONTEXT_BYTES = 256 * 1024
+
+
+class AgentContextUnavailable(RuntimeError):
+    """Safe, operator-facing context generation failure; no process diagnostics."""
+
+
 class RunnerService:
     def __init__(self):
         self.py_bin = sys.executable
@@ -140,9 +148,27 @@ class RunnerService:
         cmd = [self.py_bin, str(script), str(engagement_dir)]
         if skill_name:
             cmd.append(skill_name)
-        proc = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ,
-            "WORKSPACE_DIR": str(WORKSPACE_DIR), "SECLAB_DATA_DIR": str(DATA_DIR)})
-        return proc.stdout or proc.stderr
+        if not script.is_file():
+            raise AgentContextUnavailable("Contexto no disponible: falta el generador. Revisa la instalación antes de consultar IA.")
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                timeout=CONTEXT_TIMEOUT_SECONDS, env={**os.environ,
+                "WORKSPACE_DIR": str(WORKSPACE_DIR), "SECLAB_DATA_DIR": str(DATA_DIR)})
+        except subprocess.TimeoutExpired:
+            raise AgentContextUnavailable("Contexto no disponible: el generador agotó su tiempo de espera. Reintenta o usa la orientación local.") from None
+        except OSError:
+            raise AgentContextUnavailable("Contexto no disponible: no se pudo iniciar el generador. Revisa la instalación.") from None
+        except UnicodeError:
+            raise AgentContextUnavailable("Contexto no disponible: el generador devolvió una codificación inválida.") from None
+        if proc.returncode != 0:
+            raise AgentContextUnavailable("Contexto no disponible: el generador falló. Revisa los archivos locales y reintenta.")
+        try:
+            valid = isinstance(proc.stdout, str) and bool(proc.stdout.strip()) and "\0" not in proc.stdout and len(proc.stdout.encode("utf-8")) <= MAX_CONTEXT_BYTES
+        except UnicodeError:
+            valid = False
+        if not valid:
+            raise AgentContextUnavailable("Contexto no disponible: se requiere texto UTF-8 no vacío de hasta 256 KiB.")
+        return proc.stdout
 
 
 runner_service = RunnerService()

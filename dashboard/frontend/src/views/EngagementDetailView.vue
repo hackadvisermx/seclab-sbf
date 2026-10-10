@@ -2523,6 +2523,7 @@ const localGuidanceOpen = ref(false)
 let copilotRequest = 0
 const showContextModal = ref(false)
 const injectedContextText = ref('')
+let contextRequest = 0
 
 async function loadCopilotModels() {
   try {
@@ -2562,12 +2563,16 @@ function onCopilotModelChange() {
 }
 
 async function openContextInspection() {
+  const request = ++contextRequest
+  const project = engId.value, type = engType.value, agent = selectedAgent.value
   showContextModal.value = true
   injectedContextText.value = 'Generando contexto en tiempo real con pt-agent-context...'
   try {
-    const res = await api.getCopilotContext(engId.value, selectedAgent.value, engType.value)
+    const res = await api.getCopilotContext(project, agent, type)
+    if (request !== contextRequest || project !== engId.value || type !== engType.value || agent !== selectedAgent.value || !showContextModal.value) return
     injectedContextText.value = res.context || 'Sin contexto disponible.'
   } catch (err) {
+    if (request !== contextRequest || project !== engId.value || type !== engType.value || agent !== selectedAgent.value || !showContextModal.value) return
     injectedContextText.value = 'Error al cargar contexto: ' + err.message
   }
 }
@@ -3026,6 +3031,9 @@ async function triggerReconPipeline() {
 }
 
 watch([engId, engType], () => {
+  contextRequest++
+  showContextModal.value = false
+  injectedContextText.value = ''
   copilotRequest++
   copilotMessages.value = []
   copilotInput.value = ''
@@ -3045,6 +3053,12 @@ watch([engId, engType], () => {
   reconHistoryCursor.value = null
   reconHistoryError.value = ''
   loadReconHistory()
+})
+
+watch(selectedAgent, () => {
+  contextRequest++
+  showContextModal.value = false
+  injectedContextText.value = ''
 })
 
 watch(activeTab, tab => { if (tab === 'checklist') loadNextStep() })
@@ -3072,6 +3086,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  contextRequest++
   copilotRequest++
   reconOutcomeRequest++
   reconStatusRequest++

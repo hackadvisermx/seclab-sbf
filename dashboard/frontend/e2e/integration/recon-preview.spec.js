@@ -72,6 +72,9 @@ test('vista previa sin job y revisión obsoleta rechazada antes de simular', asy
   const first = await launchAndFinish()
   expect(first.status).toBe('completed')
   expect(first.result_summary.metrics.urls_count).toBe(1)
+  expect(first.result_summary.schema_version).toBe(2)
+  expect(first.result_summary.stages[0].execution).toBe('current')
+  expect(first.result_summary.stages[0].origin_run_id).toBe(first.run_id)
   await writeFile(urls, 'https://example.test/fixture-one\nhttps://example.test/fixture-two\nhttps://example.test/fixture-three\n')
   const second = await launchAndFinish()
   expect(second.status).toBe('completed')
@@ -91,6 +94,8 @@ test('vista previa sin job y revisión obsoleta rechazada antes de simular', asy
     await expect(row.getByTestId('recon-history-result')).toContainText(`URLs: ${count}`)
   }
   await expect(history.getByRole('listitem').filter({ hasText: blocked.run_id })).toContainText('artefactos previos; no acreditan resultados nuevos')
+  await expect(history.getByRole('listitem').filter({ hasText: first.run_id })).toContainText('Completada en este job')
+  await expect(history.getByRole('listitem').filter({ hasText: blocked.run_id })).toContainText('Intentada en este job')
   await page.getByTestId('recon-history').scrollIntoViewIfNeeded()
   await page.screenshot({ path: testInfo.outputPath('result-history.png'), fullPage: true })
   await page.getByRole('button', { name: 'Metodología & Cobertura', exact: false }).click()

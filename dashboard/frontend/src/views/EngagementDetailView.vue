@@ -579,6 +579,9 @@
               <p>Subdominios: {{ job.result_summary.metrics.subdomains_count }} · Servicios web: {{ job.result_summary.metrics.live_hosts_count }} · URLs: {{ job.result_summary.metrics.urls_count }} · JavaScript: {{ job.result_summary.metrics.js_files_count }}</p>
               <div v-for="step in job.result_summary.stages" :key="step.stage" class="border-l border-slate-700 pl-2 space-y-1">
                 <p class="text-slate-200">{{ historyStageLabel(step.stage) }} · {{ historyStatusLabel(step.failure_kind === 'scope_guard' ? 'blocked' : step.status) }}</p>
+                <p v-if="step.execution === 'recovered'" class="text-amber-300 break-all">Recuperada del checkpoint; no se ejecutó en este job. Run de origen: {{ step.origin_run_id || 'No registrado' }}.</p>
+                <p v-else-if="step.execution === 'current'">{{ step.status === 'completed' ? 'Completada' : 'Intentada' }} en este job.</p>
+                <p v-else class="text-slate-500">Resumen anterior: origen de etapa no registrado.</p>
                 <p v-for="(count, name) in step.counts" :key="name">{{ historyResultCountLabel(name) }}: {{ count }}</p>
                 <p v-if="Object.keys(step.patterns).length">Clasificación local de URLs; coincidencias por patrón: {{ Object.entries(step.patterns).map(([name, count]) => name + ': ' + count).join(' · ') }}. No confirma vulnerabilidades.</p>
               </div>

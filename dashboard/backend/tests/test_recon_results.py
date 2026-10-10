@@ -113,6 +113,62 @@ class TestReconResults(unittest.TestCase):
         self.assertEqual(value['stages'][0]['counts']['in_scope_count'], 2)
         self.assertEqual(value['stages'][1]['counts'], {})
 
+    def resumed_raw(self, run_id):
+        raw = self.raw(run_id)
+        raw['stage_results'] = {name: dict(status='completed', execution='current', origin_run_id=run_id,
+                                         **{key: 2 for key in counts}) for name, counts in STAGE_COUNTS.items()}
+        raw['stage_results']['patterns']['patterns'] = {name: 1 for name in PATTERNS}
+        raw['stage_results']['subdomains'].update(execution='recovered', origin_run_id='a' * 32)
+        raw['stages_executed'] = ['probe', 'urls', 'patterns']
+        raw['stages_recovered'] = ['subdomains']
+        return raw
+
+    def test_resumed_origin_survives_history_reopening_and_later_legacy_jobs(self):
+        job = self.store.begin(self.key, 'all', False)
+        raw = self.resumed_raw(job['run_id'])
+        raw['stage_results']['subdomains']['private'] = 'https://user:password@example.test/private'
+        value = result_summary(raw, job['run_id'], 'all', 'completed', False)
+        self.assertEqual(value['schema_version'], 2)
+        self.assertEqual(value['stages'][0]['execution'], 'recovered')
+        self.assertEqual(value['stages'][0]['origin_run_id'], 'a' * 32)
+        self.assertEqual(value['stages'][1]['origin_run_id'], job['run_id'])
+        self.store.finish(self.key, job['run_id'], 'completed', scope_revision='a' * 64, result_summary=value)
+        self.finish(count=7)
+        jobs = ReconJobStore(self.db).history(self.key)['jobs']
+        self.assertEqual(jobs[1]['result_summary'], value)
+        self.assertEqual(jobs[0]['result_summary']['schema_version'], 1)
+        self.assertNotIn('password', json.dumps(jobs))
+
+    def test_origin_validation_rejects_malformed_forged_current_and_inconsistent_recovery(self):
+        raw = self.resumed_raw('b' * 32)
+        edits = [lambda r: r['stage_results']['probe'].update(origin_run_id='a' * 32),
+                 lambda r: r['stage_results']['subdomains'].update(origin_run_id=True),
+                 lambda r: r['stage_results']['subdomains'].update(origin_run_id='b' * 32),
+                 lambda r: r['stage_results']['subdomains'].update(origin_run_id='private/path'),
+                 lambda r: r['stage_results']['urls'].update(execution='recovered'),
+                 lambda r: r.update(stages_recovered=[]),
+                 lambda r: r.update(stages_executed=list(STAGE_COUNTS)),
+                 lambda r: r['stage_results']['probe'].pop('origin_run_id')]
+        for edit in edits:
+            changed = copy.deepcopy(raw)
+            edit(changed)
+            self.assertIsNone(result_summary(changed, 'b' * 32, 'all', 'completed', False))
+        raw['stage_results']['subdomains']['origin_run_id'] = None
+        self.assertIsNone(result_summary(raw, 'b' * 32, 'urls', 'completed', False))
+        self.assertIsNotNone(result_summary(raw, 'b' * 32, 'all', 'completed', False))
+        for invalid in (None, True, 'private/path'):
+            self.assertIsNone(result_summary(self.resumed_raw(invalid), invalid, 'all', 'completed', False))
+
+    def test_failed_resumed_run_keeps_recovered_origin_and_current_failure_separate(self):
+        raw = self.resumed_raw('b' * 32)
+        raw.update(status='failed', metrics_source='previous_artifacts', stages_executed=['probe'])
+        raw['stage_results'] = {name: raw['stage_results'][name] for name in ('subdomains', 'probe')}
+        raw['stage_results']['probe'].update(status='failed', failure_kind='scope_guard')
+        value = result_summary(raw, 'b' * 32, 'all', 'blocked', False)
+        self.assertEqual(value['stages'][0]['execution'], 'recovered')
+        self.assertEqual(value['stages'][1]['execution'], 'current')
+        self.assertEqual(value['stages'][1]['counts'], {})
+
     def test_result_and_job_finalization_are_atomic_and_stale_completion_cannot_replace_results(self):
         job = self.store.begin(self.key, 'urls', False)
         value = result_summary(self.raw(job['run_id']), job['run_id'], 'urls', 'completed', False)

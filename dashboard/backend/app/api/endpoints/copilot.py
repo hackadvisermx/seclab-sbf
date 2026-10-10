@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.config import SCRIPTS_DIR
 from app.models.schemas import ChatMessage, ChatCompletionRequest, ChatCompletionResponse
 from app.services.workspace_sync import workspace_service
-from app.services.runner_service import runner_service
+from app.services.runner_service import runner_service, AgentContextUnavailable
 from app.services.proxy_service import proxy_service
 
 router = APIRouter(prefix="/copilot", tags=["Copiloto Táctico & Agentes IA"])
@@ -147,7 +147,10 @@ def get_engagement_copilot_context(
         raise HTTPException(status_code=404, detail="Directorio del engagement no encontrado")
 
     skill_name = agent if agent != "general" else None
-    context_md = runner_service.get_agent_context(str(target_dir), skill_name=skill_name)
+    try:
+        context_md = runner_service.get_agent_context(str(target_dir), skill_name=skill_name)
+    except AgentContextUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from None
     return {"engagement_id": eng_id, "agent": agent, "context": context_md}
 
 
@@ -159,7 +162,10 @@ async def copilot_chat(payload: CopilotChatRequest):
         raise HTTPException(status_code=404, detail="Directorio del engagement no encontrado")
 
     skill_name = payload.agent_id if payload.agent_id != "general" else None
-    context_md = runner_service.get_agent_context(str(target_dir), skill_name=skill_name)
+    try:
+        context_md = runner_service.get_agent_context(str(target_dir), skill_name=skill_name)
+    except AgentContextUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from None
 
     # Inyectar el contexto del engagement en el mensaje de sistema inicial
     system_prompt = (

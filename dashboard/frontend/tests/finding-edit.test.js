@@ -1013,3 +1013,55 @@ test('respuesta local inválida no conserva comando ni aparenta una decisión di
     assert.equal(card.querySelector('code'), null)
   } finally { view.cleanup() }
 })
+
+for (const key of ['id', 'type']) test(`inspector de contexto descarta respuesta tras cambiar ${key}`, async () => {
+  const route = reactive({ params: { id: 'fixture', type: 'engagement' } })
+  const pending = []
+  const view = await mountDecision({ getCopilotContext: (id, agent, type) => new Promise(resolve => pending.push({ id, agent, type, resolve })) }, route)
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    await clickText(view.root, 'Ver Contexto pt-context')
+    assert.match(view.root.querySelector('pre').textContent, /Generando contexto/)
+    route.params[key] = key === 'id' ? 'other' : 'challenge'; await flush()
+    pending[0].resolve({ context: 'CONTEXTO PRIVADO ANTERIOR' }); await flush()
+    assert.equal(view.root.querySelector('pre'), null)
+    await clickText(view.root, 'Ver Contexto pt-context')
+    pending[1].resolve({ context: 'Contexto actual' }); await flush()
+    assert.equal(pending[1][key], route.params[key])
+    assert.equal(view.root.querySelector('pre').textContent, 'Contexto actual')
+    assert.doesNotMatch(view.root.textContent, /PRIVADO ANTERIOR/)
+  } finally { view.cleanup() }
+})
+
+test('cambiar especialidad cierra contexto y no mezcla una respuesta tardía', async () => {
+  const pending = []
+  const view = await mountDecision({ getCopilotContext: (id, agent) => new Promise(resolve => pending.push({ agent, resolve })) })
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    await clickText(view.root, 'Ver Contexto pt-context')
+    const select = view.root.querySelector('select')
+    select.value = 'auth-agent'; select.dispatchEvent(new window.Event('change')); await flush()
+    pending[0].resolve({ context: 'Especialidad anterior' }); await flush()
+    assert.equal(view.root.querySelector('pre'), null)
+    await clickText(view.root, 'Ver Contexto pt-context')
+    assert.equal(pending[1].agent, 'auth-agent')
+    pending[1].resolve({ context: 'Especialidad actual' }); await flush()
+    assert.equal(view.root.querySelector('pre').textContent, 'Especialidad actual')
+  } finally { view.cleanup() }
+})
+
+test('error de contexto se muestra y la consulta bloqueada permite orientación local', async () => {
+  const error = 'Contexto no disponible: el generador falló. Revisa los archivos locales y reintenta.'
+  const view = await mountDecision({ getCopilotContext: async () => { throw new Error(error) }, sendCopilotChat: async () => { throw new Error(error) }, getNextStep: async () => nextDecisionFixture })
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    await clickText(view.root, 'Ver Contexto pt-context')
+    assert.equal(view.root.querySelector('pre').textContent, 'Error al cargar contexto: ' + error)
+    await clickText(view.root, 'Cerrar')
+    const input = view.root.querySelector('input[placeholder^="Pregunta al copiloto"]')
+    input.value = 'Ayuda'; input.dispatchEvent(new window.Event('input')); await flush()
+    await clickText(view.root, 'Enviar Consulta'); await flush()
+    assert.match(view.root.querySelector('[data-testid=copilot-local-guidance]').textContent, /Revisar alcance tras el bloqueo/)
+    assert.match(view.root.textContent, /Contexto no disponible/)
+  } finally { view.cleanup() }
+})

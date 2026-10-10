@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { createHash } from 'node:crypto'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, unlink } from 'node:fs/promises'
 
 test('vista previa sin job y revisión obsoleta rechazada antes de simular', async ({ page }, testInfo) => {
   const user = JSON.parse(await readFile(new URL('../.playwright-fixture/user.json', import.meta.url), 'utf8'))
@@ -110,6 +110,40 @@ test('vista previa sin job y revisión obsoleta rechazada antes de simular', asy
   await expect(history.getByRole('listitem').filter({ hasText: blocked.run_id })).toContainText('Intentada en este job')
   await page.getByTestId('recon-history').scrollIntoViewIfNeeded()
   await page.screenshot({ path: testInfo.outputPath('result-history.png'), fullPage: true })
+  const originRow = history.getByRole('listitem').filter({ hasText: first.run_id })
+  await expect(originRow.getByTestId('recon-history-artifact')).toHaveCount(5)
+  await expect(originRow).toContainText(firstCapture.refs[0].sha256)
+  const comparison = page.getByTestId('job-artifact-comparison')
+  const compareWrites = []
+  const recordCompareWrite = request => { if (new URL(request.url()).pathname.startsWith('/api/') && request.method() !== 'GET') compareWrites.push(request.method()) }
+  page.on('request', recordCompareWrite)
+  await originRow.getByRole('button', { name: 'Comparar archivo actual recon/live_hosts.txt', exact: true }).click()
+  await expect(comparison).toContainText(first.run_id)
+  await expect(comparison).toContainText('coincide con la registrada')
+  await expect(comparison).toContainText(firstCapture.refs[0].sha256)
+  await page.screenshot({ path: testInfo.outputPath('job-artifact-current.png'), fullPage: true })
+  const compareAgain = async () => {
+    await page.getByRole('button', { name: /Reconocimiento/ }).filter({ hasText: '📡' }).click()
+    const row = history.getByRole('listitem').filter({ hasText: first.run_id })
+    await row.getByText('Resultados conservados al terminar', { exact: true }).click()
+    await row.getByRole('button', { name: 'Comparar archivo actual recon/live_hosts.txt', exact: true }).click()
+  }
+  await writeFile(probeOutput, 'changed after completion\n')
+  await compareAgain()
+  await expect(comparison).toContainText('difiere de la registrada')
+  await expect(comparison).toContainText(firstCapture.refs[0].sha256)
+  await page.screenshot({ path: testInfo.outputPath('job-artifact-changed.png'), fullPage: true })
+  await unlink(probeOutput)
+  await compareAgain()
+  await expect(comparison).toContainText('No se pudo leer el archivo actual')
+  await expect(comparison).toContainText(firstCapture.refs[0].sha256)
+  await expect(page.getByRole('button', { name: 'Copiar Previsualización', exact: true })).toBeDisabled()
+  await page.screenshot({ path: testInfo.outputPath('job-artifact-missing.png'), fullPage: true })
+  page.off('request', recordCompareWrite)
+  expect(compareWrites).toEqual([])
+  await writeFile(probeOutput, '')
+  const afterCompare = (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs
+  expect(afterCompare.find(job => job.run_id === first.run_id).result_summary).toEqual(first.result_summary)
   await page.getByRole('button', { name: 'Metodología & Cobertura', exact: false }).click()
   const decision = page.getByTestId('next-decision')
   await expect(decision).toContainText('Revisar alcance y autorización tras el bloqueo')

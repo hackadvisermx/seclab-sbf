@@ -169,6 +169,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-05 — Copiloto con fuentes, límites y fallback (P1)
 
+**Entrega parcial V3-05c (fase 178).** Orientación local del Copiloto consulta la decisión existente con pt-next/estado persistido, sin modelo ni envío remoto de contexto. Disponible sin proveedor y durante la espera de IA; fallo o contenido inválido abre la alternativa local sin reintentar proveedor. Bloqueos conservan job/motivo y enlaces de revisión, sin comando de ejecución. Fallo local retira recomendaciones previas; respuestas IA tardías no atraviesan proyecto/desmontaje. Detalle [phase-178.md](phase-178.md). No genera respuestas libres ni completa citas/privacidad de contexto remoto; V3-05 sigue parcial.
+
 **Entrega parcial V3-05a (fase 159).** El Copiloto muestra `Validación de alcance no disponible` ante scope/validador ausentes, timeout, fallo de inicio, scope inválido o respuesta/código inconsistentes. Conserva texto original y metadata; una comprobación limpia mantiene la respuesta anterior y las exclusiones/UNKNOWN mantienen sus advertencias. Comprobado con validador instalado, API/proveedor simulado, Vue y Chromium; no ejecuta reconocimiento. Detalle y límites en `phase-159.md`. Fuentes navegables, revisión/redacción del contexto remoto y fallback determinista continúan pendientes; no se declara V3-05 completa.
 
 **Problema.** El copiloto ya es consultivo y recibe contexto del engagement, pero la advertencia de alcance no equivale a una cita de procedencia y puede no ejecutarse si el validador falla.

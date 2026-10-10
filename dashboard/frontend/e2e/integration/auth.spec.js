@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { readFile, writeFile } from 'node:fs/promises'
 import { verifyFindingStateParity } from '../finding-state-parity.mjs'
+import { verifyCopilotLocalGuidance } from '../copilot-local-guidance.mjs'
 
 test('usuario temporal consulta cobertura instalada coherente y revoca su sesión al salir', async ({ page }, testInfo) => {
   const user = JSON.parse(await readFile(new URL('../.playwright-fixture/user.json', import.meta.url), 'utf8'))
@@ -39,6 +40,7 @@ test('usuario temporal consulta cobertura instalada coherente y revoca su sesió
   await page.screenshot({ path: testInfo.outputPath('installed-checklist.png'), fullPage: true })
   await page.getByRole('button', { name: 'Cerrar', exact: true }).click()
   await verifyFindingStateParity(page, testInfo, workspace)
+  await verifyCopilotLocalGuidance(page, testInfo)
   await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'SecLab Dashboard' })).toBeVisible()
   expect((await page.request.get('/api/v1/auth/me')).status()).toBe(401)

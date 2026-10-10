@@ -33,8 +33,16 @@ from seclab_scope import (ScopeError, normalize_target, is_ip, domain_matches,
                           parse_simple_yaml_lists, load_scope_rules, load_target_yaml, load_scope_txt, check_scope, authorization_contract, require_authorization)
 
 from seclab_recon_probe import ProbeClient, operational_limits
+from seclab_artifacts import HASH_LIMIT, read_artifact_snapshot
 
 DEFAULT_GF_PATTERNS = ["xss", "sqli", "ssrf", "redirect", "idor", "rce", "lfi"]
+STAGE_ARTIFACTS = {
+    'subdomains': ('subdomains.txt', 'subdomains_new.txt', 'out_of_scope_discarded.txt'),
+    'probe': ('live_hosts.txt', 'live_hosts_new.txt', 'probe_observations.jsonl',
+              'probe_discarded.txt', 'next_commands.txt'),
+    'urls': ('urls_all.txt', 'js_files.txt'),
+    'patterns': tuple('patterns/' + pattern + '.txt' for pattern in DEFAULT_GF_PATTERNS),
+}
 
 
 def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib.Path]:
@@ -172,6 +180,7 @@ class ReconPipeline:
         self.scope_contract = self._contract(self.scope_data)
         self.scope_revision = self._revision(self.scope_contract)
         self.tools = detect_tools()
+        self.completed_artifacts = {}
 
     @staticmethod
     def _contract(data):
@@ -522,32 +531,91 @@ class ReconPipeline:
             self._write_lines('summary.json', [json.dumps(summary, indent=2, ensure_ascii=False)])
         return summary
 
+    def _stage_artifacts(self, stage):
+        refs = []
+        total = sum(ref['size'] for items in self.completed_artifacts.values() for ref in items)
+        try:
+            for name in STAGE_ARTIFACTS[stage]:
+                snapshot = read_artifact_snapshot(self.engagement_dir, 'recon/' + name)
+                total += snapshot['size']
+                if snapshot['sha256'] is None or total > HASH_LIMIT:
+                    raise ValueError('Límite de huellas excedido')
+                refs.append({'path': 'recon/' + name, 'sha256': snapshot['sha256'], 'size': snapshot['size']})
+        except (OSError, ValueError):
+            raise StageError('No se pudo verificar la versión de los artefactos de la etapa; no se marcará como completada para reanudar.') from None
+        return refs
+
     def _load_checkpoint(self):
-        path = self.recon_dir / '.checkpoint.json'
-        if not path.is_file():
+        message = ('El checkpoint no corresponde al alcance o a las versiones actuales de los artefactos, '
+                   'o está incompleto. Simula y reinicia sin --resume; se conservan los artefactos anteriores.')
+        try:
+            (self.recon_dir / '.checkpoint.json').lstat()
+        except FileNotFoundError:
             return None
         try:
-            data = json.loads(path.read_text(encoding='utf-8'))
-        except (OSError, ValueError):
-            return None
-        return data if isinstance(data.get('completed'), dict) else None
+            snapshot = read_artifact_snapshot(self.engagement_dir, 'recon/.checkpoint.json', include_bytes=True)
+            def unique_object(pairs):
+                value = {}
+                for key, item in pairs:
+                    if key in value:
+                        raise ValueError('Clave duplicada')
+                    value[key] = item
+                return value
+            data = json.loads(snapshot['_bytes'].decode('utf-8'), object_pairs_hook=unique_object)
+            fields = {'schema_version', 'completed', 'failed_stage', 'scope_revision', 'timestamp', 'artifact_refs'}
+            if (not isinstance(data, dict) or set(data) != fields or type(data['schema_version']) is not int
+                    or data['schema_version'] != 2 or data['scope_revision'] != self.scope_revision
+                    or data['failed_stage'] not in STAGE_ARTIFACTS or not isinstance(data['completed'], dict)
+                    or not isinstance(data['artifact_refs'], dict)):
+                raise ValueError('Checkpoint incompatible')
+            names = list(STAGE_ARTIFACTS)[:list(STAGE_ARTIFACTS).index(data['failed_stage'])]
+            if list(data['completed']) != names or set(data['artifact_refs']) != set(names):
+                raise ValueError('Etapas incompatibles')
+            timestamp = datetime.datetime.fromisoformat(data['timestamp'])
+            if timestamp.tzinfo is None or timestamp.utcoffset() != datetime.timedelta(0):
+                raise ValueError('Fecha incompatible')
+            total = 0
+            for name in names:
+                result = data['completed'][name]
+                refs = data['artifact_refs'][name]
+                if not isinstance(result, dict) or result.get('status') != 'completed' or result.get('stage') != name:
+                    raise ValueError('Resultado incompatible')
+                paths = ['recon/' + path for path in STAGE_ARTIFACTS[name]]
+                if not isinstance(refs, list) or len(refs) != len(paths):
+                    raise ValueError('Referencias incompletas')
+                for ref, path in zip(refs, paths):
+                    if (not isinstance(ref, dict) or set(ref) != {'path', 'sha256', 'size'} or ref['path'] != path
+                            or not isinstance(ref['sha256'], str) or not re.fullmatch(r'[a-f0-9]{64}', ref['sha256'])
+                            or type(ref['size']) is not int or not 0 <= ref['size'] <= HASH_LIMIT):
+                        raise ValueError('Referencia incompatible')
+                    total += ref['size']
+            if total > HASH_LIMIT:
+                raise ValueError('Límite de huellas excedido')
+            for refs in data['artifact_refs'].values():
+                for ref in refs:
+                    current = read_artifact_snapshot(self.engagement_dir, ref['path'])
+                    if current['sha256'] != ref['sha256'] or current['size'] != ref['size']:
+                        raise ValueError('Versión distinta')
+            return data
+        except (OSError, ValueError, KeyError, TypeError, OverflowError, RecursionError):
+            raise ScopeError(message) from None
 
     def run_all(self, stage='all', resume=False):
         if stage not in ('all', 'subdomains', 'probe', 'urls', 'patterns'):
             raise ScopeError('Etapa de reconocimiento no válida.')
-        self.prepare_directories()
         results = {}
+        self.completed_artifacts = {}
         checkpoint_path = self.recon_dir / '.checkpoint.json'
         if stage == 'all' and resume and not self.dry_run:
             checkpoint = self._load_checkpoint()
             if checkpoint:
-                if checkpoint.get('scope_revision') != self.scope_revision:
-                    raise ScopeError('El checkpoint no corresponde al alcance actual. Simula y reinicia sin --resume; se conservan los artefactos anteriores.')
                 results.update(checkpoint['completed'])
+                self.completed_artifacts.update(checkpoint['artifact_refs'])
         elif stage != 'all' and not self.dry_run:
             # Una etapa manual rompe el orden que asume la cadena automática;
             # el checkpoint de "all" ya no es fiable para reanudar.
             checkpoint_path.unlink(missing_ok=True)
+        self.prepare_directories()
         failed_stage = None
         self.progress['completed_stages'] = list(results)
         self._emit('run_start', status='running', selected_stage=stage, total_stages=4 if stage == 'all' else 1)
@@ -560,7 +628,10 @@ class ReconPipeline:
             self._emit('stage_start', stage=name, stage_status='running', command=None, command_status=None, recent_output=[])
             try:
                 self.revalidate_scope()
-                results[name] = action()
+                result = action()
+                if stage == 'all' and not self.dry_run:
+                    self.completed_artifacts[name] = self._stage_artifacts(name)
+                results[name] = result
                 results[name]['interaction'] = 'simulation' if self.dry_run else {'subdomains': 'passive', 'probe': 'active', 'urls': 'passive', 'patterns': 'local'}[name]
                 self.progress['completed_stages'].append(name)
                 self._emit('stage_end', stage=name, stage_status=results[name]['status'])
@@ -576,7 +647,9 @@ class ReconPipeline:
             if failed_stage:
                 completed = {name: result for name, result in results.items() if result.get('status') != 'failed'}
                 self._write_lines('.checkpoint.json', [json.dumps(
-                    {'completed': completed, 'failed_stage': failed_stage, 'scope_revision': self.scope_revision,
+                    {'schema_version': 2, 'completed': completed, 'failed_stage': failed_stage,
+                     'artifact_refs': {name: self.completed_artifacts[name] for name in completed},
+                     'scope_revision': self.scope_revision,
                      'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat()},
                     ensure_ascii=False)])
             else:

@@ -2219,6 +2219,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(ci_linters))
     context_recon = load_module('context_recon_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_context_recon_state.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(context_recon))
+    checkpoint = load_module('checkpoint_integrity_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_checkpoint_integrity.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(checkpoint))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

@@ -707,6 +707,70 @@ test('cambiar carpeta descarta respuestas antiguas de listado y previsualizació
   } finally { view.cleanup() }
 })
 
+const artifactJob = (letter, hash = 'a'.repeat(64)) => ({ run_id: letter.repeat(32), status: 'completed', stage: 'urls',
+  result_summary: { schema_version: 3, recorded_at: '2026-10-10T12:00:00Z', metrics_source: 'artifacts',
+    metrics: { subdomains_count: 0, live_hosts_count: 0, urls_count: 1, js_files_count: 0 }, stages: [
+      { stage: 'urls', status: 'completed', execution: 'current', origin_run_id: letter.repeat(32), counts: { urls_count: 1, js_files_count: 0 }, patterns: {}, failure_kind: null,
+        artifact_capture: { status: 'recorded', refs: [{ path: 'recon/urls_all.txt', sha256: hash, size: 9 },
+          { path: 'recon/js_files.txt', sha256: 'c'.repeat(64), size: 0 }] } },
+    ] } })
+
+test('historial compara versiones sin alterar referencia y distingue archivo ausente, límite y legacy', async () => {
+  let mode = 'match'
+  const job = artifactJob('b')
+  const unavailable = artifactJob('c'); unavailable.result_summary.stages[0].artifact_capture = { status: 'unavailable', refs: [] }
+  const legacy = artifactJob('d'); legacy.result_summary.schema_version = 2; delete legacy.result_summary.stages[0].artifact_capture
+  const file = { rel_path: 'recon/urls_all.txt', name: 'urls_all.txt', size: 9 }
+  const view = await mountDecision({ getReconHistory: async () => ({ jobs: [job, unavailable, legacy], next_cursor: null }), getArtifacts: async () => [file],
+    getArtifactContent: async () => {
+      if (mode === 'missing') throw new Error('Archivo no encontrado')
+      return { ...file, content: 'fixture', preview_status: 'complete', sha256: mode === 'large' ? null : mode === 'changed' ? 'f'.repeat(64) : 'a'.repeat(64), size: mode === 'size' ? 10 : 9 }
+    } })
+  const compare = async () => { await clickText(view.root, 'Reconocimiento'); await clickText(view.root, 'Comparar archivo actual recon/urls_all.txt') }
+  try {
+    await compare()
+    const box = () => view.root.querySelector('[data-testid="job-artifact-comparison"]')
+    assert.match(box().textContent, /coincide con la registrada/)
+    assert.ok(box().textContent.includes(job.run_id)); assert.ok(box().textContent.includes('a'.repeat(64)))
+    assert.match(box().textContent, /Los bytes anteriores no se guardaron/)
+    for (const current of ['changed', 'size', 'large', 'missing']) {
+      mode = current; await compare()
+      assert.ok(box().textContent.includes('a'.repeat(64)))
+      assert.match(box().textContent, current === 'large' ? /no se puede comparar/ : current === 'missing' ? /No se pudo leer/ : /difiere de la registrada/)
+      assert.equal(job.result_summary.stages[0].artifact_capture.refs[0].sha256, 'a'.repeat(64))
+    }
+    await clickText(view.root, 'urls_all.txt')
+    assert.equal(box(), null)
+    await clickText(view.root, 'Reconocimiento')
+    assert.match(view.root.textContent, /Huellas no disponibles/)
+    assert.match(view.root.textContent, /resumen anterior no conserva huellas/)
+  } finally { view.cleanup() }
+})
+
+test('comparación conserva el job seleccionado y descarta lectura tardía al cambiar job o proyecto', async () => {
+  let resolveFirst, calls = 0
+  const first = new Promise(resolve => { resolveFirst = resolve })
+  const jobs = [artifactJob('b'), artifactJob('c', 'c'.repeat(64))]
+  const route = reactive({ params: { id: 'fixture', type: 'engagement' } })
+  const view = await mountDecision({ getReconHistory: async () => ({ jobs, next_cursor: null }),
+    getArtifactContent: () => ++calls === 1 ? first : Promise.resolve({ content: 'current c', sha256: 'c'.repeat(64), size: 9, preview_status: 'complete' }) }, route)
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const firstRow = view.root.querySelector('[data-testid="recon-history"] li')
+    await clickText(firstRow, 'Comparar archivo actual recon/urls_all.txt')
+    assert.match(view.root.querySelector('[data-testid="job-artifact-comparison"]').textContent, /Leyendo/)
+    await clickText(view.root, 'Reconocimiento')
+    const secondRow = view.root.querySelectorAll('[data-testid="recon-history"] li')[1]
+    await clickText(secondRow, 'Comparar archivo actual recon/urls_all.txt')
+    resolveFirst({ content: 'stale b', sha256: 'a'.repeat(64), size: 9, preview_status: 'complete' }); await flush()
+    const box = view.root.querySelector('[data-testid="job-artifact-comparison"]')
+    assert.ok(box.textContent.includes(jobs[1].run_id)); assert.ok(!box.textContent.includes(jobs[0].run_id))
+    assert.match(box.textContent, /coincide/); assert.doesNotMatch(view.root.textContent, /stale b/)
+    route.params.id = 'other'; await flush()
+    assert.equal(view.root.querySelector('[data-testid="job-artifact-comparison"]'), null)
+  } finally { view.cleanup() }
+})
+
 test('editar conserva vínculos y solo añade la versión revisada explícitamente', async () => {
   const reference = { path: 'recon/kept.txt', sha256: 'a'.repeat(64) }
   let saved

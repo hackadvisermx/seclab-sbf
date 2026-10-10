@@ -584,6 +584,17 @@
                 <p v-else class="text-slate-500">Resumen anterior: origen de etapa no registrado.</p>
                 <p v-for="(count, name) in step.counts" :key="name">{{ historyResultCountLabel(name) }}: {{ count }}</p>
                 <p v-if="Object.keys(step.patterns).length">Clasificación local de URLs; coincidencias por patrón: {{ Object.entries(step.patterns).map(([name, count]) => name + ': ' + count).join(' · ') }}. No confirma vulnerabilidades.</p>
+                <div v-if="step.artifact_capture?.status === 'recorded'" class="space-y-2">
+                  <p>Huellas conservadas de la etapa; los archivos actuales pueden cambiar.</p>
+                  <div v-for="reference in step.artifact_capture.refs" :key="reference.path" data-testid="recon-history-artifact" class="border border-slate-800 rounded-sm p-2 space-y-1 break-all">
+                    <p class="text-slate-200">{{ reference.path }} · {{ reference.size }} bytes</p>
+                    <code class="block text-cyan-300">SHA-256: {{ reference.sha256 }}</code>
+                    <button @click="openJobArtifact(job, step, reference)" class="px-2 py-1 border border-slate-700 rounded-sm text-cyan-300">Comparar archivo actual {{ reference.path }}</button>
+                  </div>
+                </div>
+                <p v-else-if="step.artifact_capture?.status === 'unavailable'" class="text-amber-300">Huellas no disponibles para esta etapa; no se registró una versión verificable.</p>
+                <p v-else-if="job.result_summary.schema_version < 3" class="text-slate-500">Este resumen anterior no conserva huellas de artefactos.</p>
+                <p v-else class="text-slate-500">Sin captura de artefactos completados para esta etapa.</p>
               </div>
             </details>
             <p v-else-if="job.dry_run" class="text-slate-400">La simulación no genera resultados de artefactos.</p>
@@ -1434,6 +1445,18 @@
                   Copiar Previsualización
                 </button>
               </div>
+              <div v-if="expectedArtifactJob" data-testid="job-artifact-comparison" class="space-y-2 border border-slate-700 rounded-sm p-3 break-all text-slate-300">
+                <p>Versión conservada del job: {{ expectedArtifactJob.run_id }}</p>
+                <p>Etapa: {{ historyStageLabel(expectedArtifactJob.stage) }} · Run de origen: {{ expectedArtifactJob.origin_run_id || 'No registrado' }}</p>
+                <p>{{ expectedArtifactJob.path }} · {{ expectedArtifactJob.size }} bytes registrados</p>
+                <code class="block text-cyan-300">SHA-256 registrado: {{ expectedArtifactJob.sha256 }}</code>
+                <p v-if="artifactReadFailed" class="text-amber-300">No se pudo leer el archivo actual; la versión conservada permanece en el historial.</p>
+                <p v-else-if="!artifactSnapshot">Leyendo archivo actual para comparar...</p>
+                <p v-else-if="!artifactSnapshot.sha256" class="text-amber-300">Huella actual no disponible; no se puede comparar esta versión.</p>
+                <p v-else-if="artifactSnapshot.sha256 === expectedArtifactJob.sha256 && artifactSnapshot.size === expectedArtifactJob.size" class="text-emerald-300">La versión actual coincide con la registrada en esta lectura.</p>
+                <p v-else class="text-amber-300">La versión actual difiere de la registrada; el historial conserva la referencia anterior.</p>
+                <p>Se muestra el archivo actual. Los bytes anteriores no se guardaron; esta comparación no confirma hallazgos ni demuestra productor.</p>
+              </div>
               <div v-if="artifactSnapshot" data-testid="artifact-fingerprint" class="space-y-2 text-slate-400 break-words">
                 <p v-if="expectedArtifactSha && artifactSnapshot.sha256 !== expectedArtifactSha" class="text-amber-300">La versión actual no coincide con la vinculada al hallazgo. Revisa la evidencia; el vínculo guardado no se ha cambiado.</p>
                 <p>{{ artifactSnapshot.size }} bytes · Modificado: {{ artifactSnapshot.modified }} (UTC)</p>
@@ -1963,6 +1986,8 @@ const selectedArtifact = ref(null)
 const selectedArtifactContent = ref('')
 const artifactSnapshot = ref(null)
 const expectedArtifactSha = ref(null)
+const expectedArtifactJob = ref(null)
+const artifactReadFailed = ref(false)
 let artifactRequest = 0
 
 const capturedFlagsCount = computed(() => {
@@ -2681,6 +2706,8 @@ async function selectArtifactFolder(folder) {
   selectedArtifactContent.value = ''
   artifactSnapshot.value = null
   expectedArtifactSha.value = null
+  expectedArtifactJob.value = null
+  artifactReadFailed.value = false
   artifactFiles.value = []
   try {
     const files = await api.getArtifacts(projectId, folder, projectType)
@@ -2693,12 +2720,14 @@ async function selectArtifactFolder(folder) {
   }
 }
 
-async function loadArtifactPreview(file, expectedHash = null) {
+async function loadArtifactPreview(file, expectedHash = null, expectedJob = null) {
   const request = ++artifactRequest
   const projectId = engId.value
   const projectType = engType.value
   selectedArtifact.value = file
   expectedArtifactSha.value = expectedHash
+  expectedArtifactJob.value = expectedJob
+  artifactReadFailed.value = false
   selectedArtifactContent.value = 'Cargando contenido...'
   artifactSnapshot.value = null
   try {
@@ -2708,6 +2737,7 @@ async function loadArtifactPreview(file, expectedHash = null) {
     selectedArtifactContent.value = res.content
   } catch (err) {
     if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
+    artifactReadFailed.value = true
     selectedArtifactContent.value = 'Error al leer archivo: ' + err.message
   }
 }
@@ -2718,6 +2748,18 @@ async function openFindingArtifact(reference) {
   await selectArtifactFolder(reference.path.split('/')[0])
   if (request !== artifactRequest) return
   await loadArtifactPreview({ rel_path: reference.path, name: reference.path.split('/').at(-1) }, reference.sha256)
+}
+
+async function openJobArtifact(job, step, reference) {
+  activeTab.value = 'artifacts'
+  const projectId = engId.value
+  const projectType = engType.value
+  const request = artifactRequest + 1
+  await selectArtifactFolder(reference.path.split('/')[0])
+  if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
+  await loadArtifactPreview({ rel_path: reference.path, name: reference.path.split('/').at(-1) }, null,
+    { path: reference.path, sha256: reference.sha256, size: reference.size,
+      run_id: job.run_id, stage: step.stage, origin_run_id: step.origin_run_id })
 }
 
 async function reviewFindingArtifact() {

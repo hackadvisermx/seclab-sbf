@@ -1617,6 +1617,7 @@
         </div>
 
         <form @submit.prevent="submitFinding" class="space-y-4">
+          <fieldset :disabled="isSavingFinding" class="contents">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-mono text-slate-300 mb-1">Slug / Identificador:</label>
@@ -1814,6 +1815,23 @@
             </div>
           </section>
 
+          <section v-if="findingSaveError" role="alert" data-testid="finding-save-error" class="text-xs space-y-2 border border-amber-700 p-3 text-amber-200">
+            <p>{{ findingSaveError }}</p>
+            <p>Tu borrador sigue en el formulario. Revisa los cambios antes de guardar sobre otra versión.</p>
+            <button v-if="editingFinding" type="button" @click="compareCurrentFinding" :disabled="findingCompareBusy" class="underline">{{ findingCompareBusy ? 'Leyendo ficha actual...' : 'Ver ficha actual sin reemplazar borrador' }}</button>
+          </section>
+          <section v-if="findingLatest" data-testid="finding-current-version" class="text-xs space-y-2 border border-cyan-800 p-3 text-slate-300">
+            <h3 class="font-bold text-cyan-300">Versión actual para comparar</h3>
+            <p>{{ findingLatest.frontmatter.title }} · {{ findingLatest.frontmatter.status }} · {{ findingLatest.frontmatter.severity }}</p>
+            <p>Activo: {{ findingLatest.frontmatter.asset || 'Sin activo' }} · CWE: {{ findingLatest.frontmatter.cwe || 'Sin CWE' }}</p>
+            <p>CVSS: {{ findingLatest.frontmatter.cvss_score }} · {{ findingLatest.frontmatter.cvss_vector }}</p>
+            <code class="block break-all">SHA-256: {{ findingLatest.source_sha256 }}</code>
+            <pre class="max-h-56 overflow-auto whitespace-pre-wrap">{{ findingLatest.body }}</pre>
+            <p>Motivo de verificación: {{ findingLatest.verification_rationale || 'Sin motivo registrado' }}</p>
+            <p v-for="reference in findingLatest.artifact_refs" :key="reference.path" class="break-all">{{ reference.path }} · {{ reference.sha256 }}</p>
+            <p>Usar esta versión conserva tus campos. El próximo guardado reemplazará los campos actuales con tu borrador.</p>
+            <button type="button" @click="acceptFindingVersion" class="underline text-cyan-300">Revisé los cambios; usar esta versión como base</button>
+          </section>
           <div class="pt-3 border-t border-slate-800 flex items-center justify-end space-x-3">
             <button
               type="button"
@@ -1824,12 +1842,13 @@
             </button>
             <button
               type="submit"
-              :disabled="!!findingForm.artifact_refs_error || !!findingConfirmationIssue"
+              :disabled="isSavingFinding || !!findingForm.artifact_refs_error || !!findingConfirmationIssue"
               class="px-5 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono"
             >
-              Guardar Ficha
+              {{ isSavingFinding ? 'Guardando Ficha...' : 'Guardar Ficha' }}
             </button>
           </div>
+          </fieldset>
         </form>
       </div>
     </div>
@@ -2070,6 +2089,14 @@ const scopeTestResult = ref(null)
 const findings = ref([])
 const showFindingModal = ref(false)
 const editingFinding = ref(false)
+const findingSaveError = ref('')
+const findingLatest = ref(null)
+const isSavingFinding = ref(false)
+const findingCompareBusy = ref(false)
+let findingEditorRequest = 0
+let findingSaveRequest = 0
+let findingCompareRequest = 0
+let findingListRequest = 0
 const findingForm = ref({
   slug: '',
   title: '',
@@ -2287,8 +2314,12 @@ async function testScope() {
 }
 
 async function loadFindings() {
+  const request = ++findingListRequest
+  const project = engId.value, type = engType.value
   try {
-    findings.value = await api.getFindings(engId.value, engType.value)
+    const result = await api.getFindings(project, type)
+    if (request !== findingListRequest || project !== engId.value || type !== engType.value) return
+    findings.value = result
     const findingsTab = tabs.value.find(t => t.id === 'findings')
     if (findingsTab) findingsTab.count = findings.value.length
   } catch (err) {
@@ -2297,6 +2328,7 @@ async function loadFindings() {
 }
 
 function openNewFindingModal() {
+  resetFindingEditor()
   findingArtifactPath.value = ''
   findingArtifactDraft.value = null
   findingArtifactError.value = ''
@@ -2325,6 +2357,7 @@ function openNewFindingModal() {
 }
 
 function editFinding(f) {
+  resetFindingEditor()
   findingArtifactPath.value = ''
   findingArtifactDraft.value = null
   findingArtifactError.value = ''
@@ -2333,6 +2366,7 @@ function editFinding(f) {
   findingForm.value = {
     slug: f.slug,
     finding_id: f.finding_id || null,
+    expected_source_sha256: f.source_sha256 || null,
     title: f.frontmatter?.title || '',
     status: ['VERIFIED', 'CONFIRMADO'].includes((f.frontmatter?.status || '').trim().toUpperCase()) ? 'PROVEN' : f.frontmatter?.status || 'CANDIDATE',
     severity: f.frontmatter?.severity || 'MEDIUM',
@@ -2370,16 +2404,67 @@ async function recalcCvss() {
 }
 
 async function submitFinding() {
-  if (findingForm.value.artifact_refs_error || findingConfirmationIssue.value) return
+  if (isSavingFinding.value || findingForm.value.artifact_refs_error || findingConfirmationIssue.value) return
+  if (editingFinding.value && !findingForm.value.expected_source_sha256) {
+    findingSaveError.value = 'Falta la versión de la ficha. Revisa la ficha actual antes de guardar.'
+    return
+  }
+  const request = ++findingSaveRequest, editor = findingEditorRequest
+  const project = engId.value, type = engType.value
+  const current = () => request === findingSaveRequest && editor === findingEditorRequest && project === engId.value && type === engType.value && showFindingModal.value
+  isSavingFinding.value = true
+  findingSaveError.value = ''
+  findingLatest.value = null
   try {
     const { artifact_refs_error, ...payload } = findingForm.value
-    await api.saveFinding(engId.value, payload, engType.value)
+    await api.saveFinding(project, payload, type)
+    if (!current()) return
     showFindingModal.value = false
     await loadFindings()
   } catch (err) {
-    alert('Error al guardar hallazgo: ' + err.message)
+    if (current()) findingSaveError.value = err.message || 'No se pudo guardar la ficha.'
+  } finally {
+    if (request === findingSaveRequest && editor === findingEditorRequest) isSavingFinding.value = false
   }
 }
+
+function resetFindingEditor() {
+  findingEditorRequest++
+  findingCompareRequest++
+  findingSaveError.value = ''
+  findingLatest.value = null
+  isSavingFinding.value = false
+  findingCompareBusy.value = false
+}
+
+async function compareCurrentFinding() {
+  const request = ++findingCompareRequest, editor = findingEditorRequest
+  const project = engId.value, type = engType.value, slug = findingForm.value.slug
+  const current = () => request === findingCompareRequest && editor === findingEditorRequest && project === engId.value && type === engType.value && showFindingModal.value
+  findingLatest.value = null
+  findingCompareBusy.value = true
+  try {
+    const latest = await api.getFinding(project, slug, type)
+    if (!current()) return
+    if (!/^[0-9a-f]{64}$/.test(latest.source_sha256 || '') || latest.slug !== slug || latest.artifact_refs_error || latest.identity_error ||
+      (findingForm.value.finding_id && findingForm.value.finding_id !== latest.finding_id)) throw new Error('No se puede usar esta ficha como base: revisa su identidad o metadatos.')
+    findingLatest.value = latest
+  } catch (err) {
+    if (current()) findingSaveError.value = err.message || 'No se pudo leer la ficha actual.'
+  } finally {
+    if (current()) findingCompareBusy.value = false
+  }
+}
+
+function acceptFindingVersion() {
+  if (!findingLatest.value) return
+  findingForm.value.expected_source_sha256 = findingLatest.value.source_sha256
+  findingForm.value.finding_id = findingLatest.value.finding_id || null
+  findingLatest.value = null
+  findingSaveError.value = ''
+}
+
+watch(showFindingModal, open => { if (!open) resetFindingEditor() })
 
 async function deleteFindingAction(slug) {
   if (!confirm(`¿Eliminar la ficha de evidencia ${slug}?`)) return
@@ -3031,6 +3116,10 @@ async function triggerReconPipeline() {
 }
 
 watch([engId, engType], () => {
+  showFindingModal.value = false
+  resetFindingEditor()
+  findings.value = []
+  loadFindings()
   contextRequest++
   showContextModal.value = false
   injectedContextText.value = ''
@@ -3086,6 +3175,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  findingListRequest++
+  resetFindingEditor()
   contextRequest++
   copilotRequest++
   reconOutcomeRequest++

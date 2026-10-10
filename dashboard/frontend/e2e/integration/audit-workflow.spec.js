@@ -115,7 +115,7 @@ test('auditoría sintética: alcance, simulación, bloqueo, evidencia y reporte'
   await page.getByRole('button', { name: /Hallazgos \(evidence\/\)/ }).click()
   await page.getByRole('button', { name: 'Editar', exact: true }).click()
   await expect(page.getByTestId('finding-markdown')).toHaveValue(candidate.body)
-  const rejected = await page.request.post(`/api/v1/findings/${id}`, { data: { slug: candidate.slug, title, body: candidate.body, status: 'PROVEN' } })
+  const rejected = await page.request.post(`/api/v1/findings/${id}`, { data: { slug: candidate.slug, title, body: candidate.body, expected_source_sha256: candidate.source_sha256, status: 'PROVEN' } })
   expect(rejected.status()).toBe(409)
   await form.locator('select').first().selectOption('PROVEN')
   await expect(page.getByRole('button', { name: 'Guardar Ficha', exact: true })).toBeDisabled()

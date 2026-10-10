@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { verifyFindingStateParity } from '../finding-state-parity.mjs'
 import { verifyCopilotLocalGuidance } from '../copilot-local-guidance.mjs'
 import { verifyCopilotContextGate } from '../copilot-context-gate.mjs'
+import { verifyFindingEditVersion } from '../finding-edit-version.mjs'
 
 test('usuario temporal consulta cobertura instalada coherente y revoca su sesión al salir', async ({ page }, testInfo) => {
   const user = JSON.parse(await readFile(new URL('../.playwright-fixture/user.json', import.meta.url), 'utf8'))
@@ -43,6 +44,7 @@ test('usuario temporal consulta cobertura instalada coherente y revoca su sesió
   await verifyFindingStateParity(page, testInfo, workspace)
   await verifyCopilotLocalGuidance(page, testInfo)
   await verifyCopilotContextGate(page, testInfo, workspace)
+  await verifyFindingEditVersion(page, testInfo, workspace)
   await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'SecLab Dashboard' })).toBeVisible()
   expect((await page.request.get('/api/v1/auth/me')).status()).toBe(401)

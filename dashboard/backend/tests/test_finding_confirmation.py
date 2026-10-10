@@ -11,6 +11,10 @@ from app.services.workspace_sync import WorkspaceSyncService, FindingUpdateError
 
 
 class TestFindingConfirmation(unittest.TestCase):
+    def current_version(self, slug):
+        path = self.service._resolve_dir('fixture') / 'evidence' / (slug + '.md')
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -38,7 +42,7 @@ class TestFindingConfirmation(unittest.TestCase):
         for status in ['PROVEN', 'VERIFIED', 'CONFIRMADO']:
             (self.root / 'evidence/confirmed.md').unlink(missing_ok=True)
             detail = self.service.save_finding('fixture', FindingCreate(**dict(self.valid, status=status)))
-            edited = self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Edit', body=detail.body))
+            edited = self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Edit', body=detail.body, expected_source_sha256=self.current_version(detail.slug)))
             self.assertEqual(edited.verification_rationale, self.valid['verification_rationale'])
             self.assertEqual(edited.artifact_refs, [self.reference])
             self.assertIsNone(edited.confirmation_error)
@@ -46,7 +50,7 @@ class TestFindingConfirmation(unittest.TestCase):
         prior = path.read_bytes()
         self.artifact.write_bytes(b'Changed')
         with self.assertRaises(FindingUpdateError):
-            self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Bad edit', body=detail.body))
+            self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Bad edit', body=detail.body, expected_source_sha256=self.current_version(detail.slug)))
         self.assertEqual(path.read_bytes(), prior)
 
     def test_legacy_is_readable_and_requires_repair_or_explicit_demotion_without_data_loss(self):
@@ -59,8 +63,8 @@ class TestFindingConfirmation(unittest.TestCase):
         self.assertEqual(self.service.list_findings('fixture')[0].body, 'Original body')
         self.assertEqual(path.read_text(), original)
         with self.assertRaises(FindingUpdateError):
-            self.service.save_finding('fixture', FindingCreate(slug='legacy', title='Edit', body=detail.body))
-        changed = self.service.save_finding('fixture', FindingCreate(slug='legacy', title='Edit', body=detail.body, status='CANDIDATE'))
+            self.service.save_finding('fixture', FindingCreate(slug='legacy', title='Edit', body=detail.body, expected_source_sha256=self.current_version('legacy')))
+        changed = self.service.save_finding('fixture', FindingCreate(slug='legacy', title='Edit', body=detail.body, status='CANDIDATE', expected_source_sha256=self.current_version('legacy')))
         self.assertEqual(changed.body, 'Original body')
         self.assertEqual(changed.frontmatter.author, 'auditora')
         self.assertIsNone(changed.confirmation_error)
@@ -74,10 +78,10 @@ class TestFindingConfirmation(unittest.TestCase):
             detail = client.get('/findings/fixture/confirmed').json()
             path = self.root / 'evidence/confirmed.md'
             before = path.read_bytes()
-            rejected = client.post('/findings/fixture', json={'slug': detail['slug'], 'title': 'Edit', 'body': detail['body'], 'status': 'VERIFIED'})
+            rejected = client.post('/findings/fixture', json={'slug': detail['slug'], 'title': 'Edit', 'body': detail['body'], 'expected_source_sha256': detail['source_sha256'], 'status': 'VERIFIED'})
             self.assertEqual(rejected.status_code, 409)
             self.assertEqual(path.read_bytes(), before)
-            accepted = client.post('/findings/fixture', json=dict(self.valid, body=detail['body']))
+            accepted = client.post('/findings/fixture', json=dict(self.valid, body=detail['body'], expected_source_sha256=detail['source_sha256']))
             self.assertEqual(accepted.status_code, 200, accepted.text)
             self.assertEqual(accepted.json()['verification_rationale'], self.valid['verification_rationale'])
             self.assertEqual(accepted.json()['body'], detail['body'])
@@ -89,13 +93,13 @@ class TestFindingConfirmation(unittest.TestCase):
         scope = self.root / 'target.yaml'
         scope.unlink()
         with self.assertRaises(FindingUpdateError):
-            self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Edit', body=detail.body))
+            self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Edit', body=detail.body, expected_source_sha256=self.current_version(detail.slug)))
         scope.write_text('scope:\n  in_scope:\n    domains: [example.test]\n  out_of_scope:\n    domains: [example.test]\n')
         with self.assertRaises(FindingUpdateError):
-            self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Edit', body=detail.body))
+            self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Edit', body=detail.body, expected_source_sha256=self.current_version(detail.slug)))
         with patch('app.services.workspace_sync._scope_module', side_effect=ScopeValidationError('Validador no disponible')):
             with self.assertRaises(FindingUpdateError):
-                self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Edit', body=detail.body))
+                self.service.save_finding('fixture', FindingCreate(slug=detail.slug, title='Edit', body=detail.body, expected_source_sha256=self.current_version(detail.slug)))
         self.assertEqual(path.read_bytes(), prior)
 
     def test_api_rejects_invalid_rationale_for_candidates_without_writing(self):
@@ -111,6 +115,6 @@ class TestFindingConfirmation(unittest.TestCase):
             self.assertEqual(created.status_code, 200, created.text)
             prior = path.read_bytes()
             self.assertEqual(client.get('/findings/fixture/confirmed').json()['verification_rationale'], payload['verification_rationale'])
-            rejected = client.post('/findings/fixture', json=dict(payload, body=created.json()['body'], verification_rationale='bad\0text'))
+            rejected = client.post('/findings/fixture', json=dict(payload, body=created.json()['body'], expected_source_sha256=created.json()['source_sha256'], verification_rationale='bad\0text'))
             self.assertEqual(rejected.status_code, 409)
             self.assertEqual(path.read_bytes(), prior)

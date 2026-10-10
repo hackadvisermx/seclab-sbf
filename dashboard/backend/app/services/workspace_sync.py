@@ -1,4 +1,5 @@
 import os
+import fcntl
 import datetime
 import json
 import pathlib
@@ -6,10 +7,11 @@ import re
 import sys
 import uuid
 import yaml
+from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
 from app.core.project_trash import ProjectTrash
-from app.core.artifact_snapshot import read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs, normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id
+from app.core.artifact_snapshot import ArtifactChangedError, read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs, normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id
 from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
@@ -25,6 +27,24 @@ class ScopeValidationError(ValueError):
 
 class FindingUpdateError(ValueError):
     pass
+
+
+@contextmanager
+def _finding_write_lock(directory):
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def _read_finding_source(file_path):
+    snapshot = read_artifact_snapshot(file_path.parent, file_path.name, include_bytes=True)
+    if snapshot['sha256'] is None:
+        raise FindingUpdateError('La ficha supera el límite de lectura de 32 MiB; no se editó.')
+    return snapshot['_bytes'].decode('utf-8'), snapshot['sha256']
 
 
 def _finding_identity(metadata):
@@ -400,7 +420,7 @@ class WorkspaceSyncService:
                 continue
             slug = file_path.stem
             try:
-                content = file_path.read_text(encoding="utf-8")
+                content, source_sha256 = _read_finding_source(file_path)
                 fm_data, body = _parse_frontmatter(content)
                 fm = FindingFrontmatter(
                     title=fm_data.get("title", slug.replace("-", " ").capitalize()),
@@ -421,6 +441,7 @@ class WorkspaceSyncService:
                         frontmatter=fm,
                         body=body,
                         engagement_id=eng_id,
+                        source_sha256=source_sha256,
                         **_finding_identity(fm_data),
                         **_finding_refs(fm_data),
                         **_finding_review(fm_data),
@@ -437,7 +458,7 @@ class WorkspaceSyncService:
         file_path = self._resolve_dir(eng_id, eng_type) / "evidence" / f"{slug}.md"
         if not file_path.exists():
             return None
-        content = file_path.read_text(encoding="utf-8")
+        content, source_sha256 = _read_finding_source(file_path)
         fm_data, body = _parse_frontmatter(content)
         fm = FindingFrontmatter(
             title=fm_data.get("title", slug.replace("-", " ").capitalize()),
@@ -457,6 +478,7 @@ class WorkspaceSyncService:
             frontmatter=fm,
             body=body,
             engagement_id=eng_id,
+            source_sha256=source_sha256,
             **_finding_identity(fm_data),
             **_finding_refs(fm_data),
             **_finding_review(fm_data),
@@ -466,6 +488,15 @@ class WorkspaceSyncService:
         """Crea o actualiza una ficha en evidence/<slug>.md preservando el formato Evidence-First."""
         if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", finding_create.slug):
             raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
+        ev_dir = self._resolve_dir(eng_id, eng_type) / 'evidence'
+        ev_dir.mkdir(parents=True, exist_ok=True)
+        with _finding_write_lock(ev_dir):
+            try:
+                return self._save_finding(eng_id, finding_create, eng_type)
+            except (FileNotFoundError, ArtifactChangedError, UnicodeError):
+                raise FindingUpdateError('La fuente cambió o no puede leerse; no se guardó el borrador. Revisa la ficha actual.') from None
+
+    def _save_finding(self, eng_id: str, finding_create: FindingCreate, eng_type: str) -> FindingDetail:
         target_dir = self._resolve_dir(eng_id, eng_type)
         ev_dir = target_dir / "evidence"
         references = None
@@ -480,7 +511,13 @@ class WorkspaceSyncService:
         if file_path.exists():
             if finding_create.body is None:
                 raise FindingUpdateError("Para editar una ficha existente debes conservar su cuerpo Markdown completo.")
-            fm, _ = _parse_frontmatter(file_path.read_text(encoding="utf-8"), strict=True)
+            source, source_sha256 = _read_finding_source(file_path)
+            expected = finding_create.expected_source_sha256
+            if not expected or not re.fullmatch(r'[0-9a-f]{64}', expected):
+                raise FindingUpdateError('Recarga la ficha para obtener su versión antes de editar. El borrador no se guardó.')
+            if expected != source_sha256:
+                raise FindingUpdateError('La ficha cambió desde que la abriste. Revisa la versión actual y conserva tu borrador; no se sobrescribió.')
+            fm, _ = _parse_frontmatter(source, strict=True)
             if not isinstance(fm, dict):
                 raise FindingUpdateError("Los metadatos de la ficha no son válidos; no se sobrescribió.")
             for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status", "verification_rationale"):
@@ -501,11 +538,15 @@ class WorkspaceSyncService:
             try:
                 temporary.write_text(content, encoding="utf-8")
                 temporary.chmod(file_path.stat().st_mode & 0o777)
+                if _read_finding_source(file_path)[1] != source_sha256:
+                    raise FindingUpdateError('La ficha cambió durante el guardado; no se sobrescribió. Revisa la versión actual.')
                 temporary.replace(file_path)
             finally:
                 temporary.unlink(missing_ok=True)
             return self.get_finding(eng_id, finding_create.slug, eng_type)
 
+        if finding_create.expected_source_sha256 is not None:
+            raise FindingUpdateError('La ficha ya no existe. No se recreó con el borrador; revisa el proyecto.')
         now_date = datetime.date.today().isoformat()
         fm = {
             "title": finding_create.title,
@@ -554,22 +595,19 @@ class WorkspaceSyncService:
         finally:
             temporary.unlink(missing_ok=True)
 
-        return FindingDetail(
-            slug=finding_create.slug,
-            filename=file_path.name,
-            frontmatter=FindingFrontmatter(**fm),
-            body=markdown_body,
-            engagement_id=eng_id,
-            **_finding_identity(fm),
-            **_finding_refs(fm),
-            **_finding_review(fm),
-        )
+        return self.get_finding(eng_id, finding_create.slug, eng_type)
 
     def delete_finding(self, eng_id: str, slug: str, eng_type: str = "engagement") -> bool:
         """Elimina una ficha de hallazgo."""
         if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", slug):
             raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
         file_path = self._resolve_dir(eng_id, eng_type) / "evidence" / f"{slug}.md"
+        if not file_path.parent.exists():
+            return False
+        with _finding_write_lock(file_path.parent):
+            return self._delete_finding(file_path)
+
+    def _delete_finding(self, file_path) -> bool:
         if file_path.exists():
             file_path.unlink()
             return True

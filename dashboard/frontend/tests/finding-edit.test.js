@@ -10,7 +10,7 @@ const { createApp, nextTick, reactive } = await import('vue')
 const require = createRequire(import.meta.url)
 const vueUrl = pathToFileURL(require.resolve('vue/dist/vue.runtime.esm-bundler.js')).href
 const body = '## Descripción\nOriginal\n\n## Control negativo\nPrueba personalizada\n\n```http\nGET / HTTP/1.1\n```'
-const finding = { slug: 'legacy', filename: 'legacy.md', frontmatter: { title: 'Original', severity: 'INFO', status: 'PROVEN', asset: 'example.test', cvss_score: 0, cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N' }, artifact_refs: [{ path: 'recon/valid.txt', sha256: 'c'.repeat(64) }], verification_rationale: 'Operador reviso el fixture', body }
+const finding = { source_sha256: 'd'.repeat(64), slug: 'legacy', filename: 'legacy.md', frontmatter: { title: 'Original', severity: 'INFO', status: 'PROVEN', asset: 'example.test', cvss_score: 0, cvss_vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N' }, artifact_refs: [{ path: 'recon/valid.txt', sha256: 'c'.repeat(64) }], verification_rationale: 'Operador reviso el fixture', body }
 async function flush() { await nextTick(); await new Promise(r => setTimeout(r, 0)); await nextTick() }
 async function mount(api, route = { params: { id: 'fixture', type: 'engagement' } }) {
   globalThis.fixtureFindingRoute = route
@@ -1063,5 +1063,91 @@ test('error de contexto se muestra y la consulta bloqueada permite orientación 
     await clickText(view.root, 'Enviar Consulta'); await flush()
     assert.match(view.root.querySelector('[data-testid=copilot-local-guidance]').textContent, /Revisar alcance tras el bloqueo/)
     assert.match(view.root.textContent, /Contexto no disponible/)
+  } finally { view.cleanup() }
+})
+
+test('conflicto de versión conserva borrador y exige revisar la fuente antes de reintentar', async () => {
+  const sent = []
+  const latest = { ...finding, source_sha256: 'e'.repeat(64), body: 'Cambio guardado en otra vista', frontmatter: { ...finding.frontmatter, title: 'Título actual' } }
+  const view = await mountDecision({ getFindings: async () => [finding], getFinding: async () => latest,
+    saveFinding: async (id, payload) => { sent.push(JSON.parse(JSON.stringify(payload))); if (sent.length === 1) throw new Error('La ficha cambió desde que la abriste; no se sobrescribió.') } })
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Editar')
+    const editor = view.root.querySelector('[data-testid="finding-markdown"]')
+    editor.value = 'Mi borrador revisado'; editor.dispatchEvent(new window.Event('input')); await flush()
+    await clickText(view.root, 'Guardar Ficha')
+    assert.equal(sent[0].expected_source_sha256, finding.source_sha256)
+    assert.equal(editor.value, 'Mi borrador revisado')
+    assert.match(view.root.querySelector('[data-testid="finding-save-error"]').textContent, /no se sobrescribió/)
+    await clickText(view.root, 'Ver ficha actual sin reemplazar borrador')
+    assert.match(view.root.querySelector('[data-testid="finding-current-version"]').textContent, /Cambio guardado en otra vista/)
+    assert.equal(editor.value, 'Mi borrador revisado')
+    assert.equal(sent.length, 1)
+    await clickText(view.root, 'Revisé los cambios; usar esta versión como base')
+    assert.equal(sent.length, 1)
+    await clickText(view.root, 'Guardar Ficha')
+    assert.equal(sent[1].expected_source_sha256, latest.source_sha256)
+    assert.equal(sent[1].body, 'Mi borrador revisado')
+    assert.equal(view.root.querySelector('[data-testid="finding-markdown"]'), null)
+  } finally { view.cleanup() }
+})
+
+test('sin versión de lectura la UI no guarda; puede revisar fuente sin perder borrador', async () => {
+  let writes = 0
+  const view = await mountDecision({ getFindings: async () => [{ ...finding, source_sha256: null }],
+    getFinding: async () => finding, saveFinding: async () => { writes++ } })
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Editar'); await clickText(view.root, 'Guardar Ficha')
+    assert.equal(writes, 0)
+    assert.match(view.root.querySelector('[data-testid="finding-save-error"]').textContent, /Falta la versión/)
+    await clickText(view.root, 'Ver ficha actual sin reemplazar borrador')
+    await clickText(view.root, 'Revisé los cambios; usar esta versión como base')
+    await clickText(view.root, 'Guardar Ficha'); assert.equal(writes, 1)
+  } finally { view.cleanup() }
+})
+
+for (const key of ['id', 'type']) test(`cambiar ${key} cierra el editor y descarta guardado pendiente`, async () => {
+  const route = reactive({ params: { id: 'fixture', type: 'engagement' } })
+  let finish, writes = 0
+  const view = await mountDecision({ getFindings: async () => [finding], saveFinding: () => { writes++; return new Promise(resolve => { finish = resolve }) } }, route)
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Editar'); await clickText(view.root, 'Guardar Ficha')
+    await clickText(view.root, 'Guardando Ficha'); assert.equal(writes, 1)
+    route.params[key] = key === 'id' ? 'other' : 'reto'; await flush()
+    assert.equal(view.root.querySelector('[data-testid="finding-markdown"]'), null)
+    await clickText(view.root, 'Editar')
+    finish(); await flush()
+    assert.ok(view.root.querySelector('[data-testid="finding-markdown"]'))
+    assert.equal(writes, 1)
+  } finally { view.cleanup() }
+})
+
+test('comparación tardía no entra en otro editor y una identidad distinta no puede adoptarse', async () => {
+  const identity = 'abcdabcdabcd4bcd8bcdabcdabcdabcd'
+  const current = { ...finding, finding_id: identity }
+  let finish
+  const view = await mountDecision({ getFindings: async () => [current], saveFinding: async () => { throw new Error('Conflicto') },
+    getFinding: () => new Promise(resolve => { finish = resolve }) })
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Editar'); await clickText(view.root, 'Guardar Ficha')
+    await clickText(view.root, 'Ver ficha actual sin reemplazar borrador')
+    await clickText(view.root, 'Cancelar'); await clickText(view.root, 'Editar')
+    finish({ ...current, body: 'Respuesta anterior' }); await flush()
+    assert.equal(view.root.querySelector('[data-testid="finding-current-version"]'), null)
+    await clickText(view.root, 'Guardar Ficha'); await clickText(view.root, 'Ver ficha actual sin reemplazar borrador')
+    finish({ ...current, finding_id: 'bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb' }); await flush()
+    assert.equal(view.root.querySelector('[data-testid="finding-current-version"]'), null)
+    assert.match(view.root.querySelector('[data-testid="finding-save-error"]').textContent, /identidad o metadatos/)
+  } finally { view.cleanup() }
+})
+
+test('lista tardía del proyecto anterior no ofrece fichas para editar en el actual', async () => {
+  const route = reactive({ params: { id: 'fixture', type: 'engagement' } })
+  let finish
+  const view = await mountDecision({ getFindings: id => id === 'fixture' ? new Promise(resolve => { finish = resolve }) : Promise.resolve([]) }, route)
+  try {
+    await clickText(view.root, 'Hallazgos'); route.params.id = 'other'; await flush()
+    finish([finding]); await flush()
+    assert.equal(view.root.querySelector('[data-testid="finding-identity"]'), null)
   } finally { view.cleanup() }
 })

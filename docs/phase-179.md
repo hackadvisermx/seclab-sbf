@@ -18,7 +18,7 @@ Cuatro pruebas nuevas Vue cubren respuestas tardías al cambiar proyecto/tipo/es
 
 Imagen aislada `seclab-sbf:full-phase179`, build-inputs `afd056372ace36a6`, ID `sha256:b0802a05924dddba2f2f30ef407e8d4e6c579ca5f906bb372f820b2cf538a0e5`, igual al checkout. Base existente phase172 reutilizada tras comprobar hash `f772cb17ffe418a0`; sin reconstruirla ni publicar. Build, smoke (cuatro manifiesto, ocho UUID, 21 checkpoint), Compose local/inside y Actionlint aprobados. Gate High/Critical aprobado bajo política existente sin nuevas excepciones/dependencias.
 
-SBOM CycloneDX 1.7 válido, 2251 componentes, `tmp/phase179/sbom/seclab-sbf-full-phase179-afd056372ace36a6.json`, SHA-256 `d69b8b9d1361c2131db31986b39c281f32a7993046b6195f657916957d138a38`. PR y CI del head exacto requeridos antes del merge; autorización vigente hasta 2026-10-11 16:43:06 UTC. Sin publicar/desplegar ni modificar proyectos del owner.
+SBOM CycloneDX 1.7 válido, 2251 componentes, `tmp/phase179/sbom/seclab-sbf-full-phase179-afd056372ace36a6.json`, SHA-256 `d69b8b9d1361c2131db31986b39c281f32a7993046b6195f657916957d138a38`. PR [#199](https://github.com/hackadvisermx/seclab-sbf/pull/199), CI `38094769931` aprobado para head `7f1d09a5a27356cbd3991deabbc927252b733f16`; merge `e1015f8327263c385e72ab950f9d7561ef932ffb` confirmado a las 23:23:52 UTC, rama/worktree retirados y baseline sincronizado; autorización vigente hasta 2026-10-11 16:43:06 UTC. Sin publicar/desplegar ni modificar proyectos del owner.
 
 ## Límites y compatibilidad
 

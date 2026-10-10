@@ -8,6 +8,10 @@ from app.services.workspace_sync import WorkspaceSyncService, FindingUpdateError
 
 
 class TestFindingArtifacts(unittest.TestCase):
+    def current_version(self, slug):
+        path = self.service._resolve_dir('fixture') / 'evidence' / (slug + '.md')
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -23,10 +27,10 @@ class TestFindingArtifacts(unittest.TestCase):
         path = self.path.parent.parent / 'evidence/linked.md'
         self.assertIn('artifact_refs: ' + json.dumps([self.reference]), path.read_text())
         loaded = self.service.list_findings('fixture')[0]
-        updated = self.service.save_finding('fixture', FindingCreate(slug='linked', title='Edit', body=loaded.body))
+        updated = self.service.save_finding('fixture', FindingCreate(slug='linked', title='Edit', body=loaded.body, expected_source_sha256=self.current_version('linked')))
         self.assertEqual(updated.artifact_refs, [self.reference])
         self.assertEqual(updated.body, loaded.body)
-        cleared = self.service.save_finding('fixture', FindingCreate(slug='linked', title='Edit', body=loaded.body, artifact_refs=[]))
+        cleared = self.service.save_finding('fixture', FindingCreate(slug='linked', title='Edit', body=loaded.body, artifact_refs=[], expected_source_sha256=self.current_version('linked')))
         self.assertEqual(cleared.artifact_refs, [])
         self.assertEqual(self.path.read_bytes(), b'fixture')
 
@@ -39,11 +43,11 @@ class TestFindingArtifacts(unittest.TestCase):
                  [self.reference] * 11, None]
         for references in cases:
             with self.subTest(references=references), self.assertRaises(FindingUpdateError):
-                self.service.save_finding('fixture', FindingCreate(slug='linked', title='changed', body=finding.body, artifact_refs=references))
+                self.service.save_finding('fixture', FindingCreate(slug='linked', title='changed', body=finding.body, artifact_refs=references, expected_source_sha256=self.current_version('linked')))
             self.assertEqual(path.read_bytes(), before)
         self.path.unlink()
         with self.assertRaises(FindingUpdateError):
-            self.service.save_finding('fixture', FindingCreate(slug='linked', title='changed', body=finding.body, artifact_refs=[self.reference]))
+            self.service.save_finding('fixture', FindingCreate(slug='linked', title='changed', body=finding.body, artifact_refs=[self.reference], expected_source_sha256=self.current_version('linked')))
         self.assertEqual(path.read_bytes(), before)
 
     def test_invalid_metadata_is_visible_and_requires_explicit_repair(self):
@@ -53,6 +57,6 @@ class TestFindingArtifacts(unittest.TestCase):
         self.assertIsNotNone(result.artifact_refs_error)
         self.assertEqual(result.body, 'Original body')
         with self.assertRaises(ValueError):
-            self.service.save_finding('fixture', FindingCreate(slug='invalid', title='Invalid refs', body=result.body))
-        repaired = self.service.save_finding('fixture', FindingCreate(slug='invalid', title='Invalid refs', body=result.body, artifact_refs=[]))
+            self.service.save_finding('fixture', FindingCreate(slug='invalid', title='Invalid refs', body=result.body, expected_source_sha256=self.current_version('invalid')))
+        repaired = self.service.save_finding('fixture', FindingCreate(slug='invalid', title='Invalid refs', body=result.body, artifact_refs=[], expected_source_sha256=self.current_version('invalid')))
         self.assertIsNone(repaired.artifact_refs_error)

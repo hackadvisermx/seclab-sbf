@@ -1,3 +1,4 @@
+import os
 import datetime
 import json
 import pathlib
@@ -8,7 +9,7 @@ import yaml
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
 from app.core.project_trash import ProjectTrash
-from app.core.artifact_snapshot import read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs, normalize_status, normalize_verification_rationale, validate_confirmation
+from app.core.artifact_snapshot import read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs, normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id
 from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
@@ -24,6 +25,32 @@ class ScopeValidationError(ValueError):
 
 class FindingUpdateError(ValueError):
     pass
+
+
+def _finding_identity(metadata):
+    if 'finding_id' not in metadata:
+        return {'finding_id': None, 'identity_error': None}
+    try:
+        return {'finding_id': normalize_finding_id(metadata['finding_id']), 'identity_error': None}
+    except ValueError as error:
+        return {'finding_id': None, 'identity_error': str(error)}
+
+
+def _ensure_finding_identity(ev_dir, file_path, metadata, expected_id):
+    try:
+        identity = normalize_finding_id(metadata['finding_id']) if 'finding_id' in metadata else None
+        if expected_id is not None and (identity is None or normalize_finding_id(expected_id) != identity):
+            raise ValueError('La identidad cambió; recarga la ficha. No se puede reemplazar ni elegir una identidad.')
+        identity = identity or uuid.uuid4().hex
+        for other in ev_dir.glob('*.md'):
+            if other == file_path or other.name.startswith('_') or other.name.lower() == 'readme.md':
+                continue
+            other_meta, _ = _parse_frontmatter(other.read_text(encoding='utf-8'), strict=True)
+            if other_meta.get('finding_id') == identity:
+                raise ValueError('Identidad de hallazgo duplicada; revisa las fichas copiadas antes de editar.')
+        metadata['finding_id'] = identity
+    except (OSError, ValueError) as error:
+        raise FindingUpdateError('No se guardó la ficha: ' + str(error)) from error
 
 
 def _finding_refs(metadata):
@@ -394,6 +421,7 @@ class WorkspaceSyncService:
                         frontmatter=fm,
                         body=body,
                         engagement_id=eng_id,
+                        **_finding_identity(fm_data),
                         **_finding_refs(fm_data),
                         **_finding_review(fm_data),
                     )
@@ -429,6 +457,7 @@ class WorkspaceSyncService:
             frontmatter=fm,
             body=body,
             engagement_id=eng_id,
+            **_finding_identity(fm_data),
             **_finding_refs(fm_data),
             **_finding_review(fm_data),
         )
@@ -462,6 +491,7 @@ class WorkspaceSyncService:
                     fm[field] = value
             if references is not None:
                 fm['artifact_refs'] = references
+            _ensure_finding_identity(ev_dir, file_path, fm, finding_create.finding_id)
             _validate_finding_confirmation(target_dir, fm)
             try:
                 content = _finding_markdown(fm, finding_create.body)
@@ -492,6 +522,7 @@ class WorkspaceSyncService:
             fm['artifact_refs'] = references
         if 'verification_rationale' in finding_create.model_fields_set:
             fm['verification_rationale'] = finding_create.verification_rationale
+        _ensure_finding_identity(ev_dir, file_path, fm, finding_create.finding_id)
         _validate_finding_confirmation(target_dir, fm)
 
         body_parts = []
@@ -514,7 +545,14 @@ class WorkspaceSyncService:
         except ValueError as error:
             raise FindingUpdateError(str(error)) from error
 
-        file_path.write_text(file_content, encoding="utf-8")
+        temporary = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary.write_text(file_content, encoding='utf-8')
+            os.link(temporary, file_path)
+        except FileExistsError as error:
+            raise FindingUpdateError('La ficha ya existe; recárgala antes de editar. No se reemplazó su identidad.') from error
+        finally:
+            temporary.unlink(missing_ok=True)
 
         return FindingDetail(
             slug=finding_create.slug,
@@ -522,6 +560,7 @@ class WorkspaceSyncService:
             frontmatter=FindingFrontmatter(**fm),
             body=markdown_body,
             engagement_id=eng_id,
+            **_finding_identity(fm),
             **_finding_refs(fm),
             **_finding_review(fm),
         )

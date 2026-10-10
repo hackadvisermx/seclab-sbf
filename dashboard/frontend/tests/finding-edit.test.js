@@ -129,6 +129,25 @@ test('cambiar proyecto descarta recomendaciones y prompts pendientes del proyect
   } finally { view.cleanup() }
 })
 
+test('identidad persistente se muestra y se conserva al editar sin derivarla del título', async () => {
+  const identity = 'abcdabcdabcd4bcd8bcdabcdabcdabcd'
+  let saved
+  const view = await mountDecision({ getFindings: async () => [{ ...finding, finding_id: identity }], saveFinding: async (id, payload) => { saved = payload } })
+  try {
+    await clickText(view.root, 'Hallazgos')
+    assert.ok(view.root.querySelector('[data-testid="finding-identity"]').textContent.includes(identity))
+    await clickText(view.root, 'Editar')
+    await clickText(view.root, 'Guardar Ficha')
+    assert.equal(saved.finding_id, identity)
+    assert.equal(saved.body, body)
+  } finally { view.cleanup() }
+  const legacy = await mountDecision({ getFindings: async () => [finding] })
+  try {
+    await clickText(legacy.root, 'Hallazgos')
+    assert.match(legacy.root.querySelector('[data-testid="finding-identity"]').textContent, /No registrada/)
+  } finally { legacy.cleanup() }
+})
+
 test('editar una ficha conserva Markdown completo, fija el slug y envía solo el cuerpo original', async () => {
   let saved
   const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [finding],

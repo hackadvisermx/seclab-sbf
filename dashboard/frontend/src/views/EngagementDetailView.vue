@@ -705,6 +705,8 @@
             </div>
             <p v-if="f.confirmation_error" class="text-xs text-amber-300">Confirmación pendiente de revisión: {{ f.confirmation_error }}</p>
             <p v-if="f.verification_rationale" class="mt-2 text-xs text-slate-300 whitespace-pre-wrap">Motivo de verificación: {{ f.verification_rationale }}</p>
+            <p v-if="f.identity_error" class="text-xs text-amber-300">{{ f.identity_error }}</p>
+            <p v-else data-testid="finding-identity" class="mt-2 text-xs font-mono text-slate-400 break-all">Identidad persistente: {{ f.finding_id || 'No registrada; se asignará al guardar la ficha anterior.' }}</p>
             <p v-if="f.artifact_refs_error" class="text-xs text-amber-300">{{ f.artifact_refs_error }}</p>
             <div v-for="reference in f.artifact_refs || []" :key="reference.path" class="mt-2 text-xs font-mono break-words" data-testid="finding-artifact-ref">
               <button @click="openFindingArtifact(reference)" class="text-cyan-300 underline">Abrir {{ reference.path }}</button>
@@ -2308,6 +2310,7 @@ function editFinding(f) {
   editingFinding.value = true
   findingForm.value = {
     slug: f.slug,
+    finding_id: f.finding_id || null,
     title: f.frontmatter?.title || '',
     status: ['VERIFIED', 'CONFIRMADO'].includes((f.frontmatter?.status || '').trim().toUpperCase()) ? 'PROVEN' : f.frontmatter?.status || 'CANDIDATE',
     severity: f.frontmatter?.severity || 'MEDIUM',

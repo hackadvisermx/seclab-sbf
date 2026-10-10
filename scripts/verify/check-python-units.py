@@ -1126,7 +1126,7 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
         # debe seguir aplicandose a cada valor interpolado en el sed, no solo definido.
         self.assertIn("_pt-finding-sed-escape()", plugin)
         sed_block_start = plugin.index('if [[ -f "$tmpl_ev" ]]; then')
-        sed_invocation = plugin[sed_block_start:plugin.index('"$tmpl_ev" > "$target_file"', sed_block_start)]
+        sed_invocation = plugin[sed_block_start:plugin.index('"$tmpl_ev" > "$temporary_finding"', sed_block_start)]
         self.assertIn('safe_title="$(_pt-finding-sed-escape "$display_title")"', sed_invocation)
         self.assertIn('safe_asset="$(_pt-finding-sed-escape "$asset")"', sed_invocation)
         for safe_var in ("$safe_title", "$safe_severity", "$safe_status", "$safe_asset"):

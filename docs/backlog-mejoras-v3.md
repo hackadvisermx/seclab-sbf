@@ -120,6 +120,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
 
+**Entrega parcial V3-03j (fase 176).** UUID persistente por ficha nueva de API/CLI y primer guardado legacy, independiente de título/slug/ID legible. Edición conserva identidad; inválidos, duplicados y expectativa distinta bloquean sin sustituir fuentes. UI/reporte distinguen identidad no registrada. Detalle [phase-176.md](phase-176.md). Sin identidad de artefactos, vínculo job/finding o historial de revisiones; V3-03 sigue parcial.
+
 **Entrega parcial V3-03i/V3-02n (fase 175).** Historial muestra rutas/tamaños/SHA-256 conservados por etapa y permite comparar con el archivo actual en el visor. Distingue coincidencia, diferencia, archivo ilegible y huella no disponible sin cambiar referencias ni jobs; selección/proyecto nuevos descartan respuestas tardías. Detalle [phase-175.md](phase-175.md). Sin snapshots ni prueba de productor; no añade permisos o ejecución/revisión.
 
 **Entrega parcial V3-03h/V3-02m (fase 174).** Summary e historial conservan path/SHA-256/tamaño del inventario fijo de outputs por etapa completada, junto al origen current/recovered. Resumen v3 validado/acotado, v1/v2 legibles; etapas manuales distinguen captura unavailable. Reapertura/backup/jobs posteriores conservan referencias. Detalle [phase-174.md](phase-174.md). No guarda bytes históricos, firma procedencia ni acredita productor de cada línea; la consulta visual se añade en fase175.

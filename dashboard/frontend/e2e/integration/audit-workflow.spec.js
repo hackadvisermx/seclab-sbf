@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { promisify } from 'node:util'
 import { execFile } from 'node:child_process'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, rename } from 'node:fs/promises'
 
 async function json(response) {
   expect(response.ok()).toBe(true)
@@ -103,6 +103,8 @@ test('auditoría sintética: alcance, simulación, bloqueo, evidencia y reporte'
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   const candidate = (await json(await page.request.get(`/api/v1/findings/${id}`)))[0]
   expect(candidate.frontmatter.status).toBe('CANDIDATE')
+  expect(candidate.finding_id).toMatch(/^[a-f0-9]{12}4[a-f0-9]{3}[89ab][a-f0-9]{15}$/)
+  await expect(page.getByTestId('finding-identity')).toContainText(candidate.finding_id)
   expect(candidate.body).toContain('Host: example.test')
   const candidateReport = await compile(page, id)
   expect(candidateReport).toContain('**0 hallazgos confirmados activos**')
@@ -131,10 +133,29 @@ test('auditoría sintética: alcance, simulación, bloqueo, evidencia y reporte'
   await expect(form).toBeHidden()
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   const confirmed = (await json(await page.request.get(`/api/v1/findings/${id}`)))[0]
+  expect(confirmed.finding_id).toBe(candidate.finding_id)
   expect(confirmed.verification_rationale).toContain('Operador revisó el fixture')
   expect(confirmed.artifact_refs).toHaveLength(1)
   const confirmedReport = await compile(page, id)
   expect(confirmedReport).toContain(confirmed.verification_rationale)
+  expect(confirmedReport).toContain(candidate.finding_id)
+  await page.getByRole('button', { name: /Hallazgos \(evidence\/\)/ }).click()
+  await page.reload()
+  await page.getByRole('button', { name: /Hallazgos \(evidence\/\)/ }).click()
+  await expect(page.getByTestId('finding-identity')).toContainText(candidate.finding_id)
+  await page.screenshot({ path: testInfo.outputPath('finding-identity.png'), fullPage: true })
+  const evidencePath = `${workspace}/engagements/${id}/evidence/synthetic-profile.md`
+  const renamedPath = `${workspace}/engagements/${id}/evidence/renamed-profile.md`
+  await rename(evidencePath, renamedPath)
+  const renamedFinding = (await json(await page.request.get(`/api/v1/findings/${id}`)))[0]
+  expect(renamedFinding.slug).toBe('renamed-profile')
+  expect(renamedFinding.finding_id).toBe(candidate.finding_id)
+  await page.reload()
+  await page.getByRole('button', { name: /Hallazgos \(evidence\/\)/ }).click()
+  await expect(page.getByTestId('finding-identity')).toContainText(candidate.finding_id)
+  await page.screenshot({ path: testInfo.outputPath('finding-identity-renamed.png'), fullPage: true })
+  await rename(renamedPath, evidencePath)
+
   expect(confirmedReport).toContain('**1 hallazgos confirmados activos**')
   expect(confirmedReport).toContain('HTTP/1.1 403 Forbidden')
   const downloadPromise = page.waitForEvent('download')

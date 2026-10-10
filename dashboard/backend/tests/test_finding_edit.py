@@ -32,6 +32,8 @@ class TestFindingEdit(unittest.TestCase):
             result = self.service.get_finding('fixture', 'legacy')
             meta = yaml.safe_load(self.path.read_text().split('---\n')[1])
             self.assertEqual(result.body, self.body)
+            identity = meta.pop("finding_id")
+            self.assertEqual(identity, result.finding_id)
             self.assertEqual(meta, dict(self.metadata, title=title))
             self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
 

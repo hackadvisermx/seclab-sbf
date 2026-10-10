@@ -120,7 +120,7 @@ RUN git init /src/pspy \
  && test "$(git -C /src/pspy rev-parse HEAD)" = "${PSPY_COMMIT}" \
  && test "$(git -C /src/pspy describe --tags --exact-match 2>/dev/null || printf 'v%s' "${PSPY_VERSION}")" = "v${PSPY_VERSION}"
 WORKDIR /src/pspy
-RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false -ldflags "-s -w" -o /out/pspy .
 
 FROM --platform=$BUILDPLATFORM ${GO_UPSTREAM} AS naabu-builder
@@ -145,14 +145,14 @@ RUN git init /src/naabu \
  && test "$(git -C /src/naabu rev-parse HEAD)" = "${NAABU_COMMIT}"
 WORKDIR /src/naabu
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
  && if GOTOOLCHAIN=local go list -m google.golang.org/grpc >/dev/null 2>&1; then GOTOOLCHAIN=local go get google.golang.org/grpc@v1.83.2; fi \
  && if GOTOOLCHAIN=local go list -m github.com/go-git/go-git/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/go-git/go-git/v5@v5.19.2; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && if [ "${TARGETARCH}" = "$(GOTOOLCHAIN=local go env GOARCH)" ]; then \
       GOTOOLCHAIN=local CGO_ENABLED=1 CC=gcc GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
         go build -mod=readonly -trimpath -buildvcs=false \
@@ -198,14 +198,14 @@ RUN git init /src/subfinder \
  && test "$(git -C /src/subfinder rev-parse HEAD)" = "${SUBFINDER_COMMIT}"
 WORKDIR /src/subfinder
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
  && if GOTOOLCHAIN=local go list -m google.golang.org/grpc >/dev/null 2>&1; then GOTOOLCHAIN=local go get google.golang.org/grpc@v1.83.2; fi \
  && if GOTOOLCHAIN=local go list -m github.com/go-git/go-git/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/go-git/go-git/v5@v5.19.2; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
@@ -217,14 +217,14 @@ RUN git init /src/httpx \
  && test "$(git -C /src/httpx rev-parse HEAD)" = "${HTTPX_COMMIT}"
 WORKDIR /src/httpx
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
  && if GOTOOLCHAIN=local go list -m google.golang.org/grpc >/dev/null 2>&1; then GOTOOLCHAIN=local go get google.golang.org/grpc@v1.83.2; fi \
  && if GOTOOLCHAIN=local go list -m github.com/go-git/go-git/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/go-git/go-git/v5@v5.19.2; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
       -o /out/httpx ./cmd/httpx
@@ -235,14 +235,14 @@ RUN git init /src/katana \
  && test "$(git -C /src/katana rev-parse HEAD)" = "${KATANA_COMMIT}"
 WORKDIR /src/katana
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
  && if GOTOOLCHAIN=local go list -m google.golang.org/grpc >/dev/null 2>&1; then GOTOOLCHAIN=local go get google.golang.org/grpc@v1.83.2; fi \
  && if GOTOOLCHAIN=local go list -m github.com/go-git/go-git/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/go-git/go-git/v5@v5.19.2; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
       -o /out/katana ./cmd/katana
@@ -253,14 +253,14 @@ RUN git init /src/nuclei \
  && test "$(git -C /src/nuclei rev-parse HEAD)" = "${NUCLEI_COMMIT}"
 WORKDIR /src/nuclei
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
  && if GOTOOLCHAIN=local go list -m google.golang.org/grpc >/dev/null 2>&1; then GOTOOLCHAIN=local go get google.golang.org/grpc@v1.83.2; fi \
  && if GOTOOLCHAIN=local go list -m github.com/go-git/go-git/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/go-git/go-git/v5@v5.19.2; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
       -o /out/nuclei ./cmd/nuclei
@@ -271,14 +271,14 @@ RUN git init /src/ffuf \
  && test "$(git -C /src/ffuf rev-parse HEAD)" = "${FFUF_COMMIT}"
 WORKDIR /src/ffuf
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
  && if GOTOOLCHAIN=local go list -m google.golang.org/grpc >/dev/null 2>&1; then GOTOOLCHAIN=local go get google.golang.org/grpc@v1.83.2; fi \
  && if GOTOOLCHAIN=local go list -m github.com/go-git/go-git/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/go-git/go-git/v5@v5.19.2; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
       -o /out/ffuf .
@@ -289,14 +289,14 @@ RUN git init /src/gobuster \
  && test "$(git -C /src/gobuster rev-parse HEAD)" = "${GOBUSTER_COMMIT}"
 WORKDIR /src/gobuster
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
  && if GOTOOLCHAIN=local go list -m google.golang.org/grpc >/dev/null 2>&1; then GOTOOLCHAIN=local go get google.golang.org/grpc@v1.83.2; fi \
  && if GOTOOLCHAIN=local go list -m github.com/go-git/go-git/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/go-git/go-git/v5@v5.19.2; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
       -o /out/gobuster .
@@ -309,11 +309,11 @@ WORKDIR /src/dnsx
 # dnsx arrastra x/net, x/mod y x/crypto mas viejos que los que ya fijamos
 # para las demas herramientas del mismo autor; se suben al mismo valor.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
@@ -325,7 +325,7 @@ RUN git init /src/anew \
  && git -C /src/anew checkout --detach "${ANEW_COMMIT}" \
  && test "$(git -C /src/anew rev-parse HEAD)" = "${ANEW_COMMIT}"
 WORKDIR /src/anew
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
@@ -336,7 +336,7 @@ RUN git init /src/waybackurls \
  && git -C /src/waybackurls checkout --detach "${WAYBACKURLS_COMMIT}" \
  && test "$(git -C /src/waybackurls rev-parse HEAD)" = "${WAYBACKURLS_COMMIT}"
 WORKDIR /src/waybackurls
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
@@ -347,7 +347,7 @@ RUN git init /src/gf \
  && git -C /src/gf checkout --detach "${GF_COMMIT}" \
  && test "$(git -C /src/gf rev-parse HEAD)" = "${GF_COMMIT}"
 WORKDIR /src/gf
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && ( test -f go.mod || go mod init github.com/tomnomnom/gf ) \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
@@ -359,7 +359,7 @@ RUN git init /src/qsreplace \
  && git -C /src/qsreplace checkout --detach "${QSREPLACE_COMMIT}" \
  && test "$(git -C /src/qsreplace rev-parse HEAD)" = "${QSREPLACE_COMMIT}"
 WORKDIR /src/qsreplace
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
@@ -378,7 +378,7 @@ RUN git init /src/assetfinder \
  && git -C /src/assetfinder checkout --detach "${ASSETFINDER_COMMIT}" \
  && test "$(git -C /src/assetfinder rev-parse HEAD)" = "${ASSETFINDER_COMMIT}"
 WORKDIR /src/assetfinder
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && go mod init github.com/tomnomnom/assetfinder 2>/dev/null || true \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
@@ -390,7 +390,7 @@ RUN git init /src/httprobe \
  && git -C /src/httprobe checkout --detach "${HTTPROBE_COMMIT}" \
  && test "$(git -C /src/httprobe rev-parse HEAD)" = "${HTTPROBE_COMMIT}"
 WORKDIR /src/httprobe
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w" \
@@ -402,10 +402,10 @@ RUN git init /src/chisel \
  && test "$(git -C /src/chisel rev-parse HEAD)" = "${CHISEL_COMMIT}"
 WORKDIR /src/chisel
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.58.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN mkdir -p /out/pivoting \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out/pivoting \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w -X main.version=${CHISEL_VERSION}" \
@@ -429,10 +429,10 @@ RUN git init /src/ligolo \
  && test "$(git -C /src/ligolo rev-parse HEAD)" = "${LIGOLO_COMMIT}"
 WORKDIR /src/ligolo
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.58.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN mkdir -p /out/pivoting \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out/pivoting \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w -X main.version=${LIGOLO_VERSION}" \
@@ -540,12 +540,12 @@ WORKDIR /src/bettercap
 # XPath), corregido en 1.3.6. Llega por antchfx/jsonquery, asi que se sube el
 # modulo directamente igual que el resto de bumps.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/antchfx/xpath >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/antchfx/xpath@v1.3.6; fi \
  && GOTOOLCHAIN=local go mod tidy
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && if [ "${TARGETARCH}" = "$(GOTOOLCHAIN=local go env GOARCH)" ]; then \
       GOTOOLCHAIN=local CGO_ENABLED=1 CC=gcc GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
         go build -mod=readonly -trimpath -buildvcs=false \
@@ -571,14 +571,14 @@ WORKDIR /src/s3scanner
 # pgx 5.5.5 trae CVE-2026-33815 y CVE-2026-33816 (CRITICAL, memory safety),
 # corregidos en 5.9.0. Se sube igual que hace naabu.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go mod edit -json >/dev/null \
- && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.56.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.40.0; fi \
- && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.56.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/net >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/net@v0.60.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/mod >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/mod@v0.41.0; fi \
+ && if GOTOOLCHAIN=local go list -m golang.org/x/crypto >/dev/null 2>&1; then GOTOOLCHAIN=local go get golang.org/x/crypto@v0.57.0; fi \
  && if GOTOOLCHAIN=local go list -m github.com/jackc/pgx/v5 >/dev/null 2>&1; then GOTOOLCHAIN=local go get github.com/jackc/pgx/v5@v5.9.0; fi \
  && GOTOOLCHAIN=local go mod tidy
 # -X main.version para que `s3scanner --version` no salga como "dev": main.go
 # declara var version = "dev" y solo lo cambia el linker en release.
-RUN mkdir -p /out \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /out \
  && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -mod=readonly -trimpath -buildvcs=false \
       -ldflags "-s -w -X main.version=${S3SCANNER_VERSION}" \
@@ -594,10 +594,10 @@ RUN git init /src/gau \
  && git -C /src/gau checkout --detach "${GAU_COMMIT}" \
  && test "$(git -C /src/gau rev-parse HEAD)" = "${GAU_COMMIT}"
 WORKDIR /src/gau
-RUN GOTOOLCHAIN=local go get \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOTOOLCHAIN=local go get \
       github.com/sirupsen/logrus@v1.9.3 \
       github.com/valyala/fasthttp@v1.74.0 \
-      golang.org/x/net@v0.58.0 \
+      golang.org/x/net@v0.60.0 \
  && GOTOOLCHAIN=local go mod tidy \
  && GOTOOLCHAIN=local go mod verify \
  && GOTOOLCHAIN=local go test ./... \

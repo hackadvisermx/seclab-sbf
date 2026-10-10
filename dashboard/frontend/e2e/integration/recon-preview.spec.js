@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 
 test('vista previa sin job y revisión obsoleta rechazada antes de simular', async ({ page }, testInfo) => {
@@ -72,17 +73,28 @@ test('vista previa sin job y revisión obsoleta rechazada antes de simular', asy
   const first = await launchAndFinish()
   expect(first.status).toBe('completed')
   expect(first.result_summary.metrics.urls_count).toBe(1)
-  expect(first.result_summary.schema_version).toBe(2)
+  expect(first.result_summary.schema_version).toBe(3)
   expect(first.result_summary.stages[0].execution).toBe('current')
   expect(first.result_summary.stages[0].origin_run_id).toBe(first.run_id)
+  const firstCapture = first.result_summary.stages[0].artifact_capture
+  expect(firstCapture.status).toBe('recorded')
+  expect(firstCapture.refs.map(ref => ref.path)).toEqual(['recon/live_hosts.txt', 'recon/live_hosts_new.txt',
+    'recon/probe_observations.jsonl', 'recon/probe_discarded.txt', 'recon/next_commands.txt'])
+  const probeOutput = `${workspace}/engagements/${id}/recon/live_hosts.txt`
+  expect(firstCapture.refs[0].sha256).toBe(createHash('sha256').update(await readFile(probeOutput)).digest('hex'))
+  await writeFile(probeOutput, 'https://example.test/modified-later\n')
+  const afterChange = (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs
+  expect(afterChange.find(job => job.run_id === first.run_id).result_summary).toEqual(first.result_summary)
   await writeFile(urls, 'https://example.test/fixture-one\nhttps://example.test/fixture-two\nhttps://example.test/fixture-three\n')
   const second = await launchAndFinish()
   expect(second.status).toBe('completed')
   expect(second.result_summary.metrics.urls_count).toBe(3)
+  expect(second.result_summary.stages[0].artifact_capture.refs[0].sha256).toBe(createHash('sha256').update(await readFile(probeOutput)).digest('hex'))
   await writeFile(input, 'example.test\n')
   const blocked = await launchAndFinish()
   expect(blocked.status).toBe('blocked')
   expect(blocked.result_summary.metrics_source).toBe('previous_artifacts')
+  expect(blocked.result_summary.stages[0].artifact_capture).toBeNull()
   const retained = (await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).jobs
   expect(retained.find(job => job.run_id === first.run_id).result_summary).toEqual(first.result_summary)
   expect(retained.find(job => job.run_id === saved.run_id).result_summary).toBeNull()

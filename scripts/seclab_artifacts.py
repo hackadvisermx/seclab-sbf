@@ -8,6 +8,13 @@ import re
 
 PREVIEW_LIMIT = 2 * 1024 * 1024
 HASH_LIMIT = 32 * 1024 * 1024
+RECON_STAGE_ARTIFACTS = {
+    'subdomains': ('subdomains.txt', 'subdomains_new.txt', 'out_of_scope_discarded.txt'),
+    'probe': ('live_hosts.txt', 'live_hosts_new.txt', 'probe_observations.jsonl',
+              'probe_discarded.txt', 'next_commands.txt'),
+    'urls': ('urls_all.txt', 'js_files.txt'),
+    'patterns': tuple('patterns/' + name + '.txt' for name in ('xss', 'sqli', 'ssrf', 'redirect', 'idor', 'rce', 'lfi')),
+}
 
 
 class ArtifactChangedError(ValueError):

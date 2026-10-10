@@ -62,6 +62,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-01 — Contrato ejecutable de autorización y alcance (P0)
 
+**Entrega parcial V3-01e (fase 172).** La reanudación de la cadena de reconocimiento exige checkpoint v2, el mismo scope y los SHA-256/tamaños de todos los outputs de las etapas completadas, capturados al terminar cada etapa. Versiones cambiadas, archivos ausentes/enlazados/no regulares y checkpoints legacy, corruptos o incompletos bloquean antes de emitir progreso, llamar herramientas o escribir artefactos. Sin checkpoint conserva el inicio desde cero; simulación permanece local y sin escrituras. Detalle en [phase-172.md](phase-172.md). No congela archivos durante la ejecución ni acredita procedencia job/finding; V3-01 continúa parcial.
+
 **Problema.** `target.yaml` y el matcher ya expresan reglas; falta comprobar que todo flujo de acción del producto aplica el mismo contrato al objetivo concreto justo antes de actuar, y que el operador puede entender el resultado.
 
 **Trabajo.** Basado en V3-00, registrar para el engagement la referencia de autorización declarada por el operador, vigencia/ventana, tipos de actividad permitidos, inclusiones, exclusiones y límites. Conservar una versión del contrato asociada a cada job. Centralizar el chequeo en el límite de ejecución de las acciones gestionadas por SecLab-SBF. Mostrar preview con tipo de interacción, targets resultantes, motivo de inclusión/bloqueo y tráfico previsto.

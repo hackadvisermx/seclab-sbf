@@ -1,3 +1,19 @@
+go_security_overrides:
+  golang.org/x/net:
+    version: v0.60.0
+    minimum_go: 1.26.0
+    sum: h1:79p50tfZlm0J9YfoDsSi639qSXNGVwEzOPLCxM2FsYU=
+    go_mod_sum: h1:2DA/G1UfVbCpQPeWTmMPGY7Cs2PkBkwu743bVX5PIVg=
+    advisory: https://pkg.go.dev/vuln/GO-2026-6611
+    cves: [CVE-2026-78669]
+  golang.org/x/crypto:
+    version: v0.57.0
+    sum: h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
+    go_mod_sum: h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=
+  golang.org/x/mod:
+    version: v0.41.0
+    sum: h1:qJmnOUb4YB+FsEuM3HcWucdZASCPGhsX6uljO6pog0c=
+    go_mod_sum: h1:Ek9pY8RKWXwsWvd3rQiHYtMqkjSUV+s1Rj7j4H5Ur6o=
 schema_version: 2
 verified_at: 2026-09-28
 apt:
@@ -285,7 +301,7 @@ built_binaries:
     dependency_overrides:
       github.com/sirupsen/logrus: v1.9.3
       github.com/valyala/fasthttp: v1.74.0
-      golang.org/x/net: v0.58.0
+      golang.org/x/net: v0.60.0
     note: Recompilado desde el commit de v2.2.4 para retirar 31 CVEs High y uno Critical del binario oficial; sin excluir hallazgos del gate.
   - name: fzf
     version: 0.74.4
@@ -317,15 +333,15 @@ built_binaries:
     cgo: false
     package: ./cmd/subfinder
     dependency_overrides:
-      golang.org/x/crypto: v0.56.0
-      golang.org/x/net: v0.58.0
+      golang.org/x/crypto: v0.57.0
+      golang.org/x/net: v0.60.0
     assets:
       linux/amd64:
         file: subfinder
-        sha256: 585e6c34ebf32ffa4aa34d71f7180469b4a611cd26cc96a8c232c936a0bb91fe
+        sha256: 3d4834f6d0c3d15186629f5d89059288fcf3576f8fd5f17a849f3cbbef96882d
       linux/arm64:
         file: subfinder
-        sha256: 961ecc7403d8694aa2842f8a480a044a7514112f6e1dab2bad2b6d26f96d6e19
+        sha256: f4228bd25184d1144fed0556cbba20586708666b425221a3ecf281773442e511
   - name: httpx
     version: 1.11.0
     source: https://github.com/projectdiscovery/httpx
@@ -336,15 +352,15 @@ built_binaries:
     cgo: false
     package: ./cmd/httpx
     dependency_overrides:
-      golang.org/x/crypto: v0.56.0
-      golang.org/x/net: v0.58.0
+      golang.org/x/crypto: v0.57.0
+      golang.org/x/net: v0.60.0
     assets:
       linux/amd64:
         file: httpx
-        sha256: 1e7e420c9008eae128d9cddc475448988b922fb34ac7bda661fd594bae756054
+        sha256: 79a73bef30657f25c835c2f8d0da4f75ddaba4241df0c36f3f56f793bdc4dd92
       linux/arm64:
         file: httpx
-        sha256: 82dfbdb383cd3a63a0cb0a86028fe7074e7f485e5ac8b2a208db4bf0b5417166
+        sha256: d9b41a9f2e7f35f4cc835ef9b21f4e580362b229f923e06e8270fe5fb09f021a
   - name: katana
     version: 1.7.0
     source: https://github.com/projectdiscovery/katana
@@ -355,16 +371,16 @@ built_binaries:
     cgo: false
     package: ./cmd/katana
     dependency_overrides:
-      golang.org/x/crypto: v0.56.0
-      golang.org/x/net: v0.58.0
+      golang.org/x/crypto: v0.57.0
+      golang.org/x/net: v0.60.0
       github.com/jackc/pgx/v5: v5.9.0
     assets:
       linux/amd64:
         file: katana
-        sha256: 8b463429623b77d38df7078396489bc364ad38bcc2e3252e60faafbda9d44703
+        sha256: 6fb0204c21bd8d8d152e0a488257b62b64888bf10329a8cd57e68c0b081fc061
       linux/arm64:
         file: katana
-        sha256: 8a897cd6aca88adef2c1be02dfd0d2fb6e0a77e91b70684edfdab1f4ad9b4482
+        sha256: b6ce77231d886e276f5bdf9ef1ac5cd6dd44489e7c31de3047ef68299487beae
   - name: nuclei
     version: 3.11.1
     source: https://github.com/projectdiscovery/nuclei
@@ -375,18 +391,18 @@ built_binaries:
     cgo: false
     package: ./cmd/nuclei
     dependency_overrides:
-      golang.org/x/crypto: v0.56.0
-      golang.org/x/net: v0.58.0
-      golang.org/x/mod: v0.40.0
+      golang.org/x/crypto: v0.57.0
+      golang.org/x/net: v0.60.0
+      golang.org/x/mod: v0.41.0
       google.golang.org/grpc: v1.83.2
       github.com/go-git/go-git/v5: v5.19.2
     assets:
       linux/amd64:
         file: nuclei
-        sha256: b88a3aac113a78f39e35fa2bbd43b426a439e48782363b4595f12e18977c57b2
+        sha256: 33873dc566eb8b40e9f4c7ea0058a7764484ca702cd3eb935851ed4c74cc3572
       linux/arm64:
         file: nuclei
-        sha256: 58f52c603641a83983be4b2017d3d9b78865404cd56ad33f165c982ad92f9616
+        sha256: a0c48f5a7621fdb0a9faa8fb090c5be27d9833c8168dea14e6688b2ad3b9bbb7
   - name: ffuf
     version: 2.2.0
     source: https://github.com/ffuf/ffuf
@@ -398,14 +414,14 @@ built_binaries:
     package: .
     note: el tag v2.2.0 conserva VERSION 2.1.0-dev en pkg/ffuf/constants.go
     dependency_overrides:
-      golang.org/x/net: v0.57.0
+      golang.org/x/net: v0.60.0
     assets:
       linux/amd64:
         file: ffuf
-        sha256: 1f458361e55687eecb3fabeea3f15f50b7c603b91ebf35ad36f5e39908ae1572
+        sha256: 595e7cb18692e6bfc83196d225a1c955ce0e90951b94d3ac11ff6dad630e2a85
       linux/arm64:
         file: ffuf
-        sha256: cdc84566a1149405f3ce3ec689acdb239378ebce1fa84a3233d27836b9f6b698
+        sha256: 933cad5f299ed5bda7a3b119d2821f278fffd754f5da2edbe8989ad4cb1c86f3
   - name: gobuster
     version: 3.8.2
     source: https://github.com/OJ/gobuster
@@ -416,15 +432,15 @@ built_binaries:
     cgo: false
     package: .
     dependency_overrides:
-      golang.org/x/crypto: v0.56.0
-      golang.org/x/net: v0.58.0
+      golang.org/x/crypto: v0.57.0
+      golang.org/x/net: v0.60.0
     assets:
       linux/amd64:
         file: gobuster
-        sha256: f9a8fbb5bf54aed735fbbb7cd49bde0d35ccc13659dbbdf1feb83334c384bb44
+        sha256: 88f50eec816b1337f9ec062dd40f7e136fe8860ee5e56d017babee5565b5346b
       linux/arm64:
         file: gobuster
-        sha256: 8e1b9a99349eafdcb7738952c047a7f47724b5db1171dc21ec5f83260865ae27
+        sha256: 4fa7b5e175ecabcc72b7d3feae6b2f93655a0e10b98f765148298cea072308f8
   - name: naabu
     version: 2.6.1
     source: https://github.com/projectdiscovery/naabu
@@ -438,15 +454,15 @@ built_binaries:
       arm64: gcc-aarch64-linux-gnu=4:14.2.0-1 + libpcap-dev:arm64=1.10.5-2
     package: ./cmd/naabu
     dependency_overrides:
-      golang.org/x/crypto: v0.56.0
-      golang.org/x/net: v0.58.0
+      golang.org/x/crypto: v0.57.0
+      golang.org/x/net: v0.60.0
     assets:
       linux/amd64:
         file: naabu
-        sha256: 430b97c8dedd864adcf0bee6c77e7b6e5366b244841008896913739ba2d27efb
+        sha256: dc1062228f777dc9abcd53c97fe126e736d67897c4b129ae24ff2030ca6fd048
       linux/arm64:
         file: naabu
-        sha256: 47c2d5970cf10fc9686e12c1927f879677095d5c3c2f44565460fdb0280e760a
+        sha256: 9f9c31b932ad1a29cf689e28f4155ad94feb090d2ac7bfc419ed1eb65c3f07c2
   - name: dnsx
     version: 1.3.1
     source: https://github.com/projectdiscovery/dnsx
@@ -461,9 +477,9 @@ built_binaries:
           x/net, x/mod y x/crypto vienen mas viejos en su go.mod y se suben al
           mismo valor que ya usan las demas herramientas de ProjectDiscovery.
     dependency_overrides:
-      golang.org/x/net: v0.56.0
-      golang.org/x/mod: v0.40.0
-      golang.org/x/crypto: v0.56.0
+      golang.org/x/net: v0.60.0
+      golang.org/x/mod: v0.41.0
+      golang.org/x/crypto: v0.57.0
   - name: anew
     version: 0.1.1
     source: https://github.com/tomnomnom/anew
@@ -627,8 +643,8 @@ built_binaries:
     package: .
     built_from_source: true
     dependency_overrides:
-      golang.org/x/crypto: v0.56.0
-      golang.org/x/net: v0.58.0
+      golang.org/x/crypto: v0.57.0
+      golang.org/x/net: v0.60.0
     payloads:
       - /usr/local/share/seclab/payloads/pivoting/chisel_linux_amd64
       - /usr/local/share/seclab/payloads/pivoting/chisel_linux_arm64
@@ -646,8 +662,8 @@ built_binaries:
     package: ./cmd/proxy
     built_from_source: true
     dependency_overrides:
-      golang.org/x/crypto: v0.56.0
-      golang.org/x/net: v0.58.0
+      golang.org/x/crypto: v0.57.0
+      golang.org/x/net: v0.60.0
     payloads:
       - /usr/local/share/seclab/payloads/pivoting/ligolo_agent_linux_amd64
       - /usr/local/share/seclab/payloads/pivoting/ligolo_agent_linux_arm64

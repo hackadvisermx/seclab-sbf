@@ -101,7 +101,11 @@ class ScopeRevisionTests(unittest.TestCase):
 
     def test_checkpoint_rejects_new_scope_and_legacy_unversioned_state(self):
         checkpoint = self.root / 'recon/.checkpoint.json'
-        with patch.object(self.engine, 'run_subdomain_enumeration', return_value={'status': 'completed'}), \
+        def completed_subdomains():
+            for name in pipeline.STAGE_ARTIFACTS['subdomains']:
+                self.engine._write_lines(name, ['example.test'] if name == 'subdomains.txt' else [])
+            return {'stage': 'subdomains', 'status': 'completed'}
+        with patch.object(self.engine, 'run_subdomain_enumeration', side_effect=completed_subdomains), \
              patch.object(self.engine, 'run_live_probing', side_effect=pipeline.StageError('fixture')), \
              patch.object(pipeline, 'send_notification'):
             self.engine.run_all()

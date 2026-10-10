@@ -169,6 +169,68 @@ class TestReconResults(unittest.TestCase):
         self.assertEqual(value['stages'][1]['execution'], 'current')
         self.assertEqual(value['stages'][1]['counts'], {})
 
+    def artifact_raw(self, run_id):
+        raw = self.raw(run_id)
+        raw['stages_recovered'] = []
+        raw['stage_results']['urls'].update(execution='current', origin_run_id=run_id)
+        raw['stage_artifacts'] = {'urls': {'status': 'recorded', 'refs': [
+            {'path': 'recon/urls_all.txt', 'sha256': 'c' * 64, 'size': 9},
+            {'path': 'recon/js_files.txt', 'sha256': 'd' * 64, 'size': 0}]}}
+        return raw
+
+    def test_artifact_versions_survive_reopening_backup_and_later_legacy_run(self):
+        job = self.store.begin(self.key, 'urls', False)
+        raw = self.artifact_raw(job['run_id'])
+        value = result_summary(raw, job['run_id'], 'urls', 'completed', False)
+        self.assertEqual(value['schema_version'], 3)
+        self.store.finish(self.key, job['run_id'], 'completed', scope_revision='a' * 64, result_summary=value)
+        self.finish(count=8)
+        jobs = ReconJobStore(self.db).history(self.key)['jobs']
+        self.assertEqual(jobs[1]['result_summary']['stages'][0]['artifact_capture'], raw['stage_artifacts']['urls'])
+        with closing(self.store.connect()) as source, closing(sqlite3.connect(self.root / 'backup.db')) as target:
+            source.backup(target)
+        self.assertEqual(ReconJobStore(self.root / 'backup.db').history(self.key)['jobs'], jobs)
+        self.assertNotIn('password', json.dumps(jobs))
+
+    def test_artifact_capture_rejects_paths_inventories_hashes_sizes_and_failed_claims(self):
+        raw = self.artifact_raw('b' * 32)
+        edits = [lambda r: r['stage_artifacts']['urls']['refs'][0].update(path='../private'),
+                 lambda r: r['stage_artifacts']['urls']['refs'][0].update(sha256='secret'),
+                 lambda r: r['stage_artifacts']['urls']['refs'][0].update(size=True),
+                 lambda r: r['stage_artifacts']['urls']['refs'][0].update(size=32*1024*1024+1),
+                 lambda r: r['stage_artifacts']['urls']['refs'][0].update(private='secret'),
+                 lambda r: r['stage_artifacts']['urls']['refs'].reverse(),
+                 lambda r: r['stage_artifacts']['urls']['refs'].pop(),
+                 lambda r: r['stage_artifacts'].update(probe={'status': 'unavailable', 'refs': []}),
+                 lambda r: r.update(stage_artifacts={}),
+                 lambda r: r['stage_artifacts']['urls'].update(status='unavailable'),
+                 lambda r: r['stage_artifacts']['urls'].update(status='invented'),
+                 lambda r: r.update(stages_recovered=['urls'])]
+        for edit in edits:
+            changed = copy.deepcopy(raw); edit(changed)
+            self.assertIsNone(result_summary(changed, 'b' * 32, 'urls', 'completed', False))
+        raw.update(status='failed', metrics_source='previous_artifacts')
+        raw['stage_results']['urls'].update(status='failed', failure_kind='technical')
+        self.assertIsNone(result_summary(raw, 'b' * 32, 'urls', 'failed', False))
+        raw['stage_artifacts'] = {}
+        value = result_summary(raw, 'b' * 32, 'urls', 'failed', False)
+        self.assertIsNone(value['stages'][0]['artifact_capture'])
+
+    def test_artifact_capture_budget_recovered_origin_and_unavailable_manual_stage(self):
+        raw = self.resumed_raw('b' * 32)
+        from app.core.artifact_snapshot import RECON_STAGE_ARTIFACTS, HASH_LIMIT
+        raw['stage_artifacts'] = {name: {'status': 'recorded', 'refs': [
+            {'path': 'recon/' + path, 'sha256': 'c' * 64, 'size': 1} for path in paths]}
+            for name, paths in RECON_STAGE_ARTIFACTS.items()}
+        value = result_summary(raw, 'b' * 32, 'all', 'completed', False)
+        self.assertEqual(value['stages'][0]['origin_run_id'], 'a' * 32)
+        self.assertLess(len(json.dumps(value)), 16384)
+        raw['stage_artifacts']['subdomains']['refs'][0]['size'] = HASH_LIMIT
+        self.assertIsNone(result_summary(raw, 'b' * 32, 'all', 'completed', False))
+        raw = self.artifact_raw('b' * 32)
+        raw['stage_artifacts']['urls'] = {'status': 'unavailable', 'refs': []}
+        self.assertIsNotNone(result_summary(raw, 'b' * 32, 'urls', 'completed', False))
+
     def test_result_and_job_finalization_are_atomic_and_stale_completion_cannot_replace_results(self):
         job = self.store.begin(self.key, 'urls', False)
         value = result_summary(self.raw(job['run_id']), job['run_id'], 'urls', 'completed', False)

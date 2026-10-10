@@ -34,16 +34,10 @@ from seclab_scope import (ScopeError, normalize_target, is_ip, domain_matches,
                           parse_simple_yaml_lists, load_scope_rules, load_target_yaml, load_scope_txt, check_scope, authorization_contract, require_authorization)
 
 from seclab_recon_probe import ProbeClient, operational_limits
-from seclab_artifacts import HASH_LIMIT, read_artifact_snapshot
+from seclab_artifacts import HASH_LIMIT, RECON_STAGE_ARTIFACTS, read_artifact_snapshot
 
 DEFAULT_GF_PATTERNS = ["xss", "sqli", "ssrf", "redirect", "idor", "rce", "lfi"]
-STAGE_ARTIFACTS = {
-    'subdomains': ('subdomains.txt', 'subdomains_new.txt', 'out_of_scope_discarded.txt'),
-    'probe': ('live_hosts.txt', 'live_hosts_new.txt', 'probe_observations.jsonl',
-              'probe_discarded.txt', 'next_commands.txt'),
-    'urls': ('urls_all.txt', 'js_files.txt'),
-    'patterns': tuple('patterns/' + pattern + '.txt' for pattern in DEFAULT_GF_PATTERNS),
-}
+STAGE_ARTIFACTS = RECON_STAGE_ARTIFACTS
 
 
 def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib.Path]:
@@ -519,6 +513,9 @@ class ReconPipeline:
                    'run_id': self.progress['run_id'],
                    'scope_revision': self.scope_revision, 'scope_contract': self.scope_contract,
                    'stage_results': results, 'tools_available': {name: bool(path) for name, path in self.tools.items()},
+                   'stage_artifacts': {name: {'status': 'recorded', 'refs': self.completed_artifacts[name]}
+                                       if name in self.completed_artifacts else {'status': 'unavailable', 'refs': []}
+                                       for name, value in results.items() if value.get('status') == 'completed' and not self.dry_run},
                    'metrics_source': 'none' if self.dry_run else 'previous_artifacts' if failed else 'artifacts',
                    'subdomains_count': 0, 'subdomains_discarded_out_of_scope': 0, 'subdomains_new_count': 0,
                    'live_hosts_count': 0, 'live_hosts_new_count': 0, 'urls_count': 0, 'js_files_count': 0, 'gf_patterns': {}}
@@ -642,6 +639,11 @@ class ReconPipeline:
                 result.update(execution='current', origin_run_id=self._origin_run_id())
                 if stage == 'all' and not self.dry_run:
                     self.completed_artifacts[name] = self._stage_artifacts(name)
+                elif not self.dry_run:
+                    try:
+                        self.completed_artifacts[name] = self._stage_artifacts(name)
+                    except StageError:
+                        pass
                 results[name] = result
                 results[name]['interaction'] = 'simulation' if self.dry_run else {'subdomains': 'passive', 'probe': 'active', 'urls': 'passive', 'patterns': 'local'}[name]
                 self.progress['completed_stages'].append(name)

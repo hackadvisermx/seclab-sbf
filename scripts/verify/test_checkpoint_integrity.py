@@ -222,6 +222,46 @@ class CheckpointIntegrityTests(unittest.TestCase):
             self.assertEqual(result['summary']['stages_executed'], ['probe'])
             self.assertEqual(result['summary']['stages_recovered'], [])
 
+    def test_summary_keeps_completed_versions_when_later_stage_changes_the_file_and_fails(self):
+        def change_then_fail():
+            (self.root / 'recon/subdomains.txt').write_text('changed later\n')
+            raise pipeline.StageError('fixture')
+        with patch.object(pipeline.ReconPipeline, 'run_live_probing', side_effect=change_then_fail):
+            result = self.engine().run_all()
+        capture = result['summary']['stage_artifacts']['subdomains']
+        self.assertEqual(capture['status'], 'recorded')
+        self.assertEqual(capture['refs'][0]['sha256'], hashlib.sha256(b'10.0.0.1\n').hexdigest())
+        self.assertNotIn('probe', result['summary']['stage_artifacts'])
+        (self.root / 'recon/subdomains.txt').write_text('another version\n')
+        saved = json.loads((self.root / 'recon/summary.json').read_text())
+        self.assertEqual(saved['stage_artifacts']['subdomains'], capture)
+
+    def test_manual_stage_records_versions_and_unavailable_capture_preserves_completion(self):
+        self.fail_after_subdomains()
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = []
+            result = self.engine().run_all(stage='probe')
+        self.assertEqual(result['summary']['stage_artifacts']['probe']['status'], 'recorded')
+        self.assertEqual(len(result['summary']['stage_artifacts']['probe']['refs']), 5)
+        with patch.object(pipeline, 'ProbeClient') as client, \
+                patch.object(pipeline, 'read_artifact_snapshot', side_effect=ValueError('private-path')):
+            client.return_value.probe.return_value = []
+            result = self.engine().run_all(stage='probe')
+        self.assertEqual(result['summary']['status'], 'completed')
+        self.assertEqual(result['summary']['stage_artifacts'], {'probe': {'status': 'unavailable', 'refs': []}})
+        self.assertNotIn('private-path', json.dumps(result['summary']))
+
+    def test_resume_retains_checkpoint_artifacts_and_dry_run_records_none(self):
+        saved = self.fail_after_subdomains()
+        with patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = []
+            result = self.engine().run_all(resume=True)
+        self.assertEqual(result['summary']['stage_artifacts']['subdomains']['refs'], saved['artifact_refs']['subdomains'])
+        self.assertEqual(set(result['summary']['stage_artifacts']), set(pipeline.STAGE_ARTIFACTS))
+        self.assertEqual(sum(len(item['refs']) for item in result['summary']['stage_artifacts'].values()), 17)
+        result = self.engine(dry_run=True).run_all()
+        self.assertEqual(result['summary']['stage_artifacts'], {})
+
     def test_hashes_are_captured_at_stage_completion_not_after_a_later_failure(self):
         def fail_and_edit(*args, **kwargs):
             (self.root / 'recon/subdomains.txt').write_text('changed after completion\n')

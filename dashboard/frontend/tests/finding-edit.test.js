@@ -922,3 +922,94 @@ test('el enlace fuente del reporte abre el visor con su hash sin guardar ni ejec
     assert.equal(writes, 0)
   } finally { view.cleanup() }
 })
+
+test('orientación local funciona sin IA, respeta el bloqueo y solo abre revisión', async () => {
+  let chats = 0, writes = 0
+  const prompts = []
+  const view = await mountDecision({ getNextStep: async (id, prompt) => { prompts.push(prompt); return nextDecisionFixture },
+    sendCopilotChat: async () => { chats++ }, runRecon: async () => { writes++ }, updateScope: async () => { writes++ } })
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    await clickText(view.root, 'Orientación local sin IA')
+    const card = view.root.querySelector('[data-testid=copilot-local-guidance]')
+    assert.ok(card)
+    assert.match(card.textContent, /Reglas locales/)
+    assert.match(card.textContent, /Revisar alcance tras el bloqueo/)
+    assert.match(card.textContent, /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/)
+    assert.equal(card.querySelector('code'), null)
+    assert.ok(prompts.length); assert.ok(prompts.every(value => value === false))
+    await clickText(card, 'Revisar alcance y autorización')
+    assert.match(view.root.textContent, /Guardar Alcance/)
+    assert.equal(chats, 0); assert.equal(writes, 0)
+  } finally { view.cleanup() }
+})
+
+for (const failure of ['timeout', 'sin proveedor', 'contenido vacío', 'contenido inválido']) test(`fallo IA (${failure}) ofrece decisión local fresca y no reintenta proveedor`, async () => {
+  let changed = false, chats = 0
+  const view = await mountDecision({ getNextStep: async () => changed ? nextDecisionFixture : { next_step: { title: 'Decisión anterior', command: 'pt-recon old' } },
+    sendCopilotChat: async () => { chats++; changed = true; if (failure === 'contenido vacío') return { content: '' }; if (failure === 'contenido inválido') return { content: {} }; throw new Error(failure) } })
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    const input = view.root.querySelector('input[placeholder^="Pregunta al copiloto"]')
+    input.value = 'Ayuda'; input.dispatchEvent(new window.Event('input')); await flush()
+    await clickText(view.root, 'Enviar Consulta'); await flush()
+    const card = view.root.querySelector('[data-testid=copilot-local-guidance]')
+    assert.ok(card)
+    assert.match(card.textContent, /Revisar alcance tras el bloqueo/)
+    assert.doesNotMatch(card.textContent, /Decisión anterior|pt-recon old/)
+    assert.match(view.root.textContent, /Error del Copiloto/)
+    assert.equal(chats, 1)
+  } finally { view.cleanup() }
+})
+
+test('fallo de recomendador local retira la sugerencia previa y permite reintentar', async () => {
+  let failed = false
+  const view = await mountDecision({ getNextStep: async () => { if (failed) throw new Error('unavailable'); return { next_step: { title: 'Recomendación anterior', command: 'old command' } } } })
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    await clickText(view.root, 'Orientación local sin IA')
+    failed = true
+    await clickText(view.root, 'Orientación local sin IA')
+    const card = view.root.querySelector('[data-testid=copilot-local-guidance]')
+    assert.match(card.textContent, /No se pudo consultar/)
+    assert.doesNotMatch(card.textContent, /Recomendación anterior|old command/)
+    assert.equal(card.querySelector('code'), null)
+    failed = false
+    await clickText(view.root, 'Orientación local sin IA')
+    assert.match(card.textContent, /Recomendación anterior/)
+  } finally { view.cleanup() }
+})
+
+for (const rejected of [false, true]) test(`respuesta IA tardía (${rejected ? 'error' : 'éxito'}) no activa orientación de otro proyecto`, async () => {
+  let resolveChat, rejectChat
+  const route = reactive({ params: { id: 'fixture', type: 'engagement' } })
+  const view = await mountDecision({ getNextStep: async () => nextDecisionFixture,
+    sendCopilotChat: () => new Promise((resolve, reject) => { resolveChat = resolve; rejectChat = reject }) }, route)
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    const input = view.root.querySelector('input[placeholder^="Pregunta al copiloto"]')
+    input.value = 'Consulta antigua'; input.dispatchEvent(new window.Event('input')); await flush()
+    await clickText(view.root, 'Enviar Consulta')
+    route.params.id = 'other'; await flush()
+    if (rejected) rejectChat(new Error('Fallo antiguo')); else resolveChat({ content: 'Respuesta antigua' })
+    await flush(); await flush()
+    assert.equal(view.root.querySelector('[data-testid=copilot-local-guidance]'), null)
+    assert.doesNotMatch(view.root.textContent, /Consulta antigua|Respuesta antigua|Fallo antiguo|Analizando evidencias/)
+  } finally { view.cleanup() }
+})
+
+
+test('respuesta local inválida no conserva comando ni aparenta una decisión disponible', async () => {
+  let invalid = false
+  const view = await mountDecision({ getNextStep: async () => invalid ? null : nextDecisionFixture })
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    await clickText(view.root, 'Orientación local sin IA')
+    invalid = true
+    await clickText(view.root, 'Orientación local sin IA')
+    const card = view.root.querySelector('[data-testid=copilot-local-guidance]')
+    assert.match(card.textContent, /No se pudo consultar/)
+    assert.doesNotMatch(card.textContent, /Revisar alcance tras el bloqueo/)
+    assert.equal(card.querySelector('code'), null)
+  } finally { view.cleanup() }
+})

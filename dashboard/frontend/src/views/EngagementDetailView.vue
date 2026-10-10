@@ -921,6 +921,27 @@
           <p>El Copiloto únicamente <strong>sugiere</strong>: no ejecuta comandos, consultas ni pruebas por sí mismo contra el objetivo. Toda acción debe realizarla el operador manualmente (Terminal, herramientas del laboratorio, etc.).</p>
         </div>
 
+        <div class="space-y-3">
+          <button @click="openLocalGuidance" :disabled="nextStepLoading" class="px-3 py-2 rounded-sm border border-cyan-500/40 text-cyan-300 text-xs disabled:opacity-40">Orientación local sin IA</button>
+          <div v-if="localGuidanceOpen" data-testid="copilot-local-guidance" class="space-y-3 rounded-sm border border-cyan-500/30 bg-slate-950 p-4 text-xs">
+            <h3 class="font-bold text-cyan-300">Reglas locales · siguiente decisión</h3>
+            <p class="text-slate-400">Fuente: pt-next y estado del reconocimiento de este proyecto. Esta orientación no usa un modelo ni envía contexto a un proveedor. Revisa la recomendación; no ejecuta acciones.</p>
+            <p v-if="nextStepLoading" role="status" class="text-slate-300">Consultando la siguiente decisión…</p>
+            <p v-else-if="nextStepError" role="alert" class="text-amber-300">{{ nextStepError }}</p>
+            <template v-else>
+              <p class="font-bold text-cyan-300">{{ nextStepData.next_step?.title || nextStepData.recommendation || 'No hay una recomendación disponible.' }}</p>
+              <p v-if="nextStepData.next_step?.reason" class="text-slate-300">{{ nextStepData.next_step.reason }}</p>
+              <p v-if="nextStepData.decision_job" class="text-slate-400 break-all">Job {{ nextStepData.decision_job.run_id }} · {{ reconStageLabel(nextStepData.decision_job.stage) }} · {{ historyStatusLabel(nextStepData.decision_job.status) }}</p>
+              <button v-if="['scope', 'recon'].includes(nextStepData.next_step?.action?.view)" @click="openNextDecision" class="px-3 py-1 rounded-sm border border-cyan-500/40 text-cyan-300">{{ nextStepData.next_step.action.label }}</button>
+              <div v-if="nextStepData.next_step?.command" class="space-y-1 text-slate-300">
+                <p>Comando sugerido: revisa objetivo y alcance antes de usarlo manualmente.</p>
+                <code class="block whitespace-pre-wrap break-all text-cyan-300">{{ nextStepData.next_step.command }}</code>
+              </div>
+              <button @click="activeTab = 'checklist'" class="text-cyan-300 underline">Ver metodología y cobertura</button>
+            </template>
+          </div>
+        </div>
+
         <!-- Prompts Rápidos Sugeridos -->
         <div class="flex flex-wrap gap-2 text-[11px] font-mono">
           <button
@@ -2409,6 +2430,7 @@ async function loadNextStep(prompt = false) {
   try {
     const res = await api.getNextStep(project, prompt, type)
     if (request !== nextStepRequest || project !== engId.value || type !== engType.value) return
+    if (!res || typeof res !== 'object' || Array.isArray(res) || !(typeof res.next_step?.title === 'string' || typeof res.recommendation === 'string')) throw new Error('Decisión local inválida.')
     nextStepData.value = res
     if (prompt && res.prompt_available !== false) agentPrompt.value = res.prompt || ''
   } catch (err) {
@@ -2497,6 +2519,8 @@ const copilotModelsError = ref('')
 const copilotMessages = ref([])
 const copilotInput = ref('')
 const isCopilotThinking = ref(false)
+const localGuidanceOpen = ref(false)
+let copilotRequest = 0
 const showContextModal = ref(false)
 const injectedContextText = ref('')
 
@@ -2548,6 +2572,11 @@ async function openContextInspection() {
   }
 }
 
+async function openLocalGuidance() {
+  localGuidanceOpen.value = true
+  await loadNextStep(false)
+}
+
 function useQuickPrompt(text) {
   copilotInput.value = text
   sendCopilotMessage()
@@ -2555,6 +2584,8 @@ function useQuickPrompt(text) {
 
 async function sendCopilotMessage() {
   if (!copilotInput.value.trim() || isCopilotThinking.value) return
+  const request = ++copilotRequest
+  const project = engId.value, type = engType.value
   const userText = copilotInput.value.trim()
   copilotInput.value = ''
 
@@ -2592,6 +2623,8 @@ async function sendCopilotMessage() {
     if (reqProfile) payload.profile = reqProfile
 
     const res = await api.sendCopilotChat(payload)
+    if (request !== copilotRequest || project !== engId.value || type !== engType.value) return
+    if (!res || typeof res.content !== 'string' || !res.content.trim()) throw new Error('El proveedor no devolvió una respuesta válida.')
 
     copilotMessages.value.push({
       role: 'assistant',
@@ -2601,13 +2634,16 @@ async function sendCopilotMessage() {
       latency_ms: res.latency_ms,
     })
   } catch (err) {
+    if (request !== copilotRequest || project !== engId.value || type !== engType.value) return
     copilotMessages.value.push({
       role: 'assistant',
       content: `[Error del Copiloto]: ${err.message}`,
       model: 'error',
     })
-  } finally {
     isCopilotThinking.value = false
+    await openLocalGuidance()
+  } finally {
+    if (request === copilotRequest) isCopilotThinking.value = false
   }
 }
 
@@ -2990,6 +3026,11 @@ async function triggerReconPipeline() {
 }
 
 watch([engId, engType], () => {
+  copilotRequest++
+  copilotMessages.value = []
+  copilotInput.value = ''
+  isCopilotThinking.value = false
+  localGuidanceOpen.value = false
   reconOutcomeRequest++
   reconStatusRequest++
   reconOutcomeAcknowledged.value = ''
@@ -3031,6 +3072,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  copilotRequest++
   reconOutcomeRequest++
   reconStatusRequest++
   nextStepRequest++

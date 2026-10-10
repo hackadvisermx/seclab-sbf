@@ -1,0 +1,46 @@
+import { expect } from '@playwright/test'
+import { readFile, writeFile } from 'node:fs/promises'
+
+export async function verifyCopilotLocalGuidance(page, testInfo) {
+  const { workspace } = JSON.parse(await readFile(new URL('./.playwright-fixture/workspace.json', import.meta.url), 'utf8'))
+  const id = 'copilot-local'
+  await page.route('**/*', route => new URL(route.request().url()).origin === 'http://127.0.0.1:4199' ? route.continue() : route.abort())
+  expect((await page.request.post('/api/v1/engagements', { data: { name: id, domain: 'example.test', type: 'engagement' } })).ok()).toBe(true)
+  expect(await (await page.request.get('/api/v1/vault')).json()).toEqual([])
+  await writeFile(`${workspace}/engagements/${id}/recon/subdomains.txt`, 'example.test\n')
+  expect((await page.request.post(`/api/v1/recon/${id}/run`, { data: { stage: 'probe', dry_run: false } })).ok()).toBe(true)
+  const status = async () => (await (await page.request.get(`/api/v1/recon/${id}/status`)).json()).job
+  await expect.poll(async () => (await status()).status).toBe('blocked')
+  const originalJob = await status()
+  const originalScope = await readFile(`${workspace}/engagements/${id}/target.yaml`)
+  const originalHistory = await (await page.request.get(`/api/v1/recon/${id}/history`)).json()
+  await page.goto(`/engagements/engagement/${id}`)
+  await page.getByRole('button', { name: /Copiloto Táctico/ }).click()
+  const writes = []
+  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/') && request.method() !== 'GET') writes.push(new URL(request.url()).pathname) })
+  await page.getByRole('button', { name: 'Orientación local sin IA', exact: true }).click()
+  const card = page.getByTestId('copilot-local-guidance')
+  await expect(card).toContainText('Reglas locales')
+  await expect(card).toContainText(originalJob.run_id)
+  await expect(card.locator('code')).toHaveCount(0)
+  expect(writes).toEqual([])
+  await page.screenshot({ path: testInfo.outputPath('copilot-local-no-provider.png'), fullPage: true })
+  await card.getByRole('button', { name: /Revisar alcance/ }).click()
+  await expect(page.getByRole('button', { name: 'Guardar Alcance', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Copiloto Táctico/ }).click()
+  await page.getByPlaceholder('Pregunta al copiloto sobre el alcance, metodología, o redacción de hallazgos...').fill('Ayuda sin proveedor configurado')
+  const failure = page.waitForResponse(response => response.url().includes('/copilot/chat'))
+  await page.getByRole('button', { name: 'Enviar Consulta', exact: true }).click()
+  expect((await failure).ok()).toBe(false)
+  await expect(page.locator('pre').filter({ hasText: '[Error del Copiloto]' })).toBeVisible()
+  await expect(card).toContainText(originalJob.run_id)
+  await expect(card.locator('code')).toHaveCount(0)
+  expect(writes).toEqual(['/api/v1/copilot/chat'])
+  await page.screenshot({ path: testInfo.outputPath('copilot-local-after-failure.png'), fullPage: true })
+  expect((await status()).run_id).toBe(originalJob.run_id)
+  expect((await status()).status).toBe('blocked')
+  expect(await (await page.request.get(`/api/v1/recon/${id}/history`)).json()).toEqual(originalHistory)
+  expect(await readFile(`${workspace}/engagements/${id}/target.yaml`)).toEqual(originalScope)
+  await card.getByRole('button', { name: 'Ver metodología y cobertura', exact: true }).click()
+  await expect(page.getByTestId('next-decision')).toContainText(originalJob.run_id)
+}

@@ -1,3 +1,4 @@
+import hashlib
 import pathlib
 import tempfile
 import unittest
@@ -9,6 +10,10 @@ from app.services.workspace_sync import WorkspaceSyncService, FindingUpdateError
 
 
 class TestFindingIdentity(unittest.TestCase):
+    def current_version(self, slug):
+        path = self.service._resolve_dir('identity') / 'evidence' / (slug + '.md')
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -27,7 +32,7 @@ class TestFindingIdentity(unittest.TestCase):
         self.assertEqual(uuid.UUID(hex=ident).version, 4)
         second = self.create('second')
         self.assertNotEqual(second.finding_id, ident)
-        self.service.save_finding('identity', FindingCreate(slug='first', title='Edited', body=first.body, finding_id=ident))
+        self.service.save_finding('identity', FindingCreate(slug='first', title='Edited', body=first.body, finding_id=ident, expected_source_sha256=self.current_version('first')))
         path = self.root / 'evidence/first.md'
         path.rename(path.with_name('renamed.md'))
         reopened = WorkspaceSyncService(pathlib.Path(self.tmp.name)).get_finding('identity', 'renamed')
@@ -41,11 +46,11 @@ class TestFindingIdentity(unittest.TestCase):
         before = path.read_bytes()
         self.assertIsNone(self.service.get_finding('identity', 'legacy').finding_id)
         self.assertEqual(path.read_bytes(), before)
-        edited = self.service.save_finding('identity', FindingCreate(slug='legacy', title='Legacy', body='body'))
+        edited = self.service.save_finding('identity', FindingCreate(slug='legacy', title='Legacy', body='body', expected_source_sha256=self.current_version('legacy')))
         self.assertEqual(uuid.UUID(hex=edited.finding_id).version, 4)
         metadata = yaml.safe_load(path.read_text().split('---\n')[1])
         self.assertEqual(metadata['id'], 'VULN-42')
-        edited_again = self.service.save_finding('identity', FindingCreate(slug='legacy', title='Again', body='body'))
+        edited_again = self.service.save_finding('identity', FindingCreate(slug='legacy', title='Again', body='body', expected_source_sha256=self.current_version('legacy')))
         self.assertEqual(edited_again.finding_id, edited.finding_id)
 
     def test_replacement_stale_identity_corruption_and_duplicate_block_without_writes(self):
@@ -54,20 +59,20 @@ class TestFindingIdentity(unittest.TestCase):
         for invalid in (uuid.uuid4().hex, 'bad', ''):
             before = path.read_bytes()
             with self.assertRaises(FindingUpdateError):
-                self.service.save_finding('identity', FindingCreate(slug='first', title='Replace', body=original.body, finding_id=invalid))
+                self.service.save_finding('identity', FindingCreate(slug='first', title='Replace', body=original.body, finding_id=invalid, expected_source_sha256=self.current_version('first')))
             self.assertEqual(path.read_bytes(), before)
         duplicate = path.with_name('duplicate.md')
         duplicate.write_bytes(path.read_bytes())
         before = path.read_bytes()
         with self.assertRaises(FindingUpdateError):
-            self.service.save_finding('identity', FindingCreate(slug='first', title='Ambiguous', body=original.body))
+            self.service.save_finding('identity', FindingCreate(slug='first', title='Ambiguous', body=original.body, expected_source_sha256=self.current_version('first')))
         self.assertEqual(path.read_bytes(), before)
         duplicate.unlink()
         path.write_text(path.read_text().replace(original.finding_id, 'bad'))
         self.assertIsNotNone(self.service.get_finding('identity', 'first').identity_error)
         before = path.read_bytes()
         with self.assertRaises(FindingUpdateError):
-            self.service.save_finding('identity', FindingCreate(slug='first', title='Corrupt', body=original.body))
+            self.service.save_finding('identity', FindingCreate(slug='first', title='Corrupt', body=original.body, expected_source_sha256=self.current_version('first')))
         self.assertEqual(path.read_bytes(), before)
         with self.assertRaises(FindingUpdateError):
             self.service.save_finding('identity', FindingCreate(slug='import', title='Chosen', finding_id=uuid.uuid4().hex))

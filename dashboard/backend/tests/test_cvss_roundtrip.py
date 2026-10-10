@@ -32,7 +32,7 @@ class TestCvssRoundTrip(unittest.TestCase):
             calculated = calculate_cvss_score(dict(AV='N', AC='L', PR='N', UI='N', S='U', C='N', I='N', A='N'))
             saved = service.save_finding('fixture', FindingCreate(slug='zero', title='Zero', cvss_score=calculated['score'],
                                       cvss_vector=calculated['vector'], severity=calculated['severity']))
-            edited = service.save_finding('fixture', FindingCreate(slug='zero', title='Zero edited', body=saved.body,
+            edited = service.save_finding('fixture', FindingCreate(slug='zero', title='Zero edited', body=saved.body, expected_source_sha256=saved.source_sha256,
                                       cvss_score=saved.frontmatter.cvss_score, cvss_vector=saved.frontmatter.cvss_vector,
                                       severity=saved.frontmatter.severity))
             self.assertEqual(edited.frontmatter.cvss_score, 0.0)

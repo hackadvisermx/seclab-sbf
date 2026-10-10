@@ -9,6 +9,10 @@ from app.services.workspace_sync import WorkspaceSyncService, FindingUpdateError
 
 
 class TestFindingEdit(unittest.TestCase):
+    def current_version(self, slug):
+        path = self.service._resolve_dir('fixture') / 'evidence' / (slug + '.md')
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -28,7 +32,7 @@ class TestFindingEdit(unittest.TestCase):
     def test_round_trip_and_title_change_preserve_body_and_unknown_metadata(self):
         for title in ('Original --- título', 'Nuevo título', 'Nuevo título'):
             original = self.service.get_finding('fixture', 'legacy')
-            self.service.save_finding('fixture', FindingCreate(slug='legacy', title=title, body=original.body))
+            self.service.save_finding('fixture', FindingCreate(slug='legacy', title=title, body=original.body, expected_source_sha256=self.current_version('legacy')))
             result = self.service.get_finding('fixture', 'legacy')
             meta = yaml.safe_load(self.path.read_text().split('---\n')[1])
             self.assertEqual(result.body, self.body)
@@ -47,7 +51,7 @@ class TestFindingEdit(unittest.TestCase):
         before = self.path.read_bytes()
         with patch.object(pathlib.Path, 'replace', side_effect=OSError('fixture disk failure')):
             with self.assertRaises(OSError):
-                self.service.save_finding('fixture', FindingCreate(slug='legacy', title='new', body='new body'))
+                self.service.save_finding('fixture', FindingCreate(slug='legacy', title='new', body='new body', expected_source_sha256=self.current_version('legacy')))
         self.assertEqual(self.path.read_bytes(), before)
         self.assertEqual(list(self.path.parent.glob('.*.tmp')), [])
 
@@ -55,5 +59,5 @@ class TestFindingEdit(unittest.TestCase):
         for text in ('---\ntitle: [\n---\nbody', '---\n- list\n---\nbody', '---\nunterminated'):
             self.path.write_text(text)
             with self.assertRaises(FindingUpdateError):
-                self.service.save_finding('fixture', FindingCreate(slug='legacy', title='new', body='new'))
+                self.service.save_finding('fixture', FindingCreate(slug='legacy', title='new', body='new', expected_source_sha256=self.current_version('legacy')))
             self.assertEqual(self.path.read_text(), text)

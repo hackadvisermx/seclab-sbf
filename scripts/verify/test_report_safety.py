@@ -1,4 +1,5 @@
 import importlib.util
+import importlib.machinery
 import json
 import os
 import pathlib
@@ -17,7 +18,11 @@ sys.path.insert(0, str(SCRIPTS))
 
 
 def load(name, filename):
-    spec = importlib.util.spec_from_file_location(name, SCRIPTS / filename)
+    path = SCRIPTS / filename
+    if not path.is_file():
+        path = path.with_suffix('')
+    spec = importlib.util.spec_from_file_location(name, path,
+        loader=importlib.machinery.SourceFileLoader(name, str(path)))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -83,6 +88,90 @@ class ReportSafetyTests(unittest.TestCase):
             report.build_report(self.root)
         self.assertEqual((self.root / 'REPORT.md').read_bytes(), previous)
 
+    def test_finding_manifest_links_identity_source_and_selected_versions_in_both_formats(self):
+        import zipfile
+        identity = uuid.uuid4().hex
+        finding = self.root / 'evidence/finding.md'
+        text = finding.read_text().replace('id: VULN-TEST', 'id: VULN-TEST\nfinding_id: "' + identity + '"')
+        finding.write_bytes((text + '\nAuthorization: Bearer fixture-private-token\n').replace('\n', '\r\n').encode())
+        originals = {path: (self.root / path).read_bytes() for path in ['evidence/finding.md', 'recon/confirmation.txt']}
+        for archive_format in ['tar.gz', 'zip']:
+            for sanitize in [True, False]:
+                with self.subTest(archive_format=archive_format, sanitize=sanitize):
+                    result = packer.pack_engagement(self.root, sanitize=sanitize, archive_format=archive_format)
+                    if archive_format == 'zip':
+                        with zipfile.ZipFile(result['archive_path']) as archive:
+                            contents = {name.split('/', 1)[1]: archive.read(name) for name in archive.namelist()}
+                    else:
+                        with tarfile.open(result['archive_path']) as archive:
+                            contents = {name.split('/', 1)[1]: archive.extractfile(name).read() for name in archive.getnames()}
+                    manifest = json.loads(contents['finding-manifest.json'])
+                    self.assertEqual(manifest['schema_version'], 1)
+                    self.assertEqual(manifest['sanitized'], sanitize)
+                    self.assertEqual(len(manifest['findings']), 1)
+                    row = manifest['findings'][0]
+                    self.assertEqual(row['finding_id'], identity)
+                    self.assertEqual(row['identity_status'], 'recorded')
+                    self.assertEqual(row['source']['path'], 'evidence/finding.md')
+                    self.assertEqual([ref['path'] for ref in row['artifact_refs']], ['recon/confirmation.txt'])
+                    for source in [row['source'], *row['artifact_refs']]:
+                        self.assertEqual(source['original_sha256'], hashlib.sha256(originals[source['path']]).hexdigest())
+                        self.assertEqual(source['export_sha256'], hashlib.sha256(contents[source['path']]).hexdigest())
+                    self.assertEqual(row['artifact_refs'][0]['expected_sha256'], row['artifact_refs'][0]['original_sha256'])
+                    self.assertEqual(manifest['report']['export_sha256'], hashlib.sha256(contents['REPORT.md']).hexdigest())
+                    self.assertEqual(manifest['report']['original_sha256'], hashlib.sha256((self.root / 'REPORT.md').read_bytes()).hexdigest())
+                    self.assertIn('./evidence/finding.md#sha256=' + row['source']['original_sha256'], contents['REPORT.md'].decode())
+                    self.assertIn(identity, contents['REPORT.md'].decode())
+                    if sanitize:
+                        self.assertNotIn(b'fixture-private-token', contents['finding-manifest.json'])
+                        self.assertNotIn(b'fixture-private-token', contents['evidence/finding.md'])
+                    for path, payload in originals.items():
+                        self.assertEqual((self.root / path).read_bytes(), payload)
+                    digest = hashlib.sha256(contents['finding-manifest.json']).hexdigest()
+                    self.assertIn(digest + '  finding-manifest.json', contents['manifest.sha256'].decode())
+
+    def test_changed_finding_after_compile_blocks_export_without_replacing_prior_bundle(self):
+        destination = self.root / 'prior.tar.gz'
+        destination.write_bytes(b'prior bundle')
+        original_build = packer.ensure_report_built
+        def mutate_after_compile(*args, **kwargs):
+            result = original_build(*args, **kwargs)
+            finding = self.root / 'evidence/finding.md'
+            finding.write_text(finding.read_text() + '\nChanged after compilation')
+            return result
+        with patch.object(packer, 'ensure_report_built', side_effect=mutate_after_compile):
+            with self.assertRaisesRegex(ValueError, 'ficha.*cambi|Ficha.*cambi'):
+                packer.pack_engagement(self.root, destination)
+        self.assertEqual(destination.read_bytes(), b'prior bundle')
+        self.assertFalse(list(self.root.glob('.staging_pack*')))
+
+    def test_changed_report_after_compile_blocks_export_without_replacing_prior_bundle(self):
+        destination = self.root / 'prior.zip'
+        destination.write_bytes(b'prior bundle')
+        original = packer.ensure_report_built
+        def changed(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result.write_text('Replaced report')
+            return result
+        with patch.object(packer, 'ensure_report_built', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'reporte cambió'):
+                packer.pack_engagement(self.root, destination, archive_format='zip')
+        self.assertEqual(destination.read_bytes(), b'prior bundle')
+        self.assertFalse(list(self.root.glob('.staging_pack_*')))
+
+    def test_finding_manifest_marks_legacy_identity_missing_and_handles_empty_report(self):
+        for empty in [False, True]:
+            if empty:
+                (self.root / 'evidence/finding.md').unlink()
+            result = packer.pack_engagement(self.root)
+            with tarfile.open(result['archive_path']) as archive:
+                path = next(name for name in archive.getnames() if name.endswith('/finding-manifest.json'))
+                manifest = json.load(archive.extractfile(path))
+            self.assertEqual(len(manifest['findings']), 0 if empty else 1)
+            if not empty:
+                self.assertIsNone(manifest['findings'][0]['finding_id'])
+                self.assertEqual(manifest['findings'][0]['identity_status'], 'unregistered')
+
     def test_legacy_report_does_not_invent_identity_or_modify_finding(self):
         finding = self.root / 'evidence/finding.md'
         before = finding.read_bytes()
@@ -93,7 +182,7 @@ class ReportSafetyTests(unittest.TestCase):
     def test_linked_version_is_rendered_and_changed_missing_or_invalid_refs_block(self):
         artifact, reference = self.link_fixture()
         text = report.build_report(self.root).read_text()
-        self.assertIn('[recon/raw.txt](./recon/raw.txt)', text)
+        self.assertIn('[recon/raw.txt](./recon/raw.txt#sha256=' + reference['sha256'] + ')', text)
         self.assertIn(reference['sha256'], text)
         previous = (self.root / 'REPORT.md').read_bytes()
         for state in ['changed', 'missing']:

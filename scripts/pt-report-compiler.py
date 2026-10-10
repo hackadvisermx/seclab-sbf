@@ -9,6 +9,7 @@ Sin dependencias externas obligatorias (Python 3 stdlib).
 """
 
 import datetime
+import hashlib
 import importlib.machinery
 import importlib.util
 import os
@@ -16,10 +17,11 @@ import pathlib
 import re
 import json
 import sys
+from urllib.parse import quote
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from seclab_artifacts import validate_artifact_refs
+from seclab_artifacts import validate_artifact_refs, read_artifact_snapshot
 from seclab_findings import normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id
 
 SEVERITY_ORDER = {
@@ -71,7 +73,10 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
 
 def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     """Lee y estructura un archivo de evidencia markdown."""
-    content = file_path.read_text(encoding="utf-8")
+    snapshot = read_artifact_snapshot(file_path.parent, file_path.name, include_bytes=True)
+    if snapshot['sha256'] is None:
+        raise ValueError('La ficha supera el límite de lectura verificable de 32 MiB.')
+    content = snapshot['_bytes'].decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
     meta, body = parse_frontmatter(content)
 
     # Valores por defecto derivados del contenido o del nombre de archivo
@@ -113,6 +118,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     return {
         "finding_id_raw": meta.get("finding_id"),
         "has_finding_id": "finding_id" in meta,
+        "source_sha256": snapshot["sha256"],
         "file": file_path.name,
         "path": file_path,
         "id": finding_id,
@@ -289,7 +295,7 @@ def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[
     return not issues, issues, duplicates
 
 
-def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None, artifact_reference_output=None) -> pathlib.Path:
+def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None, artifact_reference_output=None, finding_source_output=None, report_hash_output=None) -> pathlib.Path:
     """Compila el informe final REPORT.md a partir de target.yaml y evidence/*.md."""
     if output_path is None:
         output_path = engagement_dir / "REPORT.md"
@@ -301,6 +307,13 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         for finding in findings:
             for reference in finding.get('artifact_refs', []):
                 artifact_reference_output[reference['path']] = reference['sha256']
+    if finding_source_output is not None:
+        finding_source_output.extend({
+            'finding_id': finding.get('finding_id'),
+            'identity_status': 'recorded' if finding.get('finding_id') else 'unregistered',
+            'path': 'evidence/' + finding['file'], 'sha256': finding['source_sha256'],
+            'artifact_refs': finding.get('artifact_refs', []),
+        } for finding in findings)
 
     # Intentar leer metadatos de target.yaml
     eng_name = engagement_dir.name
@@ -435,13 +448,14 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
                 "",
                 f"- **Severidad:** {f['severity'].capitalize()} (Score: {f['cvss_score']})",
                 f"- **Estado de evidencia:** {f['status']}",
+                f"- **Ficha fuente:** [Abrir ficha fuente](./{quote('evidence/' + f['file'], safe='/')}#sha256={f['source_sha256']}) · SHA-256 `{f['source_sha256']}`",
                 f"- **Identidad persistente:** `{f['finding_id']}`" if f.get('finding_id') else "- **Identidad persistente:** no registrada (ficha anterior).",
                 *([f"- **Motivo de verificación declarado:** {f['verification_rationale']}"] if f.get('verification_rationale') else []),
                 f"- **Vector CVSS:** `{f['cvss_v31']}`",
                 f"- **CWE:** {f['cwe']}",
                 f"- **Activo:** `{f['asset']}`",
                 f"- **Registro referido por la ficha:** `{f['audit_log']}` (vínculo e integridad no verificados)",
-                *[f"- **Artefacto vinculado:** [{reference['path']}](./{reference['path']}) · SHA-256 `{reference['sha256']}`"
+                *[f"- **Artefacto vinculado:** [{reference['path']}](./{quote(reference['path'], safe='/')}#sha256={reference['sha256']}) · SHA-256 `{reference['sha256']}`"
                   for reference in f.get('artifact_refs', [])],
                 "",
                 f"{f['body']}",
@@ -468,10 +482,14 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         else "No hay un registro local `terminal.log` disponible; no se acredita trazabilidad de la terminal.",
         "En el export, `source-manifest.json` relaciona hashes de archivos originales y de sus copias entregadas. "
         "Los hashes permiten comparar contenido; no constituyen una firma ni prueban procedencia por sí solos.",
+        "`finding-manifest.json` enlaza identidad de ficha (o ausencia legacy), fuente y evidencias seleccionadas con hashes original/copia. No acredita job ni productor.",
         "",
     ])
 
-    output_path.write_text("\n".join(lines), encoding="utf-8")
+    payload = "\n".join(lines).encode("utf-8")
+    output_path.write_bytes(payload)
+    if report_hash_output is not None:
+        report_hash_output["sha256"] = hashlib.sha256(payload).hexdigest()
     return output_path
 
 

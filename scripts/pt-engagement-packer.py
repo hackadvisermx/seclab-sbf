@@ -133,7 +133,7 @@ def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib
     return None
 
 
-def ensure_report_built(engagement_dir: pathlib.Path, artifact_reference_output=None) -> pathlib.Path:
+def ensure_report_built(engagement_dir: pathlib.Path, artifact_reference_output=None, finding_source_output=None, report_hash_output=None) -> pathlib.Path:
     """Recompila con el alcance y las fichas actuales antes de cada exportación."""
     compiler_path = pathlib.Path(__file__).resolve().parent / "pt-report-compiler.py"
     if not compiler_path.is_file():
@@ -146,7 +146,7 @@ def ensure_report_built(engagement_dir: pathlib.Path, artifact_reference_output=
         raise ValueError("Reporte bloqueado: no se pudo cargar pt-report-compiler.")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.build_report(engagement_dir, artifact_reference_output=artifact_reference_output)
+    return mod.build_report(engagement_dir, artifact_reference_output=artifact_reference_output, finding_source_output=finding_source_output, report_hash_output=report_hash_output)
 
 
 def pack_engagement(
@@ -159,7 +159,12 @@ def pack_engagement(
     if (engagement_dir / "REPORT.md").is_symlink():
         raise ValueError("Fuente de exportación no permitida: REPORT.md")
     references = {}
-    report_file = ensure_report_built(engagement_dir, references)
+    finding_sources = []
+    report_hash = {}
+    report_file = ensure_report_built(engagement_dir, references, finding_sources, report_hash)
+    expected_finding_hashes = {row["path"]: row["sha256"] for row in finding_sources}
+    if not report_file or not report_file.is_file():
+        raise ValueError("El reporte compilado está ausente; recompila antes de exportar.")
     eng_name = engagement_dir.name
     now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
 
@@ -201,6 +206,8 @@ def pack_engagement(
         # 1. REPORT.md
         if report_file and report_file.is_file():
             rep_text = read_source(report_file)
+            if source_hashes[str(report_file)] != report_hash["sha256"]:
+                raise ValueError("El reporte cambió después de compilar; recompila antes de exportar.")
             if sanitize:
                 rep_text, red = sanitize_text(rep_text)
                 total_redactions += red
@@ -235,6 +242,9 @@ def pack_engagement(
                 if ev_file.name.startswith("_"):
                     continue
                 ev_text = read_source(ev_file)
+                relative = 'evidence/' + ev_file.name
+                if relative in expected_finding_hashes and source_hashes[str(ev_file)] != expected_finding_hashes[relative]:
+                    raise ValueError('La ficha cambió después de compilar; recompila antes de exportar: ' + relative)
                 if sanitize:
                     ev_text, red = sanitize_text(ev_text)
                     total_redactions += red
@@ -318,6 +328,24 @@ def pack_engagement(
             "files": source_records}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         manifest_entries.append(f"{compute_sha256(source_manifest)}  source-manifest.json")
         packed_files.append("source-manifest.json")
+
+        records = {row['path']: row for row in source_records}
+        finding_records = []
+        for source in finding_sources:
+            record = records.get(source['path'])
+            if not record or record['original_sha256'] != source['sha256']:
+                raise ValueError('Ficha cambiada o ausente al exportar: ' + source['path'])
+            finding_records.append({
+                'finding_id': source['finding_id'], 'identity_status': source['identity_status'],
+                'source': record,
+                'artifact_refs': [{**records[ref['path']], 'expected_sha256': ref['sha256']}
+                                  for ref in source['artifact_refs']],
+            })
+        finding_manifest = staging_dir / 'finding-manifest.json'
+        finding_manifest.write_text(json.dumps({'schema_version': 1, 'sanitized': sanitize,
+            'report': records['REPORT.md'], 'findings': finding_records}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        manifest_entries.append(f'{compute_sha256(finding_manifest)}  finding-manifest.json')
+        packed_files.append('finding-manifest.json')
 
         # 5. Generar manifest.sha256
         manifest_file = staging_dir / "manifest.sha256"

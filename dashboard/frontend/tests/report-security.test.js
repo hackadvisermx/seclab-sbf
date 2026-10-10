@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom'
 
 const browser = new JSDOM('')
 globalThis.window = browser.window
-const { renderReport } = await import('../src/report-security.js')
+const { renderReport, reportArtifactReference } = await import('../src/report-security.js')
 
 test('elimina scripts, handlers, enlaces javascript y SVG del reporte', () => {
   const result = renderReport('# Evidencia\n<script>alert(1)</script><img src="x" onerror="alert(1)"><a href="javascript:alert(1)">ver</a><svg onload="alert(1)"></svg>')
@@ -19,4 +19,12 @@ test('preserva tablas, código HTTP y enlaces HTTPS', () => {
   assert.ok(document.querySelector('table'))
   assert.match(document.querySelector('code').textContent, /GET \/ HTTP\/1.1/)
   assert.equal(document.querySelector('a').href, 'https://example.org/')
+})
+
+
+test('solo enlaces locales versionados y sin traversal se abren como artefactos', () => {
+  const sha = 'c'.repeat(64)
+  assert.deepEqual(reportArtifactReference('./evidence/ficha%20uno.md#sha256=' + sha), { path: 'evidence/ficha uno.md', sha256: sha })
+  assert.deepEqual(reportArtifactReference('./recon/raw.txt#sha256=' + sha), { path: 'recon/raw.txt', sha256: sha })
+  for (const href of ['https://example.test/recon/raw.txt#sha256=' + sha, './evidence/../target.yaml#sha256=' + sha, './evidence/%2e%2e/target.yaml#sha256=' + sha, './evidence/a%5cb.md#sha256=' + sha, './evidence/a%3fb.md#sha256=' + sha, './evidence/a.md#sha256=bad', './target.yaml#sha256=' + sha, './evidence/%ZZ#sha256=' + sha]) assert.equal(reportArtifactReference(href), null, href)
 })

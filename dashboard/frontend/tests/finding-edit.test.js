@@ -897,3 +897,28 @@ test('abrir evidencia vinculada muestra diferencia sin actualizar la huella guar
     assert.ok(view.root.querySelector('[data-testid="finding-artifact-ref"]').textContent.includes('a'.repeat(64)))
   } finally { view.cleanup() }
 })
+
+
+test('el enlace fuente del reporte abre el visor con su hash sin guardar ni ejecutar', async () => {
+  const sha = 'c'.repeat(64)
+  const reads = []
+  let writes = 0
+  const view = await mountDecision({
+    previewReport: async () => ({ content: `[Ficha fuente](./evidence/ficha.md#sha256=${sha})` }),
+    getArtifacts: async () => [],
+    getArtifactContent: async (id, path) => { reads.push([id, path]); return { content: 'Ficha actual', sha256: 'd'.repeat(64), fingerprint_status: 'available' } },
+    saveFinding: async () => { writes++ }, runRecon: async () => { writes++ },
+  })
+  try {
+    await clickText(view.root, 'Reporte (REPORT.md)')
+    const anchor = view.root.querySelector('.prose-report a')
+    assert.ok(anchor)
+    const event = new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+    assert.equal(anchor.dispatchEvent(event), false)
+    await flush(); await flush()
+    assert.deepEqual(reads, [['fixture', 'evidence/ficha.md']])
+    assert.match(view.root.textContent, /versión actual no coincide/)
+    assert.match(view.root.textContent, /Ficha actual/)
+    assert.equal(writes, 0)
+  } finally { view.cleanup() }
+})

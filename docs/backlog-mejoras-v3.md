@@ -120,6 +120,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
 
+**Entrega parcial V3-03k (fase 177).** Reporte enlaza fichas fuente y artefactos seleccionados con hash; dashboard abre el visor y compara la lectura actual. Export añade finding-manifest v1 con UUID/legacy, fuente y versiones original/copia de cada selección, manteniendo source-manifest v1. Cambios de ficha/reporte después de compilar bloquean antes de reemplazar el paquete. Detalle [phase-177.md](phase-177.md). Sin firma, vínculo job/finding ni snapshots históricos; V3-03 sigue parcial.
+
 **Entrega parcial V3-03j (fase 176).** UUID persistente por ficha nueva de API/CLI y primer guardado legacy, independiente de título/slug/ID legible. Edición conserva identidad; inválidos, duplicados y expectativa distinta bloquean sin sustituir fuentes. UI/reporte distinguen identidad no registrada. Detalle [phase-176.md](phase-176.md). Sin identidad de artefactos, vínculo job/finding o historial de revisiones; V3-03 sigue parcial.
 
 **Entrega parcial V3-03i/V3-02n (fase 175).** Historial muestra rutas/tamaños/SHA-256 conservados por etapa y permite comparar con el archivo actual en el visor. Distingue coincidencia, diferencia, archivo ilegible y huella no disponible sin cambiar referencias ni jobs; selección/proyecto nuevos descartan respuestas tardías. Detalle [phase-175.md](phase-175.md). Sin snapshots ni prueba de productor; no añade permisos o ejecución/revisión.

@@ -1138,7 +1138,7 @@
 
         <!-- Cuerpo del Reporte Renderizado -->
         <div class="tactical-card bg-[#050811] p-8 report-content-html overflow-x-auto print:bg-white print:text-black print:border-none print:shadow-none print:p-0">
-          <div v-html="renderedReportHtml" class="prose-report"></div>
+          <div v-html="renderedReportHtml" @click="openReportSource" class="prose-report"></div>
         </div>
       </div>
 
@@ -1461,6 +1461,7 @@
               </div>
               <div v-if="artifactSnapshot" data-testid="artifact-fingerprint" class="space-y-2 text-slate-400 break-words">
                 <p v-if="expectedArtifactSha && artifactSnapshot.sha256 !== expectedArtifactSha" class="text-amber-300">La versión actual no coincide con la vinculada al hallazgo. Revisa la evidencia; el vínculo guardado no se ha cambiado.</p>
+                <p v-else-if="expectedArtifactSha && artifactSnapshot.sha256 === expectedArtifactSha" class="text-emerald-300">La versión actual coincide con la referencia revisada.</p>
                 <p>{{ artifactSnapshot.size }} bytes · Modificado: {{ artifactSnapshot.modified }} (UTC)</p>
                 <div v-if="artifactSnapshot.sha256" class="space-y-1">
                   <p>SHA-256 del archivo original en esta lectura:</p>
@@ -1817,7 +1818,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { renderReport } from '../report-security'
+import { renderReport, reportArtifactReference } from '../report-security'
 import { splitIpsAndCidrs } from '../scope-utils'
 import { authorizationToForm, authorizationFromForm } from '../authorization-utils'
 import { normalizeProbeResults, sortProbeResults } from '../recon-results'
@@ -2743,6 +2744,16 @@ async function loadArtifactPreview(file, expectedHash = null, expectedJob = null
     artifactReadFailed.value = true
     selectedArtifactContent.value = 'Error al leer archivo: ' + err.message
   }
+}
+
+function openReportSource(event) {
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+  const anchor = event.target.closest?.('a[href]')
+  if (!anchor || !event.currentTarget.contains(anchor)) return
+  const reference = reportArtifactReference(anchor.getAttribute('href'))
+  if (!reference) return
+  event.preventDefault()
+  void openFindingArtifact(reference)
 }
 
 async function openFindingArtifact(reference) {

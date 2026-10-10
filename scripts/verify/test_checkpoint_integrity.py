@@ -148,6 +148,80 @@ class CheckpointIntegrityTests(unittest.TestCase):
         self.assert_resume_blocked()
         self.checkpoint.unlink()
 
+    def test_resumed_stage_preserves_origin_and_is_not_counted_as_new_execution(self):
+        with patch.dict(os.environ, {'SECLAB_RECON_RUN_ID': 'a' * 32}):
+            saved = self.fail_after_subdomains()
+        with patch.dict(os.environ, {'SECLAB_RECON_RUN_ID': 'b' * 32}), patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = []
+            result = self.engine().run_all(resume=True)
+        self.assertEqual(saved['completed']['subdomains']['origin_run_id'], 'a' * 32)
+        self.assertEqual(result['summary']['stages_executed'], ['probe', 'urls', 'patterns'])
+        self.assertEqual(result['summary']['stages_recovered'], ['subdomains'])
+        self.assertEqual(result['stage_results']['subdomains']['execution'], 'recovered')
+        self.assertEqual(result['stage_results']['subdomains']['origin_run_id'], 'a' * 32)
+        for name in ('probe', 'urls', 'patterns'):
+            self.assertEqual(result['stage_results'][name]['origin_run_id'], 'b' * 32)
+            self.assertEqual(result['stage_results'][name]['execution'], 'current')
+
+    def test_cli_without_external_job_id_gets_distinct_run_ids_and_retains_origin(self):
+        with patch.dict(os.environ, {}, clear=True):
+            saved = self.fail_after_subdomains()
+            with patch.object(pipeline, 'ProbeClient') as client:
+                client.return_value.probe.return_value = []
+                result = self.engine().run_all(resume=True)
+        origin = saved['completed']['subdomains']['origin_run_id']
+        self.assertRegex(origin, r'^[a-f0-9]{32}$')
+        self.assertNotEqual(origin, result['summary']['run_id'])
+        self.assertEqual(result['stage_results']['subdomains']['origin_run_id'], origin)
+
+    def test_repeated_resume_keeps_each_original_run_across_later_failures(self):
+        with patch.dict(os.environ, {'SECLAB_RECON_RUN_ID': 'a' * 32}):
+            self.fail_after_subdomains()
+        with patch.dict(os.environ, {'SECLAB_RECON_RUN_ID': 'b' * 32}), patch.object(pipeline, 'ProbeClient') as client, \
+                patch.object(pipeline.ReconPipeline, 'run_url_harvesting', side_effect=pipeline.StageError('fixture')):
+            client.return_value.probe.return_value = []
+            self.engine().run_all(resume=True)
+        with patch.dict(os.environ, {'SECLAB_RECON_RUN_ID': 'c' * 32}), patch.object(pipeline, 'ProbeClient') as client:
+            result = self.engine().run_all(resume=True)
+        client.assert_not_called()
+        self.assertEqual(result['summary']['stages_recovered'], ['subdomains', 'probe'])
+        self.assertEqual(result['summary']['stages_executed'], ['urls', 'patterns'])
+        self.assertEqual(result['stage_results']['subdomains']['origin_run_id'], 'a' * 32)
+        self.assertEqual(result['stage_results']['probe']['origin_run_id'], 'b' * 32)
+        self.assertEqual(result['stage_results']['urls']['origin_run_id'], 'c' * 32)
+
+    def test_previous_v2_checkpoint_recovers_unknown_origin_without_inventing_one(self):
+        saved = self.fail_after_subdomains()
+        for field in ('execution', 'origin_run_id'):
+            saved['completed']['subdomains'].pop(field)
+        self.checkpoint.write_text(json.dumps(saved))
+        with patch.dict(os.environ, {'SECLAB_RECON_RUN_ID': 'b' * 32}), patch.object(pipeline, 'ProbeClient') as client:
+            client.return_value.probe.return_value = []
+            result = self.engine().run_all(resume=True)
+        self.assertIsNone(result['stage_results']['subdomains']['origin_run_id'])
+        self.assertEqual(result['stage_results']['subdomains']['execution'], 'recovered')
+
+    def test_invalid_checkpoint_origin_metadata_blocks_before_new_actions(self):
+        saved = self.fail_after_subdomains()
+        for origin in ('private/path', 'a' * 64, True, ['a' * 32]):
+            edited = copy.deepcopy(saved)
+            edited['completed']['subdomains']['origin_run_id'] = origin
+            self.checkpoint.write_text(json.dumps(edited))
+            self.assert_resume_blocked()
+        edited = copy.deepcopy(saved)
+        edited['completed']['subdomains']['execution'] = 'invented'
+        self.checkpoint.write_text(json.dumps(edited))
+        self.assert_resume_blocked()
+
+    def test_manual_stage_has_current_origin_and_invalid_external_id_stays_unknown(self):
+        for run_id, expected in [('a' * 32, 'a' * 32), ('private/path', None)]:
+            with patch.dict(os.environ, {'SECLAB_RECON_RUN_ID': run_id}), patch.object(pipeline, 'ProbeClient') as client:
+                client.return_value.probe.return_value = []
+                result = self.engine().run_all(stage='probe')
+            self.assertEqual(result['stage_results']['probe']['origin_run_id'], expected)
+            self.assertEqual(result['summary']['stages_executed'], ['probe'])
+            self.assertEqual(result['summary']['stages_recovered'], [])
+
     def test_hashes_are_captured_at_stage_completion_not_after_a_later_failure(self):
         def fail_and_edit(*args, **kwargs):
             (self.root / 'recon/subdomains.txt').write_text('changed after completion\n')

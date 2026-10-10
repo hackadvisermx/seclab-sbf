@@ -25,6 +25,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlsplit
 
@@ -172,7 +173,7 @@ class ReconPipeline:
         self.patterns_dir = self.recon_dir / "patterns"
         self.dry_run = dry_run
         self.live = live and not dry_run
-        self.progress = {'run_id': os.environ.get('SECLAB_RECON_RUN_ID'), 'stage': None,
+        self.progress = {'run_id': os.environ.get('SECLAB_RECON_RUN_ID') or uuid.uuid4().hex, 'stage': None,
                          'command': None, 'command_status': None, 'completed_stages': [],
                          'recent_output': [], 'events': []}
         self.scope_data = load_scope_rules(self.engagement_dir)
@@ -508,7 +509,9 @@ class ReconPipeline:
         failure = results.get(resumable_from, {})
         summary = {'engagement': self.engagement_dir.name,
                    'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                   'in_scope_domains': self.get_in_scope_domains(), 'stages_executed': list(results),
+                   'in_scope_domains': self.get_in_scope_domains(),
+                   'stages_executed': [name for name, value in results.items() if value.get('execution') != 'recovered'],
+                   'stages_recovered': [name for name, value in results.items() if value.get('execution') == 'recovered'],
                    'status': 'failed' if failed else 'simulated' if self.dry_run else 'completed',
                    'failure_kind': failure.get('failure_kind'), 'error': failure.get('error'),
                    'resumable_from': resumable_from,
@@ -580,6 +583,12 @@ class ReconPipeline:
                 refs = data['artifact_refs'][name]
                 if not isinstance(result, dict) or result.get('status') != 'completed' or result.get('stage') != name:
                     raise ValueError('Resultado incompatible')
+                if 'execution' in result or 'origin_run_id' in result:
+                    origin = result.get('origin_run_id')
+                    if (not {'execution', 'origin_run_id'} <= set(result)
+                            or result['execution'] not in ('current', 'recovered')
+                            or (origin is not None and (not isinstance(origin, str) or not re.fullmatch(r'[a-f0-9]{32}', origin)))):
+                        raise ValueError('Origen incompatible')
                 paths = ['recon/' + path for path in STAGE_ARTIFACTS[name]]
                 if not isinstance(refs, list) or len(refs) != len(paths):
                     raise ValueError('Referencias incompletas')
@@ -609,7 +618,8 @@ class ReconPipeline:
         if stage == 'all' and resume and not self.dry_run:
             checkpoint = self._load_checkpoint()
             if checkpoint:
-                results.update(checkpoint['completed'])
+                results.update({name: dict(value, execution='recovered', origin_run_id=value.get('origin_run_id'))
+                                for name, value in checkpoint['completed'].items()})
                 self.completed_artifacts.update(checkpoint['artifact_refs'])
         elif stage != 'all' and not self.dry_run:
             # Una etapa manual rompe el orden que asume la cadena automática;
@@ -629,6 +639,7 @@ class ReconPipeline:
             try:
                 self.revalidate_scope()
                 result = action()
+                result.update(execution='current', origin_run_id=self._origin_run_id())
                 if stage == 'all' and not self.dry_run:
                     self.completed_artifacts[name] = self._stage_artifacts(name)
                 results[name] = result
@@ -637,7 +648,8 @@ class ReconPipeline:
                 self._emit('stage_end', stage=name, stage_status=results[name]['status'])
             except (StageError, ScopeError, OSError) as error:
                 failure_kind = 'scope_guard' if isinstance(error, ScopeError) else 'technical'
-                results[name] = {'stage': name, 'status': 'failed', 'error': str(error), 'failure_kind': failure_kind}
+                results[name] = {'stage': name, 'status': 'failed', 'error': str(error), 'failure_kind': failure_kind,
+                                 'execution': 'current', 'origin_run_id': self._origin_run_id()}
                 failed_stage = name
                 self._emit('stage_end', stage=name, stage_status='failed', error=str(error), failure_kind=failure_kind)
                 break
@@ -664,10 +676,27 @@ class ReconPipeline:
             )
         return {'summary': summary, 'stage_results': results, 'dry_run': self.dry_run}
 
+    def _origin_run_id(self):
+        value = self.progress['run_id']
+        return value if isinstance(value, str) and re.fullmatch(r'[a-f0-9]{32}', value) else None
+
 
 def retry_command(eng_dir, summary):
     options = '--resume' if (eng_dir / 'recon' / '.checkpoint.json').is_file() else '--stage ' + shlex.quote(summary['resumable_from'])
     return f'pt-recon {shlex.quote(str(eng_dir))} {options}'
+
+
+def print_recovered_stages(summary):
+    recovered = summary.get('stages_recovered')
+    results = summary.get('stage_results')
+    if not isinstance(recovered, list) or not isinstance(results, dict):
+        return
+    for name in STAGE_ARTIFACTS:
+        result = results.get(name)
+        if name in recovered and isinstance(result, dict):
+            origin = result.get('origin_run_id')
+            origin = origin if isinstance(origin, str) and re.fullmatch(r'[a-f0-9]{32}', origin) else 'no registrado'
+            print(f'  Etapa recuperada: {name}; run de origen {origin}; no ejecutada en este job.')
 
 
 def record_initial_failure(error, stage):
@@ -732,6 +761,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if next_commands_count:
         print(f"  Próximos comandos sugeridos: {pipeline.recon_dir / 'next_commands.txt'} ({next_commands_count} hosts)")
     print(f"  Resumen estructurado:      {pipeline.recon_dir / 'summary.json'}\n")
+    print_recovered_stages(summary)
     for result in res["stage_results"].values():
         if result.get("error"):
             print("  Error: " + result["error"])
@@ -781,6 +811,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"  Servicios web activos:    {summary.get('live_hosts_count', 0)}" + (f" ({status_live_new} nuevos desde la última corrida)" if status_live_new else ""))
     print(f"  URLs archivadas:          {summary.get('urls_count', 0)}")
     print(f"  JavaScript descubiertos:  {summary.get('js_files_count', 0)}")
+    print_recovered_stages(summary)
     if summary.get("gf_patterns"):
         pats = [f"{k}={v}" for k, v in summary["gf_patterns"].items() if v > 0]
         if pats:

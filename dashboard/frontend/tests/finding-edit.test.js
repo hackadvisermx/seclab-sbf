@@ -299,10 +299,33 @@ test('historial conserva resultados por job separados del workspace actual y dis
     assert.match(rows[0].textContent, /URLs: 2/)
     assert.match(rows[0].textContent, /pueden incluir etapas que no se ejecutaron/)
     assert.doesNotMatch(rows[0].textContent, /999|URLs: 5/)
+    assert.match(rows[0].textContent, /Resumen anterior: origen de etapa no registrado/)
+    assert.doesNotMatch(rows[0].textContent, /Completada en este job/)
     assert.match(rows[1].textContent, /URLs: 5/)
     assert.match(rows[1].textContent, /artefactos previos; no acreditan resultados nuevos/)
     assert.match(rows[2].textContent, /simulación no genera resultados/)
     assert.match(rows[3].textContent, /Sin resumen de resultados conservado/)
+  } finally { view.cleanup() }
+})
+
+test('historial distingue etapa recuperada con origen, intento actual y origen anterior desconocido', async () => {
+  const snapshot = (origin, runId) => ({ schema_version: 2, recorded_at: '2026-10-10T12:00:00Z', metrics_source: 'previous_artifacts',
+    metrics: { subdomains_count: 1, live_hosts_count: 0, urls_count: 0, js_files_count: 0 }, stages: [
+      { stage: 'subdomains', status: 'completed', execution: 'recovered', origin_run_id: origin, counts: { in_scope_count: 1 }, patterns: {} },
+      { stage: 'probe', status: 'failed', execution: 'current', origin_run_id: runId, counts: {}, patterns: {} },
+    ] })
+  const jobs = [{ run_id: 'b'.repeat(32), status: 'failed', stage: 'all', result_summary: snapshot('a'.repeat(32), 'b'.repeat(32)) },
+    { run_id: 'c'.repeat(32), status: 'failed', stage: 'all', result_summary: snapshot(null, 'c'.repeat(32)) }]
+  const view = await mountDecision({ getReconHistory: async () => ({ jobs, next_cursor: null }) })
+  try {
+    await clickText(view.root, 'Reconocimiento')
+    const rows = view.root.querySelector('[data-testid=recon-history]').querySelectorAll('li')
+    const origin = [...rows[0].querySelectorAll('p')].find(p => p.textContent.includes('Run de origen'))
+    assert.match(origin.textContent, /no se ejecutó en este job/)
+    assert.match(origin.textContent, /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/)
+    assert.doesNotMatch(origin.textContent, /bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/)
+    assert.match(rows[0].textContent, /Intentada en este job/)
+    assert.match(rows[1].textContent, /Run de origen: No registrado/)
   } finally { view.cleanup() }
 })
 

@@ -23,10 +23,12 @@ def _counts(value, allowed):
 def validate_result_summary(value, run_id, stage, status, scope_revision, dry_run):
     fields = {'schema_version', 'run_id', 'scope_revision', 'recorded_at', 'metrics_source', 'metrics', 'stages'}
     if (dry_run or status not in ('completed', 'failed', 'blocked') or not isinstance(value, dict)
-            or set(value) != fields or type(value['schema_version']) is not int or value['schema_version'] != 1
+            or set(value) != fields or type(value['schema_version']) is not int or value['schema_version'] not in (1, 2)
             or value['run_id'] != run_id or value['scope_revision'] != scope_revision
             or not isinstance(scope_revision, str) or not re.fullmatch(r'[a-f0-9]{64}', scope_revision)):
         raise ValueError('Resumen no corresponde al job finalizado.')
+    if value['schema_version'] == 2 and (not isinstance(run_id, str) or not re.fullmatch(r'[a-f0-9]{32}', run_id)):
+        raise ValueError('Identificador del job inválido.')
     timestamp = datetime.datetime.fromisoformat(value['recorded_at'])
     if timestamp.tzinfo is None or timestamp.utcoffset() != datetime.timedelta(0):
         raise ValueError('Fecha de resultados inválida.')
@@ -40,13 +42,30 @@ def validate_result_summary(value, run_id, stage, status, scope_revision, dry_ru
     if not isinstance(steps, list) or not 1 <= len(steps) <= 4:
         raise ValueError('Etapas de resultados inválidas.')
     names = []
+    current_seen = False
     for step in steps:
-        if not isinstance(step, dict) or set(step) != {'stage', 'status', 'counts', 'patterns', 'failure_kind'}:
+        step_fields = {'stage', 'status', 'counts', 'patterns', 'failure_kind'}
+        if value['schema_version'] == 2:
+            step_fields |= {'execution', 'origin_run_id'}
+        if not isinstance(step, dict) or set(step) != step_fields:
             raise ValueError('Etapa de resultados inválida.')
         name = step['stage']
         if name not in STAGE_COUNTS or step['status'] not in ('completed', 'failed'):
             raise ValueError('Estado de etapa inválido.')
         names.append(name)
+        if value['schema_version'] == 2:
+            origin = step['origin_run_id']
+            if origin is not None and (not isinstance(origin, str) or not re.fullmatch(r'[a-f0-9]{32}', origin)):
+                raise ValueError('Origen de etapa inválido.')
+            if step['execution'] == 'current':
+                if origin != run_id:
+                    raise ValueError('Etapa actual no corresponde al job.')
+                current_seen = True
+            elif step['execution'] == 'recovered':
+                if stage != 'all' or current_seen or step['status'] != 'completed' or origin == run_id:
+                    raise ValueError('Etapa recuperada inconsistente.')
+            else:
+                raise ValueError('Ejecución de etapa inválida.')
         _counts(step['counts'], STAGE_COUNTS[name])
         _counts(step['patterns'], PATTERNS if name == 'patterns' else ())
         if step['status'] == 'failed':
@@ -56,6 +75,8 @@ def validate_result_summary(value, run_id, stage, status, scope_revision, dry_ru
               or (name == 'patterns' and set(step['patterns']) != set(PATTERNS))):
             raise ValueError('Estado o conteos de etapa incompletos.')
     expected_names = list(STAGE_COUNTS)[:len(names)] if stage == 'all' else [stage]
+    if value['schema_version'] == 2 and not current_seen:
+        raise ValueError('Resumen sin intento del job actual.')
     if names != expected_names:
         raise ValueError('Etapas no corresponden a la ejecución.')
     expected_statuses = ['completed'] * len(steps)
@@ -76,13 +97,22 @@ def result_summary(raw, run_id, stage, status, dry_run):
                 or raw.get('status') != ('completed' if status == 'completed' else 'failed')):
             return None
         stages = raw['stage_results']
-        if not isinstance(stages, dict) or raw['stages_executed'] != list(stages):
+        if not isinstance(stages, dict):
             return None
+        version = 2 if 'stages_recovered' in raw else 1
+        if version == 1:
+            if (raw['stages_executed'] != list(stages)
+                    or any('execution' in step or 'origin_run_id' in step for step in stages.values())):
+                return None
+        else:
+            if (raw['stages_executed'] != [name for name, step in stages.items() if step['execution'] == 'current']
+                    or raw['stages_recovered'] != [name for name, step in stages.items() if step['execution'] == 'recovered']):
+                return None
         timestamp = datetime.datetime.fromisoformat(raw['timestamp'])
         if timestamp.tzinfo is None:
             return None
         value = {
-            'schema_version': 1, 'run_id': run_id, 'scope_revision': raw['scope_revision'],
+            'schema_version': version, 'run_id': run_id, 'scope_revision': raw['scope_revision'],
             'recorded_at': timestamp.astimezone(datetime.timezone.utc).isoformat(),
             'metrics_source': raw['metrics_source'], 'metrics': {key: raw[key] for key in METRICS},
             'stages': [{
@@ -91,6 +121,7 @@ def result_summary(raw, run_id, stage, status, dry_run):
                 'patterns': {key: count for key, count in step.get('patterns', {}).items() if key in PATTERNS}
                             if name == 'patterns' and step['status'] == 'completed' else {},
                 'failure_kind': step.get('failure_kind') if step['status'] == 'failed' else None,
+                **({'execution': step['execution'], 'origin_run_id': step['origin_run_id']} if version == 2 else {}),
             } for name, step in stages.items()],
         }
         return validate_result_summary(value, run_id, stage, status, raw['scope_revision'], dry_run)

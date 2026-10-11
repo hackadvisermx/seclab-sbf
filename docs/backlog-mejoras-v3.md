@@ -1,6 +1,6 @@
 # Backlog de mejoras v3 — auditoría trazable y segura
 
-Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `089065e` de fase194. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
+Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `aade9ef` de fase196. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
 
 ## Propósito
 
@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases181/182/184/185/186/188/190/191/193/194 están terminadas y fusionadas. Las [fases193](phase-193.md) y [194](phase-194.md) corrigen dos fallas del reporte; V3-03 y V3-05 mantienen criterios pendientes. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases181/182/184/185/186/188/190/191/193/194/196 están terminadas y fusionadas. La [fase196](phase-196.md) extiende la revisión previa del Copiloto a pregunta e historial; V3-03 y V3-05 mantienen criterios pendientes. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -28,6 +28,7 @@ Las fases181/182/184/185/186/188/190/191/193/194 están terminadas y fusionadas.
 | Fase191 / V3-03s | YAML ambiguo no confirma fichas; runner local de PR | [#211](https://github.com/hackadvisermx/seclab-sbf/pull/211), `440c273` | [38159302342](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38159302342), `7ae371a`, aprobado |
 | Fase193 / V3-03t | Reporte usa estado y activo interpretados por YAML; evita falso confirmado y activo cambiado por `#` citado | [#213](https://github.com/hackadvisermx/seclab-sbf/pull/213), `79ecb32` | [38160898416](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38160898416), `8e08c3f`, aprobado |
 | Fase194 / V3-03u | Reporte rechaza salida enlazada y publica sin truncar la versión anterior | [#214](https://github.com/hackadvisermx/seclab-sbf/pull/214), `089065e` | [38161288702](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38161288702), `a1ac48a`, aprobado |
+| Fase196 / V3-05f | Pregunta e historial editables/omitibles; el proveedor recibe únicamente la transcripción revisada | [#216](https://github.com/hackadvisermx/seclab-sbf/pull/216), `aade9ef` | [38178969647](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38178969647), `27a397c`, aprobado |
 
 Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182](phase-182.md) y [fase184](phase-184.md). En el cierre de fase184: 238 Python, 237 backend instalado, smoke, Compose, Actionlint, gate High/Critical y SBOM aprobados bajo la política existente. Ninguno de estos merges publica ni despliega una imagen.
 
@@ -38,7 +39,7 @@ Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182
 | V3-02 | Historial de jobs, revisión del resultado, decisión compartida, resultados y origen de etapas/artefactos | Timeline del engagement y relación estructurada con findings; jobs CLI no se incorporan al historial del dashboard |
 | V3-03 | Activo/evidencia/motivo obligatorios para confirmación, UUID de fichas, manifiestos, visor y edición/borrado versionados; reporte interpreta YAML compartido y escribe salida atómica | Vínculo job–evidencia–finding, identidad de artefactos e historial de revisiones; no se acredita suficiencia probatoria |
 | V3-04 | Guías y preview de reconocimiento disponibles | Schema y recorrido completo de playbooks deterministas según sus criterios |
-| V3-05 | Validación no disponible visible, contexto revisado/redactable por consulta, gate de generación y orientación local sin IA | Fuentes navegables, clasificación verificable del destino custom, privacidad de pregunta/historial y contenido hostil |
+| V3-05 | Validación no disponible visible, contexto/pregunta/historial revisables y redactables por consulta, gate de generación y orientación local sin IA | Fuentes navegables, clasificación verificable del destino custom, redacción automática y contenido hostil |
 | V3-06 | Historial y bloqueos aportan información reutilizable | Vista y checkpoints de supervisión validados con instructores |
 | V3-07 | Métricas de éxito propuestas en este documento | Definición operativa, denominadores, retención y medición local validada |
 
@@ -46,7 +47,7 @@ Las notas de entrega inferiores describen lo comprobado y pendiente en su fecha.
 
 La fase191 añade un runner de PR local con imagen/base verificadas por hash, pruebas, smoke, Actionlint, CVE y SBOM. Se usa durante el desarrollo para evitar pushes intermedios; CI del head exacto sigue siendo gate de merge. Detalle en [phase-191.md](phase-191.md).
 
-Estimación de planificación tras las fases190/191: **20–33 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Las fases193/194 corrigen defectos de interpretación y escritura del reporte, pero no cierran los bloques estructurales que sustentan esta estimación; por eso no se reduce automáticamente. Es una descomposición tentativa, no un porcentaje ni una promesa de plazo. La validación con personas y los hallazgos de integración pueden cambiarla.
+Estimación de planificación tras la fase196: **19–32 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Las fases193/194 corrigieron defectos del reporte sin cerrar los bloques estructurales; la fase196 sí completa una de las entregas de privacidad previstas para V3-05. Es una descomposición tentativa, no un porcentaje ni una promesa de plazo. La validación con personas y los hallazgos de integración pueden cambiarla.
 
 | Iniciativa | Entregas adicionales estimadas | Bloque principal |
 |---|---:|---|
@@ -55,7 +56,7 @@ Estimación de planificación tras las fases190/191: **20–33 entregas pequeña
 | V3-02 | 3–5 | Timeline y vínculo estructurado de jobs/etapas/fichas |
 | V3-03 | 3–5 | Procedencia, identidad de artefactos e historial de revisiones |
 | V3-04 | 4–6 | Esquema y recorrido de playbooks deterministas |
-| V3-05 | 2–4 | Citas navegables, privacidad y contenido hostil |
+| V3-05 | 1–3 | Citas navegables, destino custom, redacción automática y contenido hostil |
 | V3-06 | 2–3 | Vista y checkpoints de supervisión validados |
 | V3-07 | 2–3 | Métricas operativas y medición local |
 
@@ -231,6 +232,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Motor adaptativo de enseñanza, gamificación, reemplazo de herramientas ni ejecución operada por IA.
 
 ### V3-05 — Copiloto con fuentes, límites y fallback (P1)
+
+**Entrega parcial V3-05f (fase 196).** Antes de contactar al proveedor, el operador puede editar la pregunta y cada mensaje del historial u omitir mensajes previos, además de redactar el contexto. El token liga la revisión a la transcripción original y el proxy recibe solo la versión revisada; cambios intermedios devuelven 409. Los errores locales del Copiloto no se incorporan al siguiente envío. Detalle [phase-196.md](phase-196.md). No hay redacción automática, clasificación verificable de destinos `custom_llm`, citas navegables ni registro firmado de consentimiento.
 
 **Entrega parcial V3-05e (fase 190).** Antes de cada consulta el operador revisa y puede editar el contexto exacto que se enviará. API liga la revisión al proyecto/agente/modelo/perfil y contenido vigente, rechaza cambios con 409 sin contactar al proveedor y exige la revisión a clientes antiguos. Dos marcas horarias efímeras no invalidan una fuente sin cambios. Detalle [phase-190.md](phase-190.md). No clasifica de manera concluyente un Base URL custom como local/remoto ni redacta automáticamente pregunta/historial; citas y tratamiento de contenido hostil continúan pendientes.
 

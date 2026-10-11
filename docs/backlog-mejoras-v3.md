@@ -1,6 +1,6 @@
 # Backlog de mejoras v3 — auditoría trazable y segura
 
-Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `440c273` de fase191. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
+Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `089065e` de fase194. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
 
 ## Propósito
 
@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases181/182/184/185/186/188/190/191 están terminadas y fusionadas. Las [fases190](phase-190.md) y [191](phase-191.md) son entregas parciales; V3-03 y V3-05 mantienen criterios pendientes. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases181/182/184/185/186/188/190/191/193/194 están terminadas y fusionadas. Las [fases193](phase-193.md) y [194](phase-194.md) corrigen dos fallas del reporte; V3-03 y V3-05 mantienen criterios pendientes. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -26,6 +26,8 @@ Las fases181/182/184/185/186/188/190/191 están terminadas y fusionadas. Las [fa
 | Fase188 / V3-03r | Claves literales repetidas permanecen sin interpretar en checklist, recomendador y cierre | [#208](https://github.com/hackadvisermx/seclab-sbf/pull/208), `a965f98` | [38146832126](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38146832126), `850c730`, aprobado |
 | Fase190 / V3-05e | Revisión editable del contexto por consulta con rechazo de preview obsoleto | [#210](https://github.com/hackadvisermx/seclab-sbf/pull/210), `138e083` | [38158197265](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38158197265), `bf96b4f`, aprobado |
 | Fase191 / V3-03s | YAML ambiguo no confirma fichas; runner local de PR | [#211](https://github.com/hackadvisermx/seclab-sbf/pull/211), `440c273` | [38159302342](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38159302342), `7ae371a`, aprobado |
+| Fase193 / V3-03t | Reporte usa estado y activo interpretados por YAML; evita falso confirmado y activo cambiado por `#` citado | [#213](https://github.com/hackadvisermx/seclab-sbf/pull/213), `79ecb32` | [38160898416](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38160898416), `8e08c3f`, aprobado |
+| Fase194 / V3-03u | Reporte rechaza salida enlazada y publica sin truncar la versión anterior | [#214](https://github.com/hackadvisermx/seclab-sbf/pull/214), `089065e` | [38161288702](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38161288702), `a1ac48a`, aprobado |
 
 Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182](phase-182.md) y [fase184](phase-184.md). En el cierre de fase184: 238 Python, 237 backend instalado, smoke, Compose, Actionlint, gate High/Critical y SBOM aprobados bajo la política existente. Ninguno de estos merges publica ni despliega una imagen.
 
@@ -34,7 +36,7 @@ Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182
 | V3-00 | Mapa técnico, línea base y recorrido sintético instalado | Validación con personas y medición de fricciones |
 | V3-01 | Autorización declarada, permisos independientes, revalidación, preview y reanudación con huellas | Completar cobertura de todos los caminos gestionados y casos del matcher; terminal libre conserva límites explícitos |
 | V3-02 | Historial de jobs, revisión del resultado, decisión compartida, resultados y origen de etapas/artefactos | Timeline del engagement y relación estructurada con findings; jobs CLI no se incorporan al historial del dashboard |
-| V3-03 | Activo/evidencia/motivo obligatorios para confirmación, UUID de fichas, manifiestos, visor y edición/borrado versionados | Vínculo job–evidencia–finding, identidad de artefactos e historial de revisiones; no se acredita suficiencia probatoria |
+| V3-03 | Activo/evidencia/motivo obligatorios para confirmación, UUID de fichas, manifiestos, visor y edición/borrado versionados; reporte interpreta YAML compartido y escribe salida atómica | Vínculo job–evidencia–finding, identidad de artefactos e historial de revisiones; no se acredita suficiencia probatoria |
 | V3-04 | Guías y preview de reconocimiento disponibles | Schema y recorrido completo de playbooks deterministas según sus criterios |
 | V3-05 | Validación no disponible visible, contexto revisado/redactable por consulta, gate de generación y orientación local sin IA | Fuentes navegables, clasificación verificable del destino custom, privacidad de pregunta/historial y contenido hostil |
 | V3-06 | Historial y bloqueos aportan información reutilizable | Vista y checkpoints de supervisión validados con instructores |
@@ -44,7 +46,7 @@ Las notas de entrega inferiores describen lo comprobado y pendiente en su fecha.
 
 La fase191 añade un runner de PR local con imagen/base verificadas por hash, pruebas, smoke, Actionlint, CVE y SBOM. Se usa durante el desarrollo para evitar pushes intermedios; CI del head exacto sigue siendo gate de merge. Detalle en [phase-191.md](phase-191.md).
 
-Estimación de planificación tras las fases190/191: **20–33 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Se descuenta una entrega de V3-03 y otra de V3-05; es una descomposición tentativa, no un porcentaje ni una promesa de plazo. La validación con personas y los hallazgos de integración pueden cambiarla.
+Estimación de planificación tras las fases190/191: **20–33 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Las fases193/194 corrigen defectos de interpretación y escritura del reporte, pero no cierran los bloques estructurales que sustentan esta estimación; por eso no se reduce automáticamente. Es una descomposición tentativa, no un porcentaje ni una promesa de plazo. La validación con personas y los hallazgos de integración pueden cambiarla.
 
 | Iniciativa | Entregas adicionales estimadas | Bloque principal |
 |---|---:|---|
@@ -166,6 +168,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Colaboración multiusuario, control de acceso de aula completo ni una auditoría legal inmutable.
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
+
+**Entregas parciales V3-03t/u (fases 193/194).** El reporte toma estado y activo del parser YAML compartido para no confirmar un estado citado con `#` ni sustituir silenciosamente el activo. La publicación rechaza enlaces de salida y conserva la versión anterior si falla el reemplazo. Detalles en [phase-193.md](phase-193.md) y [phase-194.md](phase-194.md). Sigue pendiente la procedencia completa desde job/artefacto hasta finding y revisión.
 
 **Entrega parcial V3-03q/V3-05 (fase 186).** Contexto, checklist, siguiente paso y cierre leen fichas con descriptores sin seguir enlaces en `evidence/` ni en la entrada `.md`; fuentes enlazadas o ilegibles quedan pendientes sin incorporar bytes externos. Detalle [phase-186.md](phase-186.md). No congela todo el workspace ni acredita productor de cada artefacto.
 
@@ -306,4 +310,4 @@ Estas fuentes orientan el diseño; no prueban por sí mismas una carencia del c�
 
 ## Regla de ejecución
 
-Cada entrega futura debe partir de archivos reales, enlazar criterios de aceptación con pruebas, documentar comandos y resultados en `docs/phase-<n>.md`, y conservar el flujo de revisión del repositorio. La autorización temporal explícita renovada por el owner permite merges sin preguntar del 2026-10-10 16:43:06 UTC al 2026-10-11 16:43:06 UTC, manteniendo PR, gates y CI aprobados del head exacto. Después vuelve la aprobación individual del owner. Para cambios de UI, validar en navegador con workspace/backend desechables; no usar el dominio ni reiniciar el contenedor del owner sin instrucción.
+Cada entrega futura debe partir de archivos reales, enlazar criterios de aceptación con pruebas, documentar comandos y resultados en `docs/phase-<n>.md`, y conservar el flujo de revisión del repositorio. La autorización temporal explícita renovada por el owner permite merges sin preguntar del 2026-10-11 17:11:47 UTC al 2026-10-13 17:11:47 UTC, manteniendo PR, gates y CI aprobados del head exacto. Después vuelve la aprobación individual del owner. Para cambios de UI, validar en navegador con workspace/backend desechables; no usar el dominio ni reiniciar el contenedor del owner sin instrucción.

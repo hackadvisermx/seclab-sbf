@@ -881,7 +881,7 @@
             <span class="text-2xl">🤖</span>
             <div>
               <h2 class="text-sm font-mono font-bold text-white">Copiloto Táctico de Auditoría (Evidence-First)</h2>
-              <p class="text-xs text-slate-400">Contexto vivo inyectado automáticamente desde target.yaml, evidence/ y terminal.log.</p>
+              <p class="text-xs text-slate-400">Antes de cada consulta revisas y puedes redactar el contexto que se enviará al modelo.</p>
             </div>
           </div>
 
@@ -1019,7 +1019,7 @@
             :disabled="isCopilotThinking || !copilotInput.trim()"
             class="px-5 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold text-xs font-mono transition-all shadow-md shadow-cyan-500/20 whitespace-nowrap"
           >
-            Enviar Consulta
+            Revisar y enviar
           </button>
         </form>
       </div>
@@ -1032,20 +1032,24 @@
         <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-3xl w-full p-6 shadow-2xl space-y-4 my-8 max-h-[85vh] overflow-y-auto">
           <div class="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 class="text-sm font-mono font-bold text-white flex items-center space-x-2">
-              <span>📋 Contexto Vivo Inyectado (pt-agent-context)</span>
+              <span>{{ contextReview ? '📋 Revisar contexto antes de enviar' : '📋 Contexto Vivo (pt-agent-context)' }}</span>
             </h2>
-            <button @click="showContextModal = false" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
+            <button @click="closeContextInspection" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
           </div>
+          <p v-if="contextReview" class="text-xs text-amber-200">Se enviarán tu pregunta, el historial mostrado y el texto de abajo al modelo seleccionado ({{ contextReview.modelSelection }}). El perfil puede usar proveedores del Vault como fallback. Borra o sustituye aquí cualquier dato que no quieras compartir. El contexto puede contener texto de archivos no confiables.</p>
+          <p v-if="contextPreviewError" role="alert" class="text-xs text-red-300">{{ contextPreviewError }}</p>
           <div class="bg-[#050811] p-4 rounded-sm border border-slate-800 text-xs font-mono text-slate-300 max-h-[500px] overflow-y-auto">
-            <pre class="whitespace-pre-wrap">{{ injectedContextText }}</pre>
+            <textarea v-if="contextReview" v-model="injectedContextText" aria-label="Contexto revisado para enviar" class="w-full min-h-[340px] bg-transparent text-slate-200 font-mono whitespace-pre-wrap outline-hidden" spellcheck="false" />
+            <pre v-else class="whitespace-pre-wrap">{{ injectedContextText }}</pre>
           </div>
-          <div class="flex justify-end">
+          <div class="flex justify-end gap-2">
             <button
-              @click="showContextModal = false"
+              @click="closeContextInspection"
               class="px-4 py-1.5 rounded-sm bg-slate-800 text-slate-300 text-xs font-mono"
             >
               Cerrar
             </button>
+            <button v-if="contextReview" @click="confirmCopilotMessage" :disabled="!contextReview.token || !!contextPreviewError" class="px-4 py-1.5 rounded-sm bg-cyan-500 text-slate-950 text-xs font-mono font-bold disabled:opacity-40">Enviar contexto revisado</button>
           </div>
         </div>
       </div>
@@ -2638,6 +2642,8 @@ const localGuidanceOpen = ref(false)
 let copilotRequest = 0
 const showContextModal = ref(false)
 const injectedContextText = ref('')
+const contextReview = ref(null)
+const contextPreviewError = ref('')
 let contextRequest = 0
 
 async function loadCopilotModels() {
@@ -2677,19 +2683,56 @@ function onCopilotModelChange() {
   }
 }
 
-async function openContextInspection() {
+function copilotSelection() {
+  const selection = {}
+  if (copilotSelectedModel.value.startsWith('openrouter:')) {
+    selection.provider = 'openrouter'
+    selection.model = copilotSelectedModel.value.slice(11)
+  } else if (copilotSelectedModel.value.startsWith('profile:')) {
+    selection.profile = copilotSelectedModel.value.slice(8)
+  } else if (copilotSelectedModel.value.includes(':')) {
+    const separator = copilotSelectedModel.value.indexOf(':')
+    selection.provider = copilotSelectedModel.value.slice(0, separator)
+    selection.model = copilotSelectedModel.value.slice(separator + 1)
+  } else {
+    selection.profile = copilotSelectedModel.value
+  }
+  return selection
+}
+
+function closeContextInspection() {
+  contextRequest++
+  showContextModal.value = false
+  contextReview.value = null
+  contextPreviewError.value = ''
+}
+
+async function loadContextInspection(userText = null) {
   const request = ++contextRequest
   const project = engId.value, type = engType.value, agent = selectedAgent.value
+  const modelSelection = copilotSelectedModel.value
+  const selection = copilotSelection()
   showContextModal.value = true
-  injectedContextText.value = 'Generando contexto en tiempo real con pt-agent-context...'
+  contextPreviewError.value = ''
+  contextReview.value = userText === null ? null : { project, type, agent, modelSelection, selection, userText, token: '' }
+  injectedContextText.value = userText === null ? 'Generando contexto en tiempo real con pt-agent-context...' : ''
   try {
-    const res = await api.getCopilotContext(project, agent, type)
-    if (request !== contextRequest || project !== engId.value || type !== engType.value || agent !== selectedAgent.value || !showContextModal.value) return
+    const res = await api.getCopilotContext(project, agent, type, selection)
+    if (request !== contextRequest || project !== engId.value || type !== engType.value || agent !== selectedAgent.value || modelSelection !== copilotSelectedModel.value || !showContextModal.value) return
     injectedContextText.value = res.context || 'Sin contexto disponible.'
+    if (contextReview.value) {
+      contextReview.value.token = res.context_review_token || ''
+      if (!contextReview.value.token) contextPreviewError.value = 'No se pudo vincular esta revisión al contexto. Vuelve a intentarlo.'
+    }
   } catch (err) {
     if (request !== contextRequest || project !== engId.value || type !== engType.value || agent !== selectedAgent.value || !showContextModal.value) return
-    injectedContextText.value = 'Error al cargar contexto: ' + err.message
+    contextPreviewError.value = 'Error al cargar contexto: ' + err.message
+    injectedContextText.value = userText === null ? contextPreviewError.value : ''
   }
+}
+
+function openContextInspection() {
+  return loadContextInspection()
 }
 
 async function openLocalGuidance() {
@@ -2704,43 +2747,36 @@ function useQuickPrompt(text) {
 
 async function sendCopilotMessage() {
   if (!copilotInput.value.trim() || isCopilotThinking.value) return
+  await loadContextInspection(copilotInput.value.trim())
+}
+
+async function confirmCopilotMessage() {
+  const review = contextReview.value
+  if (!review || !review.token || contextPreviewError.value || isCopilotThinking.value) return
+  if (review.project !== engId.value || review.type !== engType.value || review.agent !== selectedAgent.value || review.modelSelection !== copilotSelectedModel.value) {
+    contextPreviewError.value = 'Cambió el proyecto, agente o modelo. Cierra y revisa el contexto de nuevo.'
+    return
+  }
+  const reviewedContext = injectedContextText.value
+  closeContextInspection()
   const request = ++copilotRequest
-  const project = engId.value, type = engType.value
-  const userText = copilotInput.value.trim()
+  const project = review.project, type = review.type
+  const userText = review.userText
   copilotInput.value = ''
 
   copilotMessages.value.push({ role: 'user', content: userText })
   isCopilotThinking.value = true
 
   try {
-    let reqProvider = null
-    let reqModel = null
-    let reqProfile = null
-
-    if (copilotSelectedModel.value.startsWith('openrouter:')) {
-      reqProvider = 'openrouter'
-      reqModel = copilotSelectedModel.value.slice(11)
-    } else if (copilotSelectedModel.value.startsWith('profile:')) {
-      reqProfile = copilotSelectedModel.value.slice(8)
-    } else if (copilotSelectedModel.value.includes(':')) {
-      const separator = copilotSelectedModel.value.indexOf(':')
-      const p = copilotSelectedModel.value.slice(0, separator)
-      const m = copilotSelectedModel.value.slice(separator + 1)
-      reqProvider = p
-      reqModel = m
-    } else {
-      reqProfile = copilotSelectedModel.value
-    }
-
     const payload = {
-      engagement_id: engId.value,
-      type: engType.value,
-      agent_id: selectedAgent.value,
+      engagement_id: review.project,
+      type: review.type,
+      agent_id: review.agent,
       messages: copilotMessages.value.map(m => ({ role: m.role, content: m.content })),
+      context_review_token: review.token,
+      reviewed_context: reviewedContext,
+      ...review.selection,
     }
-    if (reqProvider) payload.provider = reqProvider
-    if (reqModel) payload.model = reqModel
-    if (reqProfile) payload.profile = reqProfile
 
     const res = await api.sendCopilotChat(payload)
     if (request !== copilotRequest || project !== engId.value || type !== engType.value) return
@@ -2755,6 +2791,12 @@ async function sendCopilotMessage() {
     })
   } catch (err) {
     if (request !== copilotRequest || project !== engId.value || type !== engType.value) return
+    if (err.status === 409) {
+      copilotMessages.value.pop()
+      copilotInput.value = userText
+      copilotMessages.value.push({ role: 'assistant', content: 'El contexto o modelo cambió. Revisa de nuevo antes de enviar; tu pregunta sigue en el campo.', model: 'error' })
+      return
+    }
     copilotMessages.value.push({
       role: 'assistant',
       content: `[Error del Copiloto]: ${err.message}`,
@@ -3156,6 +3198,8 @@ watch([engId, engType], () => {
   contextRequest++
   showContextModal.value = false
   injectedContextText.value = ''
+  contextReview.value = null
+  contextPreviewError.value = ''
   copilotRequest++
   copilotMessages.value = []
   copilotInput.value = ''
@@ -3177,10 +3221,12 @@ watch([engId, engType], () => {
   loadReconHistory()
 })
 
-watch(selectedAgent, () => {
+watch([selectedAgent, copilotSelectedModel], () => {
   contextRequest++
   showContextModal.value = false
   injectedContextText.value = ''
+  contextReview.value = null
+  contextPreviewError.value = ''
 })
 
 watch(activeTab, tab => { if (tab === 'checklist') loadNextStep() })

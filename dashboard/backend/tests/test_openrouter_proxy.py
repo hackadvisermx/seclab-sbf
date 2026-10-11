@@ -193,6 +193,11 @@ class TestOpenRouterProxy(unittest.TestCase):
                     "model": "deepseek/deepseek-r1",
                     "messages": [{"role": "user", "content": "Analizar alcance"}],
                 }
+                preview = client.get('/api/v1/copilot/context/test_eng', params={
+                    'agent': 'triage-agent', 'provider': post_data['provider'], 'model': post_data['model']})
+                self.assertEqual(preview.status_code, 200, preview.text)
+                post_data['context_review_token'] = preview.json()['context_review_token']
+                post_data['reviewed_context'] = preview.json()['context']
                 res = client.post("/api/v1/copilot/chat", json=post_data)
                 self.assertEqual(res.status_code, 200, res.text)
                 data = res.json()
@@ -255,6 +260,11 @@ class TestOpenRouterProxy(unittest.TestCase):
                         "model": "deepseek/deepseek-r1",
                         "messages": [{"role": "user", "content": "¿Qué pruebo?"}],
                     }
+                    preview = client.get('/api/v1/copilot/context/test_eng_scope', params={
+                        'agent': 'triage-agent', 'provider': post_data['provider'], 'model': post_data['model']})
+                    self.assertEqual(preview.status_code, 200, preview.text)
+                    post_data['context_review_token'] = preview.json()['context_review_token']
+                    post_data['reviewed_context'] = preview.json()['context']
                     res = client.post("/api/v1/copilot/chat", json=post_data)
                     self.assertEqual(res.status_code, 200, res.text)
                     return res.json()["content"]

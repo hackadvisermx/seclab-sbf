@@ -1,6 +1,6 @@
 # Backlog de mejoras v3 — auditoría trazable y segura
 
-Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `a965f98` de fase188. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
+Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `440c273` de fase191. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
 
 ## Propósito
 
@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases181/182/184/185/186/188/190 están terminadas y fusionadas. La [fase191](phase-191.md) pasó sus gates locales y espera PR/CI; ambas entregas recientes son parciales. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases181/182/184/185/186/188/190/191 están terminadas y fusionadas. Las [fases190](phase-190.md) y [191](phase-191.md) son entregas parciales; V3-03 y V3-05 mantienen criterios pendientes. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -25,6 +25,7 @@ Las fases181/182/184/185/186/188/190 están terminadas y fusionadas. La [fase191
 | Fase186 / V3-03q/V3-05 | Enlaces de fichas externos no alimentan contexto, checklist ni cierre | [#206](https://github.com/hackadvisermx/seclab-sbf/pull/206), `07b4951` | [38110351287](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38110351287), `45060d0`, aprobado |
 | Fase188 / V3-03r | Claves literales repetidas permanecen sin interpretar en checklist, recomendador y cierre | [#208](https://github.com/hackadvisermx/seclab-sbf/pull/208), `a965f98` | [38146832126](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38146832126), `850c730`, aprobado |
 | Fase190 / V3-05e | Revisión editable del contexto por consulta con rechazo de preview obsoleto | [#210](https://github.com/hackadvisermx/seclab-sbf/pull/210), `138e083` | [38158197265](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38158197265), `bf96b4f`, aprobado |
+| Fase191 / V3-03s | YAML ambiguo no confirma fichas; runner local de PR | [#211](https://github.com/hackadvisermx/seclab-sbf/pull/211), `440c273` | [38159302342](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38159302342), `7ae371a`, aprobado |
 
 Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182](phase-182.md) y [fase184](phase-184.md). En el cierre de fase184: 238 Python, 237 backend instalado, smoke, Compose, Actionlint, gate High/Critical y SBOM aprobados bajo la política existente. Ninguno de estos merges publica ni despliega una imagen.
 
@@ -43,16 +44,16 @@ Las notas de entrega inferiores describen lo comprobado y pendiente en su fecha.
 
 La fase191 añade un runner de PR local con imagen/base verificadas por hash, pruebas, smoke, Actionlint, CVE y SBOM. Se usa durante el desarrollo para evitar pushes intermedios; CI del head exacto sigue siendo gate de merge. Detalle en [phase-191.md](phase-191.md).
 
-Estimación de planificación al 2026-10-11: **22–35 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Es una descomposición tentativa, no un porcentaje ni una promesa de plazo; la validación con personas y los hallazgos de integración pueden cambiarla.
+Estimación de planificación tras las fases190/191: **20–33 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Se descuenta una entrega de V3-03 y otra de V3-05; es una descomposición tentativa, no un porcentaje ni una promesa de plazo. La validación con personas y los hallazgos de integración pueden cambiarla.
 
 | Iniciativa | Entregas adicionales estimadas | Bloque principal |
 |---|---:|---|
 | V3-00 | 2–3 | Sesiones con perfiles de uso y línea base de fricciones |
 | V3-01 | 2–4 | Caminos gestionados restantes y casos del matcher |
 | V3-02 | 3–5 | Timeline y vínculo estructurado de jobs/etapas/fichas |
-| V3-03 | 4–6 | Procedencia, identidad de artefactos e historial de revisiones |
+| V3-03 | 3–5 | Procedencia, identidad de artefactos e historial de revisiones |
 | V3-04 | 4–6 | Esquema y recorrido de playbooks deterministas |
-| V3-05 | 3–5 | Citas navegables, privacidad y contenido hostil |
+| V3-05 | 2–4 | Citas navegables, privacidad y contenido hostil |
 | V3-06 | 2–3 | Vista y checkpoints de supervisión validados |
 | V3-07 | 2–3 | Métricas operativas y medición local |
 

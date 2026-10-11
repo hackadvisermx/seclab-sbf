@@ -110,8 +110,9 @@ class ReportSafetyTests(unittest.TestCase):
     def test_finding_manifest_links_identity_source_and_selected_versions_in_both_formats(self):
         import zipfile
         identity = uuid.uuid4().hex
+        job_id = "a" * 32
         finding = self.root / 'evidence/finding.md'
-        text = finding.read_text().replace('id: VULN-TEST', 'id: VULN-TEST\nfinding_id: "' + identity + '"')
+        text = finding.read_text().replace('id: VULN-TEST', 'id: VULN-TEST\nfinding_id: "' + identity + '"\nsource_job_id: "' + job_id + '"\nsource_stage: "nmap_probe"')
         finding.write_bytes((text + '\nAuthorization: Bearer fixture-private-token\n').replace('\n', '\r\n').encode())
         originals = {path: (self.root / path).read_bytes() for path in ['evidence/finding.md', 'recon/confirmation.txt']}
         for archive_format in ['tar.gz', 'zip']:
@@ -131,6 +132,8 @@ class ReportSafetyTests(unittest.TestCase):
                     row = manifest['findings'][0]
                     self.assertEqual(row['finding_id'], identity)
                     self.assertEqual(row['identity_status'], 'recorded')
+                    self.assertEqual(row['source_job_id'], job_id)
+                    self.assertEqual(row['source_stage'], 'nmap_probe')
                     self.assertEqual(row['source']['path'], 'evidence/finding.md')
                     self.assertEqual([ref['path'] for ref in row['artifact_refs']], ['recon/confirmation.txt'])
                     for source in [row['source'], *row['artifact_refs']]:
@@ -141,6 +144,7 @@ class ReportSafetyTests(unittest.TestCase):
                     self.assertEqual(manifest['report']['original_sha256'], hashlib.sha256((self.root / 'REPORT.md').read_bytes()).hexdigest())
                     self.assertIn('./evidence/finding.md#sha256=' + row['source']['original_sha256'], contents['REPORT.md'].decode())
                     self.assertIn(identity, contents['REPORT.md'].decode())
+                    self.assertIn(f'Job `{job_id}` (etapa: `nmap_probe`)', contents['REPORT.md'].decode())
                     if sanitize:
                         self.assertNotIn(b'fixture-private-token', contents['finding-manifest.json'])
                         self.assertNotIn(b'fixture-private-token', contents['evidence/finding.md'])
@@ -190,6 +194,24 @@ class ReportSafetyTests(unittest.TestCase):
             if not empty:
                 self.assertIsNone(manifest['findings'][0]['finding_id'])
                 self.assertEqual(manifest['findings'][0]['identity_status'], 'unregistered')
+                self.assertIsNone(manifest['findings'][0]['source_job_id'])
+                self.assertIsNone(manifest['findings'][0]['source_stage'])
+
+    def test_invalid_provenance_scalars_block_report_check_and_build(self):
+        finding = self.root / 'evidence/finding.md'
+        original = finding.read_bytes()
+        for bad_header in [
+            'source_job_id: "not-a-hex-run-id"',
+            'source_job_id: "12345"',
+            'source_stage: "invalid/stage/traversal"',
+            'source_stage: "stage with spaces"',
+        ]:
+            with self.subTest(bad_header=bad_header):
+                finding.write_bytes(original.replace(b'---\n', f'---\n{bad_header}\n'.encode(), 1))
+                self.assertFalse(report.check_findings(self.root)[0])
+                with self.assertRaises(report.ReportValidationError):
+                    report.build_report(self.root)
+        finding.write_bytes(original)
 
     def test_legacy_report_does_not_invent_identity_or_modify_finding(self):
         finding = self.root / 'evidence/finding.md'

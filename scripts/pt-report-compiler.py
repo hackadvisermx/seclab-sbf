@@ -23,7 +23,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_artifacts import validate_artifact_refs, read_artifact_snapshot
-from seclab_findings import normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id, parse_finding_frontmatter
+from seclab_findings import (
+    normalize_status,
+    normalize_verification_rationale,
+    validate_confirmation,
+    normalize_finding_id,
+    normalize_source_job_id,
+    normalize_source_stage,
+    parse_finding_frontmatter,
+)
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -128,6 +136,10 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     return {
         "finding_id_raw": meta.get("finding_id"),
         "has_finding_id": "finding_id" in meta,
+        "source_job_id_raw": meta.get("source_job_id"),
+        "has_source_job_id": "source_job_id" in meta,
+        "source_stage_raw": meta.get("source_stage"),
+        "has_source_stage": "source_stage" in meta,
         "source_sha256": snapshot["sha256"],
         "file": file_path.name,
         "path": file_path,
@@ -264,6 +276,14 @@ def review_report_inputs(engagement_dir: pathlib.Path):
         except ValueError as error:
             issues.append(f'{prefix} {error}')
         try:
+            f['source_job_id'] = normalize_source_job_id(f['source_job_id_raw']) if f['has_source_job_id'] else None
+        except ValueError as error:
+            issues.append(f'{prefix} {error}')
+        try:
+            f['source_stage'] = normalize_source_stage(f['source_stage_raw']) if f['has_source_stage'] else None
+        except ValueError as error:
+            issues.append(f'{prefix} {error}')
+        try:
             f['artifact_refs'] = validate_artifact_refs(engagement_dir, f['artifact_refs_raw'])
         except (OSError, ValueError) as error:
             issues.append(f'{prefix} Evidencia vinculada no válida: {error}')
@@ -337,6 +357,8 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
         finding_source_output.extend({
             'finding_id': finding.get('finding_id'),
             'identity_status': 'recorded' if finding.get('finding_id') else 'unregistered',
+            'source_job_id': finding.get('source_job_id'),
+            'source_stage': finding.get('source_stage'),
             'path': 'evidence/' + finding['file'], 'sha256': finding['source_sha256'],
             'artifact_refs': finding.get('artifact_refs', []),
         } for finding in findings)
@@ -476,6 +498,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
                 f"- **Estado de evidencia:** {f['status']}",
                 f"- **Ficha fuente:** [Abrir ficha fuente](./{quote('evidence/' + f['file'], safe='/')}#sha256={f['source_sha256']}) · SHA-256 `{f['source_sha256']}`",
                 f"- **Identidad persistente:** `{f['finding_id']}`" if f.get('finding_id') else "- **Identidad persistente:** no registrada (ficha anterior).",
+                *([f"- **Origen de ejecución:** Job `{f['source_job_id']}`" + (f" (etapa: `{f['source_stage']}`)" if f.get('source_stage') else "")] if f.get('source_job_id') else []),
                 *([f"- **Motivo de verificación declarado:** {f['verification_rationale']}"] if f.get('verification_rationale') else []),
                 f"- **Vector CVSS:** `{f['cvss_v31']}`",
                 f"- **CWE:** {f['cwe']}",

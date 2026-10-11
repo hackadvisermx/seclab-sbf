@@ -79,6 +79,7 @@ export const api = {
     }
     return request(`/copilot/context/${encodeURIComponent(engId)}?${params}`)
   },
+  reviewCopilotRequest: (data) => request('/copilot/review', { method: 'POST', body: JSON.stringify(data) }),
   sendCopilotChat: (data) => request('/copilot/chat', { method: 'POST', body: JSON.stringify(data) }),
 
   // Logs & Reportes

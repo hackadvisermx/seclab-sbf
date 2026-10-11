@@ -55,7 +55,10 @@ class TestCopilotReconContext(unittest.TestCase):
                             if status=='reviewed':
                                 self.assertIn('Preparar otro plan tras revisar el resultado',markdown)
                                 self.assertIn('Revisar no confirma resultados ni concede permisos',markdown)
-                            response = client.post('/api/v1/copilot/chat',json={'engagement_id':'fixture','agent_id':'general','messages':[{'role':'user','content':'¿Cómo continúo?'}], 'context_review_token': result.json()['context_review_token'], 'reviewed_context': markdown})
+                            messages = [{'role':'user','content':'¿Cómo continúo?'}]
+                            reviewed = client.post('/api/v1/copilot/review', json={'engagement_id':'fixture','agent_id':'general','messages':messages})
+                            self.assertEqual(reviewed.status_code, 200, reviewed.text)
+                            response = client.post('/api/v1/copilot/chat',json={'engagement_id':'fixture','agent_id':'general','source_messages':messages,'reviewed_messages':messages, 'context_review_token': reviewed.json()['context_review_token'], 'reviewed_context': markdown})
                             self.assertEqual(response.status_code,200,response.text)
                             prompt = chat.call_args.args[0].messages[0].content
                             self.assertIn(job['run_id'],prompt)

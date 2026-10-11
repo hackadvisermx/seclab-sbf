@@ -1032,12 +1032,23 @@
         <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-3xl w-full p-6 shadow-2xl space-y-4 my-8 max-h-[85vh] overflow-y-auto">
           <div class="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 class="text-sm font-mono font-bold text-white flex items-center space-x-2">
-              <span>{{ contextReview ? '📋 Revisar contexto antes de enviar' : '📋 Contexto Vivo (pt-agent-context)' }}</span>
+              <span>{{ contextReview ? '📋 Revisar pregunta, historial y contexto' : '📋 Contexto Vivo (pt-agent-context)' }}</span>
             </h2>
             <button @click="closeContextInspection" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
           </div>
-          <p v-if="contextReview" class="text-xs text-amber-200">Se enviarán tu pregunta, el historial mostrado y el texto de abajo al modelo seleccionado ({{ contextReview.modelSelection }}). El perfil puede usar proveedores del Vault como fallback. Borra o sustituye aquí cualquier dato que no quieras compartir. El contexto puede contener texto de archivos no confiables.</p>
+          <p v-if="contextReview" class="text-xs text-amber-200">Revisa la pregunta, el historial y el contexto antes de enviarlos al modelo seleccionado ({{ contextReview.modelSelection }}). Puedes editar u omitir mensajes anteriores. El proveedor recibirá el texto revisado que aparece abajo junto con las instrucciones fijas del sistema. El perfil puede usar proveedores del Vault como fallback. El contexto puede contener texto de archivos no confiables.</p>
           <p v-if="contextPreviewError" role="alert" class="text-xs text-red-300">{{ contextPreviewError }}</p>
+          <div v-if="contextReview" class="space-y-3" data-testid="copilot-transcript-review">
+            <h3 class="text-xs font-mono font-bold text-white">Pregunta e historial que se enviarán</h3>
+            <div v-for="(message, index) in contextReview.reviewedMessages" :key="index" class="space-y-1 rounded-sm border border-slate-700 p-3">
+              <div class="flex items-center justify-between text-xs text-slate-300">
+                <span>{{ index === contextReview.reviewedMessages.length - 1 ? 'Pregunta actual' : message.role === 'user' ? 'Pregunta anterior' : 'Respuesta anterior' }}</span>
+                <button v-if="index < contextReview.reviewedMessages.length - 1" type="button" @click="contextReview.reviewedMessages.splice(index, 1)" class="text-amber-300 hover:text-amber-100">Omitir del envío</button>
+              </div>
+              <textarea v-model="message.content" :aria-label="`Mensaje revisado ${index + 1}`" class="w-full min-h-20 bg-[#050811] border border-slate-700 p-2 text-xs text-slate-200 font-mono" spellcheck="false" />
+            </div>
+          </div>
+          <h3 v-if="contextReview" class="text-xs font-mono font-bold text-white">Contexto que se enviará</h3>
           <div class="bg-[#050811] p-4 rounded-sm border border-slate-800 text-xs font-mono text-slate-300 max-h-[500px] overflow-y-auto">
             <textarea v-if="contextReview" v-model="injectedContextText" aria-label="Contexto revisado para enviar" class="w-full min-h-[340px] bg-transparent text-slate-200 font-mono whitespace-pre-wrap outline-hidden" spellcheck="false" />
             <pre v-else class="whitespace-pre-wrap">{{ injectedContextText }}</pre>
@@ -1049,7 +1060,7 @@
             >
               Cerrar
             </button>
-            <button v-if="contextReview" @click="confirmCopilotMessage" :disabled="!contextReview.token || !!contextPreviewError" class="px-4 py-1.5 rounded-sm bg-cyan-500 text-slate-950 text-xs font-mono font-bold disabled:opacity-40">Enviar contexto revisado</button>
+            <button v-if="contextReview" @click="confirmCopilotMessage" :disabled="!contextReview.token || !!contextPreviewError || !contextReview.reviewedMessages.at(-1)?.content.trim()" class="px-4 py-1.5 rounded-sm bg-cyan-500 text-slate-950 text-xs font-mono font-bold disabled:opacity-40">Enviar contenido revisado</button>
           </div>
         </div>
       </div>
@@ -2714,10 +2725,18 @@ async function loadContextInspection(userText = null) {
   const selection = copilotSelection()
   showContextModal.value = true
   contextPreviewError.value = ''
-  contextReview.value = userText === null ? null : { project, type, agent, modelSelection, selection, userText, token: '' }
+  const sourceMessages = userText === null ? [] : [
+    ...copilotMessages.value.filter(message => message.model !== 'error').map(message => ({ role: message.role, content: message.content })),
+    { role: 'user', content: userText },
+  ]
+  contextReview.value = userText === null ? null : { project, type, agent, modelSelection, selection,
+    sourceMessages, reviewedMessages: sourceMessages.map(message => ({ ...message })), token: '' }
   injectedContextText.value = userText === null ? 'Generando contexto en tiempo real con pt-agent-context...' : ''
   try {
-    const res = await api.getCopilotContext(project, agent, type, selection)
+    const res = userText === null
+      ? await api.getCopilotContext(project, agent, type, selection)
+      : await api.reviewCopilotRequest({ engagement_id: project, type, agent_id: agent,
+          messages: sourceMessages, ...selection })
     if (request !== contextRequest || project !== engId.value || type !== engType.value || agent !== selectedAgent.value || modelSelection !== copilotSelectedModel.value || !showContextModal.value) return
     injectedContextText.value = res.context || 'Sin contexto disponible.'
     if (contextReview.value) {
@@ -2757,14 +2776,20 @@ async function confirmCopilotMessage() {
     contextPreviewError.value = 'Cambió el proyecto, agente o modelo. Cierra y revisa el contexto de nuevo.'
     return
   }
+  const reviewedMessages = review.reviewedMessages.map(message => ({ role: message.role, content: message.content }))
+  if (!reviewedMessages.length || reviewedMessages.at(-1).role !== 'user' || !reviewedMessages.at(-1).content.trim()) {
+    contextPreviewError.value = 'Escribe la pregunta revisada antes de enviar.'
+    return
+  }
   const reviewedContext = injectedContextText.value
   closeContextInspection()
   const request = ++copilotRequest
   const project = review.project, type = review.type
-  const userText = review.userText
+  const userText = reviewedMessages.at(-1).content
+  const previousMessages = copilotMessages.value.map(message => ({ ...message }))
   copilotInput.value = ''
 
-  copilotMessages.value.push({ role: 'user', content: userText })
+  copilotMessages.value = reviewedMessages.map(message => ({ ...message }))
   isCopilotThinking.value = true
 
   try {
@@ -2772,7 +2797,8 @@ async function confirmCopilotMessage() {
       engagement_id: review.project,
       type: review.type,
       agent_id: review.agent,
-      messages: copilotMessages.value.map(m => ({ role: m.role, content: m.content })),
+      source_messages: review.sourceMessages.map(message => ({ role: message.role, content: message.content })),
+      reviewed_messages: reviewedMessages,
       context_review_token: review.token,
       reviewed_context: reviewedContext,
       ...review.selection,
@@ -2792,9 +2818,9 @@ async function confirmCopilotMessage() {
   } catch (err) {
     if (request !== copilotRequest || project !== engId.value || type !== engType.value) return
     if (err.status === 409) {
-      copilotMessages.value.pop()
+      copilotMessages.value = previousMessages
       copilotInput.value = userText
-      copilotMessages.value.push({ role: 'assistant', content: 'El contexto o modelo cambió. Revisa de nuevo antes de enviar; tu pregunta sigue en el campo.', model: 'error' })
+      copilotMessages.value.push({ role: 'assistant', content: 'El contexto, historial o modelo cambió. Revisa de nuevo antes de enviar; tu pregunta sigue en el campo.', model: 'error' })
       return
     }
     copilotMessages.value.push({

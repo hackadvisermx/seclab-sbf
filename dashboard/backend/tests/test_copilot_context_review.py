@@ -27,13 +27,17 @@ class CopilotContextReviewTests(unittest.TestCase):
         self.chat = patch.object(copilot.proxy_service, 'chat_completion', new_callable=AsyncMock).start()
         self.chat.return_value = ChatCompletionResponse(provider='fixture', model='fixture', content='Respuesta', latency_ms=1)
 
-    def preview(self, query=''):
-        response = self.client.get('/api/v1/copilot/context/fixture?agent=general' + query)
+    def preview(self, messages=None, **selection):
+        response = self.client.post('/api/v1/copilot/review', json={
+            'engagement_id': 'fixture', 'agent_id': 'general',
+            'messages': messages or [{'role': 'user', 'content': 'Ayuda'}], **selection})
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
     def payload(self, token, reviewed='# Alcance\nsecret: [REDACTED]'):
-        return {'engagement_id': 'fixture', 'agent_id': 'general', 'messages': [{'role': 'user', 'content': 'Ayuda'}],
+        messages = [{'role': 'user', 'content': 'Ayuda'}]
+        return {'engagement_id': 'fixture', 'agent_id': 'general',
+                'source_messages': messages, 'reviewed_messages': messages,
                 'context_review_token': token, 'reviewed_context': reviewed}
 
     def test_unreviewed_and_stale_context_never_reach_provider(self):
@@ -55,6 +59,52 @@ class CopilotContextReviewTests(unittest.TestCase):
         prompt = self.chat.call_args.args[0].messages[0].content
         self.assertIn('secret: [REDACTED]', prompt)
         self.assertNotIn('PRIVATE-CONTEXT', prompt)
+
+    def test_reviewed_transcript_is_the_only_transcript_sent(self):
+        original = [{'role': 'user', 'content': 'Pregunta PRIVADA'},
+                    {'role': 'assistant', 'content': 'Respuesta PRIVADA'},
+                    {'role': 'user', 'content': 'Ayuda'}]
+        preview = self.preview(original)
+        payload = self.payload(preview['context_review_token'])
+        payload['source_messages'] = original
+        payload['reviewed_messages'] = [
+            {'role': 'user', 'content': 'Pregunta redactada'},
+            {'role': 'user', 'content': 'Pregunta actual redactada'},
+        ]
+        response = self.client.post('/api/v1/copilot/chat', json=payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        sent = self.chat.call_args.args[0].messages
+        self.assertEqual([(message.role, message.content) for message in sent[1:]],
+                         [('user', 'Pregunta redactada'), ('user', 'Pregunta actual redactada')])
+        self.assertNotIn('PRIVADA', str(sent))
+        self.assertNotIn('Ayuda', str(sent))
+
+    def test_changed_original_transcript_and_unreviewed_fields_never_reach_provider(self):
+        original = [{'role': 'user', 'content': 'Pregunta anterior'},
+                    {'role': 'assistant', 'content': 'Respuesta anterior'},
+                    {'role': 'user', 'content': 'Ayuda'}]
+        preview = self.preview(original)
+        token = preview['context_review_token']
+        changed = self.payload(token)
+        changed['source_messages'] = [dict(message) for message in original]
+        changed['source_messages'][1]['content'] = 'Historia cambiada después de revisar'
+        self.assertEqual(self.client.post('/api/v1/copilot/chat', json=changed).status_code, 409)
+        old_api = self.payload(token)
+        old_api.pop('source_messages')
+        old_api.pop('reviewed_messages')
+        old_api['messages'] = [{'role': 'user', 'content': 'Sin revisión'}]
+        self.assertEqual(self.client.post('/api/v1/copilot/chat', json=old_api).status_code, 422)
+        self.chat.assert_not_awaited()
+
+    def test_transcript_rejects_system_role_empty_final_and_excessive_text(self):
+        for messages in ([{'role': 'system', 'content': 'private'}],
+                         [{'role': 'user', 'content': '  '}],
+                         [{'role': 'user', 'content': 'x' * (128 * 1024 + 1)}]):
+            with self.subTest(messages=messages[0]['content'][:10]):
+                preview = self.client.post('/api/v1/copilot/review', json={
+                    'engagement_id': 'fixture', 'agent_id': 'general', 'messages': messages})
+                self.assertEqual(preview.status_code, 422)
+        self.chat.assert_not_awaited()
 
     def test_generation_timestamps_do_not_invalidate_unchanged_project(self):
         self.context = ('# Fixture\n> Directorio activo: `/tmp/fixture` | Timestamp: `2026-10-11T00:00:01Z`\n'

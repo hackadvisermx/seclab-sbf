@@ -191,10 +191,13 @@ class TestOpenRouterProxy(unittest.TestCase):
                     "agent_id": "triage-agent",
                     "provider": "openrouter",
                     "model": "deepseek/deepseek-r1",
-                    "messages": [{"role": "user", "content": "Analizar alcance"}],
+                    "source_messages": [{"role": "user", "content": "Analizar alcance"}],
                 }
-                preview = client.get('/api/v1/copilot/context/test_eng', params={
-                    'agent': 'triage-agent', 'provider': post_data['provider'], 'model': post_data['model']})
+                post_data['reviewed_messages'] = post_data['source_messages']
+                preview = client.post('/api/v1/copilot/review', json={
+                    'engagement_id': 'test_eng', 'agent_id': 'triage-agent',
+                    'provider': post_data['provider'], 'model': post_data['model'],
+                    'messages': post_data['source_messages']})
                 self.assertEqual(preview.status_code, 200, preview.text)
                 post_data['context_review_token'] = preview.json()['context_review_token']
                 post_data['reviewed_context'] = preview.json()['context']
@@ -258,10 +261,13 @@ class TestOpenRouterProxy(unittest.TestCase):
                         "agent_id": "triage-agent",
                         "provider": "openrouter",
                         "model": "deepseek/deepseek-r1",
-                        "messages": [{"role": "user", "content": "¿Qué pruebo?"}],
+                        "source_messages": [{"role": "user", "content": "¿Qué pruebo?"}],
                     }
-                    preview = client.get('/api/v1/copilot/context/test_eng_scope', params={
-                        'agent': 'triage-agent', 'provider': post_data['provider'], 'model': post_data['model']})
+                    post_data['reviewed_messages'] = post_data['source_messages']
+                    preview = client.post('/api/v1/copilot/review', json={
+                        'engagement_id': 'test_eng_scope', 'agent_id': 'triage-agent',
+                        'provider': post_data['provider'], 'model': post_data['model'],
+                        'messages': post_data['source_messages']})
                     self.assertEqual(preview.status_code, 200, preview.text)
                     post_data['context_review_token'] = preview.json()['context_review_token']
                     post_data['reviewed_context'] = preview.json()['context']

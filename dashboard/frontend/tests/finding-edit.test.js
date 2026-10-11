@@ -36,7 +36,8 @@ async function clickText(root, text) {
 async function mountDecision(api, route) {
   return mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
     getLoot: async () => ({ credentials: [], files: [] }),
-    getCopilotContext: async () => ({ context: '# Fixture', context_review_token: 'fixture-token' }), ...api }, route)
+    getCopilotContext: async () => ({ context: '# Fixture' }),
+    reviewCopilotRequest: async () => ({ context: '# Fixture', context_review_token: 'fixture-token' }), ...api }, route)
 }
 const nextDecisionFixture = {
   decision_job: { run_id: 'a'.repeat(32), status: 'blocked', stage: 'probe', dry_run: false },
@@ -648,7 +649,7 @@ test('Copiloto muestra validación no disponible y conserva la sugerencia como t
   const view = await mount({ getVaultKeys: async () => [], getFindings: async () => [], getArtifacts: async () => [],
     getLoot: async () => ({ credentials: [], files: [] }),
     runRecon: async () => { executed = true },
-    getCopilotContext: async () => ({ context: '# Fixture', context_review_token: 'fixture-token' }),
+    reviewCopilotRequest: async () => ({ context: '# Fixture', context_review_token: 'fixture-token' }),
     sendCopilotChat: async data => { payload = structuredClone(data); return { content: warning + original, provider: 'fixture', model: 'fixture-model', latency_ms: 12 } } })
   try {
     await clickText(view.root, 'Copiloto Táctico')
@@ -658,8 +659,11 @@ test('Copiloto muestra validación no disponible y conserva la sugerencia como t
     input.closest('form').dispatchEvent(new browser.window.Event('submit', { bubbles: true, cancelable: true }))
     await flush()
     assert.equal(payload, undefined)
-    await clickText(view.root, 'Enviar contexto revisado')
-    assert.equal(payload.messages[0].content, 'Ayuda con evidencia')
+    const send = [...view.root.querySelectorAll('button')].find(button => button.textContent.includes('Enviar contenido revisado'))
+    assert.equal(send?.disabled, false, view.root.textContent.slice(-900))
+    await clickText(view.root, 'Enviar contenido revisado')
+    assert.equal(payload.reviewed_messages[0].content, 'Ayuda con evidencia')
+    assert.equal(payload.source_messages[0].content, 'Ayuda con evidencia')
     assert.equal(payload.reviewed_context, '# Fixture')
     assert.match(view.root.textContent, /Validación de alcance no disponible/)
     assert.ok([...view.root.querySelectorAll('pre')].some(pre => pre.textContent === warning + original))
@@ -667,6 +671,45 @@ test('Copiloto muestra validación no disponible y conserva la sugerencia como t
     assert.equal(executed, false)
     assert.match(view.root.textContent, /fixture-model/)
     assert.match(view.root.textContent, /no ejecuta comandos/)
+  } finally { view.cleanup() }
+})
+
+test('Copiloto permite redactar pregunta e historial y omitir una respuesta antes del envío', async () => {
+  const reviews = [], sends = []
+  const view = await mountDecision({
+    reviewCopilotRequest: async data => { reviews.push(structuredClone(data)); return { context: '# Alcance', context_review_token: `token-${reviews.length}` } },
+    sendCopilotChat: async data => { sends.push(structuredClone(data)); return { content: 'Respuesta privada', provider: 'fixture', model: 'fixture-model', latency_ms: 1 } },
+  })
+  try {
+    await clickText(view.root, 'Copiloto Táctico')
+    const input = view.root.querySelector('input[placeholder^="Pregunta al copiloto"]')
+    input.value = 'Pregunta privada'; input.dispatchEvent(new browser.window.Event('input', { bubbles: true })); await flush()
+    await clickText(view.root, 'Revisar y enviar')
+    await clickText(view.root, 'Enviar contenido revisado')
+    assert.equal(sends.length, 1)
+
+    input.value = 'Segunda pregunta privada'; input.dispatchEvent(new browser.window.Event('input', { bubbles: true })); await flush()
+    await clickText(view.root, 'Revisar y enviar')
+    const rows = [...view.root.querySelectorAll('[data-testid="copilot-transcript-review"] > div')]
+    assert.equal(rows.length, 3)
+    rows[0].querySelector('textarea').value = 'Pregunta anterior [REDACTADA]'
+    rows[0].querySelector('textarea').dispatchEvent(new browser.window.Event('input', { bubbles: true }))
+    rows[1].querySelector('button').click(); await flush()
+    const remaining = [...view.root.querySelectorAll('[data-testid="copilot-transcript-review"] > div')]
+    remaining[1].querySelector('textarea').value = 'Pregunta actual [REDACTADA]'
+    remaining[1].querySelector('textarea').dispatchEvent(new browser.window.Event('input', { bubbles: true }))
+    await clickText(view.root, 'Enviar contenido revisado')
+
+    assert.deepEqual(reviews[1].messages.map(message => message.content),
+      ['Pregunta privada', 'Respuesta privada', 'Segunda pregunta privada'])
+    assert.deepEqual(sends[1].source_messages, reviews[1].messages)
+    assert.deepEqual(sends[1].reviewed_messages, [
+      { role: 'user', content: 'Pregunta anterior [REDACTADA]' },
+      { role: 'user', content: 'Pregunta actual [REDACTADA]' },
+    ])
+    assert.doesNotMatch(JSON.stringify(sends[1].reviewed_messages), /privada/i)
+    assert.equal(view.root.querySelectorAll('[data-testid="copilot-transcript-review"] > div').length, 0)
+    assert.match(view.root.textContent, /Pregunta actual \[REDACTADA\]/)
   } finally { view.cleanup() }
 })
 
@@ -958,7 +1001,7 @@ for (const failure of ['timeout', 'sin proveedor', 'contenido vacío', 'contenid
     const input = view.root.querySelector('input[placeholder^="Pregunta al copiloto"]')
     input.value = 'Ayuda'; input.dispatchEvent(new window.Event('input')); await flush()
     await clickText(view.root, 'Revisar y enviar')
-    await clickText(view.root, 'Enviar contexto revisado'); await flush()
+    await clickText(view.root, 'Enviar contenido revisado'); await flush()
     const card = view.root.querySelector('[data-testid=copilot-local-guidance]')
     assert.ok(card)
     assert.match(card.textContent, /Revisar alcance tras el bloqueo/)
@@ -996,7 +1039,7 @@ for (const rejected of [false, true]) test(`respuesta IA tardía (${rejected ? '
     const input = view.root.querySelector('input[placeholder^="Pregunta al copiloto"]')
     input.value = 'Consulta antigua'; input.dispatchEvent(new window.Event('input')); await flush()
     await clickText(view.root, 'Revisar y enviar')
-    await clickText(view.root, 'Enviar contexto revisado')
+    await clickText(view.root, 'Enviar contenido revisado')
     route.params.id = 'other'; await flush()
     if (rejected) rejectChat(new Error('Fallo antiguo')); else resolveChat({ content: 'Respuesta antigua' })
     await flush(); await flush()
@@ -1060,7 +1103,7 @@ test('cambiar especialidad cierra contexto y no mezcla una respuesta tardía', a
 test('error de contexto bloquea envío y permite orientación local', async () => {
   const error = 'Contexto no disponible: el generador falló. Revisa los archivos locales y reintenta.'
   let chats = 0
-  const view = await mountDecision({ getCopilotContext: async () => { throw new Error(error) }, sendCopilotChat: async () => { chats++; throw new Error(error) }, getNextStep: async () => nextDecisionFixture })
+  const view = await mountDecision({ getCopilotContext: async () => { throw new Error(error) }, reviewCopilotRequest: async () => { throw new Error(error) }, sendCopilotChat: async () => { chats++; throw new Error(error) }, getNextStep: async () => nextDecisionFixture })
   try {
     await clickText(view.root, 'Copiloto Táctico')
     await clickText(view.root, 'Ver Contexto pt-context')
@@ -1080,7 +1123,7 @@ test('error de contexto bloquea envío y permite orientación local', async () =
 test('contexto obsoleto conserva la pregunta y exige una nueva revisión', async () => {
   let previews = 0, chats = 0
   const view = await mountDecision({
-    getCopilotContext: async () => ({ context: `Versión ${++previews}`, context_review_token: `token-${previews}` }),
+    reviewCopilotRequest: async () => ({ context: `Versión ${++previews}`, context_review_token: `token-${previews}` }),
     sendCopilotChat: async () => { chats++; const error = new Error('El contexto cambió'); error.status = 409; throw error },
   })
   try {
@@ -1088,7 +1131,7 @@ test('contexto obsoleto conserva la pregunta y exige una nueva revisión', async
     const input = view.root.querySelector('input[placeholder^="Pregunta al copiloto"]')
     input.value = 'Pregunta pendiente'; input.dispatchEvent(new window.Event('input', { bubbles: true })); await flush()
     await clickText(view.root, 'Revisar y enviar')
-    await clickText(view.root, 'Enviar contexto revisado')
+    await clickText(view.root, 'Enviar contenido revisado')
     assert.equal(chats, 1)
     assert.equal(input.value, 'Pregunta pendiente')
     assert.match(view.root.textContent, /Revisa de nuevo antes de enviar/)

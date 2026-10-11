@@ -257,7 +257,6 @@ make verify
 make smoke-test
 make build-full
 make compose-config ENV_FILE=.env.example
-go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 make sbom
 make tf-fmt
 make tflint-check
@@ -266,11 +265,19 @@ make tf-render-check
 make fail2ban-check
 ```
 
+Para verificar un PR completo sin pushes intermedios ni reconstruir la base desde Docker Hub, usa una imagen base local cuyo hash de insumos coincida con el checkout (sustituye el tag del ejemplo si tu base tiene otro nombre):
+
+```bash
+make local-pr-gates LOCAL_GATE_MODE=build LOCAL_GATE_BASE_IMAGE=seclab-sbf:base-phase172 LOCAL_GATE_IMAGE=seclab-sbf:full-local-pr
+```
+
+`LOCAL_GATE_MODE=check` reutiliza la imagen full y rechaza una versión obsoleta. El runner ejecuta pruebas Python/backend/frontend/Chromium, smoke, Actionlint, CVE y SBOM; no arranca el laboratorio. El primer uso puede descargar linters fijados por checksum y las dependencias de npm. Sigue siendo obligatorio el CI del commit exacto antes de fusionar un PR. Ver [`docs/phase-191.md`](docs/phase-191.md).
+
 Resultados verificados actualmente:
 
 - Builds nativos `linux/arm64` y `linux/amd64`, sin registry: cada máquina construye la suya. El de amd64 se comprobó desde el portátil arm64 con `make build-full BUILD_PLATFORM=linux/amd64 BUILD_TAG=-amd64`: 0 Critical/High y hashes de `ttyd` y `dalfox` idénticos a los del lockfile.
 - `make scan-image`: 0 vulnerabilidades Critical/High en las imágenes probadas.
-- `make sbom`: emite el SBOM CycloneDX 1.7 en `tmp/sbom/`, con el nombre ligado a la imagen y a su hash de insumos. Verificado en `light` (1.390 componentes) y en `full` (1.969).
+- `make sbom`: emite el SBOM CycloneDX 1.7 en `tmp/sbom/`, con el nombre ligado a la imagen y a su hash de insumos. Verificado en la imagen full de fase191; hash del artefacto en [`docs/phase-191.md`](docs/phase-191.md).
 - `make smoke-test`: valida en contenedor efímero los permisos de `/workspace` para `tester`, la carga limpia de Zsh interactivo con `pt-help`, runtimes de Python/Ruby/Perl, respuesta de herramientas ofensivas clave y el estado del proxy `pt-forward`.
 - TUN, `NET_ADMIN` y `tun0` presentes en Docker Desktop macOS.
 - `vpntry` real validado con `tryhackme.ovpn`.

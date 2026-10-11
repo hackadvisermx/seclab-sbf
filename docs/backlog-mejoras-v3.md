@@ -1,6 +1,6 @@
 # Backlog de mejoras v3 — auditoría trazable y segura
 
-Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `07b4951` de fase186. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
+Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, con la fase188 implementada sobre `1b7648f`. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
 
 ## Propósito
 
@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases181/182/184/185/186 están terminadas y fusionadas. La fase186 impide que enlaces de fichas externas alimenten contexto y decisiones; las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases181/182/184/185/186 están terminadas y fusionadas. La [fase188](phase-188.md) evita que metadata repetida cierre el checklist; su PR/CI/merge se verifican por separado. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -38,6 +38,19 @@ Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182
 | V3-07 | Métricas de éxito propuestas en este documento | Definición operativa, denominadores, retención y medición local validada |
 
 Las notas de entrega inferiores describen lo comprobado y pendiente en su fecha. Esta síntesis incorpora los avances posteriores; ninguna iniciativa se declara completa sólo por cerrar una fase.
+
+Estimación de planificación al 2026-10-11: **22–35 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Es una descomposición tentativa, no un porcentaje ni una promesa de plazo; la validación con personas y los hallazgos de integración pueden cambiarla.
+
+| Iniciativa | Entregas adicionales estimadas | Bloque principal |
+|---|---:|---|
+| V3-00 | 2–3 | Sesiones con perfiles de uso y línea base de fricciones |
+| V3-01 | 2–4 | Caminos gestionados restantes y casos del matcher |
+| V3-02 | 3–5 | Timeline y vínculo estructurado de jobs/etapas/fichas |
+| V3-03 | 4–6 | Procedencia, identidad de artefactos e historial de revisiones |
+| V3-04 | 4–6 | Esquema y recorrido de playbooks deterministas |
+| V3-05 | 3–5 | Citas navegables, privacidad y contenido hostil |
+| V3-06 | 2–3 | Vista y checkpoints de supervisión validados |
+| V3-07 | 2–3 | Métricas operativas y medición local |
 
 ## Estado de partida comprobado (2026-10-07)
 

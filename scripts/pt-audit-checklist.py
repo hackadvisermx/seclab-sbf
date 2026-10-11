@@ -115,6 +115,8 @@ def parse_simple_yaml_frontmatter(content: str) -> Tuple[Dict[str, str], str]:
                 if ":" in line_str:
                     key, val = line_str.split(":", 1)
                     key = key.strip()
+                    if key in metadata:
+                        raise ValueError("Metadata con claves duplicadas; revisa la fuente original.")
                     val = val.strip().strip("'\"")
                     if " #" in val:
                         val = val.split(" #")[0].strip().strip("'\"")
@@ -217,7 +219,7 @@ class AuditChecklistEvaluator:
                     "has_raw_evidence": has_raw,
                     "body_snippet": body[:500].lower(),
                 })
-            except (OSError, UnicodeError, ValueError):
+            except (OSError, UnicodeError, ValueError) as error:
                 findings.append({
                     "file": md_file.name,
                     "path": str(md_file),
@@ -229,6 +231,8 @@ class AuditChecklistEvaluator:
                     "has_poc": False,
                     "has_raw_evidence": False,
                     "body_snippet": "",
+                    "source_error": ("duplicate_metadata" if isinstance(error, ValueError)
+                                     and not isinstance(error, UnicodeError) else "unreadable"),
                 })
 
         return findings

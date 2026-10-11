@@ -88,6 +88,25 @@ class ReportSafetyTests(unittest.TestCase):
             report.build_report(self.root)
         self.assertEqual((self.root / 'REPORT.md').read_bytes(), previous)
 
+    def test_duplicate_finding_metadata_blocks_check_build_and_pack_without_replacing_outputs(self):
+        finding = self.root / 'evidence/finding.md'
+        report_path = report.build_report(self.root)
+        previous_report = report_path.read_bytes()
+        previous_pack = packer.pack_engagement(self.root, sanitize=True)['archive_path']
+        previous_archive = pathlib.Path(previous_pack).read_bytes()
+        original = finding.read_bytes()
+        for key, extra in [('status', 'status: CANDIDATE\n'), ('status', 'status: PROVEN\n'),
+                           ('asset', 'asset: excluded.example.test\n'), ('artifact_refs', 'artifact_refs: []\n')]:
+            with self.subTest(key=key, extra=extra):
+                finding.write_bytes(original.replace(b'---\n', ('---\n' + extra).encode(), 1))
+                self.assertFalse(report.check_findings(self.root)[0])
+                with self.assertRaises(report.ReportValidationError):
+                    report.build_report(self.root)
+                with self.assertRaises(ValueError):
+                    packer.pack_engagement(self.root, sanitize=True)
+                self.assertEqual(report_path.read_bytes(), previous_report)
+                self.assertEqual(pathlib.Path(previous_pack).read_bytes(), previous_archive)
+                self.assertEqual(finding.read_bytes(), original.replace(b'---\n', ('---\n' + extra).encode(), 1))
     def test_finding_manifest_links_identity_source_and_selected_versions_in_both_formats(self):
         import zipfile
         identity = uuid.uuid4().hex

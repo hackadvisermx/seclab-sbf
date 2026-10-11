@@ -679,14 +679,14 @@
                   class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold"
                   :class="getSeverityClass(f.frontmatter?.severity)"
                 >
-                  {{ f.frontmatter?.severity || 'MEDIUM' }}
+                  {{ f.source_error ? 'Sin clasificar' : f.frontmatter?.severity || 'MEDIUM' }}
                 </span>
                 <span
                   v-if="f.frontmatter?.status"
                   class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold border"
                   :class="f.confirmation_error ? 'text-amber-300 border-amber-700' : getFindingStatusClass(f.frontmatter?.status)"
                 >
-                  {{ f.confirmation_error ? 'Revisión pendiente (' + f.frontmatter?.status + ')' : f.frontmatter?.status }}
+                  {{ f.source_error ? 'Estado sin interpretar' : f.confirmation_error ? 'Revisión pendiente (' + f.frontmatter?.status + ')' : f.frontmatter?.status }}
                 </span>
               </div>
               <span class="text-xs font-mono text-cyan-400 font-bold">
@@ -703,10 +703,18 @@
             <div class="mt-3 text-xs text-slate-300 font-sans line-clamp-3 bg-slate-900/50 p-2.5 rounded-sm border border-slate-800">
               {{ f.body }}
             </div>
+            <div v-if="f.source_error" data-testid="finding-source-error" class="text-xs text-amber-300 space-y-2">
+              <p>{{ f.source_error }}</p>
+              <p>Estado sin interpretar. Repara el original en el workspace y recarga las fichas; no se modifica al revisar.</p>
+              <div class="flex flex-wrap gap-3">
+                <button @click="openFindingArtifact({ path: 'evidence/' + f.filename, sha256: f.source_sha256 })" class="underline">Revisar fuente original</button>
+                <button @click="loadFindings" class="underline">Recargar fichas tras revisar la fuente</button>
+              </div>
+            </div>
             <p v-if="f.confirmation_error" class="text-xs text-amber-300">Confirmación pendiente de revisión: {{ f.confirmation_error }}</p>
             <p v-if="f.verification_rationale" class="mt-2 text-xs text-slate-300 whitespace-pre-wrap">Motivo de verificación: {{ f.verification_rationale }}</p>
             <p v-if="f.identity_error" class="text-xs text-amber-300">{{ f.identity_error }}</p>
-            <p v-else data-testid="finding-identity" class="mt-2 text-xs font-mono text-slate-400 break-all">Identidad persistente: {{ f.finding_id || 'No registrada; se asignará al guardar la ficha anterior.' }}</p>
+            <p v-else-if="!f.source_error" data-testid="finding-identity" class="mt-2 text-xs font-mono text-slate-400 break-all">Identidad persistente: {{ f.finding_id || 'No registrada; se asignará al guardar la ficha anterior.' }}</p>
             <p v-if="f.artifact_refs_error" class="text-xs text-amber-300">{{ f.artifact_refs_error }}</p>
             <div v-for="reference in f.artifact_refs || []" :key="reference.path" class="mt-2 text-xs font-mono break-words" data-testid="finding-artifact-ref">
               <button @click="openFindingArtifact(reference)" class="text-cyan-300 underline">Abrir {{ reference.path }}</button>
@@ -723,13 +731,14 @@
             <div class="flex items-center space-x-2">
               <button
                 @click="editFinding(f)"
+                :disabled="!!f.source_error"
                 class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400"
               >
                 Editar
               </button>
               <button
                 @click="deleteFindingAction(f)"
-                :disabled="!!findingDeletePending[f.slug]"
+                :disabled="!!findingDeletePending[f.slug] || !!f.source_error"
                 class="px-2 py-1 rounded-sm bg-red-950/40 hover:bg-red-900/60 text-red-400"
               >
                 {{ findingDeletePending[f.slug] ? 'Eliminando...' : 'Eliminar' }}
@@ -2365,6 +2374,7 @@ function openNewFindingModal() {
 }
 
 function editFinding(f) {
+  if (f.source_error) return
   resetFindingEditor()
   findingArtifactPath.value = ''
   findingArtifactDraft.value = null
@@ -2454,7 +2464,7 @@ async function compareCurrentFinding() {
   try {
     const latest = await api.getFinding(project, slug, type)
     if (!current()) return
-    if (!/^[0-9a-f]{64}$/.test(latest.source_sha256 || '') || latest.slug !== slug || latest.artifact_refs_error || latest.identity_error ||
+    if (!/^[0-9a-f]{64}$/.test(latest.source_sha256 || '') || latest.slug !== slug || latest.source_error || latest.artifact_refs_error || latest.identity_error ||
       (findingForm.value.finding_id && findingForm.value.finding_id !== latest.finding_id)) throw new Error('No se puede usar esta ficha como base: revisa su identidad o metadatos.')
     findingLatest.value = latest
   } catch (err) {
@@ -2476,7 +2486,7 @@ watch(showFindingModal, open => { if (!open) resetFindingEditor() })
 
 async function deleteFindingAction(finding) {
   const slug = finding.slug
-  if (findingDeletePending.value[slug]) return
+  if (findingDeletePending.value[slug] || finding.source_error) return
   if (!/^[0-9a-f]{64}$/.test(finding.source_sha256 || '')) {
     findingDeleteErrors.value[slug] = 'Falta la versión de lectura. Recarga y revisa la ficha antes de eliminar.'
     return

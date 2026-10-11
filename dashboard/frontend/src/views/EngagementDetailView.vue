@@ -715,6 +715,8 @@
             <p v-if="f.verification_rationale" class="mt-2 text-xs text-slate-300 whitespace-pre-wrap">Motivo de verificación: {{ f.verification_rationale }}</p>
             <p v-if="f.identity_error" class="text-xs text-amber-300">{{ f.identity_error }}</p>
             <p v-else-if="!f.source_error" data-testid="finding-identity" class="mt-2 text-xs font-mono text-slate-400 break-all">Identidad persistente: {{ f.finding_id || 'No registrada; se asignará al guardar la ficha anterior.' }}</p>
+            <p v-if="f.source_job_id" data-testid="finding-job-origin" class="mt-1 text-xs font-mono text-slate-400 break-all">Origen de ejecución: Job {{ f.source_job_id }}<span v-if="f.source_stage"> (etapa: {{ f.source_stage }})</span></p>
+            <p v-if="f.source_job_error" class="text-xs text-amber-300">Origen de job pendiente de revisión: {{ f.source_job_error }}</p>
             <p v-if="f.artifact_refs_error" class="text-xs text-amber-300">{{ f.artifact_refs_error }}</p>
             <div v-for="reference in f.artifact_refs || []" :key="reference.path" class="mt-2 text-xs font-mono break-words" data-testid="finding-artifact-ref">
               <button @click="openFindingArtifact(reference)" class="text-cyan-300 underline">Abrir {{ reference.path }}</button>
@@ -1821,6 +1823,21 @@
             <p v-if="findingConfirmationIssue" role="alert" class="text-amber-300">{{ findingConfirmationIssue }}</p>
           </section>
 
+          <section class="space-y-2 border-t border-slate-800 pt-3 text-xs" data-testid="finding-provenance-editor">
+            <h3 class="font-bold text-cyan-300">Procedencia de ejecución</h3>
+            <p class="text-slate-400">Opcional: vincula el hallazgo al run_id y etapa de un job de reconocimiento registrado.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label for="finding-source-job-id" class="block text-slate-300">Job ID (run_id)</label>
+                <input id="finding-source-job-id" v-model="findingForm.source_job_id" placeholder="run_id hex de 32 caracteres" class="w-full bg-[#070b14] border border-slate-700 p-2 text-slate-100 font-mono text-xs" />
+              </div>
+              <div>
+                <label for="finding-source-stage" class="block text-slate-300">Etapa de origen</label>
+                <input id="finding-source-stage" v-model="findingForm.source_stage" placeholder="subdomains, probe, urls, patterns..." class="w-full bg-[#070b14] border border-slate-700 p-2 text-slate-100 font-mono text-xs" />
+              </div>
+            </div>
+          </section>
+
           <section class="space-y-2 border-t border-slate-800 pt-3 text-xs" data-testid="finding-artifact-editor">
             <h3 class="font-bold text-cyan-300">Artefactos vinculados</h3>
             <p class="text-slate-400">Revisa y vincula una versión de recon/, fuzzing/ o screenshots/. El paquete incluirá los archivos seleccionados. Vincular no confirma el hallazgo.</p>
@@ -2146,6 +2163,8 @@ const findingForm = ref({
   artifact_refs: [],
   artifact_refs_error: null,
   verification_rationale: '',
+  source_job_id: null,
+  source_stage: null,
 })
 const findingConfirmationIssue = computed(() => {
   if (!['PROVEN', 'VERIFIED', 'CONFIRMADO'].includes((findingForm.value.status || '').trim().toUpperCase())) return ''
@@ -2384,6 +2403,8 @@ function openNewFindingModal() {
     artifact_refs: [],
     artifact_refs_error: null,
     verification_rationale: '',
+    source_job_id: null,
+    source_stage: null,
   }
   showFindingModal.value = true
 }
@@ -2416,6 +2437,8 @@ function editFinding(f) {
     artifact_refs: (f.artifact_refs || []).map(reference => ({ ...reference })),
     artifact_refs_error: f.artifact_refs_error || null,
     verification_rationale: f.verification_rationale || '',
+    source_job_id: f.source_job_id || null,
+    source_stage: f.source_stage || null,
   }
   cvssMetrics.value = { AV: 'N', AC: 'L', PR: 'N', UI: 'N', S: 'U', C: 'L', I: 'N', A: 'N' }
   for (const metric of findingForm.value.cvss_vector.split('/').slice(1)) {

@@ -337,6 +337,8 @@ def pack_engagement(
                 raise ValueError('Ficha cambiada o ausente al exportar: ' + source['path'])
             finding_records.append({
                 'finding_id': source['finding_id'], 'identity_status': source['identity_status'],
+                'source_job_id': source.get('source_job_id'),
+                'source_stage': source.get('source_stage'),
                 'source': record,
                 'artifact_refs': [{**records[ref['path']], 'expected_sha256': ref['sha256']}
                                   for ref in source['artifact_refs']],

@@ -17,6 +17,7 @@ import pathlib
 import re
 import json
 import sys
+import tempfile
 from urllib.parse import quote
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -304,6 +305,22 @@ def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[
     return not issues, issues, duplicates
 
 
+def write_report_atomic(output_path: pathlib.Path, payload: bytes) -> None:
+    """Publica bytes completos sin seguir un enlace de salida ni truncar el reporte anterior."""
+    if output_path.is_symlink():
+        raise ValueError("La ruta de salida del reporte no puede ser un enlace simbólico.")
+    fd, temporary = tempfile.mkstemp(prefix=f'.{output_path.name}.', suffix='.tmp', dir=output_path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, output_path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None, artifact_reference_output=None, finding_source_output=None, report_hash_output=None) -> pathlib.Path:
     """Compila el informe final REPORT.md a partir de target.yaml y evidence/*.md."""
     if output_path is None:
@@ -496,7 +513,7 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
     ])
 
     payload = "\n".join(lines).encode("utf-8")
-    output_path.write_bytes(payload)
+    write_report_atomic(output_path, payload)
     if report_hash_output is not None:
         report_hash_output["sha256"] = hashlib.sha256(payload).hexdigest()
     return output_path
@@ -562,7 +579,7 @@ def main() -> int:
     elif action == "build":
         out_file = None
         if len(sys.argv) >= 4:
-            out_file = pathlib.Path(sys.argv[3]).resolve()
+            out_file = pathlib.Path(sys.argv[3]).absolute()
         try:
             res_file = build_report(eng_dir, out_file)
         except (ValueError, OSError) as error:

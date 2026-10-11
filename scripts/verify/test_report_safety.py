@@ -332,6 +332,29 @@ class ReportSafetyTests(unittest.TestCase):
         with self.assertRaises(report.ReportValidationError):
             report.build_report(self.root)
 
+    def test_report_output_symlink_does_not_overwrite_its_target(self):
+        outside = self.root / 'outside.txt'
+        outside.write_bytes(b'outside stays intact')
+        for output in [self.root / 'REPORT.md', self.root / 'custom.md']:
+            with self.subTest(output=output.name):
+                output.symlink_to(outside)
+                with self.assertRaises(ValueError):
+                    report.build_report(self.root, output)
+                if output.name == 'custom.md':
+                    self.assertEqual(self.cli('build', output).returncode, 1)
+                self.assertEqual(outside.read_bytes(), b'outside stays intact')
+                self.assertTrue(output.is_symlink())
+                output.unlink()
+
+    def test_report_output_replacement_failure_preserves_previous_bytes(self):
+        output = self.root / 'REPORT.md'
+        output.write_bytes(b'previous report')
+        with patch.object(report.os, 'replace', side_effect=OSError('replacement failed')):
+            with self.assertRaises(OSError):
+                report.build_report(self.root, output)
+        self.assertEqual(output.read_bytes(), b'previous report')
+        self.assertEqual(list(self.root.glob('.REPORT.md.*.tmp')), [])
+
     def test_cli_blocks_excluded_and_unknown_without_overwriting_reports(self):
         for asset, message in [('excluded.example.test', 'FUERA DE ALCANCE'), ('outside.test', 'sin alcance confirmado')]:
             self.finding(asset)

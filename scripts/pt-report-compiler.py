@@ -79,10 +79,14 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     if snapshot['sha256'] is None:
         raise ValueError('La ficha supera el límite de lectura verificable de 32 MiB.')
     content = snapshot['_bytes'].decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
-    # Conserva la representación JSON literal que usa el compilador, tras
-    # comprobar que el YAML completo coincide con el lector estricto.
-    parse_finding_frontmatter(content)
-    meta, body = parse_frontmatter(content)
+    # El lector compartido decide los valores semánticos. El parser antiguo
+    # conserva solo los literales JSON de estos dos campos para la validación
+    # posterior (incluido el rechazo de motivos sin comillas JSON).
+    meta, body = parse_finding_frontmatter(content)
+    raw_meta, _ = parse_frontmatter(content)
+    meta = {**meta,
+            'artifact_refs': raw_meta.get('artifact_refs', meta.get('artifact_refs', [])),
+            'verification_rationale': raw_meta.get('verification_rationale', '""')}
 
     # Valores por defecto derivados del contenido o del nombre de archivo
     stem_id = file_path.stem.upper()
@@ -104,7 +108,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     if "cvss_score" in meta:
         try:
             cvss_score = float(meta["cvss_score"])
-        except ValueError:
+        except (TypeError, ValueError):
             cvss_score = 0.0
 
     normalized_status = normalize_status(meta.get("status"))
@@ -132,7 +136,7 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
         "cvss_v31": meta.get("cvss_vector", meta.get("cvss_v31", "")),
         "cvss_score": cvss_score,
         "cwe": meta.get("cwe", "CWE-Unknown"),
-        "asset": meta.get("asset", "N/A"),
+        "asset": meta.get("asset") or "N/A",
         "status": normalized_status,
         "auditor": meta.get("auditor", "tester"),
         "date": meta.get("date", datetime.date.today().isoformat()),

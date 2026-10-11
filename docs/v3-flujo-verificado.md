@@ -2,6 +2,10 @@
 
 Fecha: 2026-10-07. Fuente de código: `b353a46`; corrección de shell y fixtures en fase 146. Estado: **revisión técnica entregada; validación con personas pendiente**. Este documento no acredita una auditoría contra un objetivo real.
 
+## Alcance temporal de esta línea base
+
+El inventario y los diagnósticos siguientes describen el código de fase146, del 2026-10-07; se conservan como evidencia histórica. Las correcciones posteriores de autorización, revalidación de alcance, historial, reporte y Copiloto se registran en el [estado actualizado del backlog v3](backlog-mejoras-v3.md#estado-actual-verificado). No interpretar una carencia de esta línea base como pendiente actual sin contrastar esa síntesis y su nota de fase.
+
 ## Frontera operativa comprobada
 
 SecLab-SBF dispone de un matcher compartido y un sondeo HTTP controlado. No dispone de una frontera universal que intercepte todo comando de una shell libre. La autenticación de la terminal y las políticas de VPN/rutas/red protegen acceso y destinos de infraestructura; no sustituyen las reglas de un engagement.

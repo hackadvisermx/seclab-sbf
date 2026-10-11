@@ -6,7 +6,11 @@ El owner renovó explícitamente otras 24 horas de permiso para merges sin pregu
 
 El 2026-10-10 el owner autorizó por separado reparar/reiniciar el laboratorio local (mensaje «no importa que toques el lab, no tengo datos importantes») para recuperar Docker tras falta de espacio. Permite liberar cachés regenerables y reiniciar Docker Desktop; no implica publicar imágenes ni modificar proyectos ajenos.
 
+El 2026-10-11 el owner autorizó detener el laboratorio mientras se completan las mejoras y borrar imágenes Docker no usadas para liberar espacio. El contenedor `seclab-sbf-lab-1` quedó detenido; no se borraron volúmenes ni proyectos.
+
 ## Estado del repositorio
+
+- Fase 188 implementada (2026-10-11 UTC) en `phase/188-checklist-metadata-parity`, base `1b7648f`, worktree `/Users/castr/tmp/t01-checklist-metadata-parity`. V3-03r parcial: checklist y lectores auxiliares tratan toda clave literal repetida de frontmatter como ambigua; conservan ficha pendiente sin adoptar metadata/cuerpo, recomiendan revisión y bloquean cierre principal/fallback. Imagen anterior reproduce cinco casos; regresión local/instalada como tester, solo lectura y sin red pasa. 244 Python/linters, 237 backend, Compose, Actionlint, smoke, gate High/Critical y SBOM aprobados. Imagen `seclab-sbf:full-phase188` (`60132baea5423077e3d1a0c1098a80c7543b59329eebb0ac6f8ba612122e67ba`), insumos `2aef2ef439ad2ebc`; detalle `docs/phase-188.md`. PR/CI del head exacto pendientes antes de merge. Laboratorio detenido; 12 imágenes históricas retiradas, volúmenes/proyectos intactos.
 
 - Fase 186 fusionada (2026-10-11 UTC), PR [#206](https://github.com/hackadvisermx/seclab-sbf/pull/206), merge `07b4951`, CI `38110351287` aprobado para head `45060d0`; rama/worktree retirados y baseline sincronizado. V3-03q/V3-05 parcial: contexto, checklist, siguiente decisión y cierre rechazan enlaces de fichas/`evidence/` sin adoptar bytes externos; fallos de lectura permanecen pendientes de revisión. Fase185 reproduce filtración sintética desde `../private.md`; tres regresiones locales/instaladas, 243 Python/linters, 237 backend, Compose/Actionlint/smoke/gate High/Critical aprobados. Imagen aislada `seclab-sbf:full-phase186` (`ddcd2084feabd4567ddd26aadb67d0ee3d694d256afe692dcc2a032af9f42a05`), insumos `ca655f4838ad2186`, SBOM JSON válido. Detalle `docs/phase-186.md`. Laboratorio vivo intacto.
 

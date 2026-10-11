@@ -74,6 +74,7 @@ pt-forward status >/dev/null 2>&1 || test $? -eq 1
 /bin/sh "$(dirname "$0")/check-finding-manifest.sh" "$image"
 /bin/sh "$(dirname "$0")/check-context-finding-source.sh" "$image"
 /bin/sh "$(dirname "$0")/check-finding-source-links.sh" "$image"
+/bin/sh "$(dirname "$0")/check-checklist-metadata-parity.sh" "$image"
 /bin/sh "$(dirname "$0")/check-installed-checklist.sh" "$image"
 /bin/sh "$(dirname "$0")/check-recon-cli-decision.sh" "$image"
 /bin/sh "$(dirname "$0")/check-recon-checkpoint.sh" "$image"

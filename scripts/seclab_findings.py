@@ -86,6 +86,15 @@ def requires_finding_review(raw_status):
 def finding_status_from_markdown(content: str) -> str:
     match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)", content, re.DOTALL)
     if match:
+        keys = set()
+        for line in match[1].splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or ":" not in line:
+                continue
+            key = line.split(":", 1)[0].strip()
+            if key in keys:
+                return "CANDIDATE"
+            keys.add(key)
         values = [line.split(":", 1)[1].strip() for line in match[1].splitlines()
                   if line.startswith("status:")]
         if len(values) == 1:

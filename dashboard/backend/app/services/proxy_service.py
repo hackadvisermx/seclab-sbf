@@ -3,6 +3,7 @@ import time
 from typing import Any, Dict, List, Optional
 import httpx
 from app.core.database import get_db_connection
+from app.core.artifact_snapshot import classify_endpoint
 from app.services.vault_service import vault_service, normalize_endpoint_url, is_openrouter_url, openrouter_base_url
 from app.models.schemas import ChatCompletionRequest, ChatCompletionResponse
 
@@ -206,6 +207,9 @@ class ProxyService:
             if (not entry or not entry.get("is_active") or not entry.get("api_key")
                     or not entry.get("base_url") or is_openrouter_url(entry["base_url"])):
                 raise ValueError("El perfil local requiere un endpoint custom_llm activo; no se enviará el contexto a otro proveedor.")
+            dest = classify_endpoint(entry["base_url"])
+            if dest["classification"] == "PUBLIC_REMOTE":
+                raise ValueError("El perfil local requiere un endpoint local o de red interna. El Base URL configurado apunta a un destino público remoto; no se enviará el contexto a un proveedor remoto bajo el perfil local.")
             candidates.append(("custom_llm", req.model or entry.get("model_name") or "local-model"))
 
         # 1. Si se solicitó un proveedor específico

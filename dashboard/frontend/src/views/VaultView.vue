@@ -110,14 +110,25 @@
               </div>
             </div>
 
-            <!-- Badge de Estado de Salud -->
-            <span
-              class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold flex items-center space-x-1"
-              :class="getStatusBadgeClass(k.status)"
-            >
-              <span class="w-1.5 h-1.5 rounded-full" :class="getStatusDotClass(k.status)"></span>
-              <span>{{ k.status.toUpperCase() }}</span>
-            </span>
+            <!-- Badges de Destino y Estado de Salud -->
+            <div class="flex items-center space-x-1.5">
+              <span
+                v-if="k.destination_classification"
+                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold flex items-center space-x-1"
+                :class="getDestinationBadgeClass(k.destination_classification)"
+                data-testid="destination-badge"
+              >
+                <span>{{ formatDestinationLabel(k.destination_classification) }}</span>
+              </span>
+
+              <span
+                class="px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold flex items-center space-x-1"
+                :class="getStatusBadgeClass(k.status)"
+              >
+                <span class="w-1.5 h-1.5 rounded-full" :class="getStatusDotClass(k.status)"></span>
+                <span>{{ k.status.toUpperCase() }}</span>
+              </span>
+            </div>
           </div>
 
           <!-- Clave Enmascarada -->
@@ -134,6 +145,10 @@
           <div v-if="k.model_name || k.base_url" class="mt-3 text-[11px] font-mono text-slate-500 space-y-0.5">
             <div v-if="k.model_name">Modelo: <span class="text-slate-300">{{ k.model_name }}</span></div>
             <div v-if="k.base_url" class="truncate">URL: <span class="text-slate-300">{{ k.base_url }}</span></div>
+          </div>
+
+          <div v-if="k.is_insecure_transport" class="mt-2.5 p-2 rounded-sm bg-amber-950/40 border border-amber-600/40 text-[10px] font-mono text-amber-300" data-testid="insecure-transport-warning">
+            ⚠️ {{ k.transport_warning || 'Advertencia: Endpoint HTTP sin cifrar (texto plano).' }}
           </div>
         </div>
 
@@ -534,6 +549,20 @@ function getStatusDotClass(status) {
     case 'error': return 'bg-red-400'
     default: return 'bg-slate-500'
   }
+}
+
+function formatDestinationLabel(classification) {
+  if (classification === 'LOCAL_LOOPBACK') return 'Local'
+  if (classification === 'PRIVATE_NETWORK') return 'Red Privada'
+  if (classification === 'PUBLIC_REMOTE') return 'Remoto Público'
+  return classification
+}
+
+function getDestinationBadgeClass(classification) {
+  if (classification === 'LOCAL_LOOPBACK') return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+  if (classification === 'PRIVATE_NETWORK') return 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
+  if (classification === 'PUBLIC_REMOTE') return 'bg-purple-500/10 text-purple-300 border border-purple-500/30'
+  return 'bg-slate-800 text-slate-400 border border-slate-700'
 }
 
 function onProviderSelect() {

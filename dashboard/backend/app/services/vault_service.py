@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from app.core.database import get_db_connection
 from app.core.security import encrypt_secret, decrypt_secret, mask_secret
+from app.core.artifact_snapshot import classify_endpoint
 from app.models.schemas import ApiKeyCreate, ApiKeyResponse, ApiKeyUpdate, HealthCheckResult
 
 
@@ -158,6 +159,25 @@ class VaultService:
             models[model_id] = {"id": model_id, "name": m.get("displayName") or model_id}
         return sorted(models.values(), key=lambda m: m["name"].casefold())
 
+    def inspect_destination(self, provider: str, base_url: Optional[str] = None) -> Dict[str, Any]:
+        """Clasifica el destino de red de un proveedor y evalúa la seguridad de su transporte."""
+        prov = (provider or "").lower().strip()
+        target_url = base_url
+        if not target_url:
+            default_urls = {
+                "openai": "https://api.openai.com/v1",
+                "anthropic": "https://api.anthropic.com/v1",
+                "gemini": "https://generativelanguage.googleapis.com/v1beta",
+                "openrouter": "https://openrouter.ai/api/v1",
+                "shodan": "https://api.shodan.io",
+                "censys": "https://search.censys.io/api",
+                "virustotal": "https://www.virustotal.com/api/v3",
+                "chaos": "https://dns.projectdiscovery.io",
+                "hermes_local": "http://localhost:11434/v1",
+            }
+            target_url = default_urls.get(prov)
+        return classify_endpoint(target_url)
+
     def list_keys(self) -> List[ApiKeyResponse]:
         """Obtiene la lista de API keys configuradas con las claves enmascaradas."""
         conn = get_db_connection()
@@ -167,6 +187,7 @@ class VaultService:
         results = []
         for r in rows:
             decrypted = decrypt_secret(r["encrypted_key"])
+            dest = self.inspect_destination(r["provider"], r["base_url"])
             results.append(
                 ApiKeyResponse(
                     id=r["id"],
@@ -180,6 +201,9 @@ class VaultService:
                     last_checked=r["last_checked"],
                     status=r["status"],
                     status_message=r["status_message"],
+                    destination_classification=dest.get("classification"),
+                    is_insecure_transport=dest.get("is_insecure_transport", False),
+                    transport_warning=dest.get("transport_warning"),
                     created_at=r["created_at"] or "",
                     updated_at=r["updated_at"] or "",
                 )
@@ -319,6 +343,7 @@ class VaultService:
         if not r:
             return None
         decrypted = decrypt_secret(r["encrypted_key"])
+        dest = self.inspect_destination(r["provider"], r["base_url"])
         return ApiKeyResponse(
             id=r["id"],
             provider=r["provider"],
@@ -331,6 +356,9 @@ class VaultService:
             last_checked=r["last_checked"],
             status=r["status"],
             status_message=r["status_message"],
+            destination_classification=dest.get("classification"),
+            is_insecure_transport=dest.get("is_insecure_transport", False),
+            transport_warning=dest.get("transport_warning"),
             created_at=r["created_at"] or "",
             updated_at=r["updated_at"] or "",
         )

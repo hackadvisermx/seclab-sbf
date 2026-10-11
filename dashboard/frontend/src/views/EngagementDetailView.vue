@@ -1039,6 +1039,24 @@
             <button @click="closeContextInspection" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
           </div>
           <p v-if="contextReview" class="text-xs text-amber-200">Revisa la pregunta, el historial y el contexto antes de enviarlos al modelo seleccionado ({{ contextReview.modelSelection }}). Puedes editar u omitir mensajes anteriores. El proveedor recibirá el texto revisado que aparece abajo junto con las instrucciones fijas del sistema. El perfil puede usar proveedores del Vault como fallback. El contexto puede contener texto de archivos no confiables.</p>
+          <div v-if="destinationInfo" class="p-3 bg-slate-900/60 border border-slate-700/60 rounded-sm text-xs space-y-1" data-testid="destination-security-info">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-slate-300 font-bold">Destino del Proveedor:</span>
+              <span class="px-2 py-0.5 rounded-sm font-mono text-[10px] font-bold"
+                :class="destinationInfo.classification === 'LOCAL_LOOPBACK' ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60' : destinationInfo.classification === 'PRIVATE_NETWORK' ? 'bg-sky-950/80 text-sky-300 border border-sky-700/60' : 'bg-purple-950/80 text-purple-300 border border-purple-700/60'">
+                {{ destinationInfo.classification === 'LOCAL_LOOPBACK' ? '💻 Local (Loopback)' : destinationInfo.classification === 'PRIVATE_NETWORK' ? '🏢 Red Privada / Interna' : '🌐 Remoto Público' }}
+              </span>
+            </div>
+            <p v-if="destinationInfo.classification === 'PUBLIC_REMOTE'" class="text-amber-200 text-[11px]">
+              El contexto revisado y la consulta saldrán de este equipo hacia internet público al proveedor remoto.
+            </p>
+            <p v-else class="text-emerald-300 text-[11px]">
+              El procesamiento se realiza dentro del entorno local o red interna privada.
+            </p>
+            <div v-if="destinationInfo.is_insecure_transport" class="mt-1 p-2 rounded-sm bg-red-950/50 border border-red-600/50 text-red-200 text-[11px]" data-testid="destination-transport-warning">
+              {{ destinationInfo.transport_warning || '⚠️ Advertencia: El endpoint utiliza HTTP sin cifrar (texto plano).' }}
+            </div>
+          </div>
           <div v-if="hostileFindings && hostileFindings.length" class="p-3 bg-amber-950/40 border border-amber-600/50 rounded-sm text-xs text-amber-200 space-y-1" data-testid="hostile-content-warning">
             <p class="font-bold text-amber-300">⚠️ Patrones hostiles o inyecciones de prompt detectadas ({{ hostileFindings.length }}):</p>
             <p class="text-slate-300 text-[11px]">Se neutralizaron delimitadores de contexto para evitar escape de instrucciones del sistema. Revisa el texto antes de enviar al modelo:</p>
@@ -2688,6 +2706,7 @@ const injectedContextText = ref('')
 const contextReview = ref(null)
 const contextPreviewError = ref('')
 const hostileFindings = ref([])
+const destinationInfo = ref(null)
 let contextRequest = 0
 
 async function loadCopilotModels() {
@@ -2750,6 +2769,7 @@ function closeContextInspection() {
   contextReview.value = null
   contextPreviewError.value = ''
   hostileFindings.value = []
+  destinationInfo.value = null
 }
 
 async function loadContextInspection(userText = null) {
@@ -2760,6 +2780,7 @@ async function loadContextInspection(userText = null) {
   showContextModal.value = true
   contextPreviewError.value = ''
   hostileFindings.value = []
+  destinationInfo.value = null
   const sourceMessages = userText === null ? [] : [
     ...copilotMessages.value.filter(message => message.model !== 'error').map(message => ({ role: message.role, content: message.content })),
     { role: 'user', content: userText },
@@ -2775,6 +2796,7 @@ async function loadContextInspection(userText = null) {
     if (request !== contextRequest || project !== engId.value || type !== engType.value || agent !== selectedAgent.value || modelSelection !== copilotSelectedModel.value || !showContextModal.value) return
     injectedContextText.value = res.context || 'Sin contexto disponible.'
     hostileFindings.value = res.hostile_findings || []
+    destinationInfo.value = res.destination || null
     if (contextReview.value) {
       contextReview.value.token = res.context_review_token || ''
       if (!contextReview.value.token) contextPreviewError.value = 'No se pudo vincular esta revisión al contexto. Vuelve a intentarlo.'

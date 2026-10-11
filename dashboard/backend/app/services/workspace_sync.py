@@ -1,5 +1,6 @@
 import os
 import fcntl
+import math
 import datetime
 import json
 import pathlib
@@ -8,6 +9,7 @@ import sys
 import uuid
 import yaml
 from contextlib import contextmanager
+from pydantic import ValidationError
 from typing import Any, Dict, List, Optional, Tuple
 from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
 from app.core.project_trash import ProjectTrash
@@ -44,7 +46,10 @@ def _read_finding_source(file_path):
     snapshot = read_artifact_snapshot(file_path.parent, file_path.name, include_bytes=True)
     if snapshot['sha256'] is None:
         raise FindingUpdateError('La ficha supera el límite de lectura de 32 MiB; no se editó.')
-    return snapshot['_bytes'].decode('utf-8'), snapshot['sha256']
+    content = snapshot['_bytes'].decode('utf-8')
+    if '\0' in content:
+        raise FindingUpdateError('Fuente binaria; no se interpretó ni editó la ficha.')
+    return content, snapshot['sha256']
 
 
 def _finding_identity(metadata):
@@ -140,6 +145,23 @@ def _validate_scope_payload(data: Dict[str, Any]) -> None:
         raise ScopeValidationError(str(exc)) from exc
 
 
+class _FindingMetadataLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        if isinstance(node, yaml.MappingNode):
+            seen = set()
+            for key_node, _ in node.value:
+                if key_node.tag == 'tag:yaml.org,2002:merge':
+                    raise FindingUpdateError('Metadata con merges YAML requiere revisión manual; no se sobrescribió.')
+                key = self.construct_object(key_node, deep=deep)
+                try:
+                    if key in seen:
+                        raise FindingUpdateError('Metadata con claves duplicadas; no se sobrescribió.')
+                    seen.add(key)
+                except TypeError:
+                    raise FindingUpdateError('Claves de metadata inválidas; no se sobrescribió.') from None
+        return super().construct_mapping(node, deep=deep)
+
+
 def _parse_frontmatter(content: str, strict: bool = False) -> Tuple[Dict[str, Any], str]:
     match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)(.*)\Z", content, re.DOTALL)
     if not match:
@@ -147,12 +169,51 @@ def _parse_frontmatter(content: str, strict: bool = False) -> Tuple[Dict[str, An
             raise FindingUpdateError("Frontmatter inválido; no se sobrescribió la ficha.")
         return {}, content
     try:
-        metadata = yaml.safe_load(match[1]) or {}
-    except yaml.YAMLError as error:
-        if strict:
-            raise FindingUpdateError("Metadatos YAML inválidos; no se sobrescribió la ficha.") from error
+        metadata = yaml.load(match[1], Loader=_FindingMetadataLoader)
+    except (yaml.YAMLError, RecursionError):
+        raise FindingUpdateError("Metadatos YAML inválidos; no se sobrescribió la ficha.") from None
+    if metadata is None:
         metadata = {}
+    if not isinstance(metadata, dict) or any(not isinstance(key, str) for key in metadata):
+        raise FindingUpdateError('Metadata debe ser un objeto con claves de texto; no se sobrescribió.')
     return metadata, match[2].strip()
+
+
+def _finding_frontmatter(metadata, file_path):
+    for field in ('title', 'severity', 'status', 'asset', 'cwe', 'owasp', 'author', 'cvss_vector', 'cvss_v31'):
+        if metadata.get(field) is not None and not isinstance(metadata[field], str):
+            raise FindingUpdateError('Campos de metadata inválidos; revisa la fuente original.')
+    score = float(metadata['cvss_score']) if metadata.get('cvss_score') is not None else None
+    if score is not None and (not math.isfinite(score) or not 0 <= score <= 10):
+        raise FindingUpdateError('CVSS inválido.')
+    return FindingFrontmatter(
+        title=metadata.get('title', file_path.stem.replace('-', ' ').capitalize()),
+        severity=str(metadata.get('severity', 'MEDIUM')).upper(), cvss_score=score,
+        cvss_vector=metadata.get('cvss_vector', metadata.get('cvss_v31')), cwe=metadata.get('cwe'),
+        owasp=metadata.get('owasp'), asset=metadata.get('asset'),
+        date=str(metadata.get('date', datetime.date.today().isoformat())),
+        author=metadata.get('author', 'tester'),
+        status=str(metadata.get('status') or 'CANDIDATE').strip().upper() or 'CANDIDATE')
+
+
+def _finding_detail(file_path, eng_id):
+    content, digest = '', None
+    try:
+        content, digest = _read_finding_source(file_path)
+    except (OSError, ValueError, ArtifactChangedError):
+        error = 'Fuente no disponible como texto UTF-8 estable de hasta 32 MiB. Revisa el original; no se interpretó la ficha.'
+    else:
+        try:
+            metadata, body = _parse_frontmatter(content, strict=True)
+            frontmatter = _finding_frontmatter(metadata, file_path)
+            return FindingDetail(slug=file_path.stem, filename=file_path.name, frontmatter=frontmatter,
+                body=body, engagement_id=eng_id, source_sha256=digest,
+                **_finding_identity(metadata), **_finding_refs(metadata), **_finding_review(metadata))
+        except (FindingUpdateError, yaml.YAMLError, ValidationError, ValueError, TypeError, RecursionError):
+            error = 'Metadata inválida o ambigua. Revisa y repara la fuente original antes de editar; no se interpretó su estado.'
+    return FindingDetail(slug=file_path.stem, filename=file_path.name, engagement_id=eng_id,
+        frontmatter=FindingFrontmatter(title=file_path.name, severity='UNKNOWN', status='BLOCKED', author=None),
+        body=content, source_sha256=digest, source_error=error)
 
 
 class WorkspaceSyncService:
@@ -414,75 +475,17 @@ class WorkspaceSyncService:
         if not ev_dir.exists():
             return []
 
-        findings = []
-        for file_path in sorted(ev_dir.glob("*.md")):
-            if not file_path.is_file():
-                continue
-            slug = file_path.stem
-            try:
-                content, source_sha256 = _read_finding_source(file_path)
-                fm_data, body = _parse_frontmatter(content)
-                fm = FindingFrontmatter(
-                    title=fm_data.get("title", slug.replace("-", " ").capitalize()),
-                    severity=str(fm_data.get("severity", "MEDIUM")).upper(),
-                    cvss_score=float(fm_data.get("cvss_score")) if fm_data.get("cvss_score") is not None else None,
-                    cvss_vector=fm_data.get("cvss_vector", fm_data.get("cvss_v31")),
-                    cwe=fm_data.get("cwe"),
-                    owasp=fm_data.get("owasp"),
-                    asset=fm_data.get("asset"),
-                    date=str(fm_data.get("date", datetime.date.today().isoformat())),
-                    author=fm_data.get("author", "tester"),
-                    status=str(fm_data.get("status") or "CANDIDATE").strip().upper() or "CANDIDATE",
-                )
-                findings.append(
-                    FindingDetail(
-                        slug=slug,
-                        filename=file_path.name,
-                        frontmatter=fm,
-                        body=body,
-                        engagement_id=eng_id,
-                        source_sha256=source_sha256,
-                        **_finding_identity(fm_data),
-                        **_finding_refs(fm_data),
-                        **_finding_review(fm_data),
-                    )
-                )
-            except Exception:
-                continue
-        return findings
+        return [_finding_detail(path, eng_id) for path in sorted(ev_dir.glob('*.md'))
+                if path.is_file() or path.is_symlink()]
 
     def get_finding(self, eng_id: str, slug: str, eng_type: str = "engagement") -> Optional[FindingDetail]:
         """Retorna el detalle completo de un hallazgo."""
         if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", slug):
             raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
         file_path = self._resolve_dir(eng_id, eng_type) / "evidence" / f"{slug}.md"
-        if not file_path.exists():
+        if not file_path.exists() and not file_path.is_symlink():
             return None
-        content, source_sha256 = _read_finding_source(file_path)
-        fm_data, body = _parse_frontmatter(content)
-        fm = FindingFrontmatter(
-            title=fm_data.get("title", slug.replace("-", " ").capitalize()),
-            severity=str(fm_data.get("severity", "MEDIUM")).upper(),
-            cvss_score=float(fm_data.get("cvss_score")) if fm_data.get("cvss_score") is not None else None,
-            cvss_vector=fm_data.get("cvss_vector", fm_data.get("cvss_v31")),
-            cwe=fm_data.get("cwe"),
-            owasp=fm_data.get("owasp"),
-            asset=fm_data.get("asset"),
-            date=str(fm_data.get("date", datetime.date.today().isoformat())),
-            author=fm_data.get("author", "tester"),
-            status=str(fm_data.get("status") or "CANDIDATE").strip().upper() or "CANDIDATE",
-        )
-        return FindingDetail(
-            slug=slug,
-            filename=file_path.name,
-            frontmatter=fm,
-            body=body,
-            engagement_id=eng_id,
-            source_sha256=source_sha256,
-            **_finding_identity(fm_data),
-            **_finding_refs(fm_data),
-            **_finding_review(fm_data),
-        )
+        return _finding_detail(file_path, eng_id)
 
     def save_finding(self, eng_id: str, finding_create: FindingCreate, eng_type: str = "engagement") -> FindingDetail:
         """Crea o actualiza una ficha en evidence/<slug>.md preservando el formato Evidence-First."""
@@ -518,8 +521,10 @@ class WorkspaceSyncService:
             if expected != source_sha256:
                 raise FindingUpdateError('La ficha cambió desde que la abriste. Revisa la versión actual y conserva tu borrador; no se sobrescribió.')
             fm, _ = _parse_frontmatter(source, strict=True)
-            if not isinstance(fm, dict):
-                raise FindingUpdateError("Los metadatos de la ficha no son válidos; no se sobrescribió.")
+            try:
+                _finding_frontmatter(fm, file_path)
+            except (ValidationError, ValueError, TypeError):
+                raise FindingUpdateError('Metadata inválida; repara la fuente original antes de editar. No se sobrescribió.') from None
             for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status", "verification_rationale"):
                 if field in finding_create.model_fields_set:
                     value = getattr(finding_create, field)

@@ -105,6 +105,7 @@ class FindingFrontmatter(BaseModel):
 
 
 class FindingDetail(BaseModel):
+    source_error: Optional[str] = None
     source_sha256: Optional[str] = None
     finding_id: Optional[str] = None
     identity_error: Optional[str] = None

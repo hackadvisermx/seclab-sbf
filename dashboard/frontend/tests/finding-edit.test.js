@@ -1202,3 +1202,47 @@ for (const failure of [false, true]) test(`borrado pendiente evita duplicados y 
     assert.match(view.root.textContent, /Eliminar/)
   } finally { view.cleanup(); globalThis.confirm = previous }
 })
+
+test('fuente inválida se conserva visible sin candidato ni editor/borrado y abre el original', async () => {
+  let writes = 0, previews = []
+  const source = { ...finding, source_error: 'Metadata inválida o ambigua.', body: '---\ntitle: [\n---\n<script>hostile()</script>',
+    frontmatter: { title: 'legacy.md', status: 'BLOCKED', severity: 'UNKNOWN' }, finding_id: null, artifact_refs: [] }
+  const view = await mountDecision({ getFindings: async () => [source], saveFinding: async () => { writes++ }, deleteFinding: async () => { writes++ },
+    getArtifactContent: async (...args) => { previews.push(args); return { content: source.body, sha256: source.source_sha256, preview_kind: 'text', truncated: false } } })
+  try {
+    await clickText(view.root, 'Hallazgos')
+    assert.match(view.root.querySelector('[data-testid="finding-source-error"]').textContent, /Metadata inválida/)
+    assert.doesNotMatch(view.root.textContent, /CANDIDATE|se asignará al guardar/)
+    await clickText(view.root, 'Editar'); assert.equal(view.root.querySelector('[data-testid="finding-markdown"]'), null)
+    const remove = [...view.root.querySelectorAll('button')].find(b => b.textContent.trim() === 'Eliminar')
+    assert.equal(remove.disabled, true); remove.click(); await flush(); assert.equal(writes, 0)
+    assert.equal(view.root.querySelector('script'), null)
+    await clickText(view.root, 'Revisar fuente original')
+    assert.equal(previews.length, 1)
+    assert.equal(previews[0][1], 'evidence/legacy.md')
+  } finally { view.cleanup() }
+})
+
+test('comparación con metadata inválida no se adopta ni reemplaza borrador', async () => {
+  const view = await mountDecision({ getFindings: async () => [finding], saveFinding: async () => { throw new Error('Conflicto') },
+    getFinding: async () => ({ ...finding, source_error: 'Metadata inválida', body: 'Invalid source' }) })
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Editar'); await clickText(view.root, 'Guardar Ficha')
+    await clickText(view.root, 'Ver ficha actual sin reemplazar borrador')
+    assert.equal(view.root.querySelector('[data-testid="finding-current-version"]'), null)
+    assert.equal(view.root.querySelector('[data-testid="finding-markdown"]').value, body)
+    assert.match(view.root.querySelector('[data-testid="finding-save-error"]').textContent, /identidad o metadatos/)
+  } finally { view.cleanup() }
+})
+
+test('reparación externa y recarga quitan error de fuente y habilitan edición', async () => {
+  let repaired = false
+  const view = await mountDecision({ getFindings: async () => [repaired ? finding : { ...finding, source_error: 'Fuente inválida' }] })
+  try {
+    await clickText(view.root, 'Hallazgos'); repaired = true
+    await clickText(view.root, 'Recargar fichas tras revisar')
+    assert.equal(view.root.querySelector('[data-testid="finding-source-error"]'), null)
+    await clickText(view.root, 'Editar')
+    assert.equal(view.root.querySelector('[data-testid="finding-markdown"]').value, body)
+  } finally { view.cleanup() }
+})

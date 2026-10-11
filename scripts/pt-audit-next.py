@@ -22,7 +22,7 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from seclab_findings import requires_finding_review, finding_status_from_markdown
+from seclab_findings import requires_finding_review, finding_status_from_markdown, read_finding_source
 from seclab_recon_state import project_recon_decision
 
 # Colores ANSI respetando NO_COLOR y TERM=dumb
@@ -342,11 +342,11 @@ def determine_roadmap(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
             if f.name.startswith(("_", ".")) or f.name.lower() == "readme.md":
                 continue
             try:
-                txt = f.read_text(encoding="utf-8")
+                txt = read_finding_source(f)
                 if requires_finding_review(finding_status_from_markdown(txt)):
                     unverified_findings.append(f.name)
-            except Exception:
-                pass
+            except (OSError, UnicodeError, ValueError):
+                unverified_findings.append(f.name)
 
     if unverified_findings:
         steps.append({

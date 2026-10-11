@@ -27,7 +27,7 @@ import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from seclab_findings import requires_finding_review, finding_status_from_markdown
+from seclab_findings import requires_finding_review, finding_status_from_markdown, read_finding_source
 
 # Constantes de severidad y metodologías
 METHODOLOGY_AREAS = [
@@ -194,7 +194,7 @@ class AuditChecklistEvaluator:
             if md_file.name.startswith("_") or md_file.name.startswith(".") or md_file.name.lower() == "readme.md":
                 continue
             try:
-                content = md_file.read_text(encoding="utf-8")
+                content = read_finding_source(md_file)
                 meta, body = parse_simple_yaml_frontmatter(content)
                 title = meta.get("title", md_file.stem)
                 status = finding_status_from_markdown(content)
@@ -217,8 +217,19 @@ class AuditChecklistEvaluator:
                     "has_raw_evidence": has_raw,
                     "body_snippet": body[:500].lower(),
                 })
-            except Exception:
-                pass
+            except (OSError, UnicodeError, ValueError):
+                findings.append({
+                    "file": md_file.name,
+                    "path": str(md_file),
+                    "id": md_file.stem,
+                    "title": "Fuente de ficha sin interpretar",
+                    "status": "UNINTERPRETED",
+                    "severity": "Unknown",
+                    "cwe": "",
+                    "has_poc": False,
+                    "has_raw_evidence": False,
+                    "body_snippet": "",
+                })
 
         return findings
 

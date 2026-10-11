@@ -1,7 +1,36 @@
+import errno
+import os
 import re
+import stat
 import uuid
 
 from seclab_artifacts import normalize_artifact_refs
+
+
+FINDING_READ_LIMIT = 32 * 1024 * 1024
+
+
+def read_finding_source(path):
+    """Lee una ficha regular sin seguir enlaces en evidence/ ni en su entrada."""
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+    directory_fd = os.open(path.parent, flags | os.O_DIRECTORY)
+    try:
+        source_fd = os.open(path.name, flags, dir_fd=directory_fd)
+        try:
+            source_stat = os.fstat(source_fd)
+            if not stat.S_ISREG(source_stat.st_mode):
+                raise OSError(errno.EINVAL, "Fuente de ficha no regular.")
+            if source_stat.st_size > FINDING_READ_LIMIT:
+                raise OSError(errno.EFBIG, "Fuente de ficha demasiado grande.")
+            with os.fdopen(source_fd, 'rb', closefd=False) as source:
+                content = source.read(FINDING_READ_LIMIT + 1)
+            if len(content) > FINDING_READ_LIMIT:
+                raise OSError(errno.EFBIG, "Fuente de ficha demasiado grande.")
+            return content.decode('utf-8')
+        finally:
+            os.close(source_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def normalize_status(raw_status: str) -> str:

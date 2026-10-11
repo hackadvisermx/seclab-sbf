@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_artifacts import read_artifact_snapshot, HASH_LIMIT
-from seclab_findings import requires_finding_review, finding_status_from_markdown
+from seclab_findings import requires_finding_review, finding_status_from_markdown, read_finding_source
 
 # Patrones para sanitización automática de credenciales
 RE_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b")
@@ -435,7 +435,7 @@ def check_closure_readiness(engagement_dir: pathlib.Path) -> Tuple[bool, List[st
                 continue
             finding_count += 1
             try:
-                content = f.read_text(encoding="utf-8")
+                content = read_finding_source(f)
                 status = finding_status_from_markdown(content)
                 fid = f.stem.upper()
                 if content.startswith("---"):
@@ -446,8 +446,8 @@ def check_closure_readiness(engagement_dir: pathlib.Path) -> Tuple[bool, List[st
                                 fid = line.split(":", 1)[1].strip().strip("'\"")
                 if requires_finding_review(status):
                     unverified.append(fid)
-            except Exception:
-                pass
+            except (OSError, UnicodeError, ValueError):
+                unverified.append(f.stem.upper())
 
     if unverified:
         blocking.append(f"Existen hallazgos sin verificar formalmente: {', '.join(unverified)}")

@@ -1039,6 +1039,15 @@
             <button @click="closeContextInspection" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
           </div>
           <p v-if="contextReview" class="text-xs text-amber-200">Revisa la pregunta, el historial y el contexto antes de enviarlos al modelo seleccionado ({{ contextReview.modelSelection }}). Puedes editar u omitir mensajes anteriores. El proveedor recibirá el texto revisado que aparece abajo junto con las instrucciones fijas del sistema. El perfil puede usar proveedores del Vault como fallback. El contexto puede contener texto de archivos no confiables.</p>
+          <div v-if="hostileFindings && hostileFindings.length" class="p-3 bg-amber-950/40 border border-amber-600/50 rounded-sm text-xs text-amber-200 space-y-1" data-testid="hostile-content-warning">
+            <p class="font-bold text-amber-300">⚠️ Patrones hostiles o inyecciones de prompt detectadas ({{ hostileFindings.length }}):</p>
+            <p class="text-slate-300 text-[11px]">Se neutralizaron delimitadores de contexto para evitar escape de instrucciones del sistema. Revisa el texto antes de enviar al modelo:</p>
+            <ul class="list-disc list-inside text-[11px] text-amber-200 font-mono space-y-0.5">
+              <li v-for="(h, idx) in hostileFindings" :key="idx">
+                Línea {{ h.line }}: {{ h.description }} (<span class="text-slate-400">{{ h.matched_text }}</span>)
+              </li>
+            </ul>
+          </div>
           <p v-if="contextPreviewError" role="alert" class="text-xs text-red-300">{{ contextPreviewError }}</p>
           <div v-if="contextReview" class="space-y-3" data-testid="copilot-transcript-review">
             <h3 class="text-xs font-mono font-bold text-white">Pregunta e historial que se enviarán</h3>
@@ -2678,6 +2687,7 @@ const showContextModal = ref(false)
 const injectedContextText = ref('')
 const contextReview = ref(null)
 const contextPreviewError = ref('')
+const hostileFindings = ref([])
 let contextRequest = 0
 
 async function loadCopilotModels() {
@@ -2739,6 +2749,7 @@ function closeContextInspection() {
   showContextModal.value = false
   contextReview.value = null
   contextPreviewError.value = ''
+  hostileFindings.value = []
 }
 
 async function loadContextInspection(userText = null) {
@@ -2748,6 +2759,7 @@ async function loadContextInspection(userText = null) {
   const selection = copilotSelection()
   showContextModal.value = true
   contextPreviewError.value = ''
+  hostileFindings.value = []
   const sourceMessages = userText === null ? [] : [
     ...copilotMessages.value.filter(message => message.model !== 'error').map(message => ({ role: message.role, content: message.content })),
     { role: 'user', content: userText },
@@ -2762,6 +2774,7 @@ async function loadContextInspection(userText = null) {
           messages: sourceMessages, ...selection })
     if (request !== contextRequest || project !== engId.value || type !== engType.value || agent !== selectedAgent.value || modelSelection !== copilotSelectedModel.value || !showContextModal.value) return
     injectedContextText.value = res.context || 'Sin contexto disponible.'
+    hostileFindings.value = res.hostile_findings || []
     if (contextReview.value) {
       contextReview.value.token = res.context_review_token || ''
       if (!contextReview.value.token) contextPreviewError.value = 'No se pudo vincular esta revisión al contexto. Vuelve a intentarlo.'

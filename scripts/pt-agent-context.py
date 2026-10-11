@@ -22,7 +22,7 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from seclab_findings import finding_status_from_markdown
+from seclab_findings import finding_status_from_markdown, read_finding_source
 from seclab_recon_state import project_recon_context
 
 SEVERITY_ORDER = {
@@ -297,7 +297,7 @@ def collect_findings(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
         if f.name.startswith(("_", ".")) or f.name.lower() == "readme.md":
             continue
         try:
-            content = f.read_text(encoding="utf-8")
+            content = read_finding_source(f)
             meta, body = parse_frontmatter(content)
             fid = meta.get("id", f.stem.upper())
             title = meta.get("title", "")
@@ -336,7 +336,8 @@ def collect_findings(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
                 "cwe": "CWE-Unknown",
                 "cvss_score": 0.0,
                 "status": "UNINTERPRETED",
-                "source_error": "unreadable" if isinstance(error, (OSError, UnicodeError)) else "duplicate_metadata",
+                "source_error": ("linked_source" if f.is_symlink() or ev_dir.is_symlink() else
+                                 "unreadable" if isinstance(error, (OSError, UnicodeError)) else "duplicate_metadata"),
             })
 
     findings.sort(

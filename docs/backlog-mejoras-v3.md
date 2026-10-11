@@ -1,6 +1,6 @@
 # Backlog de mejoras v3 — auditoría trazable y segura
 
-Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `d820ee2` de fase184 y la implementación de fase185. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
+Creado: 2026-10-07. Estado actualizado: 2026-10-11 UTC, hasta el merge `115e16e` de fase185 y la implementación de fase186. Base histórica revisada: `b353a46` (merge de la fase 145, PR #165). Fuente de producto: investigación de producto y roadmap aportada por el owner.
 
 ## Propósito
 
@@ -14,13 +14,14 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases181/182/184 están terminadas y fusionadas. La fase185 añade visibilidad contextual para fichas ambiguas o ilegibles; las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases181/182/184/185 están terminadas y fusionadas. La fase186 impide que enlaces de fichas externas alimenten contexto y decisiones; las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
 | Fase181 / V3-03m | Borrado ligado a la versión revisada; conflicto conserva la fuente y exige nueva revisión/confirmación | [#201](https://github.com/hackadvisermx/seclab-sbf/pull/201), `f7cd32e` | [38098011680](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38098011680), `15e5691`, aprobado |
 | Fase182 / V3-03n | Fuente dañada visible con estado sin interpretar, visor original y reparación explícita antes de editar | [#202](https://github.com/hackadvisermx/seclab-sbf/pull/202), `dddac53` | [38100220882](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38100220882), `f03d593`, intento 2 aprobado |
 | Fase184 / V3-03o | Reporte bloquea claves literales repetidas antes de check/build/export | [#204](https://github.com/hackadvisermx/seclab-sbf/pull/204), `d820ee2` | [38109036020](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38109036020), `8d91085`, aprobado |
+| Fase185 / V3-03p/V3-05 | Contexto conserva fuentes ambiguas/ilegibles sin adoptar valores ni marcar cierre listo | [#205](https://github.com/hackadvisermx/seclab-sbf/pull/205), `115e16e` | [38109695510](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38109695510), `ac744a2`, aprobado |
 
 Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182](phase-182.md) y [fase184](phase-184.md). En el cierre de fase184: 238 Python, 237 backend instalado, smoke, Compose, Actionlint, gate High/Critical y SBOM aprobados bajo la política existente. Ninguno de estos merges publica ni despliega una imagen.
 
@@ -146,6 +147,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Colaboración multiusuario, control de acceso de aula completo ni una auditoría legal inmutable.
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
+
+**Entrega parcial V3-03q/V3-05 (fase 186).** Contexto, checklist, siguiente paso y cierre leen fichas con descriptores sin seguir enlaces en `evidence/` ni en la entrada `.md`; fuentes enlazadas o ilegibles quedan pendientes sin incorporar bytes externos. Detalle [phase-186.md](phase-186.md). No congela todo el workspace ni acredita productor de cada artefacto.
 
 **Entrega parcial V3-03p/V3-05 (fase 185).** El contexto del agente conserva fuentes de ficha ambiguas o ilegibles como `UNINTERPRETED`, sin adoptar metadata ni cuerpo; enumera originales y bloquea readiness contextual hasta revisión. Detalle [phase-185.md](phase-185.md). No valida todo YAML ni sustituye el parser propio del checklist.
 

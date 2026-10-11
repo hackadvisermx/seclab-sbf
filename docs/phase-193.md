@@ -8,4 +8,6 @@ El compilador toma ahora los valores semánticos del lector compartido. Conserva
 
 `scripts/verify/local-pr-gates.sh build` pasó usando la base local verificada `seclab-sbf:base-phase172`, sin pulls, pushes ni arranque del laboratorio: 247 pruebas Python, 242 backend, 155 frontend, 4 UI Chromium, build/audit, smoke instalado, Actionlint, gate CVE High/Critical y SBOM CycloneDX válido. Imagen aislada `seclab-sbf:full-phase193` (`sha256:5d511fac382f3d1d5eaf99468961a072f1ed339d69d37e3fdb289c4f39beb3cd`), insumos `c1eebb8d4dcaa9f5`, SBOM SHA-256 `ea30ff0ed5303c0eb1524150fe318d0f47bb6de9c041ec40421c2087e280664f`.
 
-El cambio corrige la interpretación en el reporte; no afirma suficiencia probatoria ni añade procedencia de artefactos o jobs. El laboratorio local permanece detenido y sus volúmenes no se modificaron. CI del head exacto y merge se registrarán tras la revisión del PR.
+El cambio corrige la interpretación en el reporte; no afirma suficiencia probatoria ni añade procedencia de artefactos o jobs. El laboratorio local permanece detenido y sus volúmenes no se modificaron.
+
+Integración: [PR #213](https://github.com/hackadvisermx/seclab-sbf/pull/213), head `8e08c3f`, [CI 38160898416](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38160898416) aprobado para ese head y merge `79ecb32` en `bootstrap/baseline`.

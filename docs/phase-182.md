@@ -27,3 +27,9 @@ Resultados finales: 237 Python (`make verify`), 237 backend instalado, 154 front
 Imagen aislada `seclab-sbf:full-phase182`, insumos `62e9e2173d7223b8`, ID `sha256:f8becaf3645699af73c1295b224299e26fd7d9470d65a091e610ef9ee4d22f56`, igual al checkout; base172 comprobada `f772cb17ffe418a0`. La construcción usa el Dockerfile full real; las descargas del snapshot Ubuntu demoraron la reconstrucción final. Evidencia local `tmp/phase182/`; laboratorio healthy, sin publicar/desplegar ni modificar proyectos del owner. Cada merge requiere CI del head exacto y autorización vigente hasta 2026-10-11 16:43:06 UTC.
 
 SBOM CycloneDX 1.7, 2251 componentes, `tmp/phase182/sbom/seclab-sbf-full-phase182-62e9e2173d7223b8.json`, SHA-256 `7535a5fb19b0d31837025bddd1a36c6cad6ca23ba250ee4e147d0d7a54834482`.
+
+## Cierre confirmado
+
+PR [#202](https://github.com/hackadvisermx/seclab-sbf/pull/202) fusionado en `dddac539cf70e6e8a9686536838cec26448ab8ad` el `2026-10-11T01:01:30Z`. CI [38100220882](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38100220882), intento 2, aprobó los cuatro jobs para head `f03d59371a2d05b9d251087e298e440dea8d2ffa`. El primer intento no inició las pruebas frontend: Amazon ECR rechazó la descarga de Node con `toomanyrequests` (salida Docker 125). El reintento del mismo commit pasó sin cambiar ni omitir gates.
+
+Rama local/remota y worktree de fase182 retirados; baseline sincronizado y limpio tras el merge. Las dos tareas solicitadas (fases 181 y 182) quedaron terminadas y fusionadas. La imagen aislada conserva la huella del código integrado; el laboratorio del owner seguía healthy y no se desplegó esta imagen.

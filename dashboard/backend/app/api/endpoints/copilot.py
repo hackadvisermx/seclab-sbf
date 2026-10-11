@@ -1,4 +1,5 @@
 import json
+import hashlib
 import pathlib
 import subprocess
 import sys
@@ -127,6 +128,32 @@ class CopilotChatRequest(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
     messages: List[ChatMessage]
+    context_review_token: str
+    reviewed_context: str
+
+
+def _review_token(context: str, engagement_id: str, kind: str, agent: str,
+                  provider: Optional[str], model: Optional[str], profile: Optional[str]) -> str:
+    # pt-agent-context incluye la hora de generación en el encabezado. Esa hora
+    # cambia entre preview y POST sin que cambien los datos del engagement.
+    lines = context.splitlines(keepends=True)
+    header_end = next((index for index, line in enumerate(lines) if line.strip() == '---'), len(lines))
+    for index, line in enumerate(lines[:min(8, header_end)]):
+        if line.startswith('> Directorio activo: `') and ' | Timestamp: `' in line:
+            head, _, tail = line.partition(' | Timestamp: `')
+            if tail.rstrip('\r\n').endswith('`'):
+                lines[index] = head + line[len(line.rstrip('\r\n')):]
+            break
+    for index, line in enumerate(lines[:header_end]):
+        if line.startswith('- **Estado observado UTC:** ') and line.rstrip('\r\n').endswith('Puede cambiar después de esta lectura.'):
+            lines[index] = '- **Estado observado UTC:** <lectura actual>. Puede cambiar después de esta lectura.' + line[len(line.rstrip('\r\n')):]
+            break
+    stable_context = ''.join(lines)
+    selection = {'engagement_id': engagement_id, 'type': kind, 'agent_id': agent,
+                 'provider': provider, 'model': model,
+                 'profile': None if provider or model else (profile or 'quick')}
+    payload = json.dumps(selection, sort_keys=True, ensure_ascii=False).encode('utf-8')
+    return hashlib.sha256(payload + b'\0' + stable_context.encode('utf-8')).hexdigest()
 
 
 @router.get("/agents")
@@ -140,6 +167,9 @@ def get_engagement_copilot_context(
     eng_id: str,
     agent: Optional[str] = Query("triage-agent"),
     type: str = Query("engagement"),
+    provider: Optional[str] = Query(None),
+    model: Optional[str] = Query(None),
+    profile: Optional[str] = Query('quick'),
 ):
     """Obtiene el contexto agregado en Markdown sintetizado por pt-agent-context.py."""
     target_dir = workspace_service._resolve_dir(eng_id, type)
@@ -151,7 +181,9 @@ def get_engagement_copilot_context(
         context_md = runner_service.get_agent_context(str(target_dir), skill_name=skill_name)
     except AgentContextUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from None
-    return {"engagement_id": eng_id, "agent": agent, "context": context_md}
+    return {"engagement_id": eng_id, "agent": agent, "context": context_md,
+            "context_review_token": _review_token(context_md, eng_id, type, agent,
+                                                   provider, model, profile)}
 
 
 @router.post("/chat", response_model=ChatCompletionResponse)
@@ -167,6 +199,13 @@ async def copilot_chat(payload: CopilotChatRequest):
     except AgentContextUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from None
 
+    expected_token = _review_token(context_md, payload.engagement_id, payload.type,
+                                   payload.agent_id, payload.provider, payload.model, payload.profile)
+    if payload.context_review_token != expected_token:
+        raise HTTPException(status_code=409, detail='El contexto o modelo cambió; revisa de nuevo antes de enviar.')
+    if '\0' in payload.reviewed_context or len(payload.reviewed_context.encode('utf-8')) > 256 * 1024:
+        raise HTTPException(status_code=422, detail='El contexto revisado no es válido.')
+
     # Inyectar el contexto del engagement en el mensaje de sistema inicial
     system_prompt = (
         f"Eres el Asistente Copiloto de Auditoría de SecLab-SBF (Especialidad: {payload.agent_id}).\n"
@@ -176,7 +215,7 @@ async def copilot_chat(payload: CopilotChatRequest):
         f"2. Evidence-First: Cada afirmación debe basarse en evidencias verificables y pasos de reproducción claros.\n"
         f"3. No inventes vulnerabilidades no sustentadas por datos técnicos.\n\n"
         f"--- CONTEXTO EN VIVO DEL PROYECTO ---\n"
-        f"{context_md}\n"
+        f"{payload.reviewed_context}\n"
         f"--- FIN DEL CONTEXTO ---\n"
     )
 

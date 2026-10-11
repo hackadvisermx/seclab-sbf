@@ -18,7 +18,9 @@ async function request(endpoint, options = {}) {
     } catch {
       // Conserva el mensaje de respuestas que no son JSON.
     }
-    throw new Error(errorDetail)
+    const error = new Error(errorDetail)
+    error.status = res.status
+    throw error
   }
   return res.json()
 }
@@ -70,7 +72,13 @@ export const api = {
 
   // Copiloto Táctico & Agentes
   getCopilotAgents: () => request('/copilot/agents'),
-  getCopilotContext: (engId, agent = 'triage-agent', type = 'engagement') => request(`/copilot/context/${engId}?agent=${agent}&type=${type}`),
+  getCopilotContext: (engId, agent = 'triage-agent', type = 'engagement', selection = {}) => {
+    const params = new URLSearchParams({ agent, type })
+    for (const key of ['provider', 'model', 'profile']) {
+      if (selection[key]) params.set(key, selection[key])
+    }
+    return request(`/copilot/context/${encodeURIComponent(engId)}?${params}`)
+  },
   sendCopilotChat: (data) => request('/copilot/chat', { method: 'POST', body: JSON.stringify(data) }),
 
   // Logs & Reportes

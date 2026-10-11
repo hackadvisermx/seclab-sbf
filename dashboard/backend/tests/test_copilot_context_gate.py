@@ -31,7 +31,7 @@ class TestCopilotContextGate(unittest.TestCase):
     def assert_blocked(self):
         before = sorted(path.name for path in self.root.iterdir())
         preview = self.client.get('/api/v1/copilot/context/fixture?agent=general')
-        response = self.client.post('/api/v1/copilot/chat', json={'engagement_id': 'fixture', 'agent_id': 'general', 'messages': [{'role': 'user', 'content': 'Ayuda'}]})
+        response = self.client.post('/api/v1/copilot/chat', json={'engagement_id': 'fixture', 'agent_id': 'general', 'messages': [{'role': 'user', 'content': 'Ayuda'}], 'context_review_token': 'unavailable', 'reviewed_context': ''})
         for result in [preview, response]:
             self.assertEqual(result.status_code, 503, result.text)
             self.assertIn('Contexto no disponible',result.json()['detail'])
@@ -65,7 +65,7 @@ class TestCopilotContextGate(unittest.TestCase):
         preview = self.client.get('/api/v1/copilot/context/fixture?agent=general')
         self.assertEqual(preview.status_code,200,preview.text)
         self.assertEqual(preview.json()['context'],'# Contexto fixture á')
-        response = self.client.post('/api/v1/copilot/chat',json={'engagement_id':'fixture','agent_id':'general','messages':[{'role':'user','content':'Ayuda'}]})
+        response = self.client.post('/api/v1/copilot/chat',json={'engagement_id':'fixture','agent_id':'general','messages':[{'role':'user','content':'Ayuda'}], 'context_review_token': preview.json()['context_review_token'], 'reviewed_context': preview.json()['context']})
         self.assertEqual(response.status_code,200,response.text)
         prompt=self.chat.call_args.args[0].messages[0].content
         self.assertIn('# Contexto fixture á',prompt)

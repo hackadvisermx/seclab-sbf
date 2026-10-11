@@ -34,7 +34,7 @@ Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182
 | V3-02 | Historial de jobs, revisión del resultado, decisión compartida, resultados y origen de etapas/artefactos | Timeline del engagement y relación estructurada con findings; jobs CLI no se incorporan al historial del dashboard |
 | V3-03 | Activo/evidencia/motivo obligatorios para confirmación, UUID de fichas, manifiestos, visor y edición/borrado versionados | Vínculo job–evidencia–finding, identidad de artefactos e historial de revisiones; no se acredita suficiencia probatoria |
 | V3-04 | Guías y preview de reconocimiento disponibles | Schema y recorrido completo de playbooks deterministas según sus criterios |
-| V3-05 | Validación no disponible visible, inspector de contexto, gate de generación y orientación local sin IA | Fuentes navegables en respuestas, redacción/privacidad del contexto remoto y validación de contenido hostil |
+| V3-05 | Validación no disponible visible, contexto revisado/redactable por consulta, gate de generación y orientación local sin IA | Fuentes navegables, clasificación verificable del destino custom, privacidad de pregunta/historial y contenido hostil |
 | V3-06 | Historial y bloqueos aportan información reutilizable | Vista y checkpoints de supervisión validados con instructores |
 | V3-07 | Métricas de éxito propuestas en este documento | Definición operativa, denominadores, retención y medición local validada |
 
@@ -223,6 +223,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Motor adaptativo de enseñanza, gamificación, reemplazo de herramientas ni ejecución operada por IA.
 
 ### V3-05 — Copiloto con fuentes, límites y fallback (P1)
+
+**Entrega parcial V3-05e (fase 190).** Antes de cada consulta el operador revisa y puede editar el contexto exacto que se enviará. API liga la revisión al proyecto/agente/modelo/perfil y contenido vigente, rechaza cambios con 409 sin contactar al proveedor y exige la revisión a clientes antiguos. Dos marcas horarias efímeras no invalidan una fuente sin cambios. Detalle [phase-190.md](phase-190.md). No clasifica de manera concluyente un Base URL custom como local/remoto ni redacta automáticamente pregunta/historial; citas y tratamiento de contenido hostil continúan pendientes.
 
 **Entrega parcial V3-05d (fase 179).** Preview/chat rechazan contexto ausente, fallido, timeout, vacío, binario, codificación inválida o mayor de 256 KiB antes de llamar al proveedor; 503 seguro sin stderr/salida parcial. Contexto válido conserva stdout exacto. Error permite orientación local existente; inspector descarta respuestas tras cambio de proyecto/tipo/especialidad. Detalle [phase-179.md](phase-179.md). Gate de disponibilidad, no validación semántica ni privacidad completa; V3-05 sigue parcial.
 

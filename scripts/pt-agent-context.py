@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_findings import finding_status_from_markdown, parse_finding_frontmatter, read_finding_source
 from seclab_recon_state import project_recon_context
+from seclab_hostile import neutralize_hostile_content
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -798,7 +799,9 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
             lines.append(active_skill.get("body", ""))
 
     lines.append("")
-    return "\n".join(lines)
+    raw_text = "\n".join(lines)
+    sanitized, _ = neutralize_hostile_content(raw_text)
+    return sanitized
 
 
 def main() -> int:

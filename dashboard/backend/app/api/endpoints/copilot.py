@@ -127,13 +127,33 @@ class CopilotChatRequest(BaseModel):
     profile: Optional[str] = "quick"  # quick, deep, local
     provider: Optional[str] = None
     model: Optional[str] = None
-    messages: List[ChatMessage]
+    source_messages: List[ChatMessage]
+    reviewed_messages: List[ChatMessage]
     context_review_token: str
     reviewed_context: str
 
 
+class CopilotReviewRequest(BaseModel):
+    engagement_id: str
+    type: str = "engagement"
+    agent_id: str = "triage-agent"
+    profile: Optional[str] = "quick"
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    messages: List[ChatMessage]
+
+
+def _validate_review_messages(messages: List[ChatMessage]) -> None:
+    if (not 1 <= len(messages) <= 50 or messages[-1].role != 'user'
+            or any(message.role not in ('user', 'assistant') or not message.content.strip()
+                   or '\0' in message.content for message in messages)
+            or sum(len(message.content.encode('utf-8')) for message in messages) > 128 * 1024):
+        raise HTTPException(status_code=422, detail='Los mensajes revisados no son válidos.')
+
+
 def _review_token(context: str, engagement_id: str, kind: str, agent: str,
-                  provider: Optional[str], model: Optional[str], profile: Optional[str]) -> str:
+                  provider: Optional[str], model: Optional[str], profile: Optional[str],
+                  messages: List[ChatMessage]) -> str:
     # pt-agent-context incluye la hora de generación en el encabezado. Esa hora
     # cambia entre preview y POST sin que cambien los datos del engagement.
     lines = context.splitlines(keepends=True)
@@ -151,7 +171,8 @@ def _review_token(context: str, engagement_id: str, kind: str, agent: str,
     stable_context = ''.join(lines)
     selection = {'engagement_id': engagement_id, 'type': kind, 'agent_id': agent,
                  'provider': provider, 'model': model,
-                 'profile': None if provider or model else (profile or 'quick')}
+                 'profile': None if provider or model else (profile or 'quick'),
+                 'messages': [message.model_dump() for message in messages]}
     payload = json.dumps(selection, sort_keys=True, ensure_ascii=False).encode('utf-8')
     return hashlib.sha256(payload + b'\0' + stable_context.encode('utf-8')).hexdigest()
 
@@ -181,14 +202,33 @@ def get_engagement_copilot_context(
         context_md = runner_service.get_agent_context(str(target_dir), skill_name=skill_name)
     except AgentContextUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from None
-    return {"engagement_id": eng_id, "agent": agent, "context": context_md,
-            "context_review_token": _review_token(context_md, eng_id, type, agent,
-                                                   provider, model, profile)}
+    return {"engagement_id": eng_id, "agent": agent, "context": context_md}
+
+
+@router.post("/review")
+def review_copilot_request(payload: CopilotReviewRequest):
+    """Prepara una revisión local del contexto y transcript antes de enviarlos al modelo."""
+    _validate_review_messages(payload.messages)
+    target_dir = workspace_service._resolve_dir(payload.engagement_id, payload.type)
+    if not target_dir.exists():
+        raise HTTPException(status_code=404, detail="Directorio del engagement no encontrado")
+    skill_name = payload.agent_id if payload.agent_id != "general" else None
+    try:
+        context_md = runner_service.get_agent_context(str(target_dir), skill_name=skill_name)
+    except AgentContextUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from None
+    return {"engagement_id": payload.engagement_id, "agent": payload.agent_id,
+            "context": context_md,
+            "context_review_token": _review_token(context_md, payload.engagement_id,
+                payload.type, payload.agent_id, payload.provider, payload.model,
+                payload.profile, payload.messages)}
 
 
 @router.post("/chat", response_model=ChatCompletionResponse)
 async def copilot_chat(payload: CopilotChatRequest):
     """Envia una consulta al Copiloto inyectando el contexto vivo del proyecto."""
+    _validate_review_messages(payload.source_messages)
+    _validate_review_messages(payload.reviewed_messages)
     target_dir = workspace_service._resolve_dir(payload.engagement_id, payload.type)
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail="Directorio del engagement no encontrado")
@@ -200,9 +240,10 @@ async def copilot_chat(payload: CopilotChatRequest):
         raise HTTPException(status_code=503, detail=str(error)) from None
 
     expected_token = _review_token(context_md, payload.engagement_id, payload.type,
-                                   payload.agent_id, payload.provider, payload.model, payload.profile)
+                                   payload.agent_id, payload.provider, payload.model,
+                                   payload.profile, payload.source_messages)
     if payload.context_review_token != expected_token:
-        raise HTTPException(status_code=409, detail='El contexto o modelo cambió; revisa de nuevo antes de enviar.')
+        raise HTTPException(status_code=409, detail='El contexto, historial o modelo cambió; revisa de nuevo antes de enviar.')
     if '\0' in payload.reviewed_context or len(payload.reviewed_context.encode('utf-8')) > 256 * 1024:
         raise HTTPException(status_code=422, detail='El contexto revisado no es válido.')
 
@@ -220,7 +261,7 @@ async def copilot_chat(payload: CopilotChatRequest):
     )
 
     augmented_messages = [ChatMessage(role="system", content=system_prompt)]
-    for m in payload.messages:
+    for m in payload.reviewed_messages:
         augmented_messages.append(m)
 
     proxy_req = ChatCompletionRequest(

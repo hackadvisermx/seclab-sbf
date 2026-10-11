@@ -68,10 +68,11 @@ class TestCopilotValidation(unittest.TestCase):
                     patch.object(copilot.subprocess, 'run', side_effect=subprocess.TimeoutExpired('validator', 10)):
                 chat.return_value = ChatCompletionResponse(provider='fixture', model='fixture-model',
                                                            content=original, latency_ms=12, usage={'total_tokens': 10})
-                preview = client.get('/api/v1/copilot/context/fixture')
+                messages = [{'role': 'user', 'content': 'Ayuda'}]
+                preview = client.post('/api/v1/copilot/review', json={'engagement_id': 'fixture', 'messages': messages})
                 self.assertEqual(preview.status_code, 200, preview.text)
                 response = client.post('/api/v1/copilot/chat', json={'engagement_id': 'fixture',
-                    'messages': [{'role': 'user', 'content': 'Ayuda'}],
+                    'source_messages': messages, 'reviewed_messages': messages,
                     'context_review_token': preview.json()['context_review_token'],
                     'reviewed_context': preview.json()['context']})
             self.assertEqual(response.status_code, 200, response.text)

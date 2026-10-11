@@ -229,7 +229,8 @@ test('auditoría sintética: alcance, simulación, bloqueo, evidencia y reporte'
   expect(denied.content).toBe('')
   await expect(page.getByTestId('report-error')).toContainText('outside.test')
   expect((await page.request.get(`/api/v1/reports/${id}/download`)).status()).toBe(409)
-  expect((await page.request.delete(`/api/v1/findings/${id}/${candidate.slug}`)).ok()).toBe(true)
+  const deletionSource = await json(await page.request.get(`/api/v1/findings/${id}/${candidate.slug}`))
+  expect((await page.request.delete(`/api/v1/findings/${id}/${candidate.slug}?expected_source_sha256=${deletionSource.source_sha256}`)).ok()).toBe(true)
   const legacyPath = `${workspace}/engagements/${id}/evidence/legacy.md`
   const legacy = '---\ntitle: Confirmación antigua sintética\nasset: example.test\nstatus: VERIFIED\n---\n## Pasos para Reproducir\nFixture\n## Remediación\nFixture\n'
   await writeFile(legacyPath, legacy)

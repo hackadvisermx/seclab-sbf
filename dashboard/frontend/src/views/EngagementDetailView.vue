@@ -714,6 +714,10 @@
             </div>
           </div>
 
+          <div v-if="findingDeleteErrors[f.slug]" role="alert" data-testid="finding-delete-error" class="text-xs text-amber-300 space-y-2">
+            <p>{{ findingDeleteErrors[f.slug] }}</p>
+            <button @click="loadFindings" class="underline">Recargar fichas para revisar antes de eliminar</button>
+          </div>
           <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-mono">
             <span class="text-slate-500">{{ f.filename }}</span>
             <div class="flex items-center space-x-2">
@@ -724,10 +728,11 @@
                 Editar
               </button>
               <button
-                @click="deleteFindingAction(f.slug)"
+                @click="deleteFindingAction(f)"
+                :disabled="!!findingDeletePending[f.slug]"
                 class="px-2 py-1 rounded-sm bg-red-950/40 hover:bg-red-900/60 text-red-400"
               >
-                Eliminar
+                {{ findingDeletePending[f.slug] ? 'Eliminando...' : 'Eliminar' }}
               </button>
             </div>
           </div>
@@ -2097,6 +2102,9 @@ let findingEditorRequest = 0
 let findingSaveRequest = 0
 let findingCompareRequest = 0
 let findingListRequest = 0
+const findingDeletePending = ref({})
+const findingDeleteErrors = ref({})
+let findingDeleteGeneration = 0
 const findingForm = ref({
   slug: '',
   title: '',
@@ -2466,13 +2474,25 @@ function acceptFindingVersion() {
 
 watch(showFindingModal, open => { if (!open) resetFindingEditor() })
 
-async function deleteFindingAction(slug) {
-  if (!confirm(`¿Eliminar la ficha de evidencia ${slug}?`)) return
+async function deleteFindingAction(finding) {
+  const slug = finding.slug
+  if (findingDeletePending.value[slug]) return
+  if (!/^[0-9a-f]{64}$/.test(finding.source_sha256 || '')) {
+    findingDeleteErrors.value[slug] = 'Falta la versión de lectura. Recarga y revisa la ficha antes de eliminar.'
+    return
+  }
+  if (!confirm(`¿Eliminar la versión revisada de la ficha de evidencia ${slug}?`)) return
+  const project = engId.value, type = engType.value, generation = findingDeleteGeneration
+  const current = () => generation === findingDeleteGeneration && project === engId.value && type === engType.value
+  findingDeletePending.value[slug] = true
+  delete findingDeleteErrors.value[slug]
   try {
-    await api.deleteFinding(engId.value, slug, engType.value)
-    await loadFindings()
+    await api.deleteFinding(project, slug, type, finding.source_sha256)
+    if (current()) await loadFindings()
   } catch (err) {
-    alert(err.message)
+    if (current()) findingDeleteErrors.value[slug] = err.message || 'No se pudo eliminar la ficha.'
+  } finally {
+    if (current()) delete findingDeletePending.value[slug]
   }
 }
 
@@ -3116,6 +3136,9 @@ async function triggerReconPipeline() {
 }
 
 watch([engId, engType], () => {
+  findingDeleteGeneration++
+  findingDeletePending.value = {}
+  findingDeleteErrors.value = {}
   showFindingModal.value = false
   resetFindingEditor()
   findings.value = []
@@ -3175,6 +3198,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  findingDeleteGeneration++
   findingListRequest++
   resetFindingEditor()
   contextRequest++

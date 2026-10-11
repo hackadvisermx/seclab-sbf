@@ -597,7 +597,7 @@ class WorkspaceSyncService:
 
         return self.get_finding(eng_id, finding_create.slug, eng_type)
 
-    def delete_finding(self, eng_id: str, slug: str, eng_type: str = "engagement") -> bool:
+    def delete_finding(self, eng_id: str, slug: str, eng_type: str = "engagement", expected_source_sha256: Optional[str] = None) -> bool:
         """Elimina una ficha de hallazgo."""
         if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", slug):
             raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
@@ -605,10 +605,17 @@ class WorkspaceSyncService:
         if not file_path.parent.exists():
             return False
         with _finding_write_lock(file_path.parent):
-            return self._delete_finding(file_path)
+            try:
+                return self._delete_finding(file_path, expected_source_sha256)
+            except (FileNotFoundError, ArtifactChangedError, UnicodeError):
+                raise FindingUpdateError('La ficha cambió o no puede leerse; no se eliminó. Recarga y revisa la versión actual.') from None
 
-    def _delete_finding(self, file_path) -> bool:
+    def _delete_finding(self, file_path, expected_source_sha256) -> bool:
         if file_path.exists():
+            if not expected_source_sha256 or not re.fullmatch(r'[0-9a-f]{64}', expected_source_sha256):
+                raise FindingUpdateError('Recarga y revisa la ficha antes de eliminarla; falta una versión válida.')
+            if _read_finding_source(file_path)[1] != expected_source_sha256:
+                raise FindingUpdateError('La ficha cambió desde que la leíste; no se eliminó. Recarga y revisa la versión actual.')
             file_path.unlink()
             return True
         return False

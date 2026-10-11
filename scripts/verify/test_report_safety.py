@@ -320,6 +320,18 @@ class ReportSafetyTests(unittest.TestCase):
             self.assertEqual(report.parse_evidence_file(path)['status'], 'PROVEN')
             self.assertIn('**1 hallazgos confirmados activos**', report.build_report(self.root).read_text())
 
+    def test_quoted_yaml_comment_is_not_stripped_from_status_or_asset(self):
+        finding = self.root / 'evidence/finding.md'
+        original = finding.read_text()
+        finding.write_text(original.replace('status: PROVEN', 'status: "PROVEN # pendiente"'))
+        self.assertNotEqual(report.parse_evidence_file(finding)['status'], 'PROVEN')
+        self.assertIn('**0 hallazgos confirmados activos**', report.build_report(self.root).read_text())
+
+        finding.write_text(original.replace('asset: example.test', 'asset: "example.test # fuera de alcance"'))
+        self.assertFalse(report.check_findings(self.root)[0])
+        with self.assertRaises(report.ReportValidationError):
+            report.build_report(self.root)
+
     def test_cli_blocks_excluded_and_unknown_without_overwriting_reports(self):
         for asset, message in [('excluded.example.test', 'FUERA DE ALCANCE'), ('outside.test', 'sin alcance confirmado')]:
             self.finding(asset)

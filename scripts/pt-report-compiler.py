@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_artifacts import validate_artifact_refs, read_artifact_snapshot
-from seclab_findings import normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id
+from seclab_findings import normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id, parse_finding_frontmatter
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -79,6 +79,9 @@ def parse_evidence_file(file_path: pathlib.Path) -> Dict[str, Any]:
     if snapshot['sha256'] is None:
         raise ValueError('La ficha supera el límite de lectura verificable de 32 MiB.')
     content = snapshot['_bytes'].decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
+    # Conserva la representación JSON literal que usa el compilador, tras
+    # comprobar que el YAML completo coincide con el lector estricto.
+    parse_finding_frontmatter(content)
     meta, body = parse_frontmatter(content)
 
     # Valores por defecto derivados del contenido o del nombre de archivo

@@ -25,9 +25,49 @@ def load_script(name):
 checklist = load_script('pt-audit-checklist')
 audit_next = load_script('pt-audit-next')
 packer = load_script('pt-engagement-packer')
+context = load_script('pt-agent-context')
+report = load_script('pt-report-compiler')
 
 
 class ChecklistMetadataParityTests(unittest.TestCase):
+    def test_without_yaml_dependency_only_simple_scalars_are_interpreted(self):
+        import seclab_findings
+        with patch.object(seclab_findings, 'yaml', None):
+            self.assertEqual(seclab_findings.finding_status_from_markdown(
+                '---\nstatus: "PROVEN" # reviewed\n---\nBody'), 'PROVEN')
+            self.assertEqual(seclab_findings.finding_status_from_markdown(
+                '---\nstatus: PROVEN\n<<: *other\n---\nBody'), 'CANDIDATE')
+            self.assertEqual(seclab_findings.finding_status_from_markdown(
+                '---\nstatus: PROVEN\nartifact_refs: [{"path":"a","path":"b"}]\n---\nBody'), 'CANDIDATE')
+
+    def test_invalid_yaml_cannot_confirm_a_finding_in_any_reader(self):
+        from seclab_findings import finding_status_from_markdown
+        with tempfile.TemporaryDirectory() as temporary:
+            project = pathlib.Path(temporary) / 'engagement'
+            evidence = project / 'evidence'
+            evidence.mkdir(parents=True)
+            (project / 'target.yaml').write_text('scope:\n  in_scope:\n    domains: [example.test]\n')
+            (project / 'REPORT.md').write_text('Previous report\n')
+            source = evidence / 'finding.md'
+            for invalid in ('other: [unclosed', '<<: *missing', 'status: PROVEN\n  broken: value'):
+                with self.subTest(invalid=invalid):
+                    original = ('---\nid: VULN-1\ntitle: Original\nseverity: HIGH\n'
+                                'asset: example.test\nstatus: PROVEN\n' + invalid + '\n---\n'
+                                '## 2. Pasos\nEvidence text.\n')
+                    source.write_text(original, encoding='utf-8')
+                    self.assertEqual(finding_status_from_markdown(original), 'CANDIDATE')
+                    rows = checklist.AuditChecklistEvaluator(project).collect_evidence_findings()
+                    self.assertEqual(rows[0]['status'], 'UNINTERPRETED')
+                    self.assertEqual(rows[0]['id'], 'finding')
+                    self.assertEqual(context.collect_findings(project)[0]['status'], 'UNINTERPRETED')
+                    with self.assertRaises(ValueError):
+                        report.parse_evidence_file(source)
+                    self.assertFalse(checklist.AuditChecklistEvaluator(project).evaluate()['readiness']['ready_for_closure'])
+                    self.assertTrue(any(step['id'] == 'verify_findings'
+                                        for step in audit_next.determine_roadmap(project)))
+                    self.assertFalse(packer.check_closure_readiness(project)[0])
+                    self.assertEqual(source.read_text(encoding='utf-8'), original)
+
     def test_repeated_literal_metadata_stays_uninterpreted_across_advisory_consumers(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = pathlib.Path(temporary) / 'engagement'

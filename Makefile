@@ -62,6 +62,14 @@ help:
 
 verify: verify-secrets lint-docker lint-shell verify-pins makefile-check compose-refs-check compose-security-check python-units-check
 
+# Reutiliza una base verificada; no hace pull de Docker Hub ni inicia el lab.
+.PHONY: local-pr-gates
+LOCAL_GATE_IMAGE ?= seclab-sbf:full-local-pr
+LOCAL_GATE_BASE_IMAGE ?= seclab-sbf:base
+LOCAL_GATE_MODE ?= check
+local-pr-gates:
+	cd "$(ROOT)" && LOCAL_GATE_IMAGE="$(LOCAL_GATE_IMAGE)" LOCAL_GATE_BASE_IMAGE="$(LOCAL_GATE_BASE_IMAGE)" /bin/sh scripts/verify/local-pr-gates.sh "$(LOCAL_GATE_MODE)"
+
 verify-secrets:
 	cd "$(ROOT)" && gitleaks dir . --redact --no-banner --config .gitleaks.toml
 

@@ -22,7 +22,7 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from seclab_findings import finding_status_from_markdown, read_finding_source
+from seclab_findings import finding_status_from_markdown, parse_finding_frontmatter, read_finding_source
 from seclab_recon_state import project_recon_context
 
 SEVERITY_ORDER = {
@@ -298,7 +298,7 @@ def collect_findings(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
             continue
         try:
             content = read_finding_source(f)
-            meta, body = parse_frontmatter(content)
+            meta, body = parse_finding_frontmatter(content)
             fid = meta.get("id", f.stem.upper())
             title = meta.get("title", "")
             if not title:

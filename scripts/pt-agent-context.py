@@ -110,6 +110,8 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
                 if ":" in line_str:
                     key, val = line_str.split(":", 1)
                     key = key.strip()
+                    if key in metadata:
+                        raise ValueError("Metadata con claves duplicadas; revisa la fuente original.")
                     val = val.strip().strip("'\"")
                     if " #" in val:
                         val = val.split(" #")[0].strip().strip("'\"")
@@ -324,8 +326,18 @@ def collect_findings(engagement_dir: pathlib.Path) -> List[Dict[str, Any]]:
                 "cvss_score": cvss_score,
                 "status": finding_status_from_markdown(content),
             })
-        except Exception:
-            continue
+        except (OSError, UnicodeError, ValueError) as error:
+            findings.append({
+                "id": "SOURCE-ERROR",
+                "file": f.name,
+                "title": "Fuente de ficha sin interpretar",
+                "severity": "UNKNOWN",
+                "asset": "N/A",
+                "cwe": "CWE-Unknown",
+                "cvss_score": 0.0,
+                "status": "UNINTERPRETED",
+                "source_error": "unreadable" if isinstance(error, (OSError, UnicodeError)) else "duplicate_metadata",
+            })
 
     findings.sort(
         key=lambda x: (SEVERITY_ORDER.get(x["severity"], 0), x["cvss_score"]),
@@ -524,6 +536,14 @@ def generate_context_dict(engagement_dir: pathlib.Path, skill_query: Optional[st
     findings = collect_findings(engagement_dir)
     log_lines, log_size, recent_marks = collect_audit_marks(engagement_dir)
     coverage_data = collect_coverage_summary(engagement_dir)
+    if any(f.get("source_error") for f in findings):
+        coverage_data = dict(coverage_data)
+        coverage_data["ready_for_closure"] = False
+        issues = list(coverage_data.get("blocking_issues", []))
+        source_issue = "Hay fichas sin interpretar en evidence/; revisa las fuentes originales."
+        if source_issue not in issues:
+            issues.append(source_issue)
+        coverage_data["blocking_issues"] = issues
 
     sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
     for f in findings:
@@ -725,6 +745,8 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
     total_findings = findings.get("total", 0)
     counts = findings.get("severity_counts", {})
     count_summary = f"Total: {total_findings} (Crítico: {counts.get('CRITICAL', 0)}, Alto: {counts.get('HIGH', 0)}, Medio: {counts.get('MEDIUM', 0)}, Bajo: {counts.get('LOW', 0)}, Info: {counts.get('INFO', 0)})"
+    if counts.get("UNKNOWN", 0):
+        count_summary += f" · Sin interpretar: {counts['UNKNOWN']}"
     lines.append(f"- **Resumen:** {count_summary}")
     lines.append("")
 
@@ -734,6 +756,9 @@ def format_markdown_context(data: Dict[str, Any]) -> str:
         lines.append("|---|---|---|---|---|---|")
         for it in items:
             lines.append(f"| `{it['id']}` | `{it['status']}` | **{it['severity']}** | `{it['asset']}` | {it['cwe']} | {it['title']} |")
+        for it in items:
+            if it.get("source_error"):
+                lines.append(f"- Fuente sin interpretar: {json.dumps('evidence/' + it['file'], ensure_ascii=True)}; revisa el original.")
     else:
         lines.append("_No hay fichas registradas aún en `evidence/`._")
 

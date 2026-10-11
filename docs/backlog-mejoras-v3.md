@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las dos últimas tareas funcionales están terminadas y fusionadas. Esto cierra ese lote de trabajo; las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las dos tareas de fases181/182 están terminadas y fusionadas. La fase184 añade una compuerta parcial contra claves repetidas en el reporte; las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -145,6 +145,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Colaboración multiusuario, control de acceso de aula completo ni una auditoría legal inmutable.
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
+
+**Entrega parcial V3-03o (fase 184).** El compilador del reporte rechaza claves repetidas en el encabezado de una ficha antes de `check`, `build` o export; evita que la última declaración de estado, activo o referencias reemplace silenciosamente la primera. La fuente y entregables existentes se conservan. Detalle [phase-184.md](phase-184.md). La validación completa de YAML y la paridad con los demás parsers de contexto y fichas siguen pendientes.
 
 **Entrega parcial V3-03n (fase 182).** Lectura de fichas muestra fuentes con metadata inválida/ambigua y archivos ilegibles como estado sin interpretar, en vez de candidatos inventados, errores 500 o filas omitidas. Lista y detalle comparten lector; texto original/hash disponible sin escritura. UI enlaza visor original y recarga tras reparación externa, bloqueando edición/borrado y adopción de metadata dañada. Guardado API rechaza metadata ambigua/tipos inválidos antes de reemplazar. Detalle [phase-182.md](phase-182.md). No añade reparación automática ni modifica parsers CLI/reporte o completa procedencia global.
 

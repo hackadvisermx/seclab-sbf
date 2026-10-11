@@ -59,6 +59,8 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
                 if ":" in line_str:
                     key, val = line_str.split(":", 1)
                     key = key.strip()
+                    if key in metadata:
+                        raise ValueError("Metadata con claves duplicadas; revisa la fuente original.")
                     if key in ('artifact_refs', 'verification_rationale'):
                         metadata[key] = val.strip()
                         continue

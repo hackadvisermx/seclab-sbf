@@ -120,6 +120,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
 
+**Entrega parcial V3-03m (fase 181).** Borrado API ligado al SHA-256 revisado, con bloqueo entre escritores del servicio. Falta/cambio/reemplazo rechaza sin eliminar; UI conserva la ficha, ofrece recarga y exige otra confirmación sobre la versión actual. Evita doble envío y respuestas tardías de otro proyecto. Detalle [phase-181.md](phase-181.md). No incorpora papelera de fichas ni historial de bytes y no intercepta editores libres; V3-03 sigue parcial.
+
 **Entrega parcial V3-03l (fase 180).** API/visor leen versión SHA-256 de la ficha y las ediciones exigen esa versión; ausente, cambiada o eliminada bloquea sin reemplazar/recrear la ficha. Escrituras API serializadas por proyecto, revalidación antes del reemplazo. UI conserva borrador ante conflicto, compara fuente actual y adopta una versión solo tras revisión explícita. UUID/metadatos desconocidos conservados; legacy obtiene hash sin migración al leer. Detalle [phase-180.md](phase-180.md). No conserva historial de bytes/revisiones ni intercepta editores libres; V3-03 sigue parcial.
 
 **Entrega parcial V3-03k (fase 177).** Reporte enlaza fichas fuente y artefactos seleccionados con hash; dashboard abre el visor y compara la lectura actual. Export añade finding-manifest v1 con UUID/legacy, fuente y versiones original/copia de cada selección, manteniendo source-manifest v1. Cambios de ficha/reporte después de compilar bloquean antes de reemplazar el paquete. Detalle [phase-177.md](phase-177.md). Sin firma, vínculo job/finding ni snapshots históricos; V3-03 sigue parcial.

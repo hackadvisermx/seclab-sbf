@@ -83,9 +83,12 @@ def create_or_update_finding(eng_id: str, payload: FindingCreate, type: str = Qu
 
 
 @router.delete("/{eng_id}/{slug}")
-def delete_finding(eng_id: str, slug: str, type: str = Query("engagement")):
+def delete_finding(eng_id: str, slug: str, type: str = Query("engagement"), expected_source_sha256: str | None = Query(None)):
     """Elimina una ficha de hallazgo."""
-    success = workspace_service.delete_finding(eng_id, slug, type)
+    try:
+        success = workspace_service.delete_finding(eng_id, slug, type, expected_source_sha256)
+    except FindingUpdateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     if not success:
         raise HTTPException(status_code=404, detail="Hallazgo no encontrado")
     return {"status": "ok", "message": f"Hallazgo {slug} eliminado correctamente"}

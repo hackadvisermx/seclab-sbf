@@ -1151,3 +1151,54 @@ test('lista tardía del proyecto anterior no ofrece fichas para editar en el act
     assert.equal(view.root.querySelector('[data-testid="finding-identity"]'), null)
   } finally { view.cleanup() }
 })
+
+test('borrado obsoleto conserva ficha y recarga exige otra confirmación con versión actual', async () => {
+  const calls = [], confirmations = []
+  const previous = globalThis.confirm
+  globalThis.confirm = message => { confirmations.push(message); return true }
+  let fresh = false
+  const latest = { ...finding, source_sha256: 'e'.repeat(64), frontmatter: { ...finding.frontmatter, title: 'Actual' } }
+  const view = await mountDecision({ getFindings: async () => [fresh ? latest : finding],
+    deleteFinding: async (...args) => { calls.push(args); if (calls.length === 1) throw new Error('La ficha cambió; no se eliminó.') } })
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Eliminar')
+    assert.deepEqual(calls[0], ['fixture', 'legacy', 'engagement', finding.source_sha256])
+    assert.match(view.root.querySelector('[data-testid="finding-delete-error"]').textContent, /no se eliminó/)
+    assert.equal(confirmations.length, 1)
+    fresh = true; await clickText(view.root, 'Recargar fichas para revisar')
+    assert.match(view.root.textContent, /Actual/); assert.equal(calls.length, 1)
+    await clickText(view.root, 'Eliminar')
+    assert.equal(confirmations.length, 2); assert.equal(calls[1][3], latest.source_sha256)
+  } finally { view.cleanup(); globalThis.confirm = previous }
+})
+
+test('borrado sin versión o confirmación no envía DELETE', async () => {
+  const previous = globalThis.confirm
+  globalThis.confirm = () => false
+  let calls = 0, missing = false
+  const route = reactive({ params: { id: 'fixture', type: 'engagement' } })
+  const view = await mountDecision({ getFindings: async () => [{ ...finding, source_sha256: missing ? null : finding.source_sha256 }], deleteFinding: async () => { calls++ } }, route)
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Eliminar'); assert.equal(calls, 0)
+    missing = true
+    globalThis.confirm = () => true
+    route.params.id = 'other'; await flush(); await clickText(view.root, 'Eliminar')
+    assert.equal(calls, 0); assert.match(view.root.querySelector('[data-testid="finding-delete-error"]').textContent, /Falta la versión/)
+  } finally { view.cleanup(); globalThis.confirm = previous }
+})
+
+for (const failure of [false, true]) test(`borrado pendiente evita duplicados y descarta ${failure ? 'error' : 'éxito'} de otro proyecto`, async () => {
+  const previous = globalThis.confirm
+  globalThis.confirm = () => true
+  const route = reactive({ params: { id: 'fixture', type: 'engagement' } })
+  let finish, calls = 0
+  const view = await mountDecision({ getFindings: async () => [finding], deleteFinding: () => { calls++; return new Promise((resolve,reject) => { finish = failure ? reject : resolve }) } }, route)
+  try {
+    await clickText(view.root, 'Hallazgos'); await clickText(view.root, 'Eliminar'); await clickText(view.root, 'Eliminando')
+    assert.equal(calls, 1)
+    route.params.id = 'other'; await flush()
+    finish(new Error('Fallo anterior')); await flush()
+    assert.equal(view.root.querySelector('[data-testid="finding-delete-error"]'), null)
+    assert.match(view.root.textContent, /Eliminar/)
+  } finally { view.cleanup(); globalThis.confirm = previous }
+})

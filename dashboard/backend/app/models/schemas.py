@@ -183,6 +183,9 @@ class ApiKeyResponse(BaseModel):
     last_checked: Optional[str] = None
     status: str  # untested, online, error, rate_limited
     status_message: Optional[str] = None
+    destination_classification: Optional[str] = None
+    is_insecure_transport: bool = False
+    transport_warning: Optional[str] = None
     created_at: str
     updated_at: str
 

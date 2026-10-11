@@ -2259,6 +2259,46 @@ class TestHostileContentDetection(unittest.TestCase):
         self.assertIn("[DATO NO CONFIABLE - PATRÓN DE INYECCIÓN NEUTRALIZADO:", sanitized)
 
 
+class TestNetworkEndpointClassification(unittest.TestCase):
+    def test_loopback_destinations(self):
+        from seclab_network import classify_endpoint
+        res = classify_endpoint("http://localhost:11434")
+        self.assertEqual(res["classification"], "LOCAL_LOOPBACK")
+        self.assertTrue(res["is_local"])
+        self.assertFalse(res["is_insecure_transport"])
+
+        res2 = classify_endpoint("http://127.0.0.1:8000/v1")
+        self.assertEqual(res2["classification"], "LOCAL_LOOPBACK")
+        self.assertTrue(res2["is_local"])
+        self.assertFalse(res2["is_insecure_transport"])
+
+    def test_private_network_destinations(self):
+        from seclab_network import classify_endpoint
+        res_http = classify_endpoint("http://192.168.1.5:11434")
+        self.assertEqual(res_http["classification"], "PRIVATE_NETWORK")
+        self.assertTrue(res_http["is_local"])
+        self.assertTrue(res_http["is_insecure_transport"])
+        self.assertIsNotNone(res_http["transport_warning"])
+
+        res_https = classify_endpoint("https://10.0.0.2:11434")
+        self.assertEqual(res_https["classification"], "PRIVATE_NETWORK")
+        self.assertTrue(res_https["is_local"])
+        self.assertFalse(res_https["is_insecure_transport"])
+
+    def test_public_remote_destinations(self):
+        from seclab_network import classify_endpoint
+        res_tls = classify_endpoint("https://api.openai.com/v1")
+        self.assertEqual(res_tls["classification"], "PUBLIC_REMOTE")
+        self.assertFalse(res_tls["is_local"])
+        self.assertFalse(res_tls["is_insecure_transport"])
+
+        res_insecure = classify_endpoint("http://external-llm.example.org/v1")
+        self.assertEqual(res_insecure["classification"], "PUBLIC_REMOTE")
+        self.assertFalse(res_insecure["is_local"])
+        self.assertTrue(res_insecure["is_insecure_transport"])
+        self.assertIn("seguridad crítica", res_insecure["transport_warning"])
+
+
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
     recon_safety = load_module('recon_safety_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_recon_safety.py')

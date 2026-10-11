@@ -11,6 +11,7 @@ from app.models.schemas import ChatMessage, ChatCompletionRequest, ChatCompletio
 from app.core.artifact_snapshot import detect_hostile_content, neutralize_hostile_content
 from app.services.workspace_sync import workspace_service
 from app.services.runner_service import runner_service, AgentContextUnavailable
+from app.services.vault_service import vault_service
 from app.services.proxy_service import proxy_service
 
 router = APIRouter(prefix="/copilot", tags=["Copiloto Táctico & Agentes IA"])
@@ -204,7 +205,25 @@ def get_engagement_copilot_context(
     except AgentContextUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from None
     hostile_findings = detect_hostile_content(context_md)
-    return {"engagement_id": eng_id, "agent": agent, "context": context_md, "hostile_findings": hostile_findings}
+    dest_info = None
+    if provider:
+        entry = vault_service.get_key_entry(provider)
+        base = entry.get("base_url") if entry else None
+        dest_info = vault_service.inspect_destination(provider, base)
+    elif profile == "local":
+        entry = vault_service.get_key_entry("custom_llm")
+        base = entry.get("base_url") if entry else None
+        dest_info = vault_service.inspect_destination("custom_llm", base)
+    else:
+        dest_info = vault_service.inspect_destination(provider or "openrouter")
+
+    return {
+        "engagement_id": eng_id,
+        "agent": agent,
+        "context": context_md,
+        "hostile_findings": hostile_findings,
+        "destination": dest_info,
+    }
 
 
 @router.post("/review")
@@ -220,9 +239,23 @@ def review_copilot_request(payload: CopilotReviewRequest):
     except AgentContextUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from None
     hostile_findings = detect_hostile_content(context_md)
+
+    dest_info = None
+    if payload.provider:
+        entry = vault_service.get_key_entry(payload.provider)
+        base = entry.get("base_url") if entry else None
+        dest_info = vault_service.inspect_destination(payload.provider, base)
+    elif payload.profile == "local":
+        entry = vault_service.get_key_entry("custom_llm")
+        base = entry.get("base_url") if entry else None
+        dest_info = vault_service.inspect_destination("custom_llm", base)
+    else:
+        dest_info = vault_service.inspect_destination(payload.provider or "openrouter")
+
     return {"engagement_id": payload.engagement_id, "agent": payload.agent_id,
             "context": context_md,
             "hostile_findings": hostile_findings,
+            "destination": dest_info,
             "context_review_token": _review_token(context_md, payload.engagement_id,
                 payload.type, payload.agent_id, payload.provider, payload.model,
                 payload.profile, payload.messages)}

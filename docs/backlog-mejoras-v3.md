@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases181/182/184/185/186/188 están terminadas y fusionadas. La [fase188](phase-188.md) evita que metadata repetida cierre el checklist. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases181/182/184/185/186/188/190 están terminadas y fusionadas. La [fase191](phase-191.md) pasó sus gates locales y espera PR/CI; ambas entregas recientes son parciales. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -24,6 +24,7 @@ Las fases181/182/184/185/186/188 están terminadas y fusionadas. La [fase188](ph
 | Fase185 / V3-03p/V3-05 | Contexto conserva fuentes ambiguas/ilegibles sin adoptar valores ni marcar cierre listo | [#205](https://github.com/hackadvisermx/seclab-sbf/pull/205), `115e16e` | [38109695510](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38109695510), `ac744a2`, aprobado |
 | Fase186 / V3-03q/V3-05 | Enlaces de fichas externos no alimentan contexto, checklist ni cierre | [#206](https://github.com/hackadvisermx/seclab-sbf/pull/206), `07b4951` | [38110351287](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38110351287), `45060d0`, aprobado |
 | Fase188 / V3-03r | Claves literales repetidas permanecen sin interpretar en checklist, recomendador y cierre | [#208](https://github.com/hackadvisermx/seclab-sbf/pull/208), `a965f98` | [38146832126](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38146832126), `850c730`, aprobado |
+| Fase190 / V3-05e | Revisión editable del contexto por consulta con rechazo de preview obsoleto | [#210](https://github.com/hackadvisermx/seclab-sbf/pull/210), `138e083` | [38158197265](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38158197265), `bf96b4f`, aprobado |
 
 Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182](phase-182.md) y [fase184](phase-184.md). En el cierre de fase184: 238 Python, 237 backend instalado, smoke, Compose, Actionlint, gate High/Critical y SBOM aprobados bajo la política existente. Ninguno de estos merges publica ni despliega una imagen.
 
@@ -39,6 +40,8 @@ Detalle de pruebas, compatibilidad y límites: [fase181](phase-181.md), [fase182
 | V3-07 | Métricas de éxito propuestas en este documento | Definición operativa, denominadores, retención y medición local validada |
 
 Las notas de entrega inferiores describen lo comprobado y pendiente en su fecha. Esta síntesis incorpora los avances posteriores; ninguna iniciativa se declara completa sólo por cerrar una fase.
+
+La fase191 añade un runner de PR local con imagen/base verificadas por hash, pruebas, smoke, Actionlint, CVE y SBOM. Se usa durante el desarrollo para evitar pushes intermedios; CI del head exacto sigue siendo gate de merge. Detalle en [phase-191.md](phase-191.md).
 
 Estimación de planificación al 2026-10-11: **22–35 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Es una descomposición tentativa, no un porcentaje ni una promesa de plazo; la validación con personas y los hallazgos de integración pueden cambiarla.
 

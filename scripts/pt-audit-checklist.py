@@ -27,7 +27,7 @@ import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from seclab_findings import requires_finding_review, finding_status_from_markdown, read_finding_source
+from seclab_findings import requires_finding_review, finding_status_from_markdown, parse_finding_frontmatter, read_finding_source
 
 # Constantes de severidad y metodologías
 METHODOLOGY_AREAS = [
@@ -197,7 +197,7 @@ class AuditChecklistEvaluator:
                 continue
             try:
                 content = read_finding_source(md_file)
-                meta, body = parse_simple_yaml_frontmatter(content)
+                meta, body = parse_finding_frontmatter(content)
                 title = meta.get("title", md_file.stem)
                 status = finding_status_from_markdown(content)
                 cwe = meta.get("cwe", "").strip()

@@ -163,7 +163,7 @@ def parse_finding_frontmatter(content: str):
             raise ValueError('Metadata YAML inválida; revisa la fuente original.') from error
         if not isinstance(metadata, dict):
             raise ValueError('Metadata debe ser un objeto YAML.')
-    for key in ('id', 'title', 'severity', 'status', 'asset', 'cwe', 'finding_id'):
+    for key in ('id', 'title', 'severity', 'status', 'asset', 'cwe', 'finding_id', 'source_job_id', 'source_stage'):
         if key in metadata and metadata[key] is not None and not isinstance(metadata[key], str):
             raise ValueError(f'Metadata {key} debe ser texto.')
     return metadata, body
@@ -182,3 +182,22 @@ def normalize_finding_id(value):
             or uuid.UUID(hex=value).version != 4):
         raise ValueError('Identidad de hallazgo inválida: se requiere UUID v4 hexadecimal en minúsculas.')
     return value
+
+
+def normalize_source_job_id(value):
+    if value is None:
+        return None
+    if not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{32}', value):
+        raise ValueError('Identificador de job de origen inválido: se requiere run_id hexadecimal de 32 caracteres.')
+    return value
+
+
+def normalize_source_stage(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError('Etapa de origen inválida: se requiere nombre alfanumérico de hasta 64 caracteres.')
+    cleaned = value.strip()
+    if not re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', cleaned):
+        raise ValueError('Etapa de origen inválida: se requiere nombre alfanumérico de hasta 64 caracteres.')
+    return cleaned

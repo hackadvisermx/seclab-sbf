@@ -7,13 +7,18 @@ import pathlib
 import re
 import sys
 import uuid
+import sqlite3
 import yaml
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from pydantic import ValidationError
 from typing import Any, Dict, List, Optional, Tuple
-from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR
+from app.config import WORKSPACE_DIR, TEMPLATES_DIR, SCRIPTS_DIR, RECON_DB_PATH
 from app.core.project_trash import ProjectTrash
-from app.core.artifact_snapshot import ArtifactChangedError, read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs, normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id
+from app.core.artifact_snapshot import (
+    ArtifactChangedError, read_artifact_snapshot, normalize_artifact_refs, validate_artifact_refs,
+    normalize_status, normalize_verification_rationale, validate_confirmation, normalize_finding_id,
+    normalize_source_job_id, normalize_source_stage
+)
 from app.core.workspace_paths import UnsafeWorkspacePath, project_directory
 from app.models.schemas import (
     EngagementSummary,
@@ -110,12 +115,88 @@ def _validate_finding_confirmation(directory, metadata):
         raise FindingUpdateError('No se confirmó ni guardó la ficha: ' + str(error)) from error
 
 
+def _finding_provenance(metadata):
+    job_id = metadata.get('source_job_id')
+    stage = metadata.get('source_stage')
+    err = None
+    if job_id is not None:
+        try:
+            job_id = normalize_source_job_id(job_id)
+        except ValueError as exc:
+            err = str(exc)
+            job_id = None
+    if stage is not None and err is None:
+        try:
+            stage = normalize_source_stage(stage)
+        except ValueError as exc:
+            err = str(exc)
+            stage = None
+    return {'source_job_id': job_id, 'source_stage': stage, 'source_job_error': err}
+
+
+def _validate_finding_provenance(metadata, eng_type, eng_id, recon_db_path=None):
+    job_id = metadata.get('source_job_id')
+    stage = metadata.get('source_stage')
+    if job_id is None and stage is None:
+        return
+    if job_id is not None:
+        try:
+            normalize_source_job_id(job_id)
+        except ValueError as err:
+            raise FindingUpdateError('No se guardó la ficha: ' + str(err)) from err
+    if stage is not None:
+        try:
+            normalize_source_stage(stage)
+        except ValueError as err:
+            raise FindingUpdateError('No se guardó la ficha: ' + str(err)) from err
+    db_path = recon_db_path if recon_db_path is not None else RECON_DB_PATH
+    if job_id is not None and db_path and db_path.exists():
+        with closing(sqlite3.connect(db_path, timeout=5)) as conn:
+            row = conn.execute(
+                "SELECT stage, status FROM recon_job_history WHERE engagement_type=? AND engagement_id=? AND run_id=?",
+                (eng_type, eng_id, job_id)
+            ).fetchone()
+            if not row:
+                raise FindingUpdateError('El job de origen no existe en el historial de este proyecto.')
+            job_stage, job_status = row
+            if stage is not None and job_stage != 'all' and stage != job_stage:
+                raise FindingUpdateError(f'La etapa declarada ({stage}) no coincide con la etapa del job ({job_stage}).')
+            artifact_refs = metadata.get('artifact_refs')
+            if artifact_refs:
+                res_row = conn.execute(
+                    "SELECT result_summary FROM recon_job_results WHERE engagement_type=? AND engagement_id=? AND run_id=?",
+                    (eng_type, eng_id, job_id)
+                ).fetchone()
+                if res_row and res_row[0]:
+                    try:
+                        summary = json.loads(res_row[0])
+                        recorded_refs = {}
+                        for st in summary.get('stages', []):
+                            capture = st.get('artifact_capture')
+                            if capture and isinstance(capture, dict) and capture.get('refs'):
+                                for r in capture['refs']:
+                                    recorded_refs[r['path']] = r['sha256']
+                        if recorded_refs:
+                            for ref in artifact_refs:
+                                rpath = ref.get('path')
+                                rhash = ref.get('sha256')
+                                if rpath in recorded_refs and recorded_refs[rpath] != rhash:
+                                    raise FindingUpdateError(
+                                        f'La versión del artefacto {rpath} no coincide con la registrada por el job {job_id}.'
+                                    )
+                    except json.JSONDecodeError:
+                        pass
+
+
 def _finding_markdown(metadata, body):
     fields = dict(metadata)
     has_references = 'artifact_refs' in fields
     references = fields.pop('artifact_refs', None)
     has_rationale = 'verification_rationale' in fields
     rationale = fields.pop('verification_rationale', None)
+    for k in list(fields):
+        if fields[k] is None:
+            del fields[k]
     header = yaml.dump(fields, default_flow_style=False, sort_keys=False, allow_unicode=True)
     if has_references:
         header += 'artifact_refs: ' + json.dumps(normalize_artifact_refs(references), ensure_ascii=True) + '\n'
@@ -180,7 +261,7 @@ def _parse_frontmatter(content: str, strict: bool = False) -> Tuple[Dict[str, An
 
 
 def _finding_frontmatter(metadata, file_path):
-    for field in ('title', 'severity', 'status', 'asset', 'cwe', 'owasp', 'author', 'cvss_vector', 'cvss_v31'):
+    for field in ('title', 'severity', 'status', 'asset', 'cwe', 'owasp', 'author', 'cvss_vector', 'cvss_v31', 'source_job_id', 'source_stage'):
         if metadata.get(field) is not None and not isinstance(metadata[field], str):
             raise FindingUpdateError('Campos de metadata inválidos; revisa la fuente original.')
     score = float(metadata['cvss_score']) if metadata.get('cvss_score') is not None else None
@@ -193,7 +274,9 @@ def _finding_frontmatter(metadata, file_path):
         owasp=metadata.get('owasp'), asset=metadata.get('asset'),
         date=str(metadata.get('date', datetime.date.today().isoformat())),
         author=metadata.get('author', 'tester'),
-        status=str(metadata.get('status') or 'CANDIDATE').strip().upper() or 'CANDIDATE')
+        status=str(metadata.get('status') or 'CANDIDATE').strip().upper() or 'CANDIDATE',
+        source_job_id=metadata.get('source_job_id'),
+        source_stage=metadata.get('source_stage'))
 
 
 def _finding_detail(file_path, eng_id):
@@ -208,7 +291,8 @@ def _finding_detail(file_path, eng_id):
             frontmatter = _finding_frontmatter(metadata, file_path)
             return FindingDetail(slug=file_path.stem, filename=file_path.name, frontmatter=frontmatter,
                 body=body, engagement_id=eng_id, source_sha256=digest,
-                **_finding_identity(metadata), **_finding_refs(metadata), **_finding_review(metadata))
+                **_finding_identity(metadata), **_finding_refs(metadata), **_finding_review(metadata),
+                **_finding_provenance(metadata))
         except (FindingUpdateError, yaml.YAMLError, ValidationError, ValueError, TypeError, RecursionError):
             error = 'Metadata inválida o ambigua. Revisa y repara la fuente original antes de editar; no se interpretó su estado.'
     return FindingDetail(slug=file_path.stem, filename=file_path.name, engagement_id=eng_id,
@@ -217,8 +301,9 @@ def _finding_detail(file_path, eng_id):
 
 
 class WorkspaceSyncService:
-    def __init__(self, workspace_path: pathlib.Path = WORKSPACE_DIR):
+    def __init__(self, workspace_path: pathlib.Path = WORKSPACE_DIR, recon_db_path: pathlib.Path = RECON_DB_PATH):
         self.ws_path = workspace_path
+        self.recon_db_path = recon_db_path
         self.trash = ProjectTrash(workspace_path)
         self.ws_path.mkdir(parents=True, exist_ok=True)
         (self.ws_path / "engagements").mkdir(exist_ok=True)
@@ -525,16 +610,20 @@ class WorkspaceSyncService:
                 _finding_frontmatter(fm, file_path)
             except (ValidationError, ValueError, TypeError):
                 raise FindingUpdateError('Metadata inválida; repara la fuente original antes de editar. No se sobrescribió.') from None
-            for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status", "verification_rationale"):
+            for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status", "verification_rationale", "source_job_id", "source_stage"):
                 if field in finding_create.model_fields_set:
                     value = getattr(finding_create, field)
                     if field in ("severity", "status") and value is not None:
                         value = value.upper()
-                    fm[field] = value
+                    if value is None and field in fm:
+                        del fm[field]
+                    elif value is not None:
+                        fm[field] = value
             if references is not None:
                 fm['artifact_refs'] = references
             _ensure_finding_identity(ev_dir, file_path, fm, finding_create.finding_id)
             _validate_finding_confirmation(target_dir, fm)
+            _validate_finding_provenance(fm, eng_type, eng_id, self.recon_db_path)
             try:
                 content = _finding_markdown(fm, finding_create.body)
             except ValueError as error:
@@ -568,8 +657,13 @@ class WorkspaceSyncService:
             fm['artifact_refs'] = references
         if 'verification_rationale' in finding_create.model_fields_set:
             fm['verification_rationale'] = finding_create.verification_rationale
+        if finding_create.source_job_id is not None:
+            fm['source_job_id'] = finding_create.source_job_id
+        if finding_create.source_stage is not None:
+            fm['source_stage'] = finding_create.source_stage
         _ensure_finding_identity(ev_dir, file_path, fm, finding_create.finding_id)
         _validate_finding_confirmation(target_dir, fm)
+        _validate_finding_provenance(fm, eng_type, eng_id, self.recon_db_path)
 
         body_parts = []
         body_parts.append(f"## Descripción\n{finding_create.description or 'Detalles de la vulnerabilidad.'}\n")

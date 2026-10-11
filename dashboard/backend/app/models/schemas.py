@@ -102,6 +102,8 @@ class FindingFrontmatter(BaseModel):
     date: Optional[str] = None
     author: Optional[str] = "tester"
     status: Optional[str] = "CANDIDATE"  # PROVEN, CANDIDATE, DISPROVED, VERIFIED, DRAFT, REMEDIATED, FALSE_POSITIVE
+    source_job_id: Optional[str] = None
+    source_stage: Optional[str] = None
 
 
 class FindingDetail(BaseModel):
@@ -118,6 +120,9 @@ class FindingDetail(BaseModel):
     artifact_refs_error: Optional[str] = None
     verification_rationale: str = ""
     confirmation_error: Optional[str] = None
+    source_job_id: Optional[str] = None
+    source_stage: Optional[str] = None
+    source_job_error: Optional[str] = None
 
 
 class FindingCreate(BaseModel):
@@ -139,6 +144,8 @@ class FindingCreate(BaseModel):
     body: Optional[str] = None
     artifact_refs: Optional[List[Dict[str, str]]] = None
     verification_rationale: Optional[str] = Field(default=None, max_length=4000)
+    source_job_id: Optional[str] = None
+    source_stage: Optional[str] = None
 
 
 # ==============================================================================

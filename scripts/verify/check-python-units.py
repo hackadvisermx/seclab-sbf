@@ -1742,6 +1742,30 @@ class TestPivotingToolkitAndConfig(unittest.TestCase):
                 self.assertEqual(finding_status_from_markdown(content), expected)
         self.assertEqual(finding_status_from_markdown('status: PROVEN'), 'CANDIDATE')
 
+    def test_finding_provenance_scalars_validation(self):
+        from seclab_findings import normalize_source_job_id, normalize_source_stage, parse_finding_frontmatter
+        self.assertIsNone(normalize_source_job_id(None))
+        valid_job_id = "a" * 32
+        self.assertEqual(normalize_source_job_id(valid_job_id), valid_job_id)
+        for bad_job_id in ["", "not-hex", "A" * 32, "a" * 31, "a" * 33, 12345]:
+            with self.subTest(bad_job_id=bad_job_id):
+                with self.assertRaises(ValueError):
+                    normalize_source_job_id(bad_job_id)
+
+        self.assertIsNone(normalize_source_stage(None))
+        self.assertEqual(normalize_source_stage("nmap_scan"), "nmap_scan")
+        self.assertEqual(normalize_source_stage(" stage-1 "), "stage-1")
+        for bad_stage in ["", "stage/invalid", "stage with spaces", "a" * 65, 99]:
+            with self.subTest(bad_stage=bad_stage):
+                with self.assertRaises(ValueError):
+                    normalize_source_stage(bad_stage)
+
+        valid_fm = f"---\nid: TEST\nsource_job_id: {valid_job_id}\nsource_stage: nmap_scan\n---\nBody\n"
+        meta, body = parse_finding_frontmatter(valid_fm)
+        self.assertEqual(meta["source_job_id"], valid_job_id)
+        self.assertEqual(meta["source_stage"], "nmap_scan")
+        self.assertEqual(body, "Body\n")
+
     def test_checklist_consumers_support_source_and_extensionless_installation(self):
         import importlib.machinery
         import shutil

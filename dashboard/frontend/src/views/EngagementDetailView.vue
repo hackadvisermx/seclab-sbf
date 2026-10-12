@@ -1815,6 +1815,154 @@
 
     <!-- TAB: LÍNEA DE TIEMPO DEL ENGAGEMENT (V3-02o) -->
     <div v-if="activeTab === 'timeline'" class="space-y-6" data-testid="engagement-timeline-view">
+      <!-- Grafo Estructurado de Procedencia y Trazabilidad (DAG) (V3-02s) -->
+      <div v-if="provenanceGraph" data-testid="provenance-flow-graph" class="tactical-card space-y-4 border border-cyan-500/30 bg-slate-900/60 p-4 rounded-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-lg">⛓️</span>
+              <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider">
+                Grafo de Procedencia Técnica (Cadena de Custodia)
+              </h2>
+              <span
+                data-testid="provenance-coverage-badge"
+                class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border"
+                :class="provenanceGraph.summary?.provenance_coverage_pct === 100 ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/40' : 'bg-amber-950/40 text-amber-300 border-amber-500/40'"
+              >
+                {{ provenanceGraph.summary?.provenance_coverage_pct ?? 0 }}% Trazable
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+              Correlación dirigida entre Alcance, Escaneos/Jobs, Fichas de Hallazgo y Entregables compilados.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button
+              @click="exportProvenance('mermaid')"
+              data-testid="provenance-export-mermaid-btn"
+              class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-[11px] font-mono transition-colors"
+              title="Exportar diagrama de procedencia como sintaxis Mermaid"
+            >
+              📥 Mermaid (.mmd)
+            </button>
+            <button
+              @click="exportProvenance('json')"
+              data-testid="provenance-export-json-btn"
+              class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-[11px] font-mono transition-colors"
+              title="Exportar grafo de procedencia en JSON"
+            >
+              📥 JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- Métricas del Grafo -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+          <div class="p-2.5 rounded-sm bg-slate-950/60 border border-slate-800">
+            <span class="text-slate-400 block text-[10px]">TOTAL NODOS</span>
+            <span data-testid="provenance-total-nodes" class="text-sm font-bold text-white">{{ provenanceGraph.summary?.total_nodes ?? 0 }}</span>
+          </div>
+          <div class="p-2.5 rounded-sm bg-slate-950/60 border border-slate-800">
+            <span class="text-slate-400 block text-[10px]">RELACIONES (ARISTAS)</span>
+            <span data-testid="provenance-total-edges" class="text-sm font-bold text-white">{{ provenanceGraph.summary?.total_edges ?? 0 }}</span>
+          </div>
+          <div class="p-2.5 rounded-sm bg-slate-950/60 border border-slate-800">
+            <span class="text-slate-400 block text-[10px]">HALLAZGOS CON JOB</span>
+            <span class="text-sm font-bold text-emerald-400">{{ provenanceGraph.summary?.with_provenance_count ?? 0 }} / {{ provenanceGraph.summary?.findings_count ?? 0 }}</span>
+          </div>
+          <div class="p-2.5 rounded-sm bg-slate-950/60 border border-slate-800">
+            <span class="text-slate-400 block text-[10px]">CADENAS COMPLETAS</span>
+            <span data-testid="provenance-chains-badge" class="text-sm font-bold text-cyan-400">{{ provenanceGraph.summary?.complete_chains_count ?? 0 }}</span>
+          </div>
+        </div>
+
+        <!-- 4 Columnas del Flujo de Procedencia -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2">
+          <!-- 1. Alcance -->
+          <div class="p-3 rounded-sm bg-slate-950/80 border border-slate-800/80 space-y-2">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+              <span class="text-xs font-bold text-blue-400 uppercase tracking-wide">1. Alcance</span>
+              <span class="text-[10px] text-slate-500 font-mono">Contrato</span>
+            </div>
+            <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div
+                v-for="n in provenanceGraph.nodes?.filter(x => x.type === 'scope') || []"
+                :key="n.id"
+                class="p-2 rounded bg-slate-900 border border-slate-800 text-xs"
+              >
+                <div class="font-bold text-slate-200 truncate">{{ n.label }}</div>
+                <div class="text-[10px] text-slate-400">{{ n.details?.targets_count ?? 0 }} objetivos declarados</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Reconocimiento y Jobs -->
+          <div class="p-3 rounded-sm bg-slate-950/80 border border-slate-800/80 space-y-2">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+              <span class="text-xs font-bold text-cyan-400 uppercase tracking-wide">2. Jobs / Escaneos</span>
+              <span class="text-[10px] text-slate-500 font-mono">Ejecución</span>
+            </div>
+            <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div
+                v-for="n in provenanceGraph.nodes?.filter(x => x.type === 'job') || []"
+                :key="n.id"
+                class="p-2 rounded bg-slate-900 border border-slate-800 text-xs"
+              >
+                <div class="font-bold text-slate-200 truncate">{{ n.label }}</div>
+                <div class="text-[10px] text-slate-400 uppercase">{{ n.status }}</div>
+              </div>
+              <div v-if="!provenanceGraph.nodes?.some(x => x.type === 'job')" class="text-[11px] text-slate-500 italic">
+                Sin corridas registradas
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Hallazgos -->
+          <div class="p-3 rounded-sm bg-slate-950/80 border border-slate-800/80 space-y-2">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+              <span class="text-xs font-bold text-amber-400 uppercase tracking-wide">3. Hallazgos</span>
+              <span class="text-[10px] text-slate-500 font-mono">Evidencia</span>
+            </div>
+            <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div
+                v-for="n in provenanceGraph.nodes?.filter(x => x.type === 'finding') || []"
+                :key="n.id"
+                class="p-2 rounded bg-slate-900 border border-slate-800 text-xs"
+              >
+                <div class="font-bold text-slate-200 truncate">{{ n.label }}</div>
+                <div class="text-[10px]" :class="n.details?.source_job_id ? 'text-emerald-400' : 'text-amber-400'">
+                  {{ n.details?.source_job_id ? `Job #${n.details.source_job_id}` : 'Origen manual' }}
+                </div>
+              </div>
+              <div v-if="!provenanceGraph.nodes?.some(x => x.type === 'finding')" class="text-[11px] text-slate-500 italic">
+                Sin hallazgos registrados
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Entregables -->
+          <div class="p-3 rounded-sm bg-slate-950/80 border border-slate-800/80 space-y-2">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+              <span class="text-xs font-bold text-emerald-400 uppercase tracking-wide">4. Entregables</span>
+              <span class="text-[10px] text-slate-500 font-mono">Custodia</span>
+            </div>
+            <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div
+                v-for="n in provenanceGraph.nodes?.filter(x => x.type === 'deliverable') || []"
+                :key="n.id"
+                class="p-2 rounded bg-slate-900 border border-slate-800 text-xs"
+              >
+                <div class="font-bold text-slate-200 truncate">{{ n.label }}</div>
+                <div class="text-[10px] text-emerald-400 uppercase">{{ n.status }}</div>
+              </div>
+              <div v-if="!provenanceGraph.nodes?.some(x => x.type === 'deliverable')" class="text-[11px] text-slate-500 italic">
+                Sin entregables sellados
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="tactical-card space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
           <div>
@@ -3953,25 +4101,50 @@ const tabs = computed(() => {
   ]
 })
 
-// Timeline (V3-02o / V3-02q)
+// Timeline (V3-02o / V3-02q) & Grafo de Procedencia (V3-02s)
 const timelineEvents = ref([])
 const timelineLoading = ref(false)
 const timelineError = ref('')
 const timelineExporting = ref(false)
 const timelineSearchQuery = ref('')
 const selectedTimelineCategory = ref('all')
+const provenanceGraph = ref(null)
 
 async function loadTimeline() {
   if (!engId.value) return
   timelineLoading.value = true
   timelineError.value = ''
   try {
-    const res = await api.getEngagementTimeline(engId.value, engType.value)
-    timelineEvents.value = res.events || []
+    const [resTimeline, resProv] = await Promise.all([
+      api.getEngagementTimeline(engId.value, engType.value),
+      api.getProvenanceGraph(engId.value, engType.value).catch(() => null),
+    ])
+    timelineEvents.value = resTimeline.events || []
+    if (resProv) provenanceGraph.value = resProv
   } catch (err) {
     timelineError.value = err.message || 'Error al cargar la línea de tiempo'
   } finally {
     timelineLoading.value = false
+  }
+}
+
+async function exportProvenance(format = 'mermaid') {
+  if (!engId.value) return
+  try {
+    const content = await api.exportProvenanceGraph(engId.value, format, engType.value)
+    const ext = format === 'json' ? 'json' : format === 'mermaid' ? 'mmd' : 'md'
+    const mime = format === 'json' ? 'application/json' : 'text/plain'
+    const blob = new Blob([content], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `provenance_${engId.value}.${ext}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('Error al exportar grafo de procedencia:', err)
   }
 }
 

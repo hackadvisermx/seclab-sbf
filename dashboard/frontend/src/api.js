@@ -73,6 +73,16 @@ export const api = {
     }
     return res.text()
   },
+  getProvenanceGraph: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/provenance/graph?type=${encodeURIComponent(type)}`),
+  exportProvenanceGraph: async (id, format = 'json', type = 'engagement') => {
+    const url = `${API_BASE}/engagements/${encodeURIComponent(id)}/provenance/export?type=${encodeURIComponent(type)}&format=${encodeURIComponent(format)}`
+    const res = await fetch(url, { credentials: 'same-origin' })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(err || `Error ${res.status}`)
+    }
+    return res.text()
+  },
   updateNotes: (id, content, type = 'engagement') => request(`/engagements/${id}/notes?type=${type}`, { method: 'PUT', body: JSON.stringify({ content }) }),
 
 

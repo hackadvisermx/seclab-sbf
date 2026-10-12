@@ -120,6 +120,7 @@ export const api = {
   sendCopilotChat: (data) => request('/copilot/chat', { method: 'POST', body: JSON.stringify(data) }),
   verifyCopilotCitations: (data) => request('/copilot/citations/verify', { method: 'POST', body: JSON.stringify(data) }),
   getCopilotChatHistory: (engId, type = 'engagement') => request(`/copilot/chat/history?engagement_id=${encodeURIComponent(engId)}&type=${encodeURIComponent(type)}`),
+  getCopilotConsentHistory: (engId, type = 'engagement', limit = 50) => request(`/copilot/consent/history?engagement_id=${encodeURIComponent(engId)}&type=${encodeURIComponent(type)}&limit=${limit}`),
   autoRedactText: (text) => request('/copilot/redact', { method: 'POST', body: JSON.stringify({ text }) }),
 
   // Logs & Reportes

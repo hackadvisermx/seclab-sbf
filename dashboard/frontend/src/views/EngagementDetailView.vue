@@ -722,12 +722,24 @@
           <p class="text-xs text-slate-400">Almacenadas en /workspace/{{ engType === 'reto' ? 'retos' : 'engagements' }}/{{ engId }}/evidence/*.md</p>
         </div>
 
-        <button
-          @click="openNewFindingModal"
-          class="px-4 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs shadow-md shadow-cyan-500/20"
-        >
-          + Nueva Ficha (pt-finding new)
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            @click="exportSarif"
+            :disabled="isExportingSarif || findings.length === 0"
+            data-testid="export-findings-sarif-btn"
+            class="px-3 py-2 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 font-mono text-xs border border-cyan-500/30 flex items-center gap-1 disabled:opacity-50"
+            title="Exportar hallazgos en formato OASIS SARIF v2.1.0"
+          >
+            <span>📥</span>
+            <span>{{ isExportingSarif ? 'Exportando...' : 'SARIF v2.1.0' }}</span>
+          </button>
+          <button
+            @click="openNewFindingModal"
+            class="px-4 py-2 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs shadow-md shadow-cyan-500/20"
+          >
+            + Nueva Ficha (pt-finding new)
+          </button>
+        </div>
       </div>
 
       <div v-if="findings.length === 0" class="text-center py-16 tactical-card space-y-3">
@@ -4489,6 +4501,31 @@ async function loadFindings() {
     if (findingsTab) findingsTab.count = findings.value.length
   } catch (err) {
     console.error('Error al cargar hallazgos:', err)
+  }
+}
+
+// Exportación SARIF v2.1.0 de Hallazgos (V3-03dd)
+const isExportingSarif = ref(false)
+
+async function exportSarif() {
+  if (!engId.value || isExportingSarif.value) return
+  isExportingSarif.value = true
+  try {
+    const doc = await api.exportFindingsSarif(engId.value, engType.value)
+    const jsonStr = JSON.stringify(doc, null, 2)
+    const blob = new Blob([jsonStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `findings_${engId.value}.sarif.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('Error al exportar SARIF:', err)
+  } finally {
+    isExportingSarif.value = false
   }
 }
 

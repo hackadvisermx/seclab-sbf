@@ -2091,6 +2091,240 @@
       </div>
     </div>
 
+    <!-- TAB: MÉTRICAS OPERACIONALES DE AUDITORÍA (V3-07b) -->
+    <div v-if="activeTab === 'metrics'" class="space-y-6" data-testid="engagement-metrics-view">
+      <div class="tactical-card space-y-4">
+        <!-- Cabecera de Métricas -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-lg">📊</span>
+              <h2 class="text-sm font-mono font-bold text-slate-100 uppercase tracking-wider">Métricas Operacionales de Auditoría</h2>
+              <span
+                v-if="metricsData"
+                data-testid="audit-readiness-score"
+                class="px-2.5 py-0.5 rounded text-[11px] font-mono font-bold uppercase border"
+                :class="{
+                  'bg-emerald-950/60 text-emerald-400 border-emerald-500/50': metricsData.audit_readiness_score >= 75,
+                  'bg-amber-950/60 text-amber-400 border-amber-500/50': metricsData.audit_readiness_score >= 50 && metricsData.audit_readiness_score < 75,
+                  'bg-rose-950/60 text-rose-400 border-rose-500/50': metricsData.audit_readiness_score < 50
+                }"
+              >
+                Madurez: {{ metricsData.audit_readiness_score }} / 100
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+              Evaluación cuantitativa y trazabilidad local de artefactos, procedencia de hallazgos y cumplimiento de alcance sin egress de red.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button
+              type="button"
+              @click="loadMetrics"
+              :disabled="metricsLoading"
+              data-testid="refresh-metrics-btn"
+              class="px-3 py-1.5 rounded text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center space-x-1"
+            >
+              <span>🔄</span>
+              <span>{{ metricsLoading ? 'Calculando...' : 'Recargar Métricas' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Estado de Carga / Error -->
+        <div v-if="metricsLoading" data-testid="metrics-loading" class="text-center py-8 text-slate-400 font-mono text-xs">
+          Calculando métricas operacionales locales...
+        </div>
+
+        <div v-else-if="metricsError" data-testid="metrics-error" class="p-3 bg-rose-950/40 border border-rose-800 text-rose-300 rounded text-xs font-mono">
+          {{ metricsError }}
+        </div>
+
+        <div v-else-if="metricsData" class="space-y-6">
+          <!-- Barra de Progreso e Hitos de Madurez -->
+          <div class="p-4 bg-slate-900/40 border border-slate-800 rounded-md space-y-3 font-mono text-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-slate-300 font-bold">Índice General de Madurez de Auditoría:</span>
+              <span class="font-bold" :class="{ 'text-emerald-400': metricsData.audit_readiness_score >= 75, 'text-amber-400': metricsData.audit_readiness_score >= 50 && metricsData.audit_readiness_score < 75, 'text-rose-400': metricsData.audit_readiness_score < 50 }">
+                {{ metricsData.audit_readiness_score }}%
+              </span>
+            </div>
+            <div class="w-full bg-slate-950 rounded-full h-2.5 border border-slate-800 overflow-hidden">
+              <div
+                class="h-full transition-all duration-300"
+                :style="{ width: metricsData.audit_readiness_score + '%' }"
+                :class="{
+                  'bg-emerald-500': metricsData.audit_readiness_score >= 75,
+                  'bg-amber-500': metricsData.audit_readiness_score >= 50 && metricsData.audit_readiness_score < 75,
+                  'bg-rose-500': metricsData.audit_readiness_score < 50
+                }"
+              ></div>
+            </div>
+
+            <!-- 4 Pilares -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+              <div class="p-2 rounded border bg-slate-950/50 text-[11px]" :class="metricsData.scope?.has_scope && (metricsData.scope?.domains_count > 0 || metricsData.scope?.ips_count > 0) ? 'border-emerald-800/60 text-emerald-300' : 'border-slate-800 text-slate-500'">
+                <span>🎯 Alcance (+25)</span>
+              </div>
+              <div class="p-2 rounded border bg-slate-950/50 text-[11px]" :class="metricsData.recon?.completed_jobs > 0 ? 'border-emerald-800/60 text-emerald-300' : 'border-slate-800 text-slate-500'">
+                <span>📡 Reconocimiento (+25)</span>
+              </div>
+              <div class="p-2 rounded border bg-slate-950/50 text-[11px]" :class="metricsData.findings?.confirmed_count > 0 ? 'border-emerald-800/60 text-emerald-300' : 'border-slate-800 text-slate-500'">
+                <span>📋 Hallazgos (+25)</span>
+              </div>
+              <div class="p-2 rounded border bg-slate-950/50 text-[11px]" :class="metricsData.report?.has_report && (metricsData.report?.has_deliverables || metricsData.report?.has_artifact_manifest) ? 'border-emerald-800/60 text-emerald-300' : 'border-slate-800 text-slate-500'">
+                <span>📄 Reporte (+25)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cuadrícula de 4 Tarjetas de Métricas -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
+            <!-- Tarjeta 1: Alcance -->
+            <div data-testid="metrics-card-scope" class="p-4 bg-slate-900/30 border border-slate-800 rounded-md space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <span class="font-bold text-slate-200">🎯 Alcance y Límites</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase" :class="metricsData.scope?.has_scope ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'">
+                  {{ metricsData.scope?.has_scope ? 'target.yaml Activo' : 'Sin Alcance' }}
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-[11px]">
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Dominios:</span>
+                  <span class="text-sm font-bold text-slate-100">{{ metricsData.scope?.domains_count ?? 0 }}</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">IPs / CIDRs:</span>
+                  <span class="text-sm font-bold text-slate-100">{{ metricsData.scope?.ips_count ?? 0 }}</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Exclusiones:</span>
+                  <span class="text-sm font-bold text-slate-100">{{ metricsData.scope?.exclusions_count ?? 0 }}</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Fuera de Alcance:</span>
+                  <span class="text-sm font-bold text-emerald-400">{{ metricsData.scope?.out_of_scope_actions_executed ?? 0 }} violaciones</span>
+                </div>
+              </div>
+              <div class="text-[11px] text-slate-400 pt-1 border-t border-slate-800/40">
+                Permisos: Pasivo: <strong class="text-slate-200">{{ metricsData.scope?.allow_passive ? 'Sí' : 'No' }}</strong> | Activo: <strong class="text-slate-200">{{ metricsData.scope?.allow_active ? 'Sí' : 'No' }}</strong>
+              </div>
+            </div>
+
+            <!-- Tarjeta 2: Reconocimiento -->
+            <div data-testid="metrics-card-recon" class="p-4 bg-slate-900/30 border border-slate-800 rounded-md space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <span class="font-bold text-slate-200">📡 Pipeline de Reconocimiento</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase" :class="metricsData.recon?.has_recon_database ? 'bg-cyan-950 text-cyan-400 border border-cyan-800' : 'bg-slate-800 text-slate-400'">
+                  {{ metricsData.recon?.has_recon_database ? 'recon_jobs.db' : 'Sin Base' }}
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-[11px]">
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Jobs Totales:</span>
+                  <span class="text-sm font-bold text-slate-100">{{ metricsData.recon?.total_jobs ?? 0 }}</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Completados:</span>
+                  <span class="text-sm font-bold text-emerald-400">{{ metricsData.recon?.completed_jobs ?? 0 }}</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Fallidos:</span>
+                  <span class="text-sm font-bold text-rose-400">{{ metricsData.recon?.failed_jobs ?? 0 }}</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Etapas Ejecutadas:</span>
+                  <span class="text-sm font-bold text-cyan-400">{{ metricsData.recon?.stages_executed_count ?? 0 }}</span>
+                </div>
+              </div>
+              <div class="text-[11px] text-slate-400 pt-1 border-t border-slate-800/40 truncate">
+                Etapas: <strong class="text-slate-200">{{ metricsData.recon?.stages_executed?.length ? metricsData.recon.stages_executed.join(', ') : 'Ninguna' }}</strong>
+              </div>
+            </div>
+
+            <!-- Tarjeta 3: Hallazgos & Procedencia -->
+            <div data-testid="metrics-card-findings" class="p-4 bg-slate-900/30 border border-slate-800 rounded-md space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <span class="font-bold text-slate-200">📋 Hallazgos & Trazabilidad</span>
+                <span class="text-slate-400 text-[11px]">Total: {{ metricsData.findings?.total_findings ?? 0 }}</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2 text-[11px]">
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">PROVEN:</span>
+                  <span class="text-sm font-bold text-emerald-400">{{ metricsData.findings?.confirmed_count ?? 0 }}</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">CANDIDATE:</span>
+                  <span class="text-sm font-bold text-amber-400">{{ metricsData.findings?.candidate_count ?? 0 }}</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">DISPROVED:</span>
+                  <span class="text-sm font-bold text-slate-400">{{ metricsData.findings?.disproved_count ?? 0 }}</span>
+                </div>
+              </div>
+
+              <!-- Cobertura de procedencia -->
+              <div class="p-2 bg-slate-950/80 rounded border border-cyan-900/50 space-y-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400 text-[11px]">Cobertura de Procedencia:</span>
+                  <span data-testid="provenance-coverage-pct" class="font-bold text-cyan-400 text-xs">
+                    {{ metricsData.findings?.provenance_coverage_pct ?? 0 }}%
+                  </span>
+                </div>
+                <div class="text-[10px] text-slate-500">
+                  {{ metricsData.findings?.findings_with_provenance ?? 0 }} de {{ metricsData.findings?.total_findings ?? 0 }} fichas con job_id y etapa vinculados.
+                </div>
+              </div>
+
+              <!-- Desglose por severidad -->
+              <div v-if="metricsData.findings?.severity_breakdown" class="pt-1 border-t border-slate-800/40">
+                <div class="flex items-center space-x-2 text-[10px]">
+                  <span class="text-rose-400 font-bold">Crit: {{ metricsData.findings.severity_breakdown.critical || 0 }}</span>
+                  <span class="text-orange-400 font-bold">High: {{ metricsData.findings.severity_breakdown.high || 0 }}</span>
+                  <span class="text-amber-400 font-bold">Med: {{ metricsData.findings.severity_breakdown.medium || 0 }}</span>
+                  <span class="text-emerald-400 font-bold">Low: {{ metricsData.findings.severity_breakdown.low || 0 }}</span>
+                  <span class="text-slate-400 font-bold">Info: {{ metricsData.findings.severity_breakdown.info || 0 }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tarjeta 4: Reporte & Manifiesto -->
+            <div data-testid="metrics-card-report" class="p-4 bg-slate-900/30 border border-slate-800 rounded-md space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <span class="font-bold text-slate-200">📄 Entregables y Manifiesto</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase" :class="metricsData.report?.has_report ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-slate-800 text-slate-400'">
+                  {{ metricsData.report?.has_report ? 'REPORT.md' : 'Sin Reporte' }}
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-[11px]">
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Tamaño Reporte:</span>
+                  <span class="text-sm font-bold text-slate-100">{{ metricsData.report?.report_size_bytes ?? 0 }} B</span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Entregables:</span>
+                  <span class="text-sm font-bold" :class="metricsData.report?.has_deliverables ? 'text-emerald-400' : 'text-slate-400'">
+                    {{ metricsData.report?.has_deliverables ? 'Disponibles' : 'Pendientes' }}
+                  </span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Manifiesto JSON:</span>
+                  <span class="text-sm font-bold" :class="metricsData.report?.has_artifact_manifest ? 'text-cyan-400' : 'text-slate-400'">
+                    {{ metricsData.report?.has_artifact_manifest ? 'Generado' : 'Pendiente' }}
+                  </span>
+                </div>
+                <div class="p-2 bg-slate-950/70 rounded border border-slate-800/60">
+                  <span class="text-slate-400 block">Artefactos en Manifiesto:</span>
+                  <span class="text-sm font-bold text-cyan-400">{{ metricsData.report?.manifest_artifacts_count ?? 0 }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
 
     <!-- MODAL REGISTRAR CREDENCIAL DE BOTÍN -->
     <div
@@ -2659,6 +2893,7 @@ const tabs = computed(() => {
       { id: 'timeline', label: 'Línea de Tiempo', icon: '⏱️', count: timelineEvents.value.length },
       { id: 'supervision', label: 'Supervisión Pedagógica', icon: '🎓' },
       { id: 'playbooks', label: 'Playbooks', icon: '📖', count: playbooksList.value.length },
+      { id: 'metrics', label: 'Métricas de Auditoría', icon: '📊' },
       { id: 'logs', label: 'Terminal Logs', icon: '⚡' },
       { id: 'copilot', label: 'Copiloto CTF', icon: '🤖' },
       { id: 'notes', label: 'Solución (notes.md)', icon: '📝' },
@@ -2674,6 +2909,7 @@ const tabs = computed(() => {
     { id: 'timeline', label: 'Línea de Tiempo', icon: '⏱️', count: timelineEvents.value.length },
     { id: 'supervision', label: 'Supervisión Pedagógica', icon: '🎓' },
     { id: 'playbooks', label: 'Playbooks', icon: '📖', count: playbooksList.value.length },
+    { id: 'metrics', label: 'Métricas de Auditoría', icon: '📊' },
     { id: 'logs', label: 'Terminal Logs', icon: '⚡' },
     { id: 'checklist', label: 'Metodología & Cobertura', icon: '📊' },
     { id: 'copilot', label: 'Copiloto Táctico', icon: '🤖' },
@@ -2869,6 +3105,25 @@ async function executePlaybook(dryRun = true) {
 function getStepRunResult(stepId) {
   if (!playbookRunResult.value?.steps_results) return null
   return playbookRunResult.value.steps_results.find(s => s.step_id === stepId) || null
+}
+
+// Métricas Operacionales de Auditoría (V3-07b)
+const metricsData = ref(null)
+const metricsLoading = ref(false)
+const metricsError = ref('')
+
+async function loadMetrics() {
+  if (!engId.value) return
+  metricsLoading.value = true
+  metricsError.value = ''
+  try {
+    const res = await api.getMetrics(engId.value, engType.value)
+    metricsData.value = res
+  } catch (err) {
+    metricsError.value = err.message || 'Error al cargar métricas operacionales.'
+  } finally {
+    metricsLoading.value = false
+  }
 }
 
 // Scope
@@ -4073,6 +4328,7 @@ watch(activeTab, tab => {
   if (tab === 'timeline') loadTimeline()
   if (tab === 'supervision') loadSupervision()
   if (tab === 'playbooks') loadPlaybooks()
+  if (tab === 'metrics') loadMetrics()
 })
 watch(() => [reconStatus.value.job?.run_id, reconStatus.value.job?.status, reconStatus.value.job?.outcome_revision,
   reconStatus.value.job?.outcome_review?.reviewed_at], (current, previous) => {

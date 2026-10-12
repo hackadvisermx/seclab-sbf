@@ -38,7 +38,10 @@ export const api = {
   getEngagementDetail: (id, type = 'engagement') => request(`/engagements/${id}?type=${type}`),
   getEngagementTimeline: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/timeline?type=${encodeURIComponent(type)}`),
   getSupervision: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/supervision?type=${encodeURIComponent(type)}`),
+  getMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
+  getEngagementMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
   updateNotes: (id, content, type = 'engagement') => request(`/engagements/${id}/notes?type=${type}`, { method: 'PUT', body: JSON.stringify({ content }) }),
+
 
   // Alcance
   getScope: (id, type = 'engagement') => request(`/scope/${id}?type=${type}`),

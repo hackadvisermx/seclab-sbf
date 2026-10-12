@@ -1,0 +1,40 @@
+# Playbook determinista: Auditoría y Análisis de Configuraciones SSL/TLS
+id: "pb_ssl_tls_audit"
+title: "Auditoría de Cifrado y Certificados SSL/TLS"
+version: "1.0"
+category: "crypto_audit"
+description: "Evaluación exhaustiva de certificados, suites de cifrado, protocolos obsoletos (TLS 1.0/1.1) y vulnerabilidades criptográficas en servicios web."
+author: "SecLab-SBF"
+
+steps:
+  - id: "step_01_cert_inspection"
+    title: "Inspección de Certificado X.509 y Cadena de Confianza"
+    objective: "Obtener y validar vigencia, emisor, CN, SAN y algoritmos de firma del certificado digital."
+    interaction_type: "passive"
+    required_permissions:
+      - "allow_passive"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "target.yaml"
+    command_template: "openssl s_client -connect {domain}:443 -servername {domain} -showcerts </dev/null"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/ssl_cert_{domain}.txt"
+    success_criteria:
+      file_exists: "recon/ssl_cert_{domain}.txt"
+
+  - id: "step_02_tls_protocols_scan"
+    title: "Detección de Protocolos Obsoletos y Suites Débiles"
+    objective: "Comprobar soporte de protocolos inseguros (SSLv3, TLS 1.0, TLS 1.1) y cifrados RC4/3DES/CBC."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "target.yaml"
+    command_template: "testssl.sh --quiet --protocols --ciphers --fast {domain}:443"
+    timeout_seconds: 300
+    expected_outputs:
+      - "recon/testssl_{domain}.txt"
+    success_criteria:
+      file_exists: "recon/testssl_{domain}.txt"

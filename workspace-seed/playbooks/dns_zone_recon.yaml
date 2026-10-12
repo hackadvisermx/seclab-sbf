@@ -1,0 +1,40 @@
+# Playbook determinista: Reconocimiento DNS Avanzado y Auditoría de Zonas
+id: "pb_dns_zone_recon"
+title: "Reconocimiento DNS y Auditoría de Registros de Zona"
+version: "1.0"
+category: "dns_audit"
+description: "Enumeración completa de registros de nombres (SOA, NS, MX, TXT/SPF/DMARC) y prueba de transferencia de zona DNS (AXFR)."
+author: "SecLab-SBF"
+
+steps:
+  - id: "step_01_dns_records_query"
+    title: "Consulta Pasiva de Registros DNS Canónicos"
+    objective: "Recuperar registros de infraestructura (NS, MX, SOA, TXT, SPF y DMARC) de los dominios en alcance."
+    interaction_type: "passive"
+    required_permissions:
+      - "allow_passive"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "target.yaml"
+    command_template: "dig +noall +answer {domain} ANY @1.1.1.1"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/dns_records_{domain}.txt"
+    success_criteria:
+      file_exists: "recon/dns_records_{domain}.txt"
+
+  - id: "step_02_axfr_zone_transfer"
+    title: "Comprobación de Transferencia de Zona DNS (AXFR)"
+    objective: "Verificar si los servidores de nombres autoritativos permiten transferencias de zona no autenticadas."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "recon/dns_records_{domain}.txt"
+    command_template: "dig axfr {domain} @{nameserver}"
+    timeout_seconds: 120
+    expected_outputs:
+      - "recon/dns_axfr_{domain}.txt"
+    success_criteria:
+      file_exists: "recon/dns_axfr_{domain}.txt"

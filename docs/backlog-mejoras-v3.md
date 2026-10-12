@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases 181 a 206 están terminadas y fusionadas. La [fase206](phase-206.md) incorpora vista ligera de supervisión y checkpoints pedagógicos de auditoría; V3-03, V3-04, V3-05 y V3-06 avanzan hacia sus criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases 181 a 210 están terminadas y fusionadas. La [fase210](phase-210.md) incorpora verificación criptográfica e integridad de artefactos del engagement contra `artifact-manifest.json` v1; V3-03, V3-04, V3-05, V3-06 y V3-07 avanzan hacia sus criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -39,8 +39,12 @@ Las fases 181 a 206 están terminadas y fusionadas. La [fase206](phase-206.md) i
 | Fase204 / V3-03x | Manifiesto integral de artefactos del engagement (`artifact-manifest.json` v1) en empaquetador y API | [#226](https://github.com/hackadvisermx/seclab-sbf/pull/226), `43b6ab0` | [38262641747](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38262641747), `78658f1`, aprobado |
 | Fase205 / V3-04a | Schema y validación estricta de Playbooks deterministas (`seclab_playbook.py`) y plantillas iniciales | [#227](https://github.com/hackadvisermx/seclab-sbf/pull/227), `279e535` | [38264384454](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38264384454), `802adf6`, aprobado |
 | Fase206 / V3-06a | Vista ligera de supervisión y checkpoints pedagógicos de auditoría (`seclab_supervision.py`) | [#228](https://github.com/hackadvisermx/seclab-sbf/pull/228), `76da923` | [38265292911](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38265292911), `189e0f8`, aprobado |
+| Fase207 / V3-04b | Motor de ejecución y runner determinista de Playbooks (`seclab_playbook.py`) con simulación dry-run | [#230](https://github.com/hackadvisermx/seclab-sbf/pull/230), `c0c0689` | [38275174637](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38275174637), `bb1b187`, aprobado |
+| Fase208 / V3-06b | Pestaña y panel interactivo de Supervisión Pedagógica en Dashboard con renderizado de checkpoints | [#231](https://github.com/hackadvisermx/seclab-sbf/pull/231), `cba1263` | [38276116358](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38276116358), `60fbbe0`, aprobado |
+| Fase209 / V3-07a | Motor de métricas operacionales locales de auditoría (`seclab_metrics.py`) y endpoint `/metrics` | [#232](https://github.com/hackadvisermx/seclab-sbf/pull/232), `dd49a4a` | [38277808940](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38277808940), `b2cbca0`, aprobado |
+| Fase210 / V3-03y | Verificación criptográfica e integridad de artefactos del engagement contra `artifact-manifest.json` v1 | [#233](https://github.com/hackadvisermx/seclab-sbf/pull/233), `784a36a` | [38287183495](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38287183495), `bb8652a`, aprobado |
 
-Detalle de pruebas, compatibilidad y límites: [fase197](phase-197.md), [fase198](phase-198.md), [fase199](phase-199.md), [fase200](phase-200.md), [fase201](phase-201.md), [fase202](phase-202.md), [fase203](phase-203.md), [fase204](phase-204.md), [fase205](phase-205.md), [fase206](phase-206.md).
+Detalle de pruebas, compatibilidad y límites: [fase197](phase-197.md), [fase198](phase-198.md), [fase199](phase-199.md), [fase200](phase-200.md), [fase201](phase-201.md), [fase202](phase-202.md), [fase203](phase-203.md), [fase204](phase-204.md), [fase205](phase-205.md), [fase206](phase-206.md), [fase207](phase-207.md), [fase208](phase-208.md), [fase209](phase-209.md), [fase210](phase-210.md).
 
 | Iniciativa | Avance verificado | Pendiente de aceptación |
 |---|---|---|

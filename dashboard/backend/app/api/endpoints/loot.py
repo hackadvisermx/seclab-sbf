@@ -69,3 +69,24 @@ def get_artifact_manifest(eng_id: str, type: str = Query("engagement")):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{eng_id}/artifacts/verify")
+@router.get("/{eng_id}/artifacts/verify")
+def verify_artifacts(
+    eng_id: str,
+    payload: Optional[Dict[str, Any]] = None,
+    manifest: Optional[str] = Query(None),
+    type: str = Query("engagement"),
+):
+    """Verifica criptográficamente los artefactos del engagement contra artifact-manifest.json."""
+    try:
+        manifest_src = (payload.get("manifest") if payload else None) or manifest
+        return workspace_service.verify_artifact_manifest(eng_id, type, manifest_source=manifest_src)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

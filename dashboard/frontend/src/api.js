@@ -113,6 +113,8 @@ export const api = {
   saveFlags: (id, data, type = 'reto') => request(`/loot/${id}/flags?type=${type}`, { method: 'POST', body: JSON.stringify(data) }),
   getArtifacts: (id, folder = 'recon', type = 'engagement') => request(`/loot/${id}/artifacts?folder=${folder}&type=${type}`),
   getArtifactContent: (id, path, type = 'engagement') => request(`/loot/${id}/artifacts/content?path=${encodeURIComponent(path)}&type=${type}`),
+  getArtifactManifest: (id, type = 'engagement') => request(`/loot/${id}/artifacts/manifest?type=${type}`),
+  verifyArtifactManifest: (id, data = null, type = 'engagement') => request(`/loot/${id}/artifacts/verify?type=${type}`, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
 
   // Reportes & Descarga
   compileReport: (id, type = 'engagement') => request(`/reports/${id}/compile?type=${type}`, { method: 'POST' }),

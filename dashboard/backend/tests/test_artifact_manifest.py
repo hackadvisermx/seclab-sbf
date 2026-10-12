@@ -55,7 +55,7 @@ class TestArtifactManifestEndpoint(unittest.TestCase):
         auth._attempts.clear()
         with patch.object(auth, "TESTER_PASSWORD", "test-pass"), \
              patch("app.api.endpoints.loot.workspace_service", self.ws_service):
-            client = TestClient(app)
+            client = TestClient(app, base_url="http://localhost")
             login_res = client.post("/api/v1/auth/login", json={"password": "test-pass"})
             self.assertEqual(login_res.status_code, 200)
 
@@ -65,6 +65,59 @@ class TestArtifactManifestEndpoint(unittest.TestCase):
             self.assertEqual(data["schema_version"], 1)
             self.assertEqual(data["engagement_id"], self.eng_id)
             self.assertGreater(data["total_artifacts"], 0)
+            client.close()
+
+    def test_verify_artifact_manifest_service(self):
+        manifest = self.ws_service.get_artifact_manifest(self.eng_id)
+        import json
+        (self.eng_dir / "artifact-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+        res = self.ws_service.verify_artifact_manifest(self.eng_id)
+        self.assertTrue(res["is_valid"])
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["corrupted_count"], 0)
+        self.assertEqual(res["missing_count"], 0)
+        self.assertGreater(res["verified_count"], 0)
+
+    def test_verify_artifact_manifest_endpoint_get_and_post(self):
+        from app.main import app
+        from app.api.endpoints import auth
+        from fastapi.testclient import TestClient
+        import json
+
+        manifest = self.ws_service.get_artifact_manifest(self.eng_id)
+        (self.eng_dir / "artifact-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+        auth._attempts.clear()
+        with patch.object(auth, "TESTER_PASSWORD", "test-pass"), \
+             patch("app.api.endpoints.loot.workspace_service", self.ws_service):
+            client = TestClient(app, base_url="http://localhost")
+            login_res = client.post("/api/v1/auth/login", json={"password": "test-pass"})
+            self.assertEqual(login_res.status_code, 200)
+
+            # GET verify
+            res_get = client.get(f"/api/v1/loot/{self.eng_id}/artifacts/verify?type=engagement")
+            self.assertEqual(res_get.status_code, 200)
+            data_get = res_get.json()
+            self.assertTrue(data_get["is_valid"])
+            self.assertEqual(data_get["status"], "success")
+
+            # POST verify
+            res_post = client.post(f"/api/v1/loot/{self.eng_id}/artifacts/verify?type=engagement", json={})
+            self.assertEqual(res_post.status_code, 200)
+            data_post = res_post.json()
+            self.assertTrue(data_post["is_valid"])
+            self.assertEqual(data_post["status"], "success")
+
+            # Tamper file
+            (self.eng_dir / "notes.md").write_text("TAMPERED", encoding="utf-8")
+            res_tampered = client.post(f"/api/v1/loot/{self.eng_id}/artifacts/verify?type=engagement", json={})
+            self.assertEqual(res_tampered.status_code, 200)
+            data_tampered = res_tampered.json()
+            self.assertFalse(data_tampered["is_valid"])
+            self.assertEqual(data_tampered["status"], "integrity_failed")
+            self.assertGreater(data_tampered["corrupted_count"], 0)
+
             client.close()
 
 

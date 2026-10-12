@@ -4,6 +4,7 @@ import pathlib
 from typing import Any, Dict, List, Optional
 from app.services.workspace_sync import workspace_service
 from app.services.recon_service import recon_service
+from seclab_supervision import load_supervision_responses, save_checkpoint_response
 
 
 class SupervisionService:
@@ -149,6 +150,12 @@ class SupervisionService:
             },
         ]
 
+        responses = load_supervision_responses(target_dir)
+        for cp in checkpoints:
+            resp = responses.get(cp["id"])
+            cp["learner_response"] = resp
+            cp["is_justified"] = bool(resp and resp.get("justification"))
+
         return {
             "engagement_id": eng_id,
             "type": eng_type,
@@ -225,6 +232,20 @@ class SupervisionService:
             return "\n".join(lines)
         else:
             raise ValueError(f"Formato no soportado: '{format}'. Debe ser 'json' o 'markdown'.")
+
+    def save_checkpoint_response(
+        self,
+        eng_id: str,
+        checkpoint_id: str,
+        justification: str,
+        learner_action: Optional[str] = None,
+        eng_type: str = "engagement",
+    ) -> Dict[str, Any]:
+        """Guarda la respuesta pedagógica y justificación del estudiante para un checkpoint."""
+        target_dir = workspace_service._resolve_dir(eng_id, eng_type)
+        if not target_dir.exists():
+            raise FileNotFoundError(f"Engagement {eng_id} no encontrado")
+        return save_checkpoint_response(target_dir, checkpoint_id, justification, learner_action)
 
 
 supervision_service = SupervisionService()

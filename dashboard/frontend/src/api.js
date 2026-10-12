@@ -47,6 +47,11 @@ export const api = {
     return res.text()
   },
   getSupervision: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/supervision?type=${encodeURIComponent(type)}`),
+  respondSupervisionCheckpoint: (id, cpId, payload, type = 'engagement') =>
+    request(`/engagements/${encodeURIComponent(id)}/supervision/checkpoints/${encodeURIComponent(cpId)}/respond?type=${encodeURIComponent(type)}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   exportSupervision: async (id, format = 'json', type = 'engagement') => {
     const url = `${API_BASE}/engagements/${encodeURIComponent(id)}/supervision/export?type=${encodeURIComponent(type)}&format=${encodeURIComponent(format)}`
     const res = await fetch(url, { credentials: 'same-origin' })

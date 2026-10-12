@@ -2052,6 +2052,49 @@
               <div class="p-2 rounded bg-slate-950/60 border border-slate-800 text-[11px] font-mono text-slate-400">
                 <span class="text-cyan-400 font-semibold">💡 Orientación formativa:</span> {{ cp.recommendation }}
               </div>
+
+              <!-- Justificación registrada del estudiante (V3-06d) -->
+              <div
+                v-if="cp.learner_response && cp.learner_response.justification"
+                :data-testid="`checkpoint-learner-response-${cp.id}`"
+                class="p-2.5 rounded bg-cyan-950/30 border border-cyan-500/30 space-y-1"
+              >
+                <div class="flex items-center justify-between text-[11px] font-mono text-cyan-400 font-semibold">
+                  <span>📝 Decisión explicada por el operador:</span>
+                  <span v-if="cp.learner_response.updated_at" class="text-[10px] text-slate-500 font-normal">
+                    {{ new Date(cp.learner_response.updated_at).toLocaleString() }}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-200 font-mono whitespace-pre-wrap">{{ cp.learner_response.justification }}</p>
+                <p v-if="cp.learner_response.learner_action" class="text-[10px] text-slate-400 font-mono">
+                  Acción planificada: <span class="text-cyan-300 font-bold">{{ cp.learner_response.learner_action }}</span>
+                </p>
+              </div>
+
+              <!-- Formulario para auto-justificación pedagógica -->
+              <div class="pt-2 border-t border-slate-800/80 space-y-2">
+                <label class="block text-[11px] font-mono text-slate-400 font-semibold">
+                  Explicar decisión o estado de este checkpoint:
+                </label>
+                <textarea
+                  v-model="checkpointResponses[cp.id]"
+                  :data-testid="`checkpoint-justification-input-${cp.id}`"
+                  placeholder="Explica qué acción realizaste, por qué estás bloqueado o cómo validaste la evidencia..."
+                  rows="2"
+                  class="w-full bg-[#070b14] border border-slate-700 focus:border-cyan-400 rounded-sm p-2 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-hidden"
+                ></textarea>
+                <div class="flex justify-end">
+                  <button
+                    type="button"
+                    @click="submitCheckpointResponse(cp.id)"
+                    :disabled="savingCheckpointId === cp.id || !(checkpointResponses[cp.id] || '').trim()"
+                    :data-testid="`checkpoint-save-response-btn-${cp.id}`"
+                    class="px-2.5 py-1 rounded-sm bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-mono font-bold text-xs transition-colors disabled:opacity-40"
+                  >
+                    {{ savingCheckpointId === cp.id ? 'Guardando...' : '💾 Registrar Justificación' }}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3978,6 +4021,24 @@ async function exportSupervision(format = 'markdown') {
     supervisionError.value = err.message || 'Error al exportar supervisión pedagógica.'
   } finally {
     supervisionExporting.value = false
+  }
+}
+
+const checkpointResponses = ref({})
+const savingCheckpointId = ref(null)
+
+async function submitCheckpointResponse(cpId) {
+  const text = (checkpointResponses.value[cpId] || '').trim()
+  if (!text || !engId.value) return
+  savingCheckpointId.value = cpId
+  try {
+    await api.respondSupervisionCheckpoint(engId.value, cpId, { justification: text }, engType.value)
+    checkpointResponses.value[cpId] = ''
+    await loadSupervision()
+  } catch (err) {
+    supervisionError.value = err.message || 'Error al guardar respuesta pedagógica.'
+  } finally {
+    savingCheckpointId.value = null
   }
 }
 

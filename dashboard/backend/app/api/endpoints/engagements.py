@@ -136,6 +136,33 @@ def export_engagement_supervision(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{eng_id}/supervision/checkpoints/{cp_id}/respond")
+def respond_supervision_checkpoint(
+    eng_id: str,
+    cp_id: str,
+    payload: dict,
+    type: str = Query("engagement"),
+):
+    """Guarda la respuesta pedagógica y justificación del estudiante para un checkpoint."""
+    justification = payload.get("justification")
+    if not justification or not str(justification).strip():
+        raise HTTPException(status_code=400, detail="La justificación no puede estar vacía.")
+    learner_action = payload.get("learner_action")
+    try:
+        entry = supervision_service.save_checkpoint_response(
+            eng_id=eng_id,
+            checkpoint_id=cp_id,
+            justification=str(justification),
+            learner_action=str(learner_action) if learner_action else None,
+            eng_type=type,
+        )
+        return {"status": "ok", "checkpoint_id": cp_id, "learner_response": entry}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @router.get("/{eng_id}/metrics")
 def get_engagement_metrics(eng_id: str, type: str = Query("engagement")):

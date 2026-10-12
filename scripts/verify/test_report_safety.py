@@ -532,6 +532,30 @@ class ReportSafetyTests(unittest.TestCase):
                 path.unlink()
                 self.finding('example.test')
 
+    def test_verify_artifacts_flag_success(self):
+        ok, issues, _ = report.check_findings(self.root, verify_artifacts=True)
+        self.assertTrue(ok)
+        res = self.cli('check', '--verify-artifacts')
+        self.assertEqual(res.returncode, 0)
+        self.assertIn('Verificación criptográfica de artefactos exitosa', res.stdout)
+
+    def test_verify_artifacts_flag_detects_tampered_artifact(self):
+        # Alterar artefacto en disco
+        artifact = self.root / 'recon/confirmation.txt'
+        artifact.write_bytes(b'Tampered content')
+
+        ok, issues, _ = report.check_findings(self.root, verify_artifacts=True)
+        self.assertFalse(ok)
+        self.assertTrue(any('Integridad comprometida' in msg for msg in issues))
+
+        res = self.cli('check', '--verify-artifacts')
+        self.assertEqual(res.returncode, 1)
+
+        # También debe bloquear build_report
+        with self.assertRaises(report.ReportValidationError):
+            report.build_report(self.root, verify_artifacts=True)
+
 
 if __name__ == '__main__':
     unittest.main()
+

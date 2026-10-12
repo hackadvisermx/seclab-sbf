@@ -10,6 +10,7 @@ Evalúa el progreso de un engagement a través de 4 checkpoints pedagógicos for
 Sin dependencias externas obligatorias (Python 3 stdlib).
 """
 
+import datetime
 import json
 import os
 import pathlib
@@ -19,6 +20,59 @@ try:
     import yaml
 except ImportError:
     yaml = None
+
+
+def load_supervision_responses(engagement_dir: Union[str, pathlib.Path]) -> Dict[str, Any]:
+    """Carga las justificaciones pedagógicas del estudiante almacenadas en evidence/.supervision_responses.json."""
+    eng_path = pathlib.Path(engagement_dir)
+    resp_file = eng_path / "evidence" / ".supervision_responses.json"
+    if not resp_file.is_file():
+        return {}
+    try:
+        data = json.loads(resp_file.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_checkpoint_response(
+    engagement_dir: Union[str, pathlib.Path],
+    checkpoint_id: str,
+    justification: str,
+    learner_action: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Guarda la justificación y decisión del estudiante para un checkpoint formativo."""
+    eng_path = pathlib.Path(engagement_dir)
+    if not eng_path.is_dir():
+        raise FileNotFoundError(f"Directorio de engagement no encontrado: {eng_path}")
+
+    ev_dir = eng_path / "evidence"
+    ev_dir.mkdir(parents=True, exist_ok=True)
+    resp_file = ev_dir / ".supervision_responses.json"
+
+    current_responses = {}
+    if resp_file.is_file():
+        try:
+            current_responses = json.loads(resp_file.read_text(encoding="utf-8"))
+            if not isinstance(current_responses, dict):
+                current_responses = {}
+        except Exception:
+            current_responses = {}
+
+    entry = {
+        "checkpoint_id": checkpoint_id,
+        "justification": (justification or "").strip(),
+        "learner_action": (learner_action or "").strip() if learner_action else None,
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    current_responses[checkpoint_id] = entry
+
+    # Escritura atómica
+    tmp_file = ev_dir / f".supervision_responses.tmp.{os.getpid()}"
+    tmp_file.write_text(json.dumps(current_responses, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp_file, resp_file)
+
+    return entry
 
 
 def parse_target_yaml_simple(path: pathlib.Path) -> Dict[str, Any]:
@@ -147,6 +201,12 @@ def evaluate_supervision_checkpoints(engagement_dir: Union[str, pathlib.Path]) -
         },
     ]
 
+    responses = load_supervision_responses(eng_path)
+    for cp in checkpoints:
+        resp = responses.get(cp["id"])
+        cp["learner_response"] = resp
+        cp["is_justified"] = bool(resp and resp.get("justification"))
+
     current_stage = "scope"
     if total_findings > 0 and report_present:
         current_stage = "reporting"
@@ -200,6 +260,22 @@ def export_supervision_markdown(state: Dict[str, Any]) -> str:
         f"- **Informe y Entregables**: REPORT.md: {'Presente' if state.get('report_present') else 'Pendiente'} · Entregables exportados: {state.get('deliverables_count', 0)}",
         "",
     ])
+
+    justifications = [
+        cp for cp in state.get("checkpoints", []) if cp.get("learner_response") and cp["learner_response"].get("justification")
+    ]
+    if justifications:
+        lines.extend([
+            "## 3. Justificaciones y Decisiones del Estudiante",
+            "",
+        ])
+        for cp in justifications:
+            resp = cp["learner_response"]
+            lines.append(f"- **{cp.get('title', cp.get('id'))}**: {resp.get('justification')}")
+            if resp.get("learner_action"):
+                lines.append(f"  - Acción: `{resp.get('learner_action')}`")
+        lines.append("")
+
     return "\n".join(lines)
 
 

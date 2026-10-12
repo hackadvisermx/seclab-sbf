@@ -732,6 +732,14 @@
             <span class="text-slate-500">{{ f.filename }}</span>
             <div class="flex items-center space-x-2">
               <button
+                @click="viewFindingRevisions(f.slug)"
+                :data-testid="'finding-revisions-btn-' + f.slug"
+                class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300"
+                title="Historial de revisiones de la ficha"
+              >
+                📜 Revisiones
+              </button>
+              <button
                 @click="editFinding(f)"
                 :disabled="!!f.source_error"
                 class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-400"
@@ -2691,6 +2699,81 @@
         </form>
       </div>
     </div>
+
+    <!-- MODAL HISTORIAL DE REVISIONES DE HALLAZGO (V3-03z) -->
+    <div
+      v-if="showFindingRevisionsModal"
+      data-testid="finding-revisions-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
+    >
+      <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-2xl w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h2 class="text-sm font-mono font-bold text-white flex items-center space-x-2">
+            <span>📜 Historial de Revisiones: {{ activeRevisionSlug }}</span>
+          </h2>
+          <button @click="showFindingRevisionsModal = false" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
+        </div>
+
+        <div v-if="findingRevisionsLoading" class="text-center py-6 text-slate-400 font-mono text-xs">
+          Cargando historial de revisiones...
+        </div>
+
+        <div v-else-if="findingRevisionsError" class="p-3 bg-rose-950/40 border border-rose-800 text-rose-300 rounded text-xs font-mono">
+          {{ findingRevisionsError }}
+        </div>
+
+        <div v-else-if="findingRevisionsList.length === 0" class="text-center py-6 text-slate-400 font-mono text-xs">
+          No hay revisiones registradas en evidence/.revisions para esta ficha.
+        </div>
+
+        <div v-else class="space-y-3 max-h-96 overflow-y-auto pr-1">
+          <div
+            v-for="(rev, idx) in findingRevisionsList"
+            :key="rev.revision_id || idx"
+            :data-testid="'revision-item-' + idx"
+            class="p-3 bg-slate-900/60 border border-slate-800 rounded text-xs font-mono space-y-1.5"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span
+                  class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border"
+                  :class="{
+                    'bg-emerald-950 text-emerald-400 border-emerald-800': rev.action === 'create',
+                    'bg-cyan-950 text-cyan-400 border-cyan-800': rev.action === 'update',
+                    'bg-rose-950 text-rose-400 border-rose-800': rev.action === 'delete'
+                  }"
+                >
+                  {{ rev.action }}
+                </span>
+                <span class="text-slate-200 font-bold">{{ rev.title || rev.slug }}</span>
+              </div>
+              <span class="text-[11px] text-slate-400">{{ rev.timestamp }}</span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+              <span v-if="rev.status" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Estado: {{ rev.status }}</span>
+              <span v-if="rev.severity" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Severidad: {{ rev.severity }}</span>
+              <span v-if="rev.author" class="text-slate-400">Autor: {{ rev.author }}</span>
+            </div>
+
+            <div v-if="rev.modified_fields && rev.modified_fields.length > 0" class="text-[11px] text-slate-400">
+              Campos modificados: <span class="text-cyan-300">{{ rev.modified_fields.join(', ') }}</span>
+            </div>
+
+            <div class="text-[10px] text-slate-500 space-y-0.5 pt-1 border-t border-slate-800/40">
+              <div v-if="rev.previous_sha256" class="truncate">SHA previo: <code>{{ rev.previous_sha256 }}</code></div>
+              <div v-if="rev.new_sha256" class="truncate">SHA nuevo: <code>{{ rev.new_sha256 }}</code></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2 border-t border-slate-800">
+          <button @click="showFindingRevisionsModal = false" class="px-4 py-1.5 rounded text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -3143,6 +3226,29 @@ const scopeTestResult = ref(null)
 // Findings
 const findings = ref([])
 const showFindingModal = ref(false)
+const showFindingRevisionsModal = ref(false)
+const activeRevisionSlug = ref('')
+const findingRevisionsList = ref([])
+const findingRevisionsLoading = ref(false)
+const findingRevisionsError = ref('')
+
+async function viewFindingRevisions(slug) {
+  if (!slug || !engId.value) return
+  activeRevisionSlug.value = slug
+  showFindingRevisionsModal.value = true
+  findingRevisionsLoading.value = true
+  findingRevisionsError.value = ''
+  findingRevisionsList.value = []
+  try {
+    const res = await api.getFindingRevisions(engId.value, slug, engType.value)
+    findingRevisionsList.value = res.revisions || []
+  } catch (err) {
+    findingRevisionsError.value = err.message || 'Error al obtener revisiones del hallazgo.'
+  } finally {
+    findingRevisionsLoading.value = false
+  }
+}
+
 const editingFinding = ref(false)
 const findingSaveError = ref('')
 const findingLatest = ref(null)

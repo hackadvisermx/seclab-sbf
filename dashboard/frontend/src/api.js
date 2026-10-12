@@ -54,6 +54,8 @@ export const api = {
   saveFinding: (id, data, type = 'engagement') => request(`/findings/${id}?type=${type}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteFinding: (id, slug, type = 'engagement', expectedSourceSha256 = '') => request(`/findings/${id}/${slug}?type=${type}&expected_source_sha256=${encodeURIComponent(expectedSourceSha256)}`, { method: 'DELETE' }),
   calculateCvss: (metrics) => request('/findings/cvss-calc', { method: 'POST', body: JSON.stringify(metrics) }),
+  getFindingRevisions: (id, slug, type = 'engagement') => request(`/findings/${encodeURIComponent(id)}/${encodeURIComponent(slug)}/revisions?type=${encodeURIComponent(type)}`),
+
 
   // Tactical API Key Vault
   getVaultKeys: () => request('/vault'),

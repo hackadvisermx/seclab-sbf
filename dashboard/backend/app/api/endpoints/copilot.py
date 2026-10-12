@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from app.config import SCRIPTS_DIR
 from app.models.schemas import ChatMessage, ChatCompletionRequest, ChatCompletionResponse, CitationItem
 from app.core.database import get_db_connection
-from app.core.artifact_snapshot import detect_hostile_content, neutralize_hostile_content
+from app.core.artifact_snapshot import detect_hostile_content, neutralize_hostile_content, redact_sensitive_text
 from app.services.workspace_sync import workspace_service
 from app.services.runner_service import runner_service, AgentContextUnavailable
 from app.services.vault_service import vault_service
@@ -138,6 +138,16 @@ class CopilotChatRequest(BaseModel):
     reviewed_context: str
 
 
+class CopilotRedactRequest(BaseModel):
+    text: str
+
+
+class CopilotRedactResponse(BaseModel):
+    redacted_text: str
+    replacements_count: int
+    redacted_types: List[str]
+
+
 class CopilotReviewRequest(BaseModel):
     engagement_id: str
     type: str = "engagement"
@@ -237,6 +247,17 @@ def get_engagement_copilot_context(
         "hostile_findings": hostile_findings,
         "destination": dest_info,
     }
+
+
+@router.post("/redact", response_model=CopilotRedactResponse)
+def copilot_redact(payload: CopilotRedactRequest):
+    """Redacta automáticamente secretos y datos sensibles de un texto."""
+    res = redact_sensitive_text(payload.text)
+    return CopilotRedactResponse(
+        redacted_text=res["text"],
+        replacements_count=res["replacements_count"],
+        redacted_types=res["redacted_types"],
+    )
 
 
 @router.post("/review")

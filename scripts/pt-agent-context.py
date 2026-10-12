@@ -25,6 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_findings import finding_status_from_markdown, parse_finding_frontmatter, read_finding_source
 from seclab_recon_state import project_recon_context
 from seclab_hostile import neutralize_hostile_content
+from seclab_redact import redact_sensitive_text, parse_loot_credentials
 
 SEVERITY_ORDER = {
     "CRITICAL": 5,
@@ -823,6 +824,7 @@ def main() -> int:
     parser.add_argument("-j", "--json", action="store_true", help="Emitir salida estructurada en formato JSON.")
     parser.add_argument("-o", "--output", help="Guardar el contexto generado en un archivo de destino.")
     parser.add_argument("-c", "--copy", action="store_true", help="Copiar la salida al portapapeles del sistema.")
+    parser.add_argument("-r", "--redact", action="store_true", help="Redactar automáticamente secretos y datos sensibles del contexto.")
 
     args = parser.parse_args()
 
@@ -844,6 +846,14 @@ def main() -> int:
         output_text = json.dumps(context_data, indent=2, ensure_ascii=False)
     else:
         output_text = format_markdown_context(context_data)
+
+    if args.redact:
+        loot_terms = []
+        for loot_candidate in (eng_dir / "loot" / "credentials.csv", eng_dir / "loot" / "credentials.json"):
+            if loot_candidate.is_file():
+                loot_terms.extend(parse_loot_credentials(loot_candidate))
+        redaction_res = redact_sensitive_text(output_text, custom_terms=loot_terms)
+        output_text = redaction_res["text"]
 
     if args.output:
         out_p = pathlib.Path(args.output).resolve()

@@ -36,6 +36,7 @@ export const api = {
   getTrash: () => request('/trash'),
   restoreProject: (entry) => request(`/trash/${encodeURIComponent(entry.entry_id)}/restore?project_id=${encodeURIComponent(entry.project_id)}&type=${encodeURIComponent(entry.type)}`, { method: 'POST' }),
   getEngagementDetail: (id, type = 'engagement') => request(`/engagements/${id}?type=${type}`),
+  getEngagementTimeline: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/timeline?type=${encodeURIComponent(type)}`),
   updateNotes: (id, content, type = 'engagement') => request(`/engagements/${id}/notes?type=${type}`, { method: 'PUT', body: JSON.stringify({ content }) }),
 
   // Alcance

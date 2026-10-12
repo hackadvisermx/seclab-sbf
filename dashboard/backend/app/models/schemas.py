@@ -227,3 +227,27 @@ class ModelCatalogRequest(BaseModel):
     provider: str = "openrouter"
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+
+
+# ==============================================================================
+# Esquemas de Línea de Tiempo del Engagement (V3-02o)
+# ==============================================================================
+
+class TimelineEvent(BaseModel):
+    id: str
+    timestamp: str
+    category: str  # "scope", "recon", "finding", "report", "notes"
+    type: str      # "scope_configured", "recon_job", "recon_reviewed", "finding_recorded", "report_compiled", "notes_updated", "deliverable_exported"
+    title: str
+    status: str    # "success", "warning", "error", "info"
+    summary: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+    source_ref: Optional[str] = None
+
+
+class EngagementTimelineResponse(BaseModel):
+    engagement_id: str
+    type: str
+    total_events: int
+    events: List[TimelineEvent]
+

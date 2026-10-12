@@ -133,6 +133,31 @@ class TestSeclabMetrics(unittest.TestCase):
         self.assertEqual(metrics["audit_readiness_score"], 100)
         self.assertTrue(metrics["is_fully_audited"])
 
+    def test_complete_engagement_metrics_without_pyyaml(self):
+        import seclab_metrics
+        orig_yaml = seclab_metrics.yaml
+        try:
+            seclab_metrics.yaml = None
+            eng_dir = self.tmp_path / "no_pyyaml_eng"
+            eng_dir.mkdir()
+            target_yaml = eng_dir / "target.yaml"
+            target_yaml.write_text(
+                "authorization:\n  allow_passive: true\n  allow_active: true\n"
+                "domains:\n  - example.com\n  - sub.example.com\n"
+                "ips:\n  - 192.168.1.1\n"
+                "exclusions:\n  - private.example.com\n"
+            )
+            metrics = compute_engagement_metrics(eng_dir)
+            self.assertTrue(metrics["scope"]["has_scope"])
+            self.assertEqual(metrics["scope"]["domains_count"], 2)
+            self.assertEqual(metrics["scope"]["ips_count"], 1)
+            self.assertEqual(metrics["scope"]["exclusions_count"], 1)
+            self.assertTrue(metrics["scope"]["allow_passive"])
+            self.assertTrue(metrics["scope"]["allow_active"])
+        finally:
+            seclab_metrics.yaml = orig_yaml
+
 
 if __name__ == "__main__":
     unittest.main()
+

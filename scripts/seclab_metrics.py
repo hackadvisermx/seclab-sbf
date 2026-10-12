@@ -20,26 +20,38 @@ except ImportError:
 
 
 def _parse_yaml_basic(content: str) -> Dict[str, Any]:
-    """Extracción básica de claves para entornos sin PyYAML."""
+    """Extracción básica de claves y listas para entornos sin PyYAML."""
     data: Dict[str, Any] = {}
     current_key: Optional[str] = None
-    in_sub = False
     sub_data: Dict[str, Any] = {}
+    sub_list: List[Any] = []
+    is_list = False
 
     for line in content.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
             continue
-        if line.endswith(":") and not ":" in line[:-1]:
-            k = line[:-1].strip()
-            if current_key and sub_data:
-                data[current_key] = dict(sub_data)
-            current_key = k
+
+        if stripped.endswith(":") and not ":" in stripped[:-1]:
+            if current_key:
+                if is_list:
+                    data[current_key] = list(sub_list)
+                elif sub_data:
+                    data[current_key] = dict(sub_data)
+            current_key = stripped[:-1].strip()
             sub_data = {}
-            in_sub = True
+            sub_list = []
+            is_list = False
             continue
-        if ":" in line:
-            k, v = line.split(":", 1)
+
+        if stripped.startswith("- "):
+            is_list = True
+            val = stripped[2:].strip().strip("\"'")
+            sub_list.append(val)
+            continue
+
+        if ":" in stripped:
+            k, v = stripped.split(":", 1)
             k = k.strip()
             v = v.strip().strip("\"'")
             val: Any = v
@@ -49,13 +61,17 @@ def _parse_yaml_basic(content: str) -> Dict[str, Any]:
                 val = False
             elif v.isdigit():
                 val = int(v)
-            if in_sub and current_key:
+
+            if current_key and not is_list:
                 sub_data[k] = val
             else:
                 data[k] = val
 
-    if current_key and sub_data:
-        data[current_key] = sub_data
+    if current_key:
+        if is_list:
+            data[current_key] = list(sub_list)
+        elif sub_data:
+            data[current_key] = dict(sub_data)
 
     return data
 

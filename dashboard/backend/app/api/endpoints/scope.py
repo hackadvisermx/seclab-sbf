@@ -40,3 +40,12 @@ def check_target_scope(payload: ScopeCheckRequest, type: str = Query("engagement
         raise HTTPException(status_code=404, detail=f"target.yaml no encontrado en {target_dir}")
 
     return runner_service.check_scope(payload.target, str(yaml_path))
+
+
+
+@router.get("/boundaries/info")
+def get_scope_boundaries_info():
+    """Retorna la especificación canónica de límites de intercepción de Scope Guard (V3-01g)."""
+    from seclab_scope import get_scope_guard_boundaries
+    return get_scope_guard_boundaries()
+

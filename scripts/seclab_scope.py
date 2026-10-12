@@ -370,3 +370,58 @@ def check_scope(target, scope_data):
                 if domain_matches(target, value.strip().lower()):
                     return verdict, f'Dominio: {value}'
     return 'UNKNOWN', 'Objetivo no listado en el alcance explícito'
+
+
+def get_scope_guard_boundaries():
+    """Retorna la especificación canónica de límites de intercepción de Scope Guard (V3-01g)."""
+    return {
+        "enforced_mechanisms": [
+            {
+                "channel": "dashboard_pipeline",
+                "description": "Pipeline automatizado de reconocimiento y sondeo ejecutado desde el dashboard.",
+                "enforcement": "STRICT_BLOCK",
+                "intercepted": True,
+            },
+            {
+                "channel": "deterministic_playbooks",
+                "description": "Ejecución de playbooks deterministas con compuertas previas a la ejecución de comandos.",
+                "enforcement": "STRICT_BLOCK",
+                "intercepted": True,
+            },
+            {
+                "channel": "api_endpoints",
+                "description": "Endpoints FastAPI /api/v1/scope/check y validadores programáticos de alcance.",
+                "enforcement": "STRICT_CHECK",
+                "intercepted": True,
+            },
+            {
+                "channel": "copilot_context",
+                "description": "Asistente Copiloto con advertencia informativa y neutralización ante objetivos no confirmados.",
+                "enforcement": "ADVISORY_WARNING",
+                "intercepted": True,
+            },
+        ],
+        "unenforced_mechanisms": [
+            {
+                "channel": "interactive_terminal_ttyd",
+                "description": "Shell interactiva libre expuesta en /terminal (puerto ttyd). Los comandos ingresados por el operador operan directamente en la consola del SO y no son interceptados ni filtrados por Scope Guard.",
+                "enforcement": "NONE",
+                "intercepted": False,
+                "operator_responsibility": True,
+            },
+            {
+                "channel": "direct_cli_tools",
+                "description": "Herramientas ejecutadas directamente por el operador fuera de los scripts envoltorios pt-*.",
+                "enforcement": "NONE",
+                "intercepted": False,
+                "operator_responsibility": True,
+            },
+        ],
+        "notice": (
+            "AVISO DE LÍMITES OPERACIONALES: Scope Guard aplica compuertas obligatorias sobre flujos "
+            "gestionados (dashboard, pipeline, playbooks y API). Las sesiones interactivas de terminal "
+            "libre operan sin intermediación técnica de red; el operador es el único responsable de "
+            "respetar la autorización y el alcance acordados."
+        ),
+    }
+

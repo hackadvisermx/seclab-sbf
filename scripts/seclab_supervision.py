@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Módulo de evaluación de estado de supervisión y checkpoints de auditoría para SecLab-SBF (V3-06a).
+
+Evalúa el progreso de un engagement a través de 4 checkpoints pedagógicos formales:
+1. Alcance y Autorización (scope & rules)
+2. Mapeo de Superficie y Hosts Vivos (recon & probing)
+3. Documentación y Evidencia de Hallazgos (triage & proof of concept)
+4. Informe Técnico y Cierre (reporting & packaging)
+
+Sin dependencias externas obligatorias (Python 3 stdlib).
+"""
+
+import json
+import os
+import pathlib
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+
+def parse_target_yaml_simple(path: pathlib.Path) -> Dict[str, Any]:
+    """Lee y extrae campos clave de target.yaml de forma robusta con o sin PyYAML."""
+    if not path.is_file():
+        return {}
+    content = path.read_text(encoding="utf-8")
+    if yaml is not None:
+        try:
+            return yaml.safe_load(content) or {}
+        except Exception:
+            pass
+
+    # Parser básico
+    data: Dict[str, Any] = {"authorization": {}, "scope": {"in_scope": {}}}
+    current_section = None
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.endswith(":"):
+            current_section = line[:-1].strip()
+            continue
+        if current_section == "authorization" and ":" in line:
+            k, v = line.split(":", 1)
+            v = v.strip().lower()
+            data["authorization"][k.strip()] = v == "true"
+    return data
+
+
+def evaluate_supervision_checkpoints(engagement_dir: Union[str, pathlib.Path]) -> Dict[str, Any]:
+    """Evalúa los checkpoints pedagógicos de auditoría para el directorio del engagement."""
+    eng_path = pathlib.Path(engagement_dir)
+    if not eng_path.is_dir():
+        raise FileNotFoundError(f"Directorio de engagement no encontrado: {eng_path}")
+
+    # 1. Alcance
+    target_yaml_file = eng_path / "target.yaml"
+    target_data = parse_target_yaml_simple(target_yaml_file) if target_yaml_file.is_file() else {}
+    target_yaml_present = target_yaml_file.is_file()
+
+    auth_meta = target_data.get("authorization", {})
+    allow_passive = bool(auth_meta.get("allow_passive", False))
+    allow_active = bool(auth_meta.get("allow_active", False))
+
+    scope_status = "PASSED" if (target_yaml_present and (allow_passive or allow_active)) else ("PENDING" if target_yaml_present else "BLOCKED")
+    scope_reason = "Alcance definido y permisos formalmente autorizados." if scope_status == "PASSED" else "Falta autorización explícita en target.yaml."
+
+    # 2. Reconocimiento
+    recon_dir = eng_path / "recon"
+    live_hosts_file = recon_dir / "live_hosts.txt"
+    subdomains_file = recon_dir / "subdomains.txt"
+
+    live_hosts_count = 0
+    if live_hosts_file.is_file():
+        try:
+            live_hosts_count = len([line for line in live_hosts_file.read_text(encoding="utf-8").splitlines() if line.strip()])
+        except Exception:
+            pass
+
+    subdomains_count = 0
+    if subdomains_file.is_file():
+        try:
+            subdomains_count = len([line for line in subdomains_file.read_text(encoding="utf-8").splitlines() if line.strip()])
+        except Exception:
+            pass
+
+    recon_status = "PASSED" if live_hosts_count > 0 else ("IN_PROGRESS" if subdomains_count > 0 else "NOT_STARTED")
+    recon_reason = f"Superficie identificada ({live_hosts_count} hosts vivos, {subdomains_count} subdominios)." if recon_status == "PASSED" else "Sin hosts vivos detectados todavía."
+
+    # 3. Evidencias
+    ev_dir = eng_path / "evidence"
+    evidence_files = list(ev_dir.glob("*.md")) if ev_dir.is_dir() else []
+    total_findings = len([f for f in evidence_files if not f.name.startswith("_")])
+
+    ev_status = "PASSED" if total_findings > 0 else "NOT_STARTED"
+    ev_reason = f"Fichas de evidencia registradas ({total_findings} hallazgos)." if ev_status == "PASSED" else "Sin hallazgos documentados."
+
+    # 4. Reporte
+    report_file = eng_path / "REPORT.md"
+    report_present = report_file.is_file()
+    deliverables_dir = eng_path / "deliverables"
+    exports_dir = eng_path / "exports"
+
+    deliv_count = 0
+    if deliverables_dir.is_dir():
+        deliv_count += len(list(deliverables_dir.iterdir()))
+    if exports_dir.is_dir():
+        deliv_count += len(list(exports_dir.iterdir()))
+
+    report_status = "PASSED" if (report_present and deliv_count > 0) else ("IN_PROGRESS" if report_present else "NOT_STARTED")
+    report_reason = "Reporte compilado y paquete de entregables exportado." if report_status == "PASSED" else "Falta compilar o exportar el reporte final."
+
+    checkpoints = [
+        {
+            "id": "cp_scope",
+            "title": "Definición y Autorización de Alcance",
+            "stage": "scope",
+            "status": scope_status,
+            "reason": scope_reason,
+            "hint": "Revisa y autoriza target.yaml habilitando permisos pasivos o activos.",
+        },
+        {
+            "id": "cp_recon",
+            "title": "Mapeo de Superficie y Hosts Vivos",
+            "stage": "recon",
+            "status": recon_status,
+            "reason": recon_reason,
+            "hint": "Ejecuta el reconocimiento o sondeo web sobre los dominios en alcance.",
+        },
+        {
+            "id": "cp_evidence",
+            "title": "Documentación y Evidencia de Hallazgos",
+            "stage": "triage",
+            "status": ev_status,
+            "reason": ev_reason,
+            "hint": "Crea fichas en evidence/*.md vinculando comandos reproducibles.",
+        },
+        {
+            "id": "cp_report",
+            "title": "Informe Técnico de Auditoría y Cierre",
+            "stage": "reporting",
+            "status": report_status,
+            "reason": report_reason,
+            "hint": "Compila REPORT.md y genera el paquete de entregables.",
+        },
+    ]
+
+    current_stage = "scope"
+    if total_findings > 0 and report_present:
+        current_stage = "reporting"
+    elif total_findings > 0:
+        current_stage = "triage"
+    elif live_hosts_count > 0:
+        current_stage = "probing"
+    elif subdomains_count > 0:
+        current_stage = "recon"
+
+    return {
+        "engagement": eng_path.name,
+        "current_stage": current_stage,
+        "live_hosts_count": live_hosts_count,
+        "subdomains_count": subdomains_count,
+        "total_findings": total_findings,
+        "report_present": report_present,
+        "deliverables_count": deliv_count,
+        "checkpoints": checkpoints,
+    }

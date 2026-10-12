@@ -199,6 +199,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(payload)
   }),
+  runPlaybookStep: (id, payload = {}) => request(`/playbooks/${encodeURIComponent(id)}/step/run`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
   getPlaybookRuns: (id = null, engagementId = null, type = 'engagement') => {
     const params = new URLSearchParams()
     if (engagementId) params.set('engagement_id', engagementId)

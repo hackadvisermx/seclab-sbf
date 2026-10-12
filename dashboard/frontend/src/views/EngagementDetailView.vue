@@ -2296,6 +2296,19 @@
                       {{ step.interaction_type || step.interaction }}
                     </span>
 
+                    <!-- Botón Ejecutar Paso Individual (V3-04f) -->
+                    <button
+                      type="button"
+                      @click="runSingleStep(step.id)"
+                      :disabled="runningStepId === step.id"
+                      data-testid="run-playbook-step-btn"
+                      :data-step-id="step.id"
+                      class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-900/60 hover:bg-cyan-800/80 text-cyan-200 border border-cyan-700/60 flex items-center space-x-1 disabled:opacity-50"
+                    >
+                      <span>▶️</span>
+                      <span>{{ runningStepId === step.id ? 'Ejecutando...' : 'Paso' }}</span>
+                    </button>
+
                     <!-- Insignia de Estado de Corrida -->
                     <span
                       v-if="getStepRunResult(step.id)"
@@ -4072,6 +4085,44 @@ function getStepRunResult(stepId) {
   if (!playbookRunResult.value?.steps_results) return null
   return playbookRunResult.value.steps_results.find(s => s.step_id === stepId) || null
 }
+
+// Ejecución de Pasos Individuales de Playbook (V3-04f)
+const runningStepId = ref('')
+
+async function runSingleStep(stepId) {
+  if (!selectedPlaybookId.value || runningStepId.value) return
+  runningStepId.value = stepId
+  try {
+    const payload = {
+      step_id: stepId,
+      engagement_id: engId.value,
+      type: engType.value,
+      parameters: playbookParams.value,
+      dry_run: true,
+    }
+    const res = await api.runPlaybookStep(selectedPlaybookId.value, payload)
+    if (res?.step_result) {
+      if (!playbookRunResult.value) {
+        playbookRunResult.value = { steps_results: [] }
+      }
+      const existingIdx = playbookRunResult.value.steps_results.findIndex(s => s.step_id === stepId)
+      if (existingIdx >= 0) {
+        playbookRunResult.value.steps_results[existingIdx] = res.step_result
+      } else {
+        playbookRunResult.value.steps_results.push(res.step_result)
+      }
+    }
+  } catch (err) {
+    if (!playbookRunResult.value) playbookRunResult.value = { steps_results: [] }
+    const existingIdx = playbookRunResult.value.steps_results.findIndex(s => s.step_id === stepId)
+    const errRes = { step_id: stepId, status: 'ERROR', output: err.message }
+    if (existingIdx >= 0) playbookRunResult.value.steps_results[existingIdx] = errRes
+    else playbookRunResult.value.steps_results.push(errRes)
+  } finally {
+    runningStepId.value = ''
+  }
+}
+
 
 // Métricas Operacionales de Auditoría (V3-07b, V3-07c)
 const metricsData = ref(null)

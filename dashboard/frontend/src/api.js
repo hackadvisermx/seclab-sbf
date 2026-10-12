@@ -176,5 +176,14 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(payload)
   }),
+  getPlaybookRuns: (id = null, engagementId = null, type = 'engagement') => {
+    const params = new URLSearchParams()
+    if (engagementId) params.set('engagement_id', engagementId)
+    if (type) params.set('type', type)
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    const endpoint = id ? `/playbooks/${encodeURIComponent(id)}/runs${qs}` : `/playbooks/runs/all${qs}`
+    return request(endpoint)
+  },
 }
+
 

@@ -9,6 +9,8 @@ from seclab_playbook import (
     validate_playbook_against_scope,
     run_playbook,
     execute_playbook_step,
+    save_playbook_run_evidence,
+    list_playbook_runs,
     PlaybookValidationError,
 )
 
@@ -129,6 +131,25 @@ class PlaybookRunRequest(BaseModel):
     parameters: Optional[Dict[str, Any]] = None
     dry_run: bool = True
     max_steps: Optional[int] = None
+    save_evidence: bool = True
+
+
+@router.get("/runs/all")
+def get_all_playbook_runs(engagement_id: str = Query(...), type: str = "engagement"):
+    """Lista todas las ejecuciones registradas de playbooks como evidencia en el engagement."""
+    target_dir = WORKSPACE_DIR / ("retos" if type == "reto" else "engagements") / engagement_id
+    if not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Engagement '{engagement_id}' no encontrado.")
+    return list_playbook_runs(target_dir)
+
+
+@router.get("/{playbook_id}/runs")
+def get_playbook_runs_endpoint(playbook_id: str, engagement_id: str = Query(...), type: str = "engagement"):
+    """Lista las ejecuciones registradas para un playbook específico en el engagement."""
+    target_dir = WORKSPACE_DIR / ("retos" if type == "reto" else "engagements") / engagement_id
+    if not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Engagement '{engagement_id}' no encontrado.")
+    return list_playbook_runs(target_dir, playbook_id=playbook_id)
 
 
 @router.post("/{playbook_id}/run")
@@ -169,7 +190,19 @@ def run_playbook_endpoint(playbook_id: str, payload: PlaybookRunRequest):
             dry_run=payload.dry_run,
             max_steps=payload.max_steps,
         )
+        if payload.save_evidence and target_dir and target_dir.is_dir():
+            try:
+                ev_file = save_playbook_run_evidence(
+                    engagement_dir=target_dir,
+                    run_result=result,
+                    parameters=payload.parameters,
+                )
+                result["evidence_file"] = str(ev_file.relative_to(target_dir))
+            except Exception as e:
+                result["evidence_file_error"] = str(e)
+
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error en la ejecución del playbook: {e}")
+
 

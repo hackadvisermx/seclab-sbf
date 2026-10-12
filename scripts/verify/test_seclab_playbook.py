@@ -206,7 +206,91 @@ class TestSeclabPlaybook(unittest.TestCase):
         self.assertEqual(res["status"], "BLOCKED")
         self.assertFalse(res["can_execute"])
 
+    def test_save_playbook_run_evidence(self):
+        import json
+        from seclab_playbook import save_playbook_run_evidence
+        eng_dir = self.tmp_path / "eng_test"
+        eng_dir.mkdir(parents=True)
+
+        fake_res = {
+            "playbook_id": "pb_test_audit",
+            "title": "Auditoría de Prueba",
+            "status": "SIMULATED",
+            "dry_run": True,
+            "total_steps": 2,
+            "executed_steps_count": 2,
+            "steps_results": [
+                {
+                    "step_id": "step_01_passive_lookup",
+                    "title": "Búsqueda Pasiva",
+                    "status": "SIMULATED",
+                    "command": "whois example.com",
+                    "exit_code": 0,
+                    "output": "[dry-run] Simulación completada.",
+                }
+            ],
+        }
+
+        saved_path = save_playbook_run_evidence(eng_dir, fake_res, parameters={"target": "example.com"})
+        self.assertTrue(saved_path.is_file())
+        self.assertTrue(str(saved_path).endswith(".json"))
+        self.assertIn("pb_test_audit", saved_path.name)
+
+        data = json.loads(saved_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["schema_version"], "1.0")
+        self.assertEqual(data["evidence_type"], "playbook_run")
+        self.assertEqual(data["playbook_id"], "pb_test_audit")
+        self.assertEqual(data["parameters"], {"target": "example.com"})
+        self.assertEqual(len(data["steps_results"]), 1)
+
+    def test_list_playbook_runs(self):
+        from seclab_playbook import save_playbook_run_evidence, list_playbook_runs
+        eng_dir = self.tmp_path / "eng_test_list"
+        eng_dir.mkdir(parents=True)
+
+        # Sin ejecuciones previas
+        self.assertEqual(list_playbook_runs(eng_dir), [])
+
+        # Guardar corrida 1
+        res1 = {
+            "playbook_id": "pb_01",
+            "title": "Playbook 1",
+            "status": "COMPLETED",
+            "dry_run": False,
+            "total_steps": 1,
+            "executed_steps_count": 1,
+            "steps_results": [],
+        }
+        save_playbook_run_evidence(eng_dir, res1)
+
+        # Guardar corrida 2
+        res2 = {
+            "playbook_id": "pb_02",
+            "title": "Playbook 2",
+            "status": "SIMULATED",
+            "dry_run": True,
+            "total_steps": 2,
+            "executed_steps_count": 2,
+            "steps_results": [],
+        }
+        save_playbook_run_evidence(eng_dir, res2)
+
+        runs_all = list_playbook_runs(eng_dir)
+        self.assertEqual(len(runs_all), 2)
+
+        runs_pb1 = list_playbook_runs(eng_dir, playbook_id="pb_01")
+        self.assertEqual(len(runs_pb1), 1)
+        self.assertEqual(runs_pb1[0]["playbook_id"], "pb_01")
+        self.assertEqual(runs_pb1[0]["status"], "COMPLETED")
+        self.assertFalse(runs_pb1[0]["dry_run"])
+
+        runs_pb2 = list_playbook_runs(eng_dir, playbook_id="pb_02")
+        self.assertEqual(len(runs_pb2), 1)
+        self.assertEqual(runs_pb2[0]["playbook_id"], "pb_02")
+        self.assertTrue(runs_pb2[0]["dry_run"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

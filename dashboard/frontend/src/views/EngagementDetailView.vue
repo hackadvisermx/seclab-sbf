@@ -2110,6 +2110,11 @@
             <div v-if="playbookRunResult.reason" class="text-rose-300">
               Motivo: {{ playbookRunResult.reason }}
             </div>
+
+            <div v-if="playbookRunResult.evidence_file" data-testid="playbook-evidence-file" class="flex flex-wrap items-center space-x-1.5 text-slate-300 pt-1">
+              <span>📁 Evidencia de auditoría guardada:</span>
+              <code class="text-cyan-400 bg-slate-900/60 px-1.5 py-0.5 rounded border border-slate-700/60 font-mono">{{ playbookRunResult.evidence_file }}</code>
+            </div>
           </div>
 
           <!-- Lista de Pasos -->
@@ -2180,6 +2185,38 @@
                     <pre class="mt-1 p-2 bg-slate-950/90 border border-slate-800 rounded text-slate-300 whitespace-pre-wrap font-mono text-[10px] max-h-40 overflow-y-auto">{{ getStepRunResult(step.id).output }}</pre>
                   </details>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Historial de Evidencias de Auditoría -->
+          <div v-if="playbookRuns.length > 0" data-testid="playbook-runs-history" class="p-3 bg-slate-900/20 border border-slate-800 rounded-md space-y-2">
+            <h4 class="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+              <span>📜 Historial de Evidencias ({{ playbookRuns.length }})</span>
+            </h4>
+            <div class="space-y-1.5">
+              <div
+                v-for="run in playbookRuns"
+                :key="run.file_name"
+                data-testid="playbook-run-history-item"
+                class="flex flex-wrap items-center justify-between text-[11px] font-mono p-2 bg-slate-950/40 border border-slate-800/80 rounded gap-2"
+              >
+                <div class="flex items-center space-x-2">
+                  <span
+                    class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border"
+                    :class="{
+                      'bg-cyan-950 text-cyan-300 border-cyan-700': run.status === 'SIMULATED',
+                      'bg-emerald-950 text-emerald-300 border-emerald-700': run.status === 'COMPLETED',
+                      'bg-rose-950 text-rose-300 border-rose-700': run.status === 'BLOCKED',
+                      'bg-amber-950 text-amber-300 border-amber-700': run.status === 'STOPPED'
+                    }"
+                  >
+                    {{ run.status }}
+                  </span>
+                  <span class="text-slate-400">{{ run.timestamp }}</span>
+                  <span class="text-[10px] text-slate-500">({{ run.dry_run ? 'dry-run' : 'real' }})</span>
+                </div>
+                <code class="text-cyan-400 text-[10px]">{{ run.relative_path }}</code>
               </div>
             </div>
           </div>
@@ -3480,6 +3517,20 @@ const playbookRunResult = ref(null)
 const playbookParams = ref({})
 const playbookDryRun = ref(true)
 const playbookMaxSteps = ref(null)
+const playbookRuns = ref([])
+
+async function loadPlaybookRuns(id) {
+  if (!id || !engId.value) {
+    playbookRuns.value = []
+    return
+  }
+  try {
+    const runs = await api.getPlaybookRuns(id, engId.value, engType.value)
+    playbookRuns.value = Array.isArray(runs) ? runs : []
+  } catch {
+    playbookRuns.value = []
+  }
+}
 
 async function loadPlaybooks() {
   playbookLoading.value = true
@@ -3495,6 +3546,7 @@ async function loadPlaybooks() {
     } else {
       selectedPlaybookId.value = ''
       selectedPlaybookDetail.value = null
+      playbookRuns.value = []
     }
   } catch (err) {
     playbookError.value = err.message || 'Error al listar playbooks.'
@@ -3534,6 +3586,7 @@ async function selectPlaybook(id) {
         playbookScopeEval.value = null
       }
     }
+    await loadPlaybookRuns(id)
   } catch (err) {
     playbookError.value = err.message || `Error al cargar playbook '${id}'.`
   } finally {
@@ -3551,10 +3604,12 @@ async function executePlaybook(dryRun = true) {
       type: engType.value,
       parameters: playbookParams.value,
       dry_run: dryRun,
-      max_steps: playbookMaxSteps.value ? Number(playbookMaxSteps.value) : undefined
+      max_steps: playbookMaxSteps.value ? Number(playbookMaxSteps.value) : undefined,
+      save_evidence: true
     }
     const result = await api.runPlaybook(selectedPlaybookId.value, payload)
     playbookRunResult.value = result
+    await loadPlaybookRuns(selectedPlaybookId.value)
   } catch (err) {
     playbookError.value = err.message || 'Error al ejecutar playbook.'
   } finally {

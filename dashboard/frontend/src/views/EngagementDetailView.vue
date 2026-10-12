@@ -1657,15 +1657,43 @@
               Selecciona un archivo de la lista para previsualizar su contenido.
             </div>
             <div v-else class="space-y-3">
-              <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span class="text-cyan-400 font-bold">{{ selectedArtifact.rel_path }}</span>
-                <button
-                  @click="copyText(selectedArtifactContent)"
-                  :disabled="!artifactSnapshot || !['complete', 'decoded_with_replacement'].includes(artifactSnapshot.preview_status)"
-                  class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 text-[10px]"
-                >
-                  Copiar Previsualización
-                </button>
+              <div class="flex flex-wrap items-center justify-between border-b border-slate-800 pb-2 gap-2">
+                <div class="flex items-center space-x-2">
+                  <span class="text-cyan-400 font-bold">{{ selectedArtifact.rel_path }}</span>
+                  <span
+                    v-if="artifactRedactActive"
+                    data-testid="artifact-redacted-badge"
+                    class="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-950/80 border border-amber-700/60 text-amber-300 flex items-center space-x-1"
+                  >
+                    <span>🛡️</span>
+                    <span>{{ artifactRedactedCount }} {{ artifactRedactedCount === 1 ? 'secreto enmascarado' : 'secretos enmascarados' }}</span>
+                  </span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <!-- Botón Toggle de Redacción de Secretos (V3-05l) -->
+                  <button
+                    type="button"
+                    @click="toggleArtifactRedaction"
+                    :disabled="!artifactSnapshot || !['complete', 'decoded_with_replacement'].includes(artifactSnapshot.preview_status) || isRedactingArtifact"
+                    data-testid="artifact-redact-toggle"
+                    class="px-2.5 py-1 rounded-sm text-[10px] font-mono flex items-center space-x-1 transition-colors border"
+                    :class="artifactRedactActive
+                      ? 'bg-amber-950/90 text-amber-300 border-amber-600/80 hover:bg-amber-900/80'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'"
+                    :title="artifactRedactActive ? 'Mostrar contenido original sin máscaras de seguridad' : 'Enmascarar contraseñas, tokens JWT, Bearer tokens y claves privadas'"
+                  >
+                    <span>🛡️</span>
+                    <span>{{ isRedactingArtifact ? 'Redactando...' : artifactRedactActive ? 'Mostrar Original' : 'Redactar Secretos' }}</span>
+                  </button>
+
+                  <button
+                    @click="copyText(displayedArtifactContent)"
+                    :disabled="!artifactSnapshot || !['complete', 'decoded_with_replacement'].includes(artifactSnapshot.preview_status)"
+                    class="px-2 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 text-[10px]"
+                  >
+                    Copiar Previsualización
+                  </button>
+                </div>
               </div>
               <div v-if="expectedArtifactJob" data-testid="job-artifact-comparison" class="space-y-2 border border-slate-700 rounded-sm p-3 break-all text-slate-300">
                 <p>Versión conservada del job: {{ expectedArtifactJob.run_id }}</p>
@@ -1694,7 +1722,7 @@
                 <p v-if="artifactSnapshot.preview_status === 'binary'" class="text-amber-300">Archivo binario; la huella identifica los bytes originales, sin previsualización textual.</p>
                 <p>La huella permite comparar esta versión; no acredita procedencia, autorización ni suficiencia de evidencia.</p>
               </div>
-              <pre class="whitespace-pre-wrap text-slate-200 text-xs overflow-x-auto">{{ selectedArtifactContent }}</pre>
+              <pre data-testid="artifact-preview-content" class="whitespace-pre-wrap text-slate-200 text-xs overflow-x-auto">{{ displayedArtifactContent }}</pre>
             </div>
           </div>
         </div>
@@ -3350,6 +3378,44 @@ const expectedArtifactJob = ref(null)
 const artifactReadFailed = ref(false)
 let artifactRequest = 0
 
+// Redacción de Secretos en Visor de Artefactos (V3-05l)
+const artifactRedactActive = ref(false)
+const isRedactingArtifact = ref(false)
+const artifactRedactedContent = ref('')
+const artifactRedactedCount = ref(0)
+
+const displayedArtifactContent = computed(() => {
+  if (artifactRedactActive.value && artifactRedactedContent.value) {
+    return artifactRedactedContent.value
+  }
+  return selectedArtifactContent.value
+})
+
+async function toggleArtifactRedaction() {
+  if (!selectedArtifactContent.value || isRedactingArtifact.value) return
+  if (artifactRedactActive.value) {
+    artifactRedactActive.value = false
+    return
+  }
+  if (artifactRedactedContent.value) {
+    artifactRedactActive.value = true
+    return
+  }
+  isRedactingArtifact.value = true
+  try {
+    const res = await api.autoRedactText(selectedArtifactContent.value)
+    if (res && typeof res.redacted_text === 'string') {
+      artifactRedactedContent.value = res.redacted_text
+      artifactRedactedCount.value = res.replacements_count || 0
+      artifactRedactActive.value = true
+    }
+  } catch {
+    // Si falla la redacción remota, no alterar estado activo
+  } finally {
+    isRedactingArtifact.value = false
+  }
+}
+
 // Verificación Criptográfica de Artefactos (V3-03aa)
 const showArtifactVerificationModal = ref(false)
 const artifactVerificationLoading = ref(false)
@@ -4674,6 +4740,10 @@ async function selectArtifactFolder(folder) {
   expectedArtifactJob.value = null
   artifactReadFailed.value = false
   artifactFiles.value = []
+  artifactRedactActive.value = false
+  isRedactingArtifact.value = false
+  artifactRedactedContent.value = ''
+  artifactRedactedCount.value = 0
   try {
     const files = await api.getArtifacts(projectId, folder, projectType)
     if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return
@@ -4695,6 +4765,10 @@ async function loadArtifactPreview(file, expectedHash = null, expectedJob = null
   artifactReadFailed.value = false
   selectedArtifactContent.value = 'Cargando contenido...'
   artifactSnapshot.value = null
+  artifactRedactActive.value = false
+  isRedactingArtifact.value = false
+  artifactRedactedContent.value = ''
+  artifactRedactedCount.value = 0
   try {
     const res = await api.getArtifactContent(projectId, file.rel_path, projectType)
     if (request !== artifactRequest || projectId !== engId.value || projectType !== engType.value) return

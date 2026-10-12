@@ -79,6 +79,7 @@ export const api = {
 
   // Alcance
   getScope: (id, type = 'engagement') => request(`/scope/${id}?type=${type}`),
+  getScopeRevisions: (id, type = 'engagement') => request(`/scope/${encodeURIComponent(id)}/revisions?type=${encodeURIComponent(type)}`),
   updateScope: (id, data, type = 'engagement') => request(`/scope/${id}?type=${type}`, { method: 'PUT', body: JSON.stringify(data) }),
   checkScope: (target, engagementId, type = 'engagement') => request(`/scope/check?type=${type}`, { method: 'POST', body: JSON.stringify({ target, engagement_id: engagementId }) }),
   getScopeBoundaries: () => request('/scope/boundaries/info'),

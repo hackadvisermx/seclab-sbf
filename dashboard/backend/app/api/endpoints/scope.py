@@ -7,6 +7,17 @@ from app.services.runner_service import runner_service
 router = APIRouter(prefix="/scope", tags=["Alcance & Scope Guard"])
 
 
+@router.get("/{eng_id}/revisions")
+def get_scope_revisions(eng_id: str, type: str = Query("engagement")):
+    """Devuelve el historial cronológico inverso de revisiones y diffs de target.yaml (V3-01h)."""
+    try:
+        return workspace_service.get_scope_revisions(eng_id, type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{eng_id}")
 def get_scope_config(eng_id: str, type: str = Query("engagement")):
     """Obtiene la configuración de alcance desde target.yaml."""

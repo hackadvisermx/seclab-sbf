@@ -122,13 +122,24 @@
             <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider flex items-center space-x-2">
               <span>🎯 Reglas de Alcance (target.yaml)</span>
             </h2>
-            <button
-              @click="saveScopeConfig"
-              :disabled="isSavingScope || scopeLoadState !== 'ready'"
-              class="px-3 py-1 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold"
-            >
-              {{ isSavingScope ? 'Guardando...' : 'Guardar Alcance' }}
-            </button>
+            <div class="flex items-center space-x-2">
+              <button
+                type="button"
+                @click="openScopeRevisionsModal"
+                data-testid="scope-revisions-btn"
+                class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-colors"
+                title="Ver historial cronológico y diffs de modificaciones a target.yaml"
+              >
+                📜 Revisiones de Alcance
+              </button>
+              <button
+                @click="saveScopeConfig"
+                :disabled="isSavingScope || scopeLoadState !== 'ready'"
+                class="px-3 py-1 rounded-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold"
+              >
+                {{ isSavingScope ? 'Guardando...' : 'Guardar Alcance' }}
+              </button>
+            </div>
           </div>
 
           <p v-if="scopeLoadState === 'loading'" class="text-xs text-slate-400">Cargando contrato de alcance...</p>
@@ -3233,6 +3244,68 @@
       </div>
     </div>
 
+    <!-- MODAL HISTORIAL DE REVISIONES DE ALCANCE (V3-01h) -->
+    <div
+      v-if="showScopeRevisionsModal"
+      data-testid="scope-revisions-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
+    >
+      <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-2xl w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h2 class="text-sm font-mono font-bold text-white flex items-center space-x-2">
+            <span>📜 Historial de Revisiones: target.yaml</span>
+          </h2>
+          <button @click="showScopeRevisionsModal = false" data-testid="close-scope-revisions-btn" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
+        </div>
+
+        <div v-if="loadingScopeRevisions" class="text-center py-6 text-slate-400 font-mono text-xs">
+          Cargando historial de revisiones...
+        </div>
+
+        <div v-else-if="scopeRevisions.length === 0" class="text-center py-6 text-slate-400 font-mono text-xs">
+          No hay revisiones registradas en evidence/.revisions para target.yaml.
+        </div>
+
+        <div v-else class="space-y-3 max-h-96 overflow-y-auto pr-1">
+          <div
+            v-for="(rev, idx) in scopeRevisions"
+            :key="rev.revision_id || idx"
+            :data-testid="'scope-revision-item-' + idx"
+            class="p-3 bg-slate-900/60 border border-slate-800 rounded text-xs font-mono space-y-1.5"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span
+                  class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border"
+                  :class="rev.action === 'created' ? 'bg-emerald-950 text-emerald-400 border-emerald-500/40' : 'bg-cyan-950 text-cyan-400 border-cyan-500/40'"
+                >
+                  {{ rev.action }}
+                </span>
+                <span class="text-slate-300 font-bold">#{{ rev.revision_id }}</span>
+                <span class="text-slate-500">por {{ rev.author || 'tester' }}</span>
+              </div>
+              <span class="text-slate-400 text-[11px]">{{ new Date(rev.timestamp).toLocaleString() }}</span>
+            </div>
+
+            <div v-if="rev.diff" class="mt-2 bg-[#050811] p-2 rounded border border-slate-800/80 overflow-x-auto text-[11px] font-mono text-slate-300 whitespace-pre">
+              <code>{{ rev.diff }}</code>
+            </div>
+
+            <div class="text-[10px] text-slate-500 space-y-0.5 pt-1 border-t border-slate-800/40">
+              <div v-if="rev.previous_sha256" class="truncate">SHA previo: <code>{{ rev.previous_sha256 }}</code></div>
+              <div v-if="rev.new_sha256" class="truncate">SHA nuevo: <code>{{ rev.new_sha256 }}</code></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2 border-t border-slate-800">
+          <button @click="showScopeRevisionsModal = false" class="px-4 py-1.5 rounded text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL VERIFICACIÓN CRIPTOGRÁFICA DE ARTEFACTOS (V3-03aa) -->
     <div
       v-if="showArtifactVerificationModal"
@@ -4539,6 +4612,24 @@ async function saveScopeConfig() {
     alert('Error al guardar alcance: ' + err.message)
   } finally {
     isSavingScope.value = false
+  }
+}
+
+const showScopeRevisionsModal = ref(false)
+const scopeRevisions = ref([])
+const loadingScopeRevisions = ref(false)
+
+async function openScopeRevisionsModal() {
+  if (!engId.value) return
+  showScopeRevisionsModal.value = true
+  loadingScopeRevisions.value = true
+  try {
+    scopeRevisions.value = await api.getScopeRevisions(engId.value, engType.value)
+  } catch (err) {
+    console.error('Error al cargar revisiones de alcance:', err)
+    scopeRevisions.value = []
+  } finally {
+    loadingScopeRevisions.value = false
   }
 }
 

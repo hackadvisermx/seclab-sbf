@@ -1,11 +1,16 @@
 """Reglas compartidas de alcance para el validador y el reconocimiento."""
 import ast
 import datetime
+import difflib
+import hashlib
 import ipaddress
+import json
 import pathlib
 import posixpath
 import re
 import urllib.parse
+import uuid
+from typing import Any, Dict, List, Optional, Union
 
 
 class ScopeError(ValueError):
@@ -424,4 +429,69 @@ def get_scope_guard_boundaries():
             "respetar la autorización y el alcance acordados."
         ),
     }
+
+
+def record_scope_revision(
+    engagement_dir: Union[str, pathlib.Path],
+    new_yaml_content: str,
+    author: str = "tester",
+) -> Dict[str, Any]:
+    """Registra una revisión inmutable de target.yaml en evidence/.revisions/target_yaml.jsonl."""
+    eng_path = pathlib.Path(engagement_dir)
+    target_file = eng_path / "target.yaml"
+    old_content = ""
+    old_sha256 = None
+    if target_file.is_file():
+        old_content = target_file.read_text(encoding="utf-8")
+        old_sha256 = hashlib.sha256(old_content.encode("utf-8")).hexdigest()
+
+    new_sha256 = hashlib.sha256(new_yaml_content.encode("utf-8")).hexdigest()
+    action = "created" if not old_content else "updated"
+
+    # Compute diff
+    diff_lines = list(difflib.unified_diff(
+        old_content.splitlines(keepends=True),
+        new_yaml_content.splitlines(keepends=True),
+        fromfile="target.yaml (anterior)",
+        tofile="target.yaml (nuevo)",
+    ))
+    diff_text = "".join(diff_lines)
+
+    rev_id = str(uuid.uuid4())[:8]
+    entry = {
+        "revision_id": rev_id,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "action": action,
+        "previous_sha256": old_sha256,
+        "new_sha256": new_sha256,
+        "diff": diff_text,
+        "author": author,
+    }
+
+    rev_dir = eng_path / "evidence" / ".revisions"
+    rev_dir.mkdir(parents=True, exist_ok=True)
+    rev_file = rev_dir / "target_yaml.jsonl"
+    with open(rev_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return entry
+
+
+def get_scope_revisions(engagement_dir: Union[str, pathlib.Path]) -> List[Dict[str, Any]]:
+    """Recupera el historial de auditoría de revisiones de target.yaml en orden cronológico inverso."""
+    eng_path = pathlib.Path(engagement_dir)
+    rev_file = eng_path / "evidence" / ".revisions" / "target_yaml.jsonl"
+    if not rev_file.is_file():
+        return []
+    revisions = []
+    try:
+        with open(rev_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    revisions.append(json.loads(line))
+    except Exception:
+        pass
+    revisions.reverse()
+    return revisions
 

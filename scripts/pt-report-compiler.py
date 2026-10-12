@@ -241,7 +241,7 @@ class ReportValidationError(ValueError):
         super().__init__("Reporte bloqueado: " + "; ".join(issues))
 
 
-def review_report_inputs(engagement_dir: pathlib.Path):
+def review_report_inputs(engagement_dir: pathlib.Path, verify_artifacts: bool = False):
     evidence_dir = engagement_dir / "evidence"
     issues: List[str] = []
     findings = []
@@ -286,7 +286,10 @@ def review_report_inputs(engagement_dir: pathlib.Path):
         try:
             f['artifact_refs'] = validate_artifact_refs(engagement_dir, f['artifact_refs_raw'])
         except (OSError, ValueError) as error:
-            issues.append(f'{prefix} Evidencia vinculada no válida: {error}')
+            if verify_artifacts:
+                issues.append(f'{prefix} Integridad comprometida en evidencia vinculada: {error}')
+            else:
+                issues.append(f'{prefix} Evidencia vinculada no válida: {error}')
         try:
             f['verification_rationale'] = normalize_verification_rationale(json.loads(f['verification_rationale_raw']))
             validate_confirmation({'status': f['status'], 'asset': f['asset'],
@@ -313,13 +316,68 @@ def review_report_inputs(engagement_dir: pathlib.Path):
             except Exception as error:
                 issues.append(f"{prefix} No se pudo validar el activo: {error}")
 
+    if verify_artifacts:
+        # 1. Verificación criptográfica de artefactos declarados en fichas
+        for f in findings:
+            prefix = f"[{f['file']}]"
+            for ref in f.get('artifact_refs', []):
+                ref_path = engagement_dir / ref['path']
+                if not ref_path.exists():
+                    issues.append(f"{prefix} Artefacto vinculado ausente en disco: {ref['path']}")
+                elif ref_path.is_symlink():
+                    issues.append(f"{prefix} Artefacto vinculado no puede ser un enlace simbólico: {ref['path']}")
+                else:
+                    try:
+                        actual_sha = hashlib.sha256(ref_path.read_bytes()).hexdigest()
+                        if actual_sha != ref['sha256']:
+                            issues.append(
+                                f"{prefix} Integridad comprometida en '{ref['path']}': "
+                                f"esperado {ref['sha256']}, calculado {actual_sha}."
+                            )
+                    except Exception as err:
+                        issues.append(f"{prefix} Error al verificar artefacto '{ref['path']}': {err}")
+
+        # 2. Verificación contra artifact-manifest.json si existe
+        manifest_cand = [
+            engagement_dir / "artifact-manifest.json",
+            engagement_dir / "deliverables" / "artifact-manifest.json",
+        ]
+        manifest_found = None
+        for mc in manifest_cand:
+            if mc.is_file() and not mc.is_symlink():
+                manifest_found = mc
+                break
+
+        if manifest_found:
+            try:
+                packer_path = pathlib.Path(__file__).resolve().parent / "pt-engagement-packer.py"
+                if packer_path.is_file():
+                    spec = importlib.util.spec_from_file_location("packer_verifier", packer_path)
+                    if spec and spec.loader:
+                        packer_mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(packer_mod)
+                        if hasattr(packer_mod, "verify_artifact_manifest"):
+                            res = packer_mod.verify_artifact_manifest(engagement_dir, manifest_source=manifest_found)
+                            if not res.get("valid", False):
+                                corrupted = res.get("corrupted_count", 0)
+                                missing = res.get("missing_count", 0)
+                                issues.append(
+                                    f"Verificación de {manifest_found.name} fallida: "
+                                    f"{corrupted} corrupto(s), {missing} ausente(s)."
+                                )
+                                for d in res.get("details", []):
+                                    if d.get("status") != "verified":
+                                        issues.append(f"  [!] Artefacto '{d.get('path')}': {d.get('status')} ({d.get('error', 'anomalía')})")
+            except Exception as err:
+                issues.append(f"Error al verificar {manifest_found.name}: {err}")
+
     duplicates = [format_duplicate_warning(group) for group in find_duplicate_groups(findings)]
     return findings, scope_data, issues, duplicates
 
 
-def check_findings(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[str]]:
+def check_findings(engagement_dir: pathlib.Path, verify_artifacts: bool = False) -> Tuple[bool, List[str], List[str]]:
     """Devuelve (ok, issues, duplicate_warnings); los duplicados no bloquean."""
-    findings, _, issues, duplicates = review_report_inputs(engagement_dir)
+    findings, _, issues, duplicates = review_report_inputs(engagement_dir, verify_artifacts=verify_artifacts)
     if not findings and not issues:
         return True, ["No se encontraron fichas de evidencia (.md) en el directorio."], duplicates
     return not issues, issues, duplicates
@@ -341,12 +399,19 @@ def write_report_atomic(output_path: pathlib.Path, payload: bytes) -> None:
             os.unlink(temporary)
 
 
-def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Path] = None, artifact_reference_output=None, finding_source_output=None, report_hash_output=None) -> pathlib.Path:
+def build_report(
+    engagement_dir: pathlib.Path,
+    output_path: Optional[pathlib.Path] = None,
+    artifact_reference_output=None,
+    finding_source_output=None,
+    report_hash_output=None,
+    verify_artifacts: bool = False,
+) -> pathlib.Path:
     """Compila el informe final REPORT.md a partir de target.yaml y evidence/*.md."""
     if output_path is None:
         output_path = engagement_dir / "REPORT.md"
 
-    findings, target_data, issues, _ = review_report_inputs(engagement_dir)
+    findings, target_data, issues, _ = review_report_inputs(engagement_dir, verify_artifacts=verify_artifacts)
     if issues:
         raise ReportValidationError(issues)
     if artifact_reference_output is not None:
@@ -543,12 +608,15 @@ def build_report(engagement_dir: pathlib.Path, output_path: Optional[pathlib.Pat
 
 
 def main() -> int:
-    if len(sys.argv) < 3:
-        print("Uso: pt-report-compiler.py <list|check|build> <ruta_engagement> [salida_reporte]", file=sys.stderr)
+    verify_artifacts = "--verify-artifacts" in sys.argv
+    clean_argv = [a for a in sys.argv if a != "--verify-artifacts"]
+
+    if len(clean_argv) < 3:
+        print("Uso: pt-report-compiler.py <list|check|build> <ruta_engagement> [salida_reporte] [--verify-artifacts]", file=sys.stderr)
         return 2
 
-    action = sys.argv[1].lower()
-    eng_dir = pathlib.Path(sys.argv[2]).resolve()
+    action = clean_argv[1].lower()
+    eng_dir = pathlib.Path(clean_argv[2]).resolve()
 
     if not eng_dir.is_dir():
         print(f"Error: La ruta especificada no es un directorio válido: {eng_dir}", file=sys.stderr)
@@ -583,9 +651,11 @@ def main() -> int:
         return 0
 
     elif action == "check":
-        ok, issues, duplicate_warnings = check_findings(eng_dir)
+        ok, issues, duplicate_warnings = check_findings(eng_dir, verify_artifacts=verify_artifacts)
         if ok:
             print(f"[+] Verificación exitosa: Todas las evidencias en {eng_dir.name} cumplen con el estándar Evidence-First.")
+            if verify_artifacts:
+                print("    [+] Verificación criptográfica de artefactos exitosa: todos los artefactos vinculados y manifiestos son íntegros.")
             for msg in issues:
                 print(f"    - {msg}")
         else:
@@ -601,14 +671,16 @@ def main() -> int:
 
     elif action == "build":
         out_file = None
-        if len(sys.argv) >= 4:
-            out_file = pathlib.Path(sys.argv[3]).absolute()
+        if len(clean_argv) >= 4:
+            out_file = pathlib.Path(clean_argv[3]).absolute()
         try:
-            res_file = build_report(eng_dir, out_file)
+            res_file = build_report(eng_dir, out_file, verify_artifacts=verify_artifacts)
         except (ValueError, OSError) as error:
             print(f"[!] {error}", file=sys.stderr)
             return 1
         print(f"[+] Reporte compilado exitosamente en: {res_file}")
+        if verify_artifacts:
+            print("    [+] Integridad criptográfica de artefactos verificada con éxito.")
         findings = get_findings(evidence_dir)
         print(f"    Total de hallazgos consolidados: {len(findings)}")
         return 0

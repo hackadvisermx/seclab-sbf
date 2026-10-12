@@ -612,6 +612,7 @@ class WorkspaceSyncService:
                 _finding_frontmatter(fm, file_path)
             except (ValidationError, ValueError, TypeError):
                 raise FindingUpdateError('Metadata inválida; repara la fuente original antes de editar. No se sobrescribió.') from None
+            old_fm = dict(fm)
             for field in ("title", "severity", "cvss_score", "cvss_vector", "cwe", "asset", "status", "verification_rationale", "source_job_id", "source_stage"):
                 if field in finding_create.model_fields_set:
                     value = getattr(finding_create, field)
@@ -623,6 +624,10 @@ class WorkspaceSyncService:
                         fm[field] = value
             if references is not None:
                 fm['artifact_refs'] = references
+            field_diffs = {}
+            for k in set(old_fm.keys()) | set(fm.keys()):
+                if old_fm.get(k) != fm.get(k):
+                    field_diffs[k] = {"old": old_fm.get(k), "new": fm.get(k)}
             _ensure_finding_identity(ev_dir, file_path, fm, finding_create.finding_id)
             _validate_finding_confirmation(target_dir, fm)
             _validate_finding_provenance(fm, eng_type, eng_id, self.recon_db_path)
@@ -649,6 +654,7 @@ class WorkspaceSyncService:
                     "previous_sha256": source_sha256,
                     "new_sha256": new_sha256,
                     "modified_fields": sorted(list(finding_create.model_fields_set)),
+                    "field_diffs": field_diffs,
                     "author": fm.get("author", "tester"),
                 })
             finally:
@@ -717,6 +723,7 @@ class WorkspaceSyncService:
                 "previous_sha256": None,
                 "new_sha256": new_sha256,
                 "modified_fields": sorted(list(finding_create.model_fields_set)),
+                "field_diffs": {k: {"old": None, "new": v} for k, v in fm.items() if v is not None},
                 "author": fm.get("author", "tester"),
             })
         except FileExistsError as error:

@@ -76,6 +76,9 @@ class TestFindingRevisions(unittest.TestCase):
         self.assertEqual(rev2["title"], "SQL Injection en Login (Actualizado)")
         self.assertEqual(rev2["severity"], "CRITICAL")
         self.assertIn("severity", rev2["modified_fields"])
+        self.assertIn("field_diffs", rev2)
+        self.assertEqual(rev2["field_diffs"]["title"]["old"], "SQL Injection en Login")
+        self.assertEqual(rev2["field_diffs"]["title"]["new"], "SQL Injection en Login (Actualizado)")
 
         # 3. Eliminar hallazgo
         del_res = self.client.delete(f'/findings/test_eng/sqli_test?expected_source_sha256={sha2}')

@@ -97,6 +97,10 @@ const mockRevisionsData = {
       previous_sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       new_sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       modified_fields: ['severity', 'status', 'verification_rationale'],
+      field_diffs: {
+        severity: { old: 'MEDIUM', new: 'HIGH' },
+        status: { old: 'CANDIDATE', new: 'PROVEN' }
+      },
       author: 'tester'
     }
   ]
@@ -167,3 +171,52 @@ test('botón de revisiones abre modal con historial de auditoría de la ficha', 
     cleanup()
   }
 })
+
+test('comparador visual de versiones muestra diferencias de campos entre revisiones', async () => {
+  const api = {
+    getEngagementDetail: async () => ({
+      name: 'Test Project',
+      type: 'engagement',
+      created_at: '2026-10-11T10:00:00Z',
+      stats: { findings: 1, creds: 0, artifacts: 0 }
+    }),
+    getScope: async () => ({ target: 'example.com', authorization: { allow_passive: true } }),
+    getFindings: async () => [mockFinding],
+    getLoot: async () => ({ credentials: [] }),
+    getArtifacts: async () => [],
+    getReconStatus: async () => ({ running: false }),
+    getFindingRevisions: async () => mockRevisionsData
+  }
+
+  const { root, cleanup } = await mount(api)
+  try {
+    await clickText(root, 'Hallazgos (evidence/)')
+    const revBtn = root.querySelector('[data-testid="finding-revisions-btn-xss_stored"]')
+    revBtn.click()
+    await flush()
+
+    // 1. Verificar visual diff inline en la revisión 1
+    const fieldDiffs = root.querySelector('[data-testid="revision-field-diffs"]')
+    assert.ok(fieldDiffs, 'Deben renderizarse los cambios detallados inline')
+    assert.match(fieldDiffs.textContent, /severity:/)
+    assert.match(fieldDiffs.textContent, /MEDIUM/)
+    assert.match(fieldDiffs.textContent, /HIGH/)
+
+    // 2. Abrir comparador visual
+    const toggleBtn = root.querySelector('[data-testid="toggle-comparator-btn"]')
+    assert.ok(toggleBtn, 'Debe existir el botón para alternar el comparador')
+    toggleBtn.click()
+    await flush()
+
+    // 3. Verificar panel del comparador
+    const panel = root.querySelector('[data-testid="revision-comparator-panel"]')
+    assert.ok(panel, 'Debe renderizarse el panel del comparador')
+
+    const diffView = root.querySelector('[data-testid="revisions-diff-view"]')
+    assert.ok(diffView, 'Debe renderizarse la vista de diferencias')
+    assert.match(diffView.textContent, /Diferencias detectadas/)
+  } finally {
+    cleanup()
+  }
+})
+

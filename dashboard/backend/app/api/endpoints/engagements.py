@@ -1,8 +1,9 @@
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
-from app.models.schemas import EngagementSummary, EngagementCreate
+from app.models.schemas import EngagementSummary, EngagementCreate, EngagementTimelineResponse
 from app.services.workspace_sync import workspace_service
 from app.services.recon_service import recon_service
+from app.services.timeline_service import timeline_service
 
 router = APIRouter(prefix="/engagements", tags=["Engagements & Retos"])
 
@@ -59,6 +60,12 @@ def update_notes(eng_id: str, payload: dict, type: str = Query("engagement")):
     content = payload.get("content", "")
     workspace_service.save_notes(eng_id, content, type)
     return {"status": "ok", "message": "Notas actualizadas exitosamente"}
+
+
+@router.get("/{eng_id}/timeline", response_model=EngagementTimelineResponse)
+def get_engagement_timeline(eng_id: str, type: str = Query("engagement")):
+    """Obtiene la línea de tiempo unificada cronológica del engagement."""
+    return timeline_service.get_timeline(eng_id, type)
 
 
 @router.delete("/{eng_id}")

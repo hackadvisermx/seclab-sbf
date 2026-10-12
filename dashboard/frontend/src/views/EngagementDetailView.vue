@@ -1560,6 +1560,127 @@
       </div>
     </div>
 
+    <!-- TAB: LÍNEA DE TIEMPO DEL ENGAGEMENT (V3-02o) -->
+    <div v-if="activeTab === 'timeline'" class="space-y-6" data-testid="engagement-timeline-view">
+      <div class="tactical-card space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-lg">⏱️</span>
+              <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider">
+                Línea de Tiempo del Engagement
+              </h2>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+              Historial unificado cronológico de eventos: scope, reconocimiento, hallazgos, notas y reportes.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button
+              @click="loadTimeline"
+              :disabled="timelineLoading"
+              class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition-colors"
+              data-testid="timeline-refresh-button"
+            >
+              {{ timelineLoading ? 'Cargando...' : '🔄 Actualizar' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Filtro por categoría -->
+        <div class="flex flex-wrap items-center gap-2 pt-1" data-testid="timeline-category-filter">
+          <span class="text-xs font-mono text-slate-400">Filtrar por categoría:</span>
+          <button
+            v-for="cat in [
+              { id: 'all', label: 'Todos' },
+              { id: 'scope', label: 'Alcance' },
+              { id: 'recon', label: 'Reconocimiento' },
+              { id: 'finding', label: 'Hallazgos' },
+              { id: 'notes', label: 'Notas' },
+              { id: 'report', label: 'Reportes' }
+            ]"
+            :key="cat.id"
+            @click="selectedTimelineCategory = cat.id"
+            class="px-2.5 py-1 text-xs font-mono rounded-sm transition-colors"
+            :class="selectedTimelineCategory === cat.id ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400 hover:text-white'"
+            :data-testid="`timeline-filter-${cat.id}`"
+          >
+            {{ cat.label }}
+          </button>
+        </div>
+
+        <!-- Alerta de Error -->
+        <div v-if="timelineError" class="p-3 bg-red-950/60 border border-red-700/60 rounded-sm text-red-200 text-xs font-mono">
+          ⚠️ {{ timelineError }}
+        </div>
+
+        <!-- Estado de Carga -->
+        <div v-if="timelineLoading" class="text-center py-12 text-slate-400 text-xs font-mono">
+          Cargando eventos cronológicos...
+        </div>
+
+        <!-- Sin Eventos -->
+        <div v-else-if="filteredTimelineEvents.length === 0" class="text-center py-12 text-slate-500 text-xs font-mono" data-testid="timeline-empty-state">
+          No hay eventos registrados en la línea de tiempo para este filtro.
+        </div>
+
+        <!-- Lista de Eventos Cronológicos -->
+        <div v-else class="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800" data-testid="timeline-events-list">
+          <div
+            v-for="ev in filteredTimelineEvents"
+            :key="ev.id"
+            class="relative group"
+            data-testid="timeline-event-item"
+            :data-event-id="ev.id"
+          >
+            <!-- Punto en la línea de tiempo -->
+            <div class="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full border-2 border-slate-900 bg-cyan-500 group-hover:scale-125 transition-transform"></div>
+
+            <div class="bg-[#050811] border border-slate-800 rounded-sm p-3 hover:border-slate-700 transition-colors">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5">
+                <div class="flex items-center space-x-2 flex-wrap">
+                  <span class="text-sm">{{ getTimelineStatusIcon(ev.status) }}</span>
+                  <span
+                    class="px-2 py-0.5 rounded-xs text-[10px] font-mono uppercase tracking-wider"
+                    :class="getTimelineCategoryBadgeClass(ev.category)"
+                  >
+                    {{ ev.category }}
+                  </span>
+                  <h3 class="text-xs font-mono font-bold text-white">{{ ev.title }}</h3>
+                </div>
+                <div class="text-[11px] font-mono text-slate-500">
+                  {{ ev.timestamp ? new Date(ev.timestamp).toLocaleString() : 'Fecha no especificada' }}
+                </div>
+              </div>
+
+              <p class="text-xs text-slate-300 font-mono mb-2 whitespace-pre-wrap">{{ ev.summary || ev.description }}</p>
+
+              <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-400 pt-2 border-t border-slate-900">
+                <span v-if="ev.source_ref">Referencia: <span class="text-slate-300">{{ ev.source_ref }}</span></span>
+                <span v-else-if="ev.source_file">Archivo: <span class="text-slate-300">{{ ev.source_file }}</span></span>
+                <span v-if="ev.actor">Origen: <span class="text-slate-300">{{ ev.actor }}</span></span>
+                <button
+                  type="button"
+                  @click="navigateFromTimeline(ev)"
+                  class="text-cyan-400 hover:text-cyan-300 underline ml-auto text-xs"
+                >
+                  Ver en {{ ev.category }} &rarr;
+                </button>
+              </div>
+
+              <!-- Metadatos de detalles si existen -->
+              <div v-if="ev.details && Object.keys(ev.details).length > 0" class="mt-2 pt-2 border-t border-slate-900/60 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] font-mono text-slate-400">
+                <div v-for="(val, key) in ev.details" :key="key" class="bg-slate-900/40 px-2 py-1 rounded-xs">
+                  <span class="text-slate-500">{{ key }}: </span>
+                  <span class="text-slate-300 truncate inline-block max-w-[120px] align-bottom">{{ val }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL REGISTRAR CREDENCIAL DE BOTÍN -->
     <div
       v-if="showCredModal"
@@ -2124,6 +2245,7 @@ const tabs = computed(() => {
       { id: 'recon', label: 'Reconocimiento', icon: '📡', count: reconStatus.value.summary?.subdomains_count },
       { id: 'findings', label: 'Vectores / Hallazgos', icon: '📋', count: findings.value.length },
       { id: 'artifacts', label: 'Artefactos & Dumps', icon: '📁', count: artifactFiles.value.length },
+      { id: 'timeline', label: 'Línea de Tiempo', icon: '⏱️', count: timelineEvents.value.length },
       { id: 'logs', label: 'Terminal Logs', icon: '⚡' },
       { id: 'copilot', label: 'Copiloto CTF', icon: '🤖' },
       { id: 'notes', label: 'Solución (notes.md)', icon: '📝' },
@@ -2136,6 +2258,7 @@ const tabs = computed(() => {
     { id: 'findings', label: 'Hallazgos (evidence/)', icon: '📋', count: findings.value.length },
     { id: 'loot', label: 'Botín & Credenciales', icon: '🔑', count: lootData.value.credentials.length },
     { id: 'artifacts', label: 'Artefactos (recon/)', icon: '📁', count: artifactFiles.value.length },
+    { id: 'timeline', label: 'Línea de Tiempo', icon: '⏱️', count: timelineEvents.value.length },
     { id: 'logs', label: 'Terminal Logs', icon: '⚡' },
     { id: 'checklist', label: 'Metodología & Cobertura', icon: '📊' },
     { id: 'copilot', label: 'Copiloto Táctico', icon: '🤖' },
@@ -2143,6 +2266,59 @@ const tabs = computed(() => {
     { id: 'report', label: 'Reporte (REPORT.md)', icon: '📄' },
   ]
 })
+
+// Timeline (V3-02o)
+const timelineEvents = ref([])
+const timelineLoading = ref(false)
+const timelineError = ref('')
+const selectedTimelineCategory = ref('all')
+
+async function loadTimeline() {
+  if (!engId.value) return
+  timelineLoading.value = true
+  timelineError.value = ''
+  try {
+    const res = await api.getEngagementTimeline(engId.value, engType.value)
+    timelineEvents.value = res.events || []
+  } catch (err) {
+    timelineError.value = err.message || 'Error al cargar la línea de tiempo'
+  } finally {
+    timelineLoading.value = false
+  }
+}
+
+const filteredTimelineEvents = computed(() => {
+  if (selectedTimelineCategory.value === 'all') return timelineEvents.value
+  return timelineEvents.value.filter(e => e.category === selectedTimelineCategory.value)
+})
+
+function getTimelineCategoryBadgeClass(category) {
+  switch (category) {
+    case 'scope': return 'bg-cyan-950/60 text-cyan-300 border border-cyan-700/60'
+    case 'recon': return 'bg-sky-950/60 text-sky-300 border border-sky-700/60'
+    case 'finding': return 'bg-amber-950/60 text-amber-300 border border-amber-700/60'
+    case 'report': return 'bg-purple-950/60 text-purple-300 border border-purple-700/60'
+    case 'notes': return 'bg-slate-800 text-slate-300 border border-slate-600'
+    default: return 'bg-slate-900 text-slate-400 border border-slate-700'
+  }
+}
+
+function getTimelineStatusIcon(status) {
+  switch (status) {
+    case 'success': return '🟢'
+    case 'warning': return '🟡'
+    case 'error': return '🔴'
+    default: return '🔵'
+  }
+}
+
+function navigateFromTimeline(event) {
+  if (event.category === 'finding') activeTab.value = 'findings'
+  else if (event.category === 'recon') activeTab.value = 'recon'
+  else if (event.category === 'scope') activeTab.value = 'scope'
+  else if (event.category === 'report') activeTab.value = 'report'
+  else if (event.category === 'notes') activeTab.value = 'notes'
+}
 
 // Scope
 const scopeData = ref({})
@@ -3313,7 +3489,10 @@ watch([selectedAgent, copilotSelectedModel], () => {
   contextPreviewError.value = ''
 })
 
-watch(activeTab, tab => { if (tab === 'checklist') loadNextStep() })
+watch(activeTab, tab => {
+  if (tab === 'checklist') loadNextStep()
+  if (tab === 'timeline') loadTimeline()
+})
 watch(() => [reconStatus.value.job?.run_id, reconStatus.value.job?.status, reconStatus.value.job?.outcome_revision,
   reconStatus.value.job?.outcome_review?.reviewed_at], (current, previous) => {
   if (current.some((value, index) => value !== previous[index])) loadNextStep()
@@ -3335,6 +3514,7 @@ onMounted(() => {
   loadReconStatus()
   loadReconLog()
   loadReconHistory()
+  loadTimeline()
 })
 
 onUnmounted(() => {

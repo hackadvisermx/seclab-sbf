@@ -1,5 +1,6 @@
 import os
 import fcntl
+import hashlib
 import math
 import datetime
 import json
@@ -954,6 +955,62 @@ class WorkspaceSyncService:
     def get_artifact_content(self, eng_id: str, rel_path: str, eng_type: str = "engagement") -> Dict[str, Any]:
         """Lee el contenido de un archivo de artefacto de forma segura contra path traversal."""
         return read_artifact_snapshot(self._resolve_dir(eng_id, eng_type), rel_path)
+
+    def get_artifact_manifest(self, eng_id: str, eng_type: str = "engagement") -> Dict[str, Any]:
+        """Genera el inventario criptográfico de artefactos del engagement (artifact-manifest v1)."""
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        if not target_dir.exists():
+            raise FileNotFoundError(f"Engagement {eng_id} no encontrado")
+
+        artifacts = []
+        scan_folders = ["recon", "evidence", "loot", "fuzzing", "screenshots", "deliverables", "exports"]
+        root_files = ["target.yaml", "scope.txt", "notes.md", "REPORT.md", "terminal.log"]
+        for rf in root_files:
+            file_path = target_dir / rf
+            if file_path.is_file() and not file_path.name.startswith("."):
+                cat = "scope" if rf in ("target.yaml", "scope.txt") else ("report" if rf == "REPORT.md" else ("notes" if rf == "notes.md" else "terminal"))
+                stat = file_path.stat()
+                with open(file_path, "rb") as f:
+                    file_hash = hashlib.sha256(f.read()).hexdigest()
+                artifacts.append({
+                    "path": rf,
+                    "category": cat,
+                    "size_bytes": stat.st_size,
+                    "sha256": file_hash,
+                    "modified": datetime.datetime.fromtimestamp(stat.st_mtime, datetime.timezone.utc).isoformat(),
+                    "source_job_id": None,
+                    "source_stage": None,
+                })
+
+        for folder in scan_folders:
+            sub = target_dir / folder
+            if sub.is_dir():
+                for p in sorted(sub.rglob("*")):
+                    if p.is_file() and not p.name.startswith("."):
+                        rel = str(p.relative_to(target_dir))
+                        stat = p.stat()
+                        with open(p, "rb") as f:
+                            file_hash = hashlib.sha256(f.read()).hexdigest()
+                        artifacts.append({
+                            "path": rel,
+                            "category": folder,
+                            "size_bytes": stat.st_size,
+                            "sha256": file_hash,
+                            "modified": datetime.datetime.fromtimestamp(stat.st_mtime, datetime.timezone.utc).isoformat(),
+                            "source_job_id": None,
+                            "source_stage": None,
+                        })
+
+        total_bytes = sum(a["size_bytes"] for a in artifacts)
+        return {
+            "schema_version": 1,
+            "engagement_id": eng_id,
+            "type": eng_type,
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "total_artifacts": len(artifacts),
+            "total_bytes": total_bytes,
+            "artifacts": artifacts,
+        }
 
 
 workspace_service = WorkspaceSyncService()

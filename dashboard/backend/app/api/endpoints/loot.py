@@ -58,3 +58,14 @@ def get_artifact_content(eng_id: str, path: str = Query(...), type: str = Query(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{eng_id}/artifacts/manifest")
+def get_artifact_manifest(eng_id: str, type: str = Query("engagement")):
+    """Genera o devuelve el manifiesto estructurado de artefactos del engagement (artifact-manifest v1)."""
+    try:
+        return workspace_service.get_artifact_manifest(eng_id, type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

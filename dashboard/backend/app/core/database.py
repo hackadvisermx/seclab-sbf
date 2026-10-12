@@ -74,6 +74,21 @@ def init_db():
                 created_at TEXT
             );
         """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS copilot_chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                engagement_id TEXT NOT NULL,
+                engagement_type TEXT NOT NULL,
+                agent_id TEXT NOT NULL,
+                user_message TEXT NOT NULL,
+                assistant_message TEXT NOT NULL,
+                citations TEXT,
+                provider TEXT,
+                model TEXT,
+                created_at TEXT
+            );
+        """)
     conn.close()
 
 

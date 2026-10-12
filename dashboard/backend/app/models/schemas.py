@@ -215,12 +215,24 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = 2000
 
 
+class CitationItem(BaseModel):
+    path: str
+    type: str = "file"
+    target_section: Optional[str] = "artifacts"
+    slug: Optional[str] = None
+    exists: bool = False
+    sha256: Optional[str] = None
+    size: Optional[int] = None
+    modified: Optional[str] = None
+
+
 class ChatCompletionResponse(BaseModel):
     provider: str
     model: str
     content: str
     latency_ms: int
     usage: Optional[Dict[str, Any]] = None
+    citations: List[CitationItem] = Field(default_factory=list)
 
 
 class ModelCatalogRequest(BaseModel):

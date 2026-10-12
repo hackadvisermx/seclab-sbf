@@ -998,6 +998,26 @@
               :class="m.role === 'user' ? 'bg-cyan-950/80 border border-cyan-500/40 text-cyan-100' : 'bg-slate-900 border border-slate-800 text-slate-200'"
             >
               <pre class="whitespace-pre-wrap font-mono">{{ m.content }}</pre>
+
+              <!-- Citas navegables (V3-05i) -->
+              <div v-if="m.citations && m.citations.length > 0" class="mt-2.5 pt-2 border-t border-slate-800 space-y-1.5" data-testid="copilot-citations-list">
+                <span class="text-[10px] font-mono text-slate-400 block font-bold">Fuentes citadas:</span>
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    v-for="(cit, cidx) in m.citations"
+                    :key="cidx"
+                    type="button"
+                    @click="navigateToCitation(cit)"
+                    class="px-2 py-0.5 rounded-xs text-[11px] font-mono flex items-center space-x-1 transition-colors"
+                    :class="cit.exists ? 'bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/80' : 'bg-amber-950/70 border border-amber-700/60 text-amber-300 hover:bg-amber-900/80'"
+                    :title="cit.exists ? `Archivo verificado (${cit.size || 0} bytes) · SHA-256: ${cit.sha256 || 'n/a'}` : 'Archivo citado no encontrado en el workspace'"
+                    data-testid="copilot-citation-link"
+                  >
+                    <span>{{ cit.exists ? '📎' : '⚠️' }}</span>
+                    <span>{{ cit.path }}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2320,6 +2340,24 @@ function navigateFromTimeline(event) {
   else if (event.category === 'notes') activeTab.value = 'notes'
 }
 
+function navigateToCitation(cit) {
+  if (!cit || !cit.path) return
+  const p = cit.path
+  if (p.startsWith('evidence/')) {
+    activeTab.value = 'findings'
+  } else if (p.startsWith('recon/') || p.startsWith('fuzzing/') || p.startsWith('screenshots/') || p.startsWith('exports/') || p.startsWith('deliverables/')) {
+    activeTab.value = 'artifacts'
+  } else if (p.startsWith('loot/')) {
+    activeTab.value = 'loot'
+  } else if (p === 'target.yaml' || p === 'target.yml' || p === 'scope.txt') {
+    activeTab.value = 'scope'
+  } else if (p === 'notes.md') {
+    activeTab.value = 'notes'
+  } else if (p === 'REPORT.md') {
+    activeTab.value = 'report'
+  }
+}
+
 // Scope
 const scopeData = ref({})
 const authorizationForm = ref(authorizationToForm())
@@ -3048,6 +3086,7 @@ async function confirmCopilotMessage() {
       model: res.model,
       provider: res.provider,
       latency_ms: res.latency_ms,
+      citations: res.citations || [],
     })
   } catch (err) {
     if (request !== copilotRequest || project !== engId.value || type !== engType.value) return

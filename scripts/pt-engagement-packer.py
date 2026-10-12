@@ -349,6 +349,64 @@ def pack_engagement(
         manifest_entries.append(f'{compute_sha256(finding_manifest)}  finding-manifest.json')
         packed_files.append('finding-manifest.json')
 
+        # Generar artifact-manifest.json (v1)
+        artifact_items = []
+        for row in source_records:
+            p = row["path"]
+            cat = "other"
+            if p == "REPORT.md":
+                cat = "report"
+            elif p in ("target.yaml", "scope.txt"):
+                cat = "scope"
+            elif p == "notes.md":
+                cat = "notes"
+            elif p.startswith("evidence/"):
+                cat = "evidence"
+            elif p.startswith("recon/"):
+                cat = "recon"
+            elif p == "terminal.log":
+                cat = "terminal"
+            elif p in ("source-manifest.json", "finding-manifest.json"):
+                cat = "manifest"
+            elif p.startswith("loot/"):
+                cat = "loot"
+
+            dest_file = staging_dir / p
+            file_size = dest_file.stat().st_size if dest_file.is_file() else 0
+
+            source_job = None
+            source_stg = None
+            for f_rec in finding_records:
+                if f_rec["source"]["path"] == p:
+                    source_job = f_rec.get("source_job_id")
+                    source_stg = f_rec.get("source_stage")
+                    break
+
+            artifact_items.append({
+                "path": p,
+                "category": cat,
+                "size_bytes": file_size,
+                "sha256": row["export_sha256"],
+                "original_sha256": row["original_sha256"],
+                "content_changed": row["content_changed"],
+                "source_job_id": source_job,
+                "source_stage": source_stg,
+            })
+
+        total_bytes = sum(item["size_bytes"] for item in artifact_items)
+        artifact_manifest = staging_dir / "artifact-manifest.json"
+        artifact_manifest.write_text(json.dumps({
+            "schema_version": 1,
+            "engagement_id": eng_name,
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "sanitized": sanitize,
+            "total_artifacts": len(artifact_items),
+            "total_bytes": total_bytes,
+            "artifacts": artifact_items,
+        }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        manifest_entries.append(f"{compute_sha256(artifact_manifest)}  artifact-manifest.json")
+        packed_files.append("artifact-manifest.json")
+
         # 5. Generar manifest.sha256
         manifest_file = staging_dir / "manifest.sha256"
         manifest_file.write_text("\n".join(manifest_entries) + "\n", encoding="utf-8")

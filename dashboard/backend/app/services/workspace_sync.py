@@ -637,6 +637,20 @@ class WorkspaceSyncService:
                 if _read_finding_source(file_path)[1] != source_sha256:
                     raise FindingUpdateError('La ficha cambió durante el guardado; no se sobrescribió. Revisa la versión actual.')
                 temporary.replace(file_path)
+                new_sha256 = hashlib.sha256(content.encode('utf-8')).hexdigest()
+                self._append_finding_revision(ev_dir, finding_create.slug, {
+                    "revision_id": str(uuid.uuid4())[:8],
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "action": "update",
+                    "slug": finding_create.slug,
+                    "title": fm.get("title", ""),
+                    "severity": fm.get("severity", ""),
+                    "status": fm.get("status", ""),
+                    "previous_sha256": source_sha256,
+                    "new_sha256": new_sha256,
+                    "modified_fields": sorted(list(finding_create.model_fields_set)),
+                    "author": fm.get("author", "tester"),
+                })
             finally:
                 temporary.unlink(missing_ok=True)
             return self.get_finding(eng_id, finding_create.slug, eng_type)
@@ -691,6 +705,20 @@ class WorkspaceSyncService:
         try:
             temporary.write_text(file_content, encoding='utf-8')
             os.link(temporary, file_path)
+            new_sha256 = hashlib.sha256(file_content.encode('utf-8')).hexdigest()
+            self._append_finding_revision(ev_dir, finding_create.slug, {
+                "revision_id": str(uuid.uuid4())[:8],
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "action": "create",
+                "slug": finding_create.slug,
+                "title": fm.get("title", ""),
+                "severity": fm.get("severity", ""),
+                "status": fm.get("status", ""),
+                "previous_sha256": None,
+                "new_sha256": new_sha256,
+                "modified_fields": sorted(list(finding_create.model_fields_set)),
+                "author": fm.get("author", "tester"),
+            })
         except FileExistsError as error:
             raise FindingUpdateError('La ficha ya existe; recárgala antes de editar. No se reemplazó su identidad.') from error
         finally:
@@ -718,8 +746,48 @@ class WorkspaceSyncService:
             if _read_finding_source(file_path)[1] != expected_source_sha256:
                 raise FindingUpdateError('La ficha cambió desde que la leíste; no se eliminó. Recarga y revisa la versión actual.')
             file_path.unlink()
+            slug = file_path.stem
+            self._append_finding_revision(file_path.parent, slug, {
+                "revision_id": str(uuid.uuid4())[:8],
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "action": "delete",
+                "slug": slug,
+                "previous_sha256": expected_source_sha256,
+                "new_sha256": None,
+                "author": "tester",
+            })
             return True
         return False
+
+    def _append_finding_revision(self, ev_dir: pathlib.Path, slug: str, entry: Dict[str, Any]) -> None:
+        try:
+            rev_dir = ev_dir / ".revisions"
+            rev_dir.mkdir(parents=True, exist_ok=True)
+            rev_file = rev_dir / f"{slug}.jsonl"
+            with open(rev_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+
+    def get_finding_revisions(self, eng_id: str, slug: str, eng_type: str = "engagement") -> List[Dict[str, Any]]:
+        """Devuelve el historial de auditoría de revisiones de una ficha."""
+        if not re.fullmatch(r"[a-zA-Z0-9-][a-zA-Z0-9._-]{0,127}", slug):
+            raise UnsafeWorkspacePath("Identificador de hallazgo no válido.")
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        rev_file = target_dir / "evidence" / ".revisions" / f"{slug}.jsonl"
+        if not rev_file.is_file():
+            return []
+        revisions = []
+        try:
+            with open(rev_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        revisions.append(json.loads(line))
+        except Exception:
+            pass
+        return revisions
+
 
     def get_terminal_log(self, eng_id: str, lines: int = 500, eng_type: str = "engagement") -> str:
         """Lee las últimas N líneas del archivo terminal.log."""

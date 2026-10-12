@@ -92,3 +92,15 @@ def delete_finding(eng_id: str, slug: str, type: str = Query("engagement"), expe
     if not success:
         raise HTTPException(status_code=404, detail="Hallazgo no encontrado")
     return {"status": "ok", "message": f"Hallazgo {slug} eliminado correctamente"}
+
+
+@router.get("/{eng_id}/{slug}/revisions")
+def get_finding_revisions(eng_id: str, slug: str, type: str = Query("engagement")):
+    """Obtiene el historial de revisiones (audit log) de una ficha de hallazgo."""
+    revisions = workspace_service.get_finding_revisions(eng_id, slug, type)
+    return {
+        "slug": slug,
+        "total_revisions": len(revisions),
+        "revisions": revisions,
+    }
+

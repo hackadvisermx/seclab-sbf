@@ -180,6 +180,7 @@ export const api = {
   runRecon: (id, data, type = 'engagement') => request(`/recon/${id}/run?type=${type}`, { method: 'POST', body: JSON.stringify(data) }),
   cancelRecon: (id, type = 'engagement') => request(`/recon/${id}/cancel?type=${type}`, { method: 'POST' }),
   getReconLog: (id, lines = 200, type = 'engagement') => request(`/recon/${id}/log?lines=${lines}&type=${type}`),
+  recordExternalReconJob: (id, data, type = 'engagement') => request(`/recon/${encodeURIComponent(id)}/record-external-job?type=${encodeURIComponent(type)}`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Playbooks Deterministas & Automatización Controlada
   getPlaybooks: (engagementId = null, type = 'engagement') => {

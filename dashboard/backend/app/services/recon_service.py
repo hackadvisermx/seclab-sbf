@@ -422,5 +422,30 @@ class ReconService:
                 if self._threads.get(job_key) is threading.current_thread():
                     self._threads.pop(job_key, None)
 
+    def record_external_job(
+        self,
+        engagement_id: str,
+        tool: str,
+        stage: str = "probe",
+        command: Optional[str] = None,
+        status: str = "completed",
+        notes: Optional[str] = None,
+        engagement_type: str = "engagement",
+    ) -> Dict[str, Any]:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        from seclab_record_job import record_external_recon_job
+        return record_external_recon_job(
+            db_path=self.store.path,
+            engagement_type=engagement_type,
+            engagement_id=engagement_id,
+            tool=tool,
+            stage=stage,
+            command=command,
+            status=status,
+            notes=notes,
+        )
+
 
 recon_service = ReconService()
+

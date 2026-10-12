@@ -2335,6 +2335,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(playbook_tests))
     supervision_tests = load_module('supervision_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_supervision_checkpoints.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(supervision_tests))
+    metrics_tests = load_module('metrics_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_seclab_metrics.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(metrics_tests))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

@@ -260,6 +260,26 @@
               <span class="text-red-400 font-bold">{{ scopeData.operational_limits?.dos_testing ? 'SÍ' : 'NO' }}</span>
             </div>
           </div>
+
+          <!-- Tarjeta de Fronteras Técnicas y Límites de Intercepción (V3-01g) -->
+          <div data-testid="scope-boundaries-card" class="tactical-card space-y-3 text-xs font-mono">
+            <h3 class="font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-2 flex items-center space-x-1.5">
+              <span>⚠️ Frontera Técnica de Scope Guard</span>
+            </h3>
+            <p class="text-slate-300 text-[11px] leading-relaxed">
+              Scope Guard aplica compuertas obligatorias sobre flujos gestionados. No ofrece una garantía global de red sobre todo el sistema.
+            </p>
+            <div class="space-y-1.5 pt-1">
+              <div class="p-2 rounded bg-emerald-950/30 border border-emerald-900/50 space-y-0.5">
+                <span class="text-emerald-400 font-bold block text-[10px] uppercase">✓ Interceptado y Validado</span>
+                <span class="text-slate-300 text-[10px]">Dashboard, pipeline automatizado (pt-recon-pipeline), playbooks deterministas y validaciones API.</span>
+              </div>
+              <div class="p-2 rounded bg-amber-950/30 border border-amber-900/50 space-y-0.5">
+                <span class="text-amber-400 font-bold block text-[10px] uppercase">⚠️ No Interceptado (Shell Libre)</span>
+                <span class="text-slate-300 text-[10px]">Terminal interactiva ttyd (:7681), sesiones SSH directas y comandos manuales del SO. El operador es el único responsable de respetar el alcance.</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

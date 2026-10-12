@@ -95,6 +95,15 @@
       </div>
     </div>
 
+    <!-- Aviso de Límites Operacionales de Scope Guard (V3-01g) -->
+    <div data-testid="terminal-scope-guard-notice" class="bg-amber-950/30 border border-amber-800/50 rounded-lg p-3 text-xs font-mono text-amber-200/90 flex flex-col md:flex-row md:items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-amber-400 font-bold">⚠️ Límites Operacionales de Scope Guard:</span>
+        <span>Los comandos ejecutados libremente en esta shell interactiva operan directamente en el sistema operativo y no son interceptados ni filtrados por el Scope Guard del pipeline/dashboard. El operador es el único responsable de respetar el alcance y la autorización acordados.</span>
+      </div>
+    </div>
+
+
     <!-- Contenedor del Iframe ttyd -->
     <div class="tactical-card p-1 bg-[#050811] border-cyan-500/30 overflow-hidden relative rounded-lg">
       <iframe

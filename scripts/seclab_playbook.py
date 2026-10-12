@@ -469,6 +469,11 @@ def run_playbook(
                 "dry_run": dry_run,
                 "steps_results": [],
             }
+    elif dry_run:
+        # En simulación previa sin target.yaml (previsualización de plantilla),
+        # se permite la simulación determinista sin tráfico real
+        ctx.setdefault("allow_passive", True)
+        ctx.setdefault("allow_active", True)
 
     steps = playbook_data.get("steps", [])
     if max_steps is not None:

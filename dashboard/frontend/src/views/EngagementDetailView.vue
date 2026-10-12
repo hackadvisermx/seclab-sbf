@@ -1020,6 +1020,22 @@
           </button>
         </div>
 
+        <!-- Barra de métricas de citas de la conversación (V3-05k) -->
+        <div v-if="copilotSessionCitationStats.total > 0" data-testid="copilot-session-citation-stats" class="flex flex-wrap items-center justify-between text-[11px] font-mono px-3 py-1.5 bg-slate-900/60 border border-slate-800 rounded-md">
+          <div class="flex items-center space-x-2">
+            <span class="text-slate-400">Verificabilidad de citas en la conversación:</span>
+            <span
+              class="font-bold px-1.5 py-0.5 rounded text-[10px]"
+              :class="copilotSessionCitationStats.pct === 100 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60' : copilotSessionCitationStats.pct >= 50 ? 'bg-amber-950/80 text-amber-300 border border-amber-700/60' : 'bg-rose-950/80 text-rose-300 border border-rose-700/60'"
+            >
+              {{ copilotSessionCitationStats.pct }}% ({{ copilotSessionCitationStats.verified }}/{{ copilotSessionCitationStats.total }})
+            </span>
+          </div>
+          <span class="text-slate-500 text-[10px]">
+            {{ copilotSessionCitationStats.verified }} verificadas · {{ copilotSessionCitationStats.missing }} no encontradas
+          </span>
+        </div>
+
         <!-- Ventana de Chat de Conversación -->
         <div class="h-[480px] bg-[#050811] border border-slate-800 rounded-lg p-4 overflow-y-auto space-y-4 font-mono text-xs">
           <div v-if="copilotMessages.length === 0" class="text-center py-20 text-slate-500 space-y-2">
@@ -1037,6 +1053,21 @@
             <div class="flex items-center space-x-2 text-[10px] text-slate-500 font-bold uppercase">
               <span>{{ m.role === 'user' ? 'OPERADOR AUDITOR' : `COPILOTO (${m.model || 'AI'})` }}</span>
               <span v-if="m.latency_ms">({{ m.latency_ms }} ms)</span>
+              <!-- Indicador proactivo de cobertura de citas (V3-05k) -->
+              <span
+                v-if="m.role === 'assistant'"
+                data-testid="copilot-citation-coverage-badge"
+                class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase border flex items-center space-x-1"
+                :class="{
+                  'bg-emerald-950/80 text-emerald-300 border-emerald-600/70': getCitationCoverage(m.citations).state === 'full',
+                  'bg-amber-950/80 text-amber-300 border-amber-600/70': getCitationCoverage(m.citations).state === 'partial',
+                  'bg-rose-950/80 text-rose-300 border-rose-600/70': getCitationCoverage(m.citations).state === 'unverified',
+                  'bg-slate-800/80 text-slate-400 border-slate-700': getCitationCoverage(m.citations).state === 'none'
+                }"
+              >
+                <span>{{ getCitationCoverage(m.citations).state === 'full' ? '✓' : getCitationCoverage(m.citations).state === 'partial' ? '⚠️' : getCitationCoverage(m.citations).state === 'unverified' ? '✗' : 'ℹ️' }}</span>
+                <span>Citas: {{ getCitationCoverage(m.citations).label }}</span>
+              </span>
             </div>
             <div
               class="max-w-[85%] rounded-lg p-3 text-xs leading-relaxed"
@@ -1046,7 +1077,12 @@
 
               <!-- Citas navegables (V3-05i) -->
               <div v-if="m.citations && m.citations.length > 0" class="mt-2.5 pt-2 border-t border-slate-800 space-y-1.5" data-testid="copilot-citations-list">
-                <span class="text-[10px] font-mono text-slate-400 block font-bold">Fuentes citadas:</span>
+                <div class="flex items-center justify-between text-[10px] font-mono">
+                  <span class="text-slate-400 block font-bold">Fuentes citadas:</span>
+                  <span class="text-slate-500">
+                    {{ getCitationCoverage(m.citations).verified }} de {{ getCitationCoverage(m.citations).total }} verificadas en disco
+                  </span>
+                </div>
                 <div class="flex flex-wrap gap-1.5">
                   <button
                     v-for="(cit, cidx) in m.citations"
@@ -1062,6 +1098,16 @@
                     <span>{{ cit.path }}</span>
                   </button>
                 </div>
+              </div>
+
+              <!-- Aviso proactivo de respuesta no anclada a fuentes locales (V3-05k) -->
+              <div
+                v-if="m.role === 'assistant' && (!m.citations || m.citations.length === 0)"
+                data-testid="copilot-citation-unanchored-notice"
+                class="mt-2 pt-1.5 border-t border-slate-800/60 text-[10px] font-mono text-slate-500 flex items-center space-x-1"
+              >
+                <span>ℹ️</span>
+                <span>Respuesta sin fuentes locales citadas.</span>
               </div>
             </div>
           </div>
@@ -4274,6 +4320,47 @@ const destinationInfo = ref(null)
 const isRedactingContext = ref(false)
 const redactedSecretBadge = ref('')
 let contextRequest = 0
+
+function getCitationCoverage(citations) {
+  if (!citations || !Array.isArray(citations) || citations.length === 0) {
+    return {
+      total: 0,
+      verified: 0,
+      missing: 0,
+      pct: 0,
+      state: 'none',
+      label: 'Sin fuentes citadas',
+    }
+  }
+  const total = citations.length
+  const verified = citations.filter(c => c && c.exists).length
+  const missing = total - verified
+  const pct = Math.round((verified / total) * 100)
+  let state = 'unverified'
+  let label = `0/${total} verificadas`
+  if (verified === total) {
+    state = 'full'
+    label = `100% verificada (${verified}/${total})`
+  } else if (verified > 0) {
+    state = 'partial'
+    label = `${pct}% parcial (${verified}/${total})`
+  }
+  return { total, verified, missing, pct, state, label }
+}
+
+const copilotSessionCitationStats = computed(() => {
+  let total = 0
+  let verified = 0
+  for (const m of copilotMessages.value) {
+    if (m && m.role === 'assistant' && Array.isArray(m.citations)) {
+      total += m.citations.length
+      verified += m.citations.filter(c => c && c.exists).length
+    }
+  }
+  const missing = total - verified
+  const pct = total > 0 ? Math.round((verified / total) * 100) : 0
+  return { total, verified, missing, pct }
+})
 
 async function loadCopilotModels() {
   try {

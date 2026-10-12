@@ -98,3 +98,33 @@ def cancel_recon_pipeline(id: str, type: str = Query("engagement", pattern="^(en
     if not result.get('success'):
         raise HTTPException(status_code=result['code'], detail=result['error'])
     return result
+
+
+class ExternalJobRecordRequest(BaseModel):
+    tool: str = Field(min_length=1, max_length=100)
+    stage: Literal['subdomains', 'probe', 'urls', 'patterns', 'all'] = "probe"
+    command: str = Field(default="", max_length=2000)
+    status: Literal['completed', 'failed'] = "completed"
+    notes: str = Field(default="", max_length=2000)
+
+
+@router.post("/{id}/record-external-job")
+def record_external_recon_job(
+    id: str,
+    req: ExternalJobRecordRequest,
+    type: str = Query("engagement", pattern="^(engagement|reto)$"),
+):
+    """Registra una ejecución externa o manual de herramienta CLI en el historial oficial de reconocimiento."""
+    try:
+        return recon_service.record_external_job(
+            engagement_id=id,
+            tool=req.tool,
+            stage=req.stage,
+            command=req.command,
+            status=req.status,
+            notes=req.notes,
+            engagement_type=type,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No se pudo registrar la corrida CLI externa: {str(e)}")
+

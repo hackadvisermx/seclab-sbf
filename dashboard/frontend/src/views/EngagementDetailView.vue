@@ -614,7 +614,16 @@
       <section class="tactical-card space-y-3" data-testid="recon-history">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-sm font-mono font-bold text-white">Historial de reconocimiento</h3>
-          <button @click="loadReconHistory()" :disabled="reconHistoryBusy" class="px-3 py-1 rounded-sm border border-slate-700 text-cyan-300 text-xs disabled:opacity-50">Actualizar historial</button>
+          <div class="flex items-center gap-2">
+            <button
+              @click="openExternalJobModal"
+              data-testid="record-external-job-btn"
+              class="px-3 py-1 rounded-sm border border-purple-700 bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 text-xs"
+            >
+              + Ingestar Corrida CLI
+            </button>
+            <button @click="loadReconHistory()" :disabled="reconHistoryBusy" class="px-3 py-1 rounded-sm border border-slate-700 text-cyan-300 text-xs disabled:opacity-50">Actualizar historial</button>
+          </div>
         </div>
         <p class="text-xs text-slate-400">Conserva el plan revisado y un resumen de resultados por job del dashboard. Los artefactos y la salida de arriba corresponden al workspace actual; este historial no guarda copias de outputs anteriores.</p>
         <p v-if="reconHistoryError" role="alert" class="text-xs text-amber-300">{{ reconHistoryError }}</p>
@@ -623,7 +632,16 @@
         <ol v-else class="space-y-3 text-xs font-mono">
           <li v-for="job in reconHistory" :key="job.run_id" class="border border-slate-800 rounded-sm p-3 space-y-1">
             <div class="flex flex-wrap justify-between gap-2 text-slate-100">
-              <span>{{ historyStageLabel(job.stage) }} · {{ job.dry_run ? 'SIMULACIÓN' : 'EJECUCIÓN' }}</span>
+              <div class="flex items-center gap-2">
+                <span>{{ historyStageLabel(job.stage) }} · {{ job.dry_run ? 'SIMULACIÓN' : 'EJECUCIÓN' }}</span>
+                <span
+                  v-if="job.origin === 'cli-external'"
+                  data-testid="cli-external-badge"
+                  class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-700/50"
+                >
+                  CLI_EXTERNAL
+                </span>
+              </div>
               <span>{{ historyStatusLabel(job.status) }}</span>
             </div>
             <p class="text-slate-400">Inicio: {{ new Date(job.started_at).toLocaleString() }} · Fin: {{ job.finished_at ? new Date(job.finished_at).toLocaleString() : 'Pendiente' }}</p>
@@ -3346,6 +3364,96 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal Ingestar Corrida CLI Externa (V3-02r) -->
+    <div
+      v-if="showExternalJobModal"
+      data-testid="record-external-job-modal"
+      class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+    >
+      <div class="bg-slate-900 border border-slate-700 rounded-lg max-w-lg w-full p-4 overflow-hidden text-xs font-mono shadow-2xl space-y-4">
+        <div class="border-b border-slate-800 pb-3 flex items-center justify-between">
+          <span class="text-purple-300 font-bold text-sm">⚡ Ingestar Corrida CLI Externa a recon_jobs.db</span>
+          <button
+            type="button"
+            @click="showExternalJobModal = false"
+            class="text-slate-400 hover:text-white font-mono text-lg"
+          >&times;</button>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Herramienta Utilizada *</label>
+            <input
+              v-model="externalJobForm.tool"
+              placeholder="ej. nmap, subfinder, httpx, ffuf, nikto"
+              class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+            />
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Etapa de Reconocimiento</label>
+            <select
+              v-model="externalJobForm.stage"
+              class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+            >
+              <option value="subdomains">Subdominios (subdomains)</option>
+              <option value="probe">Sondeo de Servicios (probe)</option>
+              <option value="urls">Rutas y URLs (urls)</option>
+              <option value="patterns">Patrones de Ataque (patterns)</option>
+              <option value="all">Pipeline Completo (all)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Comando Ejecutado (Opcional)</label>
+            <input
+              v-model="externalJobForm.command"
+              placeholder="ej. nmap -sV -sC -Pn target.local"
+              class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+            />
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Estado</label>
+            <select
+              v-model="externalJobForm.status"
+              class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+            >
+              <option value="completed">Completado (completed)</option>
+              <option value="failed">Fallido (failed)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Notas / Salida Relevante</label>
+            <textarea
+              v-model="externalJobForm.notes"
+              rows="3"
+              placeholder="Detalles sobre activos identificados o anomalías observadas..."
+              class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-slate-200"
+            ></textarea>
+          </div>
+        </div>
+
+        <p v-if="externalJobError" class="text-rose-400 text-xs">{{ externalJobError }}</p>
+
+        <div class="border-t border-slate-800 pt-3 flex justify-end space-x-2">
+          <button
+            type="button"
+            @click="showExternalJobModal = false"
+            class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            @click="submitExternalJob"
+            :disabled="isSubmittingExternalJob || !externalJobForm.tool.trim()"
+            data-testid="submit-external-job-btn"
+            class="px-4 py-1.5 rounded bg-purple-700 hover:bg-purple-600 text-white font-bold disabled:opacity-50"
+          >
+            {{ isSubmittingExternalJob ? 'Registrando...' : 'Registrar en recon_jobs.db' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -3606,6 +3714,45 @@ async function openConsentHistoryModal() {
     consentHistoryList.value = []
   } finally {
     loadingConsentHistory.value = false
+  }
+}
+
+// Ingestión de Jobs CLI Externos (V3-02r)
+const showExternalJobModal = ref(false)
+const isSubmittingExternalJob = ref(false)
+const externalJobError = ref('')
+const externalJobForm = ref({
+  tool: '',
+  stage: 'probe',
+  command: '',
+  status: 'completed',
+  notes: '',
+})
+
+function openExternalJobModal() {
+  externalJobError.value = ''
+  externalJobForm.value = {
+    tool: '',
+    stage: 'probe',
+    command: '',
+    status: 'completed',
+    notes: '',
+  }
+  showExternalJobModal.value = true
+}
+
+async function submitExternalJob() {
+  if (!externalJobForm.value.tool.trim() || !engId.value) return
+  isSubmittingExternalJob.value = true
+  externalJobError.value = ''
+  try {
+    await api.recordExternalReconJob(engId.value, externalJobForm.value, engType.value)
+    showExternalJobModal.value = false
+    await loadReconHistory()
+  } catch (err) {
+    externalJobError.value = err.message || 'Error al registrar la corrida CLI externa.'
+  } finally {
+    isSubmittingExternalJob.value = false
   }
 }
 

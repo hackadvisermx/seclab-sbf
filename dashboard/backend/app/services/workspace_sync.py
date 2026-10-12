@@ -550,11 +550,24 @@ class WorkspaceSyncService:
     def save_target_yaml(self, eng_id: str, data: Dict[str, Any], eng_type: str = "engagement") -> bool:
         """Guarda la especificación de alcance en target.yaml, validando antes de escribir."""
         _validate_scope_payload(data)
-        target_file = self._resolve_dir(eng_id, eng_type) / "target.yaml"
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        target_file = target_dir / "target.yaml"
         target_file.parent.mkdir(parents=True, exist_ok=True)
+        new_content = yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        try:
+            from seclab_scope import record_scope_revision
+            record_scope_revision(target_dir, new_content)
+        except Exception:
+            pass
         with open(target_file, "w", encoding="utf-8") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            f.write(new_content)
         return True
+
+    def get_scope_revisions(self, eng_id: str, eng_type: str = "engagement") -> List[Dict[str, Any]]:
+        """Devuelve el historial de auditoría de revisiones de target.yaml."""
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        from seclab_scope import get_scope_revisions
+        return get_scope_revisions(target_dir)
 
     def list_findings(self, eng_id: str, eng_type: str = "engagement") -> List[FindingDetail]:
         """Obtiene todas las fichas de hallazgos en evidence/*.md."""

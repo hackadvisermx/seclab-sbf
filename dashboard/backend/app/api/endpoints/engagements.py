@@ -4,6 +4,7 @@ from app.models.schemas import EngagementSummary, EngagementCreate, EngagementTi
 from app.services.workspace_sync import workspace_service
 from app.services.recon_service import recon_service
 from app.services.timeline_service import timeline_service
+from app.services.supervision_service import supervision_service
 
 router = APIRouter(prefix="/engagements", tags=["Engagements & Retos"])
 
@@ -66,6 +67,17 @@ def update_notes(eng_id: str, payload: dict, type: str = Query("engagement")):
 def get_engagement_timeline(eng_id: str, type: str = Query("engagement")):
     """Obtiene la línea de tiempo unificada cronológica del engagement."""
     return timeline_service.get_timeline(eng_id, type)
+
+
+@router.get("/{eng_id}/supervision")
+def get_engagement_supervision(eng_id: str, type: str = Query("engagement")):
+    """Obtiene el estado de supervisión consolidado y checkpoints pedagógicos de auditoría."""
+    try:
+        return supervision_service.get_supervision_state(eng_id, type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/{eng_id}")

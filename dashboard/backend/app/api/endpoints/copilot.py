@@ -553,3 +553,67 @@ def get_copilot_consent_history(
     evidence_dir = target_dir / "evidence"
     return read_copilot_consent_history(evidence_dir, limit=limit)
 
+
+@router.get("/chat/export")
+def export_copilot_chat_history(
+    engagement_id: str = Query(...),
+    type: str = Query("engagement"),
+    format: str = Query("markdown", pattern="^(markdown|md|json)$"),
+):
+    """Exporta el historial de conversación del Copiloto en Markdown estructurado o JSON (V3-05n)."""
+    from seclab_copilot_export import export_copilot_chat
+
+    try:
+        conn = get_db_connection()
+        query = (
+            "SELECT id, engagement_id, engagement_type, agent_id, user_message, "
+            "assistant_message, citations, provider, model, created_at "
+            "FROM copilot_chat_history WHERE engagement_id = ? AND engagement_type = ? "
+            "ORDER BY id ASC"
+        )
+        rows = conn.execute(query, (engagement_id, type)).fetchall()
+        conn.close()
+
+        messages = []
+        for r in rows:
+            raw_citations = r["citations"]
+            try:
+                stored_citations = json.loads(raw_citations) if raw_citations else []
+            except Exception:
+                stored_citations = []
+
+            current_citations = citations_service.verify_citations(
+                text=r["assistant_message"],
+                engagement_id=r["engagement_id"],
+                engagement_type=r["engagement_type"],
+            )
+            effective_citations = current_citations if current_citations else stored_citations
+
+            messages.append({
+                "id": r["id"],
+                "agent_id": r["agent_id"],
+                "user_message": r["user_message"],
+                "assistant_message": r["assistant_message"],
+                "citations": effective_citations,
+                "provider": r["provider"],
+                "model": r["model"],
+                "created_at": r["created_at"],
+            })
+
+        content = export_copilot_chat(
+            engagement_id=engagement_id,
+            messages=messages,
+            format=format,
+            engagement_type=type,
+        )
+
+        media_type = "application/json" if format == "json" else "text/markdown; charset=utf-8"
+        ext = "json" if format == "json" else "md"
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="copilot_chat_{engagement_id}.{ext}"'},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

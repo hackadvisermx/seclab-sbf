@@ -130,6 +130,15 @@ export const api = {
   getCopilotChatHistory: (engId, type = 'engagement') => request(`/copilot/chat/history?engagement_id=${encodeURIComponent(engId)}&type=${encodeURIComponent(type)}`),
   getCopilotConsentHistory: (engId, type = 'engagement', limit = 50) => request(`/copilot/consent/history?engagement_id=${encodeURIComponent(engId)}&type=${encodeURIComponent(type)}&limit=${limit}`),
   autoRedactText: (text) => request('/copilot/redact', { method: 'POST', body: JSON.stringify({ text }) }),
+  exportCopilotChat: async (engId, format = 'markdown', type = 'engagement') => {
+    const url = `${API_BASE}/copilot/chat/export?engagement_id=${encodeURIComponent(engId)}&type=${encodeURIComponent(type)}&format=${encodeURIComponent(format)}`
+    const res = await fetch(url, { credentials: 'same-origin' })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(err || `Error ${res.status}`)
+    }
+    return res.text()
+  },
 
   // Logs & Reportes
   getLogs: (id, lines = 500, type = 'engagement') => request(`/logs/${id}?lines=${lines}&type=${type}`),

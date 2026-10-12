@@ -1041,6 +1041,15 @@
             >
               📜 Log Consentimiento
             </button>
+            <button
+              @click="exportCopilotChat('markdown')"
+              data-testid="copilot-chat-export-btn"
+              :disabled="exportingCopilotChat"
+              class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-[11px] transition-colors disabled:opacity-50"
+              title="Exportar transcripción de la sesión del Copiloto en Markdown"
+            >
+              📥 Exportar Chat (.md)
+            </button>
           </div>
         </div>
 
@@ -5240,6 +5249,31 @@ async function confirmCopilotMessage() {
     await openLocalGuidance()
   } finally {
     if (request === copilotRequest) isCopilotThinking.value = false
+  }
+}
+
+const exportingCopilotChat = ref(false)
+
+async function exportCopilotChat(format = 'markdown') {
+  if (!engId.value) return
+  exportingCopilotChat.value = true
+  try {
+    const content = await api.exportCopilotChat(engId.value, format, engType.value)
+    const ext = format === 'json' ? 'json' : 'md'
+    const mime = format === 'json' ? 'application/json' : 'text/markdown'
+    const blob = new Blob([content], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `copilot_transcript_${engId.value}.${ext}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('Error al exportar transcripción de Copiloto:', err)
+  } finally {
+    exportingCopilotChat.value = false
   }
 }
 

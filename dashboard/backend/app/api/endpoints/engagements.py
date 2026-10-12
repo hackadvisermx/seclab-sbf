@@ -5,6 +5,7 @@ from app.services.workspace_sync import workspace_service
 from app.services.recon_service import recon_service
 from app.services.timeline_service import timeline_service
 from app.services.supervision_service import supervision_service
+from app.services.metrics_service import metrics_service
 
 router = APIRouter(prefix="/engagements", tags=["Engagements & Retos"])
 
@@ -78,6 +79,18 @@ def get_engagement_supervision(eng_id: str, type: str = Query("engagement")):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{eng_id}/metrics")
+def get_engagement_metrics(eng_id: str, type: str = Query("engagement")):
+    """Obtiene las métricas operacionales locales y avance de calidad de la auditoría."""
+    try:
+        return metrics_service.get_metrics(eng_id, type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @router.delete("/{eng_id}")

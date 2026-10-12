@@ -1,0 +1,40 @@
+# Playbook determinista: Reconocimiento Web Táctico
+id: "pb_web_recon"
+title: "Reconocimiento y Mapeo de Superficie Web"
+version: "1.0"
+category: "web_audit"
+description: "Identificación de hosts vivos, resolución de subdominios y detección de endpoints web HTTP/HTTPS."
+author: "SecLab-SBF"
+
+steps:
+  - id: "step_01_subdomain_discovery"
+    title: "Descubrimiento Pasivo de Subdominios"
+    objective: "Identificar nombres de dominio calificados sin generar tráfico directo contra el objetivo."
+    interaction_type: "passive"
+    required_permissions:
+      - "allow_passive"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "target.yaml"
+    command_template: "subfinder -d {domain} -silent -o recon/subdomains.txt"
+    timeout_seconds: 180
+    expected_outputs:
+      - "recon/subdomains.txt"
+    success_criteria:
+      file_exists: "recon/subdomains.txt"
+
+  - id: "step_02_web_probing"
+    title: "Sondeo Activo de Puertos Web HTTP/HTTPS"
+    objective: "Comprobar qué subdominios tienen servidores HTTP/HTTPS activos y responder con códigos de estado."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "recon/subdomains.txt"
+    inputs:
+      - "recon/subdomains.txt"
+    command_template: "httpx -l recon/subdomains.txt -silent -status-code -title -o recon/live_hosts.txt"
+    timeout_seconds: 300
+    expected_outputs:
+      - "recon/live_hosts.txt"
+    success_criteria:
+      file_exists: "recon/live_hosts.txt"

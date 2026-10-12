@@ -17,6 +17,7 @@ from app.api.endpoints import (
     vpn,
     recon,
     terminal_proxy,
+    playbooks,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -39,5 +40,6 @@ protected.include_router(loot.router)
 protected.include_router(vpn.router)
 protected.include_router(recon.router)
 protected.include_router(terminal_proxy.router)
+protected.include_router(playbooks.router)
 
 api_router.include_router(protected)

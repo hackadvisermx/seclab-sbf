@@ -6,6 +6,7 @@ from app.services.recon_service import recon_service
 from app.services.timeline_service import timeline_service
 from app.services.supervision_service import supervision_service
 from app.services.metrics_service import metrics_service
+from app.services.provenance_service import provenance_service
 
 router = APIRouter(prefix="/engagements", tags=["Engagements & Retos"])
 
@@ -190,6 +191,41 @@ def export_engagement_metrics(
             content=content,
             media_type=media_type,
             headers={"Content-Disposition": f'attachment; filename="metrics_{eng_id}.{ext}"'},
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{eng_id}/provenance/graph")
+def get_engagement_provenance_graph(eng_id: str, type: str = Query("engagement")):
+    """Obtiene el grafo estructurado de procedencia (DAG) del engagement o reto."""
+    try:
+        return provenance_service.get_provenance_graph(eng_id, type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{eng_id}/provenance/export")
+def export_engagement_provenance_graph(
+    eng_id: str,
+    type: str = Query("engagement"),
+    format: str = Query("json", pattern="^(json|mermaid|markdown|md)$"),
+):
+    """Exporta el grafo de procedencia en JSON, diagrama Mermaid o informe Markdown."""
+    try:
+        content = provenance_service.export_provenance_graph(eng_id, type, format)
+        media_type = "application/json" if format == "json" else "text/markdown; charset=utf-8" if format in ("markdown", "md") else "text/plain; charset=utf-8"
+        ext = "json" if format == "json" else "md" if format in ("markdown", "md") else "mmd"
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="provenance_{eng_id}.{ext}"'},
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

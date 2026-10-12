@@ -22,7 +22,7 @@ import shutil
 import sys
 import tarfile
 import zipfile
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_artifacts import read_artifact_snapshot, HASH_LIMIT
@@ -107,6 +107,8 @@ def resolve_engagement_dir(target_arg: Optional[str] = None) -> Optional[pathlib
     if target_arg:
         p = pathlib.Path(target_arg).expanduser()
         if p.is_dir():
+            return p.resolve()
+        if p.is_file() and (p.suffix.lower() == ".zip" or p.name.endswith(".tar.gz") or p.suffix.lower() == ".tgz"):
             return p.resolve()
 
         ws_env = os.environ.get("WORKSPACE_DIR")
@@ -449,6 +451,391 @@ def pack_engagement(
     }
 
 
+def verify_artifact_manifest(
+    engagement_dir: Union[pathlib.Path, str],
+    manifest_source: Optional[Union[pathlib.Path, Dict[str, Any], str]] = None,
+) -> Dict[str, Any]:
+    """Verifica criptográficamente la integridad de los artefactos del engagement contra un manifiesto v1."""
+    target_p = pathlib.Path(engagement_dir).resolve()
+    eng_name = target_p.name
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    manifest_data: Optional[Dict[str, Any]] = None
+
+    if isinstance(manifest_source, dict):
+        manifest_data = manifest_source
+    elif manifest_source is not None:
+        p = pathlib.Path(manifest_source).resolve()
+        if not p.exists():
+            p_rel = target_p / manifest_source if target_p.is_dir() else None
+            if p_rel and p_rel.exists():
+                p = p_rel.resolve()
+            else:
+                raise FileNotFoundError(f"Fuente de manifiesto no encontrada: {manifest_source}")
+
+        if p.is_file():
+            if p.suffix.lower() == ".zip":
+                with zipfile.ZipFile(p, "r") as zf:
+                    for name in zf.namelist():
+                        if name.endswith("artifact-manifest.json"):
+                            manifest_data = json.loads(zf.read(name).decode("utf-8"))
+                            break
+            elif p.name.endswith(".tar.gz") or p.suffix.lower() == ".tgz":
+                with tarfile.open(p, "r:gz") as tf:
+                    for member in tf.getmembers():
+                        if member.name.endswith("artifact-manifest.json"):
+                            f = tf.extractfile(member)
+                            if f:
+                                manifest_data = json.loads(f.read().decode("utf-8"))
+                            break
+            else:
+                manifest_data = json.loads(p.read_text(encoding="utf-8"))
+
+    is_archive = target_p.is_file() and (
+        target_p.suffix.lower() == ".zip"
+        or target_p.name.endswith(".tar.gz")
+        or target_p.suffix.lower() == ".tgz"
+    )
+
+    if not is_archive:
+        if not manifest_data:
+            candidates = [
+                target_p / "artifact-manifest.json",
+                target_p / "deliverables" / "artifact-manifest.json",
+            ]
+            deliv_dir = target_p / "deliverables"
+            if deliv_dir.is_dir():
+                for arch in sorted(deliv_dir.glob("*.zip"), reverse=True):
+                    candidates.append(arch)
+                for arch in sorted(deliv_dir.glob("*.tar.gz"), reverse=True):
+                    candidates.append(arch)
+
+            for cand in candidates:
+                if cand.is_file():
+                    if cand.suffix.lower() == ".json":
+                        manifest_data = json.loads(cand.read_text(encoding="utf-8"))
+                        break
+                    elif cand.suffix.lower() == ".zip":
+                        try:
+                            with zipfile.ZipFile(cand, "r") as zf:
+                                for name in zf.namelist():
+                                    if name.endswith("artifact-manifest.json"):
+                                        manifest_data = json.loads(zf.read(name).decode("utf-8"))
+                                        break
+                        except Exception:
+                            pass
+                        if manifest_data:
+                            break
+                    elif cand.name.endswith(".tar.gz") or cand.suffix.lower() == ".tgz":
+                        try:
+                            with tarfile.open(cand, "r:gz") as tf:
+                                for member in tf.getmembers():
+                                    if member.name.endswith("artifact-manifest.json"):
+                                        f = tf.extractfile(member)
+                                        if f:
+                                            manifest_data = json.loads(f.read().decode("utf-8"))
+                                            break
+                        except Exception:
+                            pass
+                        if manifest_data:
+                            break
+
+    if is_archive and not manifest_data:
+        if target_p.suffix.lower() == ".zip":
+            with zipfile.ZipFile(target_p, "r") as zf:
+                for name in zf.namelist():
+                    if name.endswith("artifact-manifest.json"):
+                        manifest_data = json.loads(zf.read(name).decode("utf-8"))
+                        break
+        else:
+            with tarfile.open(target_p, "r:gz") as tf:
+                for member in tf.getmembers():
+                    if member.name.endswith("artifact-manifest.json"):
+                        f = tf.extractfile(member)
+                        if f:
+                            manifest_data = json.loads(f.read().decode("utf-8"))
+                            break
+
+    if not manifest_data:
+        raise FileNotFoundError(f"No se encontró artifact-manifest.json para {eng_name}")
+
+    if not isinstance(manifest_data, dict) or manifest_data.get("schema_version") != 1:
+        raise ValueError("El manifiesto de artefactos debe cumplir schema_version: 1")
+
+    artifacts = manifest_data.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise ValueError("El manifiesto de artefactos no contiene una lista válida de 'artifacts'")
+
+    details: List[Dict[str, Any]] = []
+    verified_count = 0
+    corrupted_count = 0
+    missing_count = 0
+
+    if is_archive:
+        if target_p.suffix.lower() == ".zip":
+            with zipfile.ZipFile(target_p, "r") as zf:
+                namelist = zf.namelist()
+                name_map: Dict[str, str] = {}
+                for n in namelist:
+                    name_map[n] = n
+                    parts = n.split("/", 1)
+                    if len(parts) == 2:
+                        name_map[parts[1]] = n
+
+                for item in artifacts:
+                    if not isinstance(item, dict):
+                        continue
+                    rel_path = item.get("path", "")
+                    cat = item.get("category", "other")
+                    expected_sha = item.get("sha256")
+                    original_sha = item.get("original_sha256")
+                    expected_size = item.get("size_bytes")
+
+                    rel_p = pathlib.Path(rel_path)
+                    if rel_p.is_absolute() or ".." in rel_p.parts:
+                        corrupted_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "rejected",
+                            "error": "Ruta de artefacto insegura o fuera de límites",
+                        })
+                        continue
+
+                    entry = name_map.get(rel_path)
+                    if not entry:
+                        for n in namelist:
+                            if n == rel_path or n.endswith("/" + rel_path):
+                                entry = n
+                                break
+
+                    if not entry:
+                        missing_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "missing",
+                            "expected_sha256": expected_sha,
+                            "actual_sha256": None,
+                            "error": "Archivo ausente en el paquete comprimido",
+                        })
+                        continue
+
+                    zinfo = zf.getinfo(entry)
+                    if (zinfo.external_attr >> 16) & 0o120000 == 0o120000:
+                        corrupted_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "symlink_rejected",
+                            "expected_sha256": expected_sha,
+                            "actual_sha256": None,
+                            "error": "Enlace simbólico no permitido como artefacto",
+                        })
+                        continue
+
+                    content = zf.read(entry)
+                    actual_size = len(content)
+                    actual_sha = hashlib.sha256(content).hexdigest()
+                    matches_hash = (actual_sha == expected_sha) or (original_sha and actual_sha == original_sha)
+
+                    if not matches_hash:
+                        corrupted_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "hash_mismatch",
+                            "expected_sha256": expected_sha,
+                            "actual_sha256": actual_sha,
+                            "expected_size": expected_size,
+                            "actual_size": actual_size,
+                            "error": f"SHA-256 no coincide (esperado: {expected_sha[:12] if expected_sha else 'None'}..., actual: {actual_sha[:12]}...)",
+                        })
+                    else:
+                        verified_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "verified",
+                            "sha256": actual_sha,
+                            "size_bytes": actual_size,
+                        })
+        else:
+            with tarfile.open(target_p, "r:gz") as tf:
+                members = tf.getmembers()
+                member_map: Dict[str, tarfile.TarInfo] = {}
+                for m in members:
+                    member_map[m.name] = m
+                    parts = m.name.split("/", 1)
+                    if len(parts) == 2:
+                        member_map[parts[1]] = m
+
+                for item in artifacts:
+                    if not isinstance(item, dict):
+                        continue
+                    rel_path = item.get("path", "")
+                    cat = item.get("category", "other")
+                    expected_sha = item.get("sha256")
+                    original_sha = item.get("original_sha256")
+                    expected_size = item.get("size_bytes")
+
+                    rel_p = pathlib.Path(rel_path)
+                    if rel_p.is_absolute() or ".." in rel_p.parts:
+                        corrupted_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "rejected",
+                            "error": "Ruta de artefacto insegura o fuera de límites",
+                        })
+                        continue
+
+                    m_entry = member_map.get(rel_path)
+                    if not m_entry:
+                        for m in members:
+                            if m.name == rel_path or m.name.endswith("/" + rel_path):
+                                m_entry = m
+                                break
+
+                    if not m_entry:
+                        missing_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "missing",
+                            "expected_sha256": expected_sha,
+                            "actual_sha256": None,
+                            "error": "Archivo ausente en el paquete comprimido",
+                        })
+                        continue
+
+                    if m_entry.issym() or m_entry.islnk():
+                        corrupted_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "symlink_rejected",
+                            "expected_sha256": expected_sha,
+                            "actual_sha256": None,
+                            "error": "Enlace simbólico no permitido como artefacto",
+                        })
+                        continue
+
+                    extr = tf.extractfile(m_entry)
+                    content = extr.read() if extr else b""
+                    actual_size = len(content)
+                    actual_sha = hashlib.sha256(content).hexdigest()
+                    matches_hash = (actual_sha == expected_sha) or (original_sha and actual_sha == original_sha)
+
+                    if not matches_hash:
+                        corrupted_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "hash_mismatch",
+                            "expected_sha256": expected_sha,
+                            "actual_sha256": actual_sha,
+                            "expected_size": expected_size,
+                            "actual_size": actual_size,
+                            "error": f"SHA-256 no coincide (esperado: {expected_sha[:12] if expected_sha else 'None'}..., actual: {actual_sha[:12]}...)",
+                        })
+                    else:
+                        verified_count += 1
+                        details.append({
+                            "path": rel_path,
+                            "category": cat,
+                            "status": "verified",
+                            "sha256": actual_sha,
+                            "size_bytes": actual_size,
+                        })
+    else:
+        base_dir = target_p
+        for item in artifacts:
+            if not isinstance(item, dict):
+                continue
+            rel_path = item.get("path", "")
+            cat = item.get("category", "other")
+            expected_sha = item.get("sha256")
+            original_sha = item.get("original_sha256")
+            expected_size = item.get("size_bytes")
+
+            rel_p = pathlib.Path(rel_path)
+            if rel_p.is_absolute() or ".." in rel_p.parts:
+                corrupted_count += 1
+                details.append({
+                    "path": rel_path,
+                    "category": cat,
+                    "status": "rejected",
+                    "error": "Ruta de artefacto insegura o fuera de límites",
+                })
+                continue
+
+            target_file = base_dir / rel_path
+            if not target_file.exists():
+                missing_count += 1
+                details.append({
+                    "path": rel_path,
+                    "category": cat,
+                    "status": "missing",
+                    "expected_sha256": expected_sha,
+                    "actual_sha256": None,
+                    "error": "Archivo ausente en disco",
+                })
+                continue
+
+            if target_file.is_symlink() or not target_file.resolve().is_relative_to(base_dir):
+                corrupted_count += 1
+                details.append({
+                    "path": rel_path,
+                    "category": cat,
+                    "status": "symlink_rejected",
+                    "expected_sha256": expected_sha,
+                    "actual_sha256": None,
+                    "error": "Enlace simbólico no permitido como artefacto",
+                })
+                continue
+
+            actual_size = target_file.stat().st_size
+            actual_sha = compute_sha256(target_file)
+            matches_hash = (actual_sha == expected_sha) or (original_sha and actual_sha == original_sha)
+
+            if not matches_hash:
+                corrupted_count += 1
+                details.append({
+                    "path": rel_path,
+                    "category": cat,
+                    "status": "hash_mismatch",
+                    "expected_sha256": expected_sha,
+                    "actual_sha256": actual_sha,
+                    "expected_size": expected_size,
+                    "actual_size": actual_size,
+                    "error": f"SHA-256 no coincide (esperado: {expected_sha[:12] if expected_sha else 'None'}..., actual: {actual_sha[:12]}...)",
+                })
+            else:
+                verified_count += 1
+                details.append({
+                    "path": rel_path,
+                    "category": cat,
+                    "status": "verified",
+                    "sha256": actual_sha,
+                    "size_bytes": actual_size,
+                })
+
+    is_valid = (corrupted_count == 0 and missing_count == 0)
+
+    return {
+        "status": "success" if is_valid else "integrity_failed",
+        "engagement": eng_name,
+        "is_valid": is_valid,
+        "total_artifacts": len(artifacts),
+        "verified_count": verified_count,
+        "corrupted_count": corrupted_count,
+        "missing_count": missing_count,
+        "verified_at": now_iso,
+        "details": details,
+    }
+
+
 def check_closure_readiness(engagement_dir: pathlib.Path) -> Tuple[bool, List[str], List[str]]:
     """Verifica si el engagement cumple con los requisitos de calidad para cierre."""
     # 1. Intentar delegar a AuditChecklistEvaluator si está disponible
@@ -624,11 +1011,70 @@ def main() -> int:
     p_san.add_argument("file", help="Archivo a sanitizar")
     p_san.add_argument("-o", "--output", help="Archivo de salida (si se omite, imprime en stdout)")
 
+    # verify-manifest
+    p_ver = subparsers.add_parser("verify-manifest", help="Verifica la integridad de los artefactos contra artifact-manifest.json")
+    p_ver.add_argument("engagement", nargs="?", help="Ruta o nombre del engagement a verificar")
+    p_ver.add_argument("-m", "--manifest", help="Ruta a un archivo artifact-manifest.json o bundle exportado")
+    p_ver.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
+
+    parser.add_argument("--verify-manifest", nargs="?", const="default", help="Verifica la integridad de los artefactos contra artifact-manifest.json")
+    parser.add_argument("-m", "--manifest", help="Ruta a un archivo artifact-manifest.json o bundle exportado")
+    parser.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
+
     args = parser.parse_args()
 
-    if not args.subcommand:
+    is_verify = (args.subcommand == "verify-manifest") or (getattr(args, "verify_manifest", None) is not None)
+
+    if not args.subcommand and not is_verify:
         parser.print_help(sys.stderr)
         return 2
+
+    if is_verify:
+        eng_target = getattr(args, "engagement", None)
+        manifest_src = getattr(args, "manifest", None)
+        if getattr(args, "verify_manifest", None) and args.verify_manifest != "default":
+            if not eng_target:
+                eng_target = args.verify_manifest
+            else:
+                manifest_src = args.verify_manifest
+
+        eng_dir = resolve_engagement_dir(eng_target)
+        if not eng_dir or (not eng_dir.is_dir() and not eng_dir.is_file()):
+            err_msg = f"No se pudo localizar el directorio o paquete del engagement: {eng_target or 'no especificado'}"
+            if getattr(args, "json", False):
+                print(json.dumps({"status": "error", "message": err_msg}, ensure_ascii=False))
+            else:
+                print(f"Error: {err_msg}", file=sys.stderr)
+            return 1
+
+        try:
+            res = verify_artifact_manifest(eng_dir, manifest_source=manifest_src)
+        except (ValueError, OSError, ImportError, FileNotFoundError) as error:
+            if getattr(args, "json", False):
+                print(json.dumps({"status": "error", "message": str(error)}, ensure_ascii=False))
+            else:
+                print(f"[!] Error de verificación: {error}", file=sys.stderr)
+            return 1
+
+        if getattr(args, "json", False):
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+        else:
+            if res.get("is_valid"):
+                print(f"\n\033[32m[+] Verificación de artefactos exitosa para {res['engagement']}:\033[0m")
+                print(f"    Total artefactos:  {res['total_artifacts']}")
+                print(f"    Verificados OK:    {res['verified_count']}")
+                print(f"    Estado:            Íntegro y verificado\n")
+            else:
+                print(f"\n\033[31m[!] Fallo de integridad en artefactos de {res['engagement']}:\033[0m")
+                print(f"    Total artefactos:  {res['total_artifacts']}")
+                print(f"    Verificados OK:    {res['verified_count']}")
+                print(f"    Corruptos/Hash:    {res['corrupted_count']}")
+                print(f"    Ausentes:          {res['missing_count']}")
+                for det in res.get("details", []):
+                    if det.get("status") != "verified":
+                        print(f"    - ❌ {det['path']}: {det.get('error', det['status'])}")
+                print()
+        return 0 if res.get("is_valid") else 1
 
     if args.subcommand == "sanitize":
         f_path = pathlib.Path(args.file)

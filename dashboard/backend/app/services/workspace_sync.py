@@ -10,6 +10,7 @@ import sys
 import uuid
 import sqlite3
 import yaml
+import importlib.util
 from contextlib import contextmanager, closing
 from pydantic import ValidationError
 from typing import Any, Dict, List, Optional, Tuple
@@ -1011,6 +1012,37 @@ class WorkspaceSyncService:
             "total_bytes": total_bytes,
             "artifacts": artifacts,
         }
+
+    def verify_artifact_manifest(
+        self,
+        eng_id: str,
+        eng_type: str = "engagement",
+        manifest_source: Optional[Union[str, Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Verifica la integridad de los artefactos del engagement contra artifact-manifest.json."""
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        if not target_dir.exists():
+            raise FileNotFoundError(f"Engagement {eng_id} no encontrado")
+        packer = _packer_module()
+        return packer.verify_artifact_manifest(target_dir, manifest_source=manifest_source)
+
+
+def _packer_module():
+    candidates = [
+        SCRIPTS_DIR / "pt-engagement-packer.py",
+        SCRIPTS_DIR / "pt-engagement-packer",
+        pathlib.Path("/usr/local/bin/pt-engagement-packer.py"),
+        pathlib.Path("/usr/local/bin/pt-engagement-packer"),
+        pathlib.Path(__file__).resolve().parent.parent.parent.parent / "scripts" / "pt-engagement-packer.py",
+    ]
+    for cp in candidates:
+        if cp.is_file():
+            spec = importlib.util.spec_from_file_location("pt_engagement_packer", str(cp))
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                return mod
+    raise ImportError("No se pudo cargar pt-engagement-packer")
 
 
 workspace_service = WorkspaceSyncService()

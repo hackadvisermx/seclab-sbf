@@ -310,3 +310,79 @@ test('pestaña de playbooks refleja bloqueos de alcance y estado BLOCKED', async
   }
 })
 
+test('pestaña de playbooks visualiza evidencia guardada e historial de corridas', async () => {
+  const mockRun = {
+    playbook_id: 'pb_web_recon',
+    title: 'Reconocimiento y Mapeo de Superficie Web',
+    status: 'COMPLETED',
+    dry_run: false,
+    total_steps: 2,
+    executed_steps_count: 2,
+    evidence_file: 'evidence/playbooks/pb_web_recon_20261012T200000Z.json',
+    steps_results: []
+  }
+
+  const mockPastRuns = [
+    {
+      playbook_id: 'pb_web_recon',
+      playbook_title: 'Reconocimiento y Mapeo de Superficie Web',
+      timestamp: '2026-10-12T20:00:00Z',
+      status: 'COMPLETED',
+      dry_run: false,
+      total_steps: 2,
+      executed_steps_count: 2,
+      file_name: 'pb_web_recon_20261012T200000Z.json',
+      relative_path: 'evidence/playbooks/pb_web_recon_20261012T200000Z.json'
+    }
+  ]
+
+  let calledGetRuns = false
+
+  const api = {
+    getEngagementDetail: async () => ({
+      name: 'Test Project',
+      type: 'engagement',
+      created_at: '2026-10-11T10:00:00Z',
+      stats: { findings: 0, creds: 0, artifacts: 0 }
+    }),
+    getScope: async () => ({ target: 'example.com', authorization: { allow_passive: true, allow_active: true } }),
+    getFindings: async () => [],
+    getLoot: async () => ({ credentials: [] }),
+    getArtifacts: async () => [],
+    getReconStatus: async () => ({ running: false }),
+    getPlaybooks: async () => mockPlaybooksList,
+    getPlaybook: async () => mockPlaybookDetail,
+    validatePlaybook: async () => ({ is_valid: true, errors: [], scope_evaluation: null }),
+    runPlaybook: async () => mockRun,
+    getPlaybookRuns: async () => {
+      calledGetRuns = true
+      return mockPastRuns
+    }
+  }
+
+  const { root, cleanup } = await mount(api)
+
+  try {
+    await clickText(root, 'Playbooks')
+    assert.equal(calledGetRuns, true, 'getPlaybookRuns debe haberse invocado')
+
+    // Verificar historial de corridas renderizado
+    const historySection = root.querySelector('[data-testid="playbook-runs-history"]')
+    assert.ok(historySection, 'Sección de historial debe existir')
+    assert.match(historySection.textContent, /Historial de Evidencias/)
+
+    const historyItem = root.querySelector('[data-testid="playbook-run-history-item"]')
+    assert.ok(historyItem, 'Item de historial debe existir')
+    assert.match(historyItem.textContent, /pb_web_recon_20261012T200000Z\.json/)
+
+    // Ejecutar playbook y comprobar que el archivo de evidencia guardado se muestra en el resumen
+    await clickText(root, 'Ejecutar Playbook')
+    const evAlert = root.querySelector('[data-testid="playbook-evidence-file"]')
+    assert.ok(evAlert, 'Badge de archivo de evidencia guardada debe existir')
+    assert.match(evAlert.textContent, /evidence\/playbooks\/pb_web_recon_20261012T200000Z\.json/)
+  } finally {
+    cleanup()
+  }
+})
+
+

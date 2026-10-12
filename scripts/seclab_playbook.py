@@ -15,6 +15,7 @@ import pathlib
 import re
 import shlex
 import subprocess
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 try:
@@ -501,4 +502,108 @@ def run_playbook(
         "executed_steps_count": len(steps_results),
         "steps_results": steps_results,
     }
+
+
+def save_playbook_run_evidence(
+    engagement_dir: Union[str, pathlib.Path],
+    run_result: Dict[str, Any],
+    parameters: Optional[Dict[str, Any]] = None,
+) -> pathlib.Path:
+    """Guarda el resultado de ejecución o simulación de un playbook como evidencia de auditoría.
+
+    Ruta canónica: evidence/playbooks/<playbook_id>_<timestamp>.json
+    Genera atómicamente el archivo estructurado de evidencia con metadatos completos.
+    """
+    eng_dir = pathlib.Path(engagement_dir).resolve()
+    if not eng_dir.is_dir():
+        raise FileNotFoundError(f"Directorio de engagement no encontrado: {eng_dir}")
+
+    playbooks_ev_dir = eng_dir / "evidence" / "playbooks"
+    playbooks_ev_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_id = str(run_result.get("playbook_id") or "unnamed_playbook")
+    safe_id = re.sub(r"[^a-zA-Z0-9_.-]", "_", raw_id)
+
+    now_utc = datetime.now(timezone.utc)
+    ts_str = now_utc.strftime("%Y%m%dT%H%M%SZ")
+    iso_str = now_utc.isoformat()
+
+    file_name = f"{safe_id}_{ts_str}.json"
+    target_file = playbooks_ev_dir / file_name
+
+    evidence_data = {
+        "schema_version": "1.0",
+        "evidence_type": "playbook_run",
+        "playbook_id": raw_id,
+        "playbook_title": run_result.get("title", raw_id),
+        "timestamp": iso_str,
+        "status": run_result.get("status", "UNKNOWN"),
+        "dry_run": bool(run_result.get("dry_run", True)),
+        "parameters": parameters or {},
+        "total_steps": run_result.get("total_steps", 0),
+        "executed_steps_count": run_result.get("executed_steps_count", 0),
+        "steps_results": run_result.get("steps_results", []),
+    }
+
+    tmp_file = playbooks_ev_dir / f".tmp_{file_name}.{os.getpid()}"
+    try:
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(evidence_data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_file, target_file)
+    except Exception:
+        if tmp_file.exists():
+            try:
+                tmp_file.unlink()
+            except OSError:
+                pass
+        raise
+
+    return target_file
+
+
+def list_playbook_runs(
+    engagement_dir: Union[str, pathlib.Path],
+    playbook_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Lista las ejecuciones de playbooks registradas como evidencia en el engagement.
+
+    Retorna una lista ordenada de ejecuciones (más recientes primero).
+    """
+    eng_dir = pathlib.Path(engagement_dir).resolve()
+    playbooks_ev_dir = eng_dir / "evidence" / "playbooks"
+    if not playbooks_ev_dir.is_dir():
+        return []
+
+    runs: List[Dict[str, Any]] = []
+    for f in sorted(playbooks_ev_dir.glob("*.json"), reverse=True):
+        if not f.is_file() or f.name.startswith("."):
+            continue
+        try:
+            with open(f, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            if not isinstance(data, dict):
+                continue
+
+            p_id = data.get("playbook_id")
+            if playbook_id and p_id != playbook_id:
+                continue
+
+            runs.append({
+                "playbook_id": p_id,
+                "playbook_title": data.get("playbook_title", p_id),
+                "timestamp": data.get("timestamp", ""),
+                "status": data.get("status", "UNKNOWN"),
+                "dry_run": data.get("dry_run", True),
+                "total_steps": data.get("total_steps", 0),
+                "executed_steps_count": data.get("executed_steps_count", 0),
+                "file_name": f.name,
+                "relative_path": str(f.relative_to(eng_dir)),
+            })
+        except Exception:
+            continue
+
+    return runs
+
 

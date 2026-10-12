@@ -2327,6 +2327,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(checklist_metadata))
     checkpoint = load_module('checkpoint_integrity_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_checkpoint_integrity.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(checkpoint))
+    redact_tests = load_module('seclab_redact_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_seclab_redact.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(redact_tests))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

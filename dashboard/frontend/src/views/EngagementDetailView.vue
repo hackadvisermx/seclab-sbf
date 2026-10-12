@@ -1097,7 +1097,27 @@
               <textarea v-model="message.content" :aria-label="`Mensaje revisado ${index + 1}`" class="w-full min-h-20 bg-[#050811] border border-slate-700 p-2 text-xs text-slate-200 font-mono" spellcheck="false" />
             </div>
           </div>
-          <h3 v-if="contextReview" class="text-xs font-mono font-bold text-white">Contexto que se enviará</h3>
+          <div class="flex items-center justify-between">
+            <h3 v-if="contextReview" class="text-xs font-mono font-bold text-white">Contexto que se enviará</h3>
+            <div v-if="contextReview" class="flex items-center space-x-2">
+              <span
+                v-if="redactedSecretBadge"
+                data-testid="copilot-redact-badge"
+                class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-emerald-950/80 text-emerald-300 border border-emerald-700/60"
+              >
+                {{ redactedSecretBadge }}
+              </span>
+              <button
+                type="button"
+                @click="applyAutoRedaction"
+                :disabled="isRedactingContext || !injectedContextText"
+                data-testid="copilot-auto-redact-btn"
+                class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-cyan-200 text-xs font-mono border border-cyan-500/40 flex items-center space-x-1 disabled:opacity-50"
+              >
+                <span>🛡️ Redactar Secretos</span>
+              </button>
+            </div>
+          </div>
           <div class="bg-[#050811] p-4 rounded-sm border border-slate-800 text-xs font-mono text-slate-300 max-h-[500px] overflow-y-auto">
             <textarea v-if="contextReview" v-model="injectedContextText" aria-label="Contexto revisado para enviar" class="w-full min-h-[340px] bg-transparent text-slate-200 font-mono whitespace-pre-wrap outline-hidden" spellcheck="false" />
             <pre v-else class="whitespace-pre-wrap">{{ injectedContextText }}</pre>
@@ -2921,6 +2941,8 @@ const contextReview = ref(null)
 const contextPreviewError = ref('')
 const hostileFindings = ref([])
 const destinationInfo = ref(null)
+const isRedactingContext = ref(false)
+const redactedSecretBadge = ref('')
 let contextRequest = 0
 
 async function loadCopilotModels() {
@@ -2984,6 +3006,29 @@ function closeContextInspection() {
   contextPreviewError.value = ''
   hostileFindings.value = []
   destinationInfo.value = null
+  redactedSecretBadge.value = ''
+  isRedactingContext.value = false
+}
+
+async function applyAutoRedaction() {
+  if (!injectedContextText.value || isRedactingContext.value) return
+  isRedactingContext.value = true
+  try {
+    const res = await api.autoRedactText(injectedContextText.value)
+    if (res && typeof res.redacted_text === 'string') {
+      injectedContextText.value = res.redacted_text
+      const count = res.replacements_count || 0
+      if (count > 0) {
+        redactedSecretBadge.value = `${count} ${count === 1 ? 'secreto enmascarado' : 'secretos enmascarados'}`
+      } else {
+        redactedSecretBadge.value = 'Sin secretos detectados'
+      }
+    }
+  } catch (err) {
+    console.error('Error al redactar secretos:', err)
+  } finally {
+    isRedactingContext.value = false
+  }
 }
 
 async function loadContextInspection(userText = null) {
@@ -2995,6 +3040,8 @@ async function loadContextInspection(userText = null) {
   contextPreviewError.value = ''
   hostileFindings.value = []
   destinationInfo.value = null
+  redactedSecretBadge.value = ''
+  isRedactingContext.value = false
   const sourceMessages = userText === null ? [] : [
     ...copilotMessages.value.filter(message => message.model !== 'error').map(message => ({ role: message.role, content: message.content })),
     { role: 'user', content: userText },

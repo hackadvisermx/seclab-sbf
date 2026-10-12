@@ -1721,6 +1721,118 @@
       </div>
     </div>
 
+    <!-- TAB: SUPERVISIÓN PEDAGÓGICA Y CHECKPOINTS DE AUDITORÍA (V3-06) -->
+    <div v-if="activeTab === 'supervision'" class="space-y-6" data-testid="engagement-supervision-view">
+      <div class="tactical-card space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-lg">🎓</span>
+              <h2 class="text-sm font-mono font-bold text-slate-100 uppercase tracking-wider">Supervisión Pedagógica y Checkpoints</h2>
+              <span
+                v-if="supervisionData"
+                data-testid="supervision-overall-status"
+                class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border"
+                :class="{
+                  'bg-emerald-950/60 text-emerald-400 border-emerald-500/40': supervisionData.overall_status === 'PASS',
+                  'bg-amber-950/60 text-amber-400 border-amber-500/40': supervisionData.overall_status === 'WARNING',
+                  'bg-rose-950/60 text-rose-400 border-rose-500/40': supervisionData.overall_status === 'BLOCKED',
+                }"
+              >
+                Estado: {{ supervisionData.overall_status }}
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+              Evaluación formativa continua de 4 checkpoints deterministas: alcance, reconocimiento, evidencia y reporte.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button
+              type="button"
+              @click="loadSupervision"
+              :disabled="supervisionLoading"
+              class="px-3 py-1.5 rounded text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center space-x-1"
+            >
+              <span>🔄</span>
+              <span>{{ supervisionLoading ? 'Cargando...' : 'Recargar Estado' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="supervisionLoading" class="text-center py-8 text-slate-400 font-mono text-xs">
+          Cargando estado de supervisión pedagógica...
+        </div>
+
+        <div v-else-if="supervisionError" class="p-3 bg-rose-950/40 border border-rose-800 text-rose-300 rounded text-xs font-mono">
+          {{ supervisionError }}
+        </div>
+
+        <div v-else-if="supervisionData" class="space-y-6">
+          <!-- Cuadrícula de Checkpoints -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div
+              v-for="cp in supervisionData.checkpoints"
+              :key="cp.id"
+              class="border rounded-md p-4 bg-slate-900/40 space-y-3"
+              :class="{
+                'border-emerald-500/30': cp.status === 'PASS',
+                'border-amber-500/30': cp.status === 'WARNING',
+                'border-rose-500/30': cp.status === 'BLOCKED',
+              }"
+              :data-testid="`checkpoint-${cp.id}`"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs font-bold text-slate-200">{{ cp.name }}</span>
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border"
+                  :class="{
+                    'bg-emerald-950/60 text-emerald-400 border-emerald-500/40': cp.status === 'PASS',
+                    'bg-amber-950/60 text-amber-400 border-amber-500/40': cp.status === 'WARNING',
+                    'bg-rose-950/60 text-rose-400 border-rose-500/40': cp.status === 'BLOCKED',
+                  }"
+                >
+                  {{ cp.status }}
+                </span>
+              </div>
+              <p class="text-xs text-slate-300 font-mono">{{ cp.detail }}</p>
+              <div class="p-2 rounded bg-slate-950/60 border border-slate-800 text-[11px] font-mono text-slate-400">
+                <span class="text-cyan-400 font-semibold">💡 Orientación formativa:</span> {{ cp.recommendation }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Bloqueos y Advertencias Formativas -->
+          <div v-if="supervisionData.blocking_issues && supervisionData.blocking_issues.length > 0" class="p-4 bg-rose-950/20 border border-rose-800/60 rounded-md space-y-2">
+            <h3 class="text-xs font-mono font-bold text-rose-400 uppercase tracking-wider flex items-center space-x-1">
+              <span>⛔ Bloqueos Formativos Detectados</span>
+            </h3>
+            <ul class="list-disc list-inside text-xs font-mono text-rose-300 space-y-1">
+              <li v-for="(issue, idx) in supervisionData.blocking_issues" :key="idx">{{ issue }}</li>
+            </ul>
+          </div>
+
+          <div v-if="supervisionData.warnings && supervisionData.warnings.length > 0" class="p-4 bg-amber-950/20 border border-amber-800/60 rounded-md space-y-2">
+            <h3 class="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-1">
+              <span>⚠️ Advertencias Pedagógicas</span>
+            </h3>
+            <ul class="list-disc list-inside text-xs font-mono text-amber-300 space-y-1">
+              <li v-for="(warn, idx) in supervisionData.warnings" :key="idx">{{ warn }}</li>
+            </ul>
+          </div>
+
+          <!-- Acciones Pendientes -->
+          <div v-if="supervisionData.pending_actions && supervisionData.pending_actions.length > 0" class="p-4 bg-cyan-950/20 border border-cyan-800/60 rounded-md space-y-2">
+            <h3 class="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center space-x-1">
+              <span>📋 Acciones Pedagógicas Recomendadas</span>
+            </h3>
+            <ul class="list-disc list-inside text-xs font-mono text-cyan-200 space-y-1">
+              <li v-for="(action, idx) in supervisionData.pending_actions" :key="idx">{{ action }}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL REGISTRAR CREDENCIAL DE BOTÍN -->
     <div
       v-if="showCredModal"
@@ -2286,6 +2398,7 @@ const tabs = computed(() => {
       { id: 'findings', label: 'Vectores / Hallazgos', icon: '📋', count: findings.value.length },
       { id: 'artifacts', label: 'Artefactos & Dumps', icon: '📁', count: artifactFiles.value.length },
       { id: 'timeline', label: 'Línea de Tiempo', icon: '⏱️', count: timelineEvents.value.length },
+      { id: 'supervision', label: 'Supervisión Pedagógica', icon: '🎓' },
       { id: 'logs', label: 'Terminal Logs', icon: '⚡' },
       { id: 'copilot', label: 'Copiloto CTF', icon: '🤖' },
       { id: 'notes', label: 'Solución (notes.md)', icon: '📝' },
@@ -2299,6 +2412,7 @@ const tabs = computed(() => {
     { id: 'loot', label: 'Botín & Credenciales', icon: '🔑', count: lootData.value.credentials.length },
     { id: 'artifacts', label: 'Artefactos (recon/)', icon: '📁', count: artifactFiles.value.length },
     { id: 'timeline', label: 'Línea de Tiempo', icon: '⏱️', count: timelineEvents.value.length },
+    { id: 'supervision', label: 'Supervisión Pedagógica', icon: '🎓' },
     { id: 'logs', label: 'Terminal Logs', icon: '⚡' },
     { id: 'checklist', label: 'Metodología & Cobertura', icon: '📊' },
     { id: 'copilot', label: 'Copiloto Táctico', icon: '🤖' },
@@ -2375,6 +2489,25 @@ function navigateToCitation(cit) {
     activeTab.value = 'notes'
   } else if (p === 'REPORT.md') {
     activeTab.value = 'report'
+  }
+}
+
+// Supervisión Pedagógica y Checkpoints (V3-06)
+const supervisionData = ref(null)
+const supervisionLoading = ref(false)
+const supervisionError = ref('')
+
+async function loadSupervision() {
+  if (!engId.value) return
+  supervisionLoading.value = true
+  supervisionError.value = ''
+  try {
+    const res = await api.getSupervision(engId.value, engType.value)
+    supervisionData.value = res
+  } catch (err) {
+    supervisionError.value = err.message || 'Error al cargar supervisión pedagógica.'
+  } finally {
+    supervisionLoading.value = false
   }
 }
 
@@ -3578,6 +3711,7 @@ watch([selectedAgent, copilotSelectedModel], () => {
 watch(activeTab, tab => {
   if (tab === 'checklist') loadNextStep()
   if (tab === 'timeline') loadTimeline()
+  if (tab === 'supervision') loadSupervision()
 })
 watch(() => [reconStatus.value.job?.run_id, reconStatus.value.job?.status, reconStatus.value.job?.outcome_revision,
   reconStatus.value.job?.outcome_review?.reviewed_at], (current, previous) => {

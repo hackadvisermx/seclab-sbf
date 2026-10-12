@@ -993,6 +993,13 @@
             >
               Ver Contexto pt-context
             </button>
+            <button
+              @click="openConsentHistoryModal"
+              data-testid="copilot-consent-history-btn"
+              class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px]"
+            >
+              📜 Log Consentimiento
+            </button>
           </div>
         </div>
 
@@ -1232,6 +1239,13 @@
           <div class="bg-[#050811] p-4 rounded-sm border border-slate-800 text-xs font-mono text-slate-300 max-h-[500px] overflow-y-auto">
             <textarea v-if="contextReview" v-model="injectedContextText" aria-label="Contexto revisado para enviar" class="w-full min-h-[340px] bg-transparent text-slate-200 font-mono whitespace-pre-wrap outline-hidden" spellcheck="false" />
             <pre v-else class="whitespace-pre-wrap">{{ injectedContextText }}</pre>
+          </div>
+          <div v-if="contextReview" data-testid="copilot-consent-notice" class="bg-slate-900/80 border border-cyan-500/30 rounded-sm p-2 text-xs font-mono text-slate-300 flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-cyan-400">
+              <span class="h-2 w-2 rounded-full bg-cyan-400"></span>
+              <span>Auditoría de Consentimiento Activa:</span>
+              <span class="text-slate-400">Al enviar, se registrará el hash criptográfico del prompt, contexto y tier en <code>evidence/.copilot_consent.jsonl</code>.</span>
+            </span>
           </div>
           <div class="flex justify-end gap-2">
             <button
@@ -3257,6 +3271,81 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal Historial de Consentimiento Copiloto (V3-05m) -->
+    <div
+      v-if="showConsentHistoryModal"
+      data-testid="copilot-consent-modal"
+      class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+    >
+      <div class="bg-slate-900 border border-slate-700 rounded-lg max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden text-xs font-mono shadow-2xl">
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+          <div class="flex items-center space-x-2">
+            <span class="text-cyan-400 font-bold text-sm">📜 Registro Inmutable de Consentimiento Copiloto</span>
+            <span class="text-slate-500">evidence/.copilot_consent.jsonl</span>
+          </div>
+          <button
+            type="button"
+            @click="showConsentHistoryModal = false"
+            class="text-slate-400 hover:text-white font-mono text-lg"
+          >&times;</button>
+        </div>
+
+        <div class="p-4 overflow-y-auto space-y-4 flex-1">
+          <div v-if="loadingConsentHistory" class="text-slate-400 py-6 text-center">
+            Cargando historial de consentimiento...
+          </div>
+          <div v-else-if="!consentHistoryList.length" class="text-slate-400 py-6 text-center">
+            No se han registrado eventos de consentimiento para este engagement todavía.
+          </div>
+          <div v-else class="space-y-3">
+            <div
+              v-for="(item, idx) in consentHistoryList"
+              :key="idx"
+              data-testid="consent-entry-item"
+              class="border border-slate-800 bg-[#080d1a] p-3 rounded space-y-2"
+            >
+              <div class="flex items-center justify-between text-[11px]">
+                <div class="flex items-center space-x-2">
+                  <span class="text-slate-400">{{ item.timestamp }}</span>
+                  <span class="text-cyan-300 font-bold">{{ item.agent_id }}</span>
+                  <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">{{ item.provider }} / {{ item.model }}</span>
+                </div>
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-bold"
+                  :class="item.network_tier === 'LOCAL_LOOPBACK' ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/50' : (item.network_tier === 'PRIVATE_NETWORK' ? 'bg-amber-950 text-amber-300 border border-amber-700/50' : 'bg-red-950 text-red-300 border border-red-700/50')"
+                >
+                  {{ item.network_tier }}
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-400">
+                <div>
+                  <span class="text-slate-500">Prompt Hash: </span>
+                  <span class="font-mono text-slate-300">{{ item.prompt_hash?.slice(0, 16) }}...</span>
+                </div>
+                <div>
+                  <span class="text-slate-500">Context Hash: </span>
+                  <span class="font-mono text-slate-300">{{ item.context_hash?.slice(0, 16) }}... ({{ item.context_bytes }} bytes)</span>
+                </div>
+              </div>
+              <div class="text-[10px] text-slate-500 truncate">
+                Token: <span class="font-mono text-slate-400">{{ item.token }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3 border-t border-slate-800 flex justify-end bg-slate-950">
+          <button
+            type="button"
+            @click="showConsentHistoryModal = false"
+            class="px-4 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -3499,6 +3588,24 @@ async function runArtifactVerification() {
     artifactVerificationError.value = err.message || 'Error al verificar integridad criptográfica de artefactos.'
   } finally {
     artifactVerificationLoading.value = false
+  }
+}
+
+// Auditoría de Consentimiento Copiloto (V3-05m)
+const showConsentHistoryModal = ref(false)
+const loadingConsentHistory = ref(false)
+const consentHistoryList = ref([])
+
+async function openConsentHistoryModal() {
+  showConsentHistoryModal.value = true
+  loadingConsentHistory.value = true
+  try {
+    const res = await api.getCopilotConsentHistory(engId.value, engType.value)
+    consentHistoryList.value = Array.isArray(res) ? res : []
+  } catch (err) {
+    consentHistoryList.value = []
+  } finally {
+    loadingConsentHistory.value = false
   }
 }
 

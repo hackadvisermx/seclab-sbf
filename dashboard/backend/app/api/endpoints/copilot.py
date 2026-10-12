@@ -16,6 +16,9 @@ from app.services.runner_service import runner_service, AgentContextUnavailable
 from app.services.vault_service import vault_service
 from app.services.proxy_service import proxy_service
 from app.services.citations_service import citations_service
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from seclab_copilot_audit import log_copilot_consent, read_copilot_consent_history
 
 router = APIRouter(prefix="/copilot", tags=["Copiloto Táctico & Agentes IA"])
 
@@ -348,6 +351,34 @@ async def copilot_chat(payload: CopilotChatRequest):
         max_tokens=2500,
     )
 
+    dest_info = None
+    if payload.provider:
+        entry = vault_service.get_key_entry(payload.provider)
+        base = entry.get("base_url") if entry else None
+        dest_info = vault_service.inspect_destination(payload.provider, base)
+    elif payload.profile == "local":
+        entry = vault_service.get_key_entry("custom_llm")
+        base = entry.get("base_url") if entry else None
+        dest_info = vault_service.inspect_destination("custom_llm", base)
+    else:
+        dest_info = vault_service.inspect_destination(payload.provider or "openrouter")
+    network_tier = dest_info.get("tier", "UNKNOWN") if isinstance(dest_info, dict) else "UNKNOWN"
+
+    user_msg = payload.reviewed_messages[-1].content if payload.reviewed_messages else ""
+    evidence_dir = target_dir / "evidence"
+    log_copilot_consent(
+        evidence_dir=evidence_dir,
+        engagement_id=payload.engagement_id,
+        agent_id=payload.agent_id,
+        provider=payload.provider or "openrouter",
+        model=payload.model or "default",
+        network_tier=network_tier,
+        prompt_hash=hashlib.sha256(user_msg.encode("utf-8")).hexdigest(),
+        context_hash=hashlib.sha256(payload.reviewed_context.encode("utf-8")).hexdigest(),
+        context_bytes=len(payload.reviewed_context.encode("utf-8")),
+        token=payload.context_review_token,
+    )
+
     try:
         profile_arg = None if (payload.provider or payload.model) else payload.profile
         response = await proxy_service.chat_completion(proxy_req, profile=profile_arg)
@@ -509,3 +540,16 @@ def get_copilot_chat_history(
         return results
     except Exception:
         return []
+
+
+@router.get("/consent/history")
+def get_copilot_consent_history(
+    engagement_id: str = Query(...),
+    type: str = Query("engagement"),
+    limit: int = Query(50, le=200),
+):
+    """Retorna el historial inmutable de consentimiento de envíos al Copiloto para este engagement."""
+    target_dir = workspace_service._resolve_dir(engagement_id, type)
+    evidence_dir = target_dir / "evidence"
+    return read_copilot_consent_history(evidence_dir, limit=limit)
+

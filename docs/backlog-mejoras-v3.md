@@ -126,6 +126,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-01 — Contrato ejecutable de autorización y alcance (P0)
 
+**Entrega parcial V3-01f (fase 215).** Matriz extendida de evaluación de alcance y normalización determinista de activos (`scripts/seclab_scope.py`, `scripts/pt-scope-validator.py`). Normalización bidireccional y correspondencia de dominios IDNA / Punycode (Unicode vs `xn--...`), fronteras estrictas de subdominios y comodines (`*.target.local` distinguiendo apex), soporte exhaustivo para representaciones IPv6 comprimidas, no comprimidas, corchetes `[2001:db8::1]` y rangos CIDR con precedencia de exclusión, normalización de rutas con `posixpath.normpath` en `endpoint_matches` neutralizando bypasses de path traversal (`/api/../admin`), y extracción de objetivos IPv6 e IDNA en texto libre para asistentes. Detalle en [phase-215.md](phase-215.md). V3-01 continúa parcial.
+
 **Entrega parcial V3-01e (fase 172).** La reanudación de la cadena de reconocimiento exige checkpoint v2, el mismo scope y los SHA-256/tamaños de todos los outputs de las etapas completadas, capturados al terminar cada etapa. Versiones cambiadas, archivos ausentes/enlazados/no regulares y checkpoints legacy, corruptos o incompletos bloquean antes de emitir progreso, llamar herramientas o escribir artefactos. Sin checkpoint conserva el inicio desde cero; simulación permanece local y sin escrituras. Detalle en [phase-172.md](phase-172.md). No congela archivos durante la ejecución ni acredita procedencia job/finding; V3-01 continúa parcial.
 
 **Problema.** `target.yaml` y el matcher ya expresan reglas; falta comprobar que todo flujo de acción del producto aplica el mismo contrato al objetivo concreto justo antes de actuar, y que el operador puede entender el resultado.
@@ -196,6 +198,10 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 **Entrega parcial V3-03o (fase 184).** El compilador del reporte rechaza claves repetidas en el encabezado de una ficha antes de `check`, `build` o export; evita que la última declaración de estado, activo o referencias reemplace silenciosamente la primera. La fuente y entregables existentes se conservan. Detalle [phase-184.md](phase-184.md). La validación completa de YAML y la paridad con los demás parsers de contexto y fichas siguen pendientes.
 
+**Entrega parcial V3-03aa (fase 214).** Modal y panel interactivo de verificación criptográfica de artefactos en el dashboard (`EngagementDetailView.vue`) contra `artifact-manifest.json` v1. Muestra badge global de integridad, métricas consolidadas (verificados, adulterados, ausentes, rechazados) y tabla detallada de hashes SHA-256 esperados vs calculados. Detalle [phase-214.md](phase-214.md). V3-03 continúa parcial.
+
+**Entrega parcial V3-03z (fase 213).** Registro de auditoría cronológico inmutable de revisiones de hallazgos (`evidence/.revisions/<slug>.jsonl`) bajo candado de escritura atómica en `workspace_sync.py`, endpoint `GET /api/v1/findings/{eng_id}/{slug}/revisions` y modal interactivo «📜 Revisiones» en dashboard. Detalle [phase-213.md](phase-213.md). V3-03 continúa parcial.
+
 **Entrega parcial V3-03n (fase 182).** Lectura de fichas muestra fuentes con metadata inválida/ambigua y archivos ilegibles como estado sin interpretar, en vez de candidatos inventados, errores 500 o filas omitidas. Lista y detalle comparten lector; texto original/hash disponible sin escritura. UI enlaza visor original y recarga tras reparación externa, bloqueando edición/borrado y adopción de metadata dañada. Guardado API rechaza metadata ambigua/tipos inválidos antes de reemplazar. Detalle [phase-182.md](phase-182.md). No añade reparación automática ni modifica parsers CLI/reporte o completa procedencia global.
 
 **Entrega parcial V3-03m (fase 181).** Borrado API ligado al SHA-256 revisado, con bloqueo entre escritores del servicio. Falta/cambio/reemplazo rechaza sin eliminar; UI conserva la ficha, ofrece recarga y exige otra confirmación sobre la versión actual. Evita doble envío y respuestas tardías de otro proyecto. Detalle [phase-181.md](phase-181.md). No incorpora papelera de fichas ni historial de bytes y no intercepta editores libres; V3-03 sigue parcial.
@@ -234,6 +240,10 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Ontología universal de vulnerabilidades, ticketing de remediación ni borrado automático de resultados duplicados.
 
 ### V3-04 — Playbooks deterministas y experiencia progresiva (P1)
+
+**Entrega parcial V3-04c (fase 211).** Pestaña interactiva «⚡ Playbooks Deterministas» en dashboard (`EngagementDetailView.vue`), consulta `api.getPlaybooks`, catálogo de procedimientos, inspección táctica de pasos con insignias de interacción (`passive`, `active_low`, `active_high`), simulación `dry-run`, compuertas de detención por políticas de alcance y visualización de resultados paso a paso. Detalle [phase-211.md](phase-211.md).
+
+**Entrega parcial V3-04b (fase 207).** Motor de ejecución y runner determinista de Playbooks (`scripts/seclab_playbook.py`), interpolación sanitizada de comandos sin metacaracteres de inyección, simulación `dry-run`, compuertas de detención por políticas de alcance (`target.yaml`) y endpoint `POST /api/v1/playbooks/{playbook_id}/run`. Detalle [phase-207.md](phase-207.md).
 
 **Entrega parcial V3-04a (fase 205).** Schema formal y validación estricta de Playbooks deterministas (`scripts/seclab_playbook.py`). Valida estructura, precondiciones, pasos, permisos y compatibilidad con el alcance (`target.yaml`). Incluye plantillas iniciales para reconocimiento web y descubrimiento de puertos en `playbooks/`, endpoints `GET /api/v1/playbooks` y `POST /api/v1/playbooks/validate`, y parser básico sin dependencia estricta de PyYAML. Detalle en [phase-205.md](phase-205.md).
 
@@ -300,6 +310,10 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Asignaciones por grupo, calificaciones, leaderboard, cursos o cohortes hasta confirmar esa necesidad.
 
 ### V3-07 — Métricas e integraciones justificadas por uso (P2)
+
+**Entrega parcial V3-07b (fase 212).** Pestaña interactiva «📊 Métricas de Auditoría» en dashboard (`EngagementDetailView.vue`), consulta reactiva `api.getMetrics`, barra táctica de madurez `audit_readiness_score` (0-100%), 4 pilares de avance (Alcance, Reconocimiento, Hallazgos y Entregables) y tarjetas tácticas operacionales con métricas de procedencia de hallazgos. Detalle [phase-212.md](phase-212.md).
+
+**Entrega parcial V3-07a (fase 209).** Motor de métricas operacionales locales de auditoría (`scripts/seclab_metrics.py`, `metrics_service.py`, `GET /api/v1/engagements/{eng_id}/metrics`). Analiza deterministamente y sin telemetría externa métricas de alcance, reconocimiento, cobertura de procedencia de hallazgos (`provenance_coverage_pct`), reporte y cálculo ponderado de madurez `audit_readiness_score`. Detalle [phase-209.md](phase-209.md).
 
 **Problema.** El producto necesita evidencia para decidir qué fricción resolver y si una integración adicional mejora el flujo.
 

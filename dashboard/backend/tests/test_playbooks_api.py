@@ -69,6 +69,18 @@ class TestPlaybooksAPI(unittest.TestCase):
             self.assertTrue(val_data["is_valid"])
             self.assertEqual(len(val_data["errors"]), 0)
 
+            # 4. POST /playbooks/pb_web_recon/run (dry-run)
+            res = client.post(
+                "/api/v1/playbooks/pb_web_recon/run",
+                json={"dry_run": True, "parameters": {"target": "example.com"}},
+            )
+            self.assertEqual(res.status_code, 200)
+            run_data = res.json()
+            self.assertEqual(run_data["playbook_id"], "pb_web_recon")
+            self.assertTrue(run_data["dry_run"])
+            self.assertEqual(run_data["status"], "SIMULATED")
+            self.assertGreater(len(run_data["steps_results"]), 0)
+
             client.close()
 
 

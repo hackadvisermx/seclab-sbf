@@ -273,3 +273,68 @@ def compute_engagement_metrics(engagement_dir: Union[str, pathlib.Path]) -> Dict
         "findings": findings_metrics,
         "report": report_metrics,
     }
+
+
+def export_metrics_markdown(metrics: Dict[str, Any]) -> str:
+    """Genera informe en Markdown de métricas operacionales a partir del diccionario de métricas."""
+    eng_name = metrics.get("engagement_id") or "engagement"
+    score = metrics.get("audit_readiness_score", 0)
+    status_str = "COMPLETO (100%)" if metrics.get("is_fully_audited") else f"EN PROGRESO ({score}%)"
+
+    scope = metrics.get("scope", {})
+    recon = metrics.get("recon", {})
+    findings = metrics.get("findings", {})
+    report = metrics.get("report", {})
+    severities = findings.get("severity_breakdown", {})
+
+    lines = [
+        f"# Informe de Métricas Operacionales de Auditoría: {eng_name}",
+        "",
+        f"- **Puntuación de Madurez de Auditoría**: `{score}/100` ({status_str})",
+        f"- **Completamente Auditado**: {'Sí' if metrics.get('is_fully_audited') else 'No'}",
+        "",
+        "## 1. Alcance y Autorización",
+        "",
+        f"- **Definición de Alcance (target.yaml)**: {'Presente' if scope.get('has_scope') else 'Ausente'}",
+        f"- **Autorización Pasiva**: {'Autorizada' if scope.get('allow_passive') else 'Denegada'}",
+        f"- **Autorización Activa**: {'Autorizada' if scope.get('allow_active') else 'Denegada'}",
+        f"- **Objetivos Declarados**: Dominios: {scope.get('domains_count', 0)} · IPs: {scope.get('ips_count', 0)} · Exclusiones: {scope.get('exclusions_count', 0)}",
+        f"- **Acciones Fuera de Alcance Ejecutadas**: {scope.get('out_of_scope_actions_executed', 0)}",
+        "",
+        "## 2. Reconocimiento y Sondeo",
+        "",
+        f"- **Base de Datos de Jobs (recon_jobs.db)**: {'Presente' if recon.get('has_recon_database') else 'Ausente'}",
+        f"- **Jobs Registrados**: Total: {recon.get('total_jobs', 0)} · Completados: {recon.get('completed_jobs', 0)} · Fallidos: {recon.get('failed_jobs', 0)} · Bloqueados: {recon.get('blocked_jobs', 0)}",
+        f"- **Etapas Ejecutadas**: {recon.get('stages_executed_count', 0)} ({', '.join(recon.get('stages_executed', [])) if recon.get('stages_executed') else 'Ninguna'})",
+        "",
+        "## 3. Hallazgos y Trazabilidad de Evidencia",
+        "",
+        f"- **Total de Hallazgos**: {findings.get('total_findings', 0)}",
+        f"- **Estados**: Confirmados (PROVEN): {findings.get('confirmed_count', 0)} · Candidatos (CANDIDATE): {findings.get('candidate_count', 0)} · Descartados (DISPROVED): {findings.get('disproved_count', 0)}",
+        f"- **Cobertura de Procedencia**: {findings.get('findings_with_provenance', 0)} hallazgos con job y stage vinculados ({findings.get('provenance_coverage_pct', 0.0)}%)",
+        f"- **Desglose por Severidad**: Crítica: {severities.get('critical', 0)} · Alta: {severities.get('high', 0)} · Media: {severities.get('medium', 0)} · Baja: {severities.get('low', 0)} · Info: {severities.get('info', 0)}",
+        "",
+        "## 4. Reporte Técnico y Entregables",
+        "",
+        f"- **Informe Técnico (REPORT.md)**: {'Presente' if report.get('has_report') else 'Ausente'} ({report.get('report_size_bytes', 0)} bytes)",
+        f"- **Entregables Exportados**: {'Presentes' if report.get('has_deliverables') else 'Ausentes'}",
+        f"- **Manifiesto Criptográfico (artifact-manifest.json)**: {'Presente' if report.get('has_artifact_manifest') else 'Ausente'} ({report.get('manifest_artifacts_count', 0)} artefactos verificados)",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def export_metrics_report(
+    engagement_dir: Union[str, pathlib.Path],
+    format: str = "json",
+) -> str:
+    """Exporta el reporte de métricas operacionales de auditoría en formato JSON o Markdown."""
+    metrics = compute_engagement_metrics(engagement_dir)
+    fmt = (format or "json").lower()
+    if fmt == "json":
+        return json.dumps(metrics, indent=2, ensure_ascii=False)
+    elif fmt in ("markdown", "md"):
+        return export_metrics_markdown(metrics)
+    else:
+        raise ValueError(f"Formato no soportado: '{format}'. Debe ser 'json' o 'markdown'.")
+

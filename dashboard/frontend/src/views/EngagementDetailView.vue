@@ -2347,6 +2347,26 @@
           <div class="flex items-center space-x-2">
             <button
               type="button"
+              @click="exportMetrics('markdown')"
+              :disabled="!metricsData || metricsExporting || metricsLoading"
+              class="px-2.5 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-colors disabled:opacity-50"
+              data-testid="metrics-export-md-button"
+              title="Exportar métricas operacionales como Markdown"
+            >
+              📥 Markdown
+            </button>
+            <button
+              type="button"
+              @click="exportMetrics('json')"
+              :disabled="!metricsData || metricsExporting || metricsLoading"
+              class="px-2.5 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-colors disabled:opacity-50"
+              data-testid="metrics-export-json-button"
+              title="Exportar métricas operacionales como JSON"
+            >
+              📥 JSON
+            </button>
+            <button
+              type="button"
               @click="loadMetrics"
               :disabled="metricsLoading"
               data-testid="refresh-metrics-btn"
@@ -3779,9 +3799,10 @@ function getStepRunResult(stepId) {
   return playbookRunResult.value.steps_results.find(s => s.step_id === stepId) || null
 }
 
-// Métricas Operacionales de Auditoría (V3-07b)
+// Métricas Operacionales de Auditoría (V3-07b, V3-07c)
 const metricsData = ref(null)
 const metricsLoading = ref(false)
+const metricsExporting = ref(false)
 const metricsError = ref('')
 
 async function loadMetrics() {
@@ -3797,6 +3818,31 @@ async function loadMetrics() {
     metricsLoading.value = false
   }
 }
+
+async function exportMetrics(format = 'markdown') {
+  if (!engId.value) return
+  metricsExporting.value = true
+  metricsError.value = ''
+  try {
+    const content = await api.exportMetrics(engId.value, format, engType.value)
+    const ext = format === 'json' ? 'json' : 'md'
+    const mime = format === 'json' ? 'application/json' : 'text/markdown'
+    const blob = new Blob([content], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `metrics_${engId.value}.${ext}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    metricsError.value = err.message || 'Error al exportar métricas operacionales.'
+  } finally {
+    metricsExporting.value = false
+  }
+}
+
 
 // Scope
 const scopeData = ref({})

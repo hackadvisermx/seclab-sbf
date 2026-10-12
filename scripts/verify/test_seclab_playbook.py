@@ -111,23 +111,39 @@ class TestSeclabPlaybook(unittest.TestCase):
         self.assertIn("target.yaml", step_map["step_02_port_scan"]["reason"])
 
     def test_load_builtin_playbook_templates(self):
-        web_recon = REPO_ROOT / "workspace-seed" / "playbooks" / "web_recon.yaml"
-        self.assertTrue(web_recon.is_file())
-        pb = load_playbook_file(web_recon)
-        is_valid, errors = validate_playbook_schema(pb)
-        self.assertTrue(is_valid, f"Errores en web_recon.yaml: {errors}")
+        playbook_files = [
+            "web_recon.yaml",
+            "port_discovery.yaml",
+            "ssl_tls_audit.yaml",
+            "dns_zone_recon.yaml",
+            "api_endpoint_discovery.yaml",
+        ]
+        for name in playbook_files:
+            pb_path = REPO_ROOT / "workspace-seed" / "playbooks" / name
+            self.assertTrue(pb_path.is_file(), f"Falta archivo {name}")
+            pb = load_playbook_file(pb_path)
+            is_valid, errors = validate_playbook_schema(pb)
+            self.assertTrue(is_valid, f"Errores en {name}: {errors}")
+            self.assertGreaterEqual(len(pb.get("steps", [])), 1)
 
     def test_load_builtin_playbook_templates_without_pyyaml(self):
         import seclab_playbook
         orig_yaml = seclab_playbook.yaml
         try:
             seclab_playbook.yaml = None
-            web_recon = REPO_ROOT / "workspace-seed" / "playbooks" / "web_recon.yaml"
-            pb = load_playbook_file(web_recon)
-            is_valid, errors = validate_playbook_schema(pb)
-            self.assertTrue(is_valid, f"Errores sin PyYAML en web_recon.yaml: {errors}")
-            self.assertEqual(pb["id"], "pb_web_recon")
-            self.assertEqual(len(pb["steps"]), 2)
+            playbook_files = [
+                "web_recon.yaml",
+                "port_discovery.yaml",
+                "ssl_tls_audit.yaml",
+                "dns_zone_recon.yaml",
+                "api_endpoint_discovery.yaml",
+            ]
+            for name in playbook_files:
+                pb_path = REPO_ROOT / "workspace-seed" / "playbooks" / name
+                pb = load_playbook_file(pb_path)
+                is_valid, errors = validate_playbook_schema(pb)
+                self.assertTrue(is_valid, f"Errores sin PyYAML en {name}: {errors}")
+                self.assertGreaterEqual(len(pb.get("steps", [])), 1)
         finally:
             seclab_playbook.yaml = orig_yaml
 

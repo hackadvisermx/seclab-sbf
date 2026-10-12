@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases181/182/184/185/186/188/190/191/193/194/196 están terminadas y fusionadas. La [fase196](phase-196.md) extiende la revisión previa del Copiloto a pregunta e historial; V3-03 y V3-05 mantienen criterios pendientes. Las ocho iniciativas V3-00–07 mantienen los criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases 181 a 206 están terminadas y fusionadas. La [fase206](phase-206.md) incorpora vista ligera de supervisión y checkpoints pedagógicos de auditoría; V3-03, V3-04, V3-05 y V3-06 avanzan hacia sus criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -34,18 +34,23 @@ Las fases181/182/184/185/186/188/190/191/193/194/196 están terminadas y fusiona
 | Fase199 / V3-05g | Detección y neutralización de contenido hostil / prompt injection en contexto del Copiloto | [#220](https://github.com/hackadvisermx/seclab-sbf/pull/220), `17ac4ab` | [38183177659](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38183177659), `7bba361`, aprobado |
 | Fase200 / V3-05h | Clasificación verificable y advertencias de seguridad para destinos de proveedor `custom_llm` | [#221](https://github.com/hackadvisermx/seclab-sbf/pull/221), `749125e` | [38185012371](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38185012371), `ae0fbfa`, aprobado |
 | Fase201 / V3-02o | Timeline unificado cronológico del engagement en backend (`/timeline`) y visualización en dashboard | [#222](https://github.com/hackadvisermx/seclab-sbf/pull/222), `1b41aa9` | [38251642504](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38251642504), `939dd10`, aprobado |
+| Fase202 / V3-05i | Citas navegables y fuentes verificables en respuestas del Copiloto con endpoints de verificación e historial | [#224](https://github.com/hackadvisermx/seclab-sbf/pull/224), `dd8c0c9` | [38258947346](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38258947346), `1910e06`, aprobado |
+| Fase203 / V3-05j | Redacción automática de secretos y datos sensibles en contexto del Copiloto con acción UI interactiva | [#225](https://github.com/hackadvisermx/seclab-sbf/pull/225), `ef2fac4` | [38260755497](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38260755497), `299838f`, aprobado |
+| Fase204 / V3-03x | Manifiesto integral de artefactos del engagement (`artifact-manifest.json` v1) en empaquetador y API | [#226](https://github.com/hackadvisermx/seclab-sbf/pull/226), `43b6ab0` | [38262641747](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38262641747), `78658f1`, aprobado |
+| Fase205 / V3-04a | Schema y validación estricta de Playbooks deterministas (`seclab_playbook.py`) y plantillas iniciales | [#227](https://github.com/hackadvisermx/seclab-sbf/pull/227), `279e535` | [38264384454](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38264384454), `802adf6`, aprobado |
+| Fase206 / V3-06a | Vista ligera de supervisión y checkpoints pedagógicos de auditoría (`seclab_supervision.py`) | [#228](https://github.com/hackadvisermx/seclab-sbf/pull/228), `76da923` | [38265292911](https://github.com/hackadvisermx/seclab-sbf/actions/runs/38265292911), `189e0f8`, aprobado |
 
-Detalle de pruebas, compatibilidad y límites: [fase197](phase-197.md), [fase198](phase-198.md), [fase199](phase-199.md), [fase200](phase-200.md), [fase201](phase-201.md).
+Detalle de pruebas, compatibilidad y límites: [fase197](phase-197.md), [fase198](phase-198.md), [fase199](phase-199.md), [fase200](phase-200.md), [fase201](phase-201.md), [fase202](phase-202.md), [fase203](phase-203.md), [fase204](phase-204.md), [fase205](phase-205.md), [fase206](phase-206.md).
 
 | Iniciativa | Avance verificado | Pendiente de aceptación |
 |---|---|---|
 | V3-00 | Mapa técnico, línea base y recorrido sintético instalado | Validación con personas y medición de fricciones |
 | V3-01 | Autorización declarada, permisos independientes, revalidación, preview y reanudación con huellas | Completar cobertura de todos los caminos gestionados y casos del matcher; terminal libre conserva límites explícitos |
 | V3-02 | Historial de jobs, revisión del resultado, decisión compartida, resultados y origen de etapas/artefactos; timeline unificado cronológico en backend y dashboard | Vínculo estructurado ampliado; jobs CLI no se incorporan al historial del dashboard |
-| V3-03 | Activo/evidencia/motivo obligatorios para confirmación, UUID de fichas, manifiestos, visor y edición/borrado versionados; reporte interpreta YAML compartido y escribe salida atómica; procedencia `source_job_id`/`source_stage` en fichas y reporte | Identidad de artefactos e historial de revisiones; no se acredita suficiencia probatoria |
-| V3-04 | Guías y preview de reconocimiento disponibles | Schema y recorrido completo de playbooks deterministas según sus criterios |
-| V3-05 | Validación no disponible visible, contexto/pregunta/historial revisables y redactables, gate de generación, orientación local sin IA, detección de contenido hostil y clasificación de destino custom | Fuentes navegables y redacción automática |
-| V3-06 | Historial y bloqueos aportan información reutilizable | Vista y checkpoints de supervisión validados con instructores |
+| V3-03 | Activo/evidencia/motivo obligatorios para confirmación, UUID de fichas, manifiestos (finding y artifact-manifest v1), visor y edición/borrado versionados; reporte interpreta YAML compartido y escribe salida atómica; procedencia `source_job_id`/`source_stage` en fichas y reporte | Identidad de artefactos e historial de revisiones; no se acredita suficiencia probatoria |
+| V3-04 | Guías y preview de reconocimiento disponibles; schema y validación estricta de playbooks deterministas con plantillas semilla | Recorrido interactivo de ejecución de playbooks según sus criterios |
+| V3-05 | Validación no disponible visible, contexto/pregunta/historial revisables y redactables, gate de generación, orientación local sin IA, detección de contenido hostil, clasificación de destino custom, citas navegables verificables y redacción automática de secretos | Consentimiento firmado o retención criptográfica |
+| V3-06 | Historial y bloqueos aportan información reutilizable; vista ligera y checkpoints pedagógicos de auditoría (`cp_scope`, `cp_recon`, `cp_evidence`, `cp_report`) | Pruebas y validación directa con instructores |
 | V3-07 | Métricas de éxito propuestas en este documento | Definición operativa, denominadores, retención y medición local validada |
 
 Las notas de entrega inferiores describen lo comprobado y pendiente en su fecha. Esta síntesis incorpora los avances posteriores; ninguna iniciativa se declara completa sólo por cerrar una fase.
@@ -175,6 +180,10 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-03 — Procedencia de evidencia, hallazgos y reporte (P0)
 
+**Entrega parcial V3-03x (fase 204).** Manifiesto integral de artefactos del engagement (`artifact-manifest.json` v1) generado de forma atómica por `scripts/pt-engagement-packer.py`. Registra de cada archivo en `evidence/`, `deliverables/`, `recon/`, `notes/` y `scope/` su ruta relativa, SHA-256, tamaño en bytes y categoría. Expuesto vía `GET /api/v1/loot/{eng_id}/artifacts/manifest` con comprobación estricta de ruta y seguridad. Detalle en [phase-204.md](phase-204.md).
+
+**Entregas parciales V3-03v/w (fases 197/198).** Soporte de procedencia de hallazgos (`source_job_id` y `source_stage`) en fichas, backend y compilador de reportes (`pt-report`). Auditoría de jobs de reconocimiento y export en `finding-manifest v1`. Detalles en [phase-197.md](phase-197.md) y [phase-198.md](phase-198.md).
+
 **Entregas parciales V3-03t/u (fases 193/194).** El reporte toma estado y activo del parser YAML compartido para no confirmar un estado citado con `#` ni sustituir silenciosamente el activo. La publicación rechaza enlaces de salida y conserva la versión anterior si falla el reemplazo. Detalles en [phase-193.md](phase-193.md) y [phase-194.md](phase-194.md). Sigue pendiente la procedencia completa desde job/artefacto hasta finding y revisión.
 
 **Entrega parcial V3-03q/V3-05 (fase 186).** Contexto, checklist, siguiente paso y cierre leen fichas con descriptores sin seguir enlaces en `evidence/` ni en la entrada `.md`; fuentes enlazadas o ilegibles quedan pendientes sin incorporar bytes externos. Detalle [phase-186.md](phase-186.md). No congela todo el workspace ni acredita productor de cada artefacto.
@@ -222,6 +231,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 
 ### V3-04 — Playbooks deterministas y experiencia progresiva (P1)
 
+**Entrega parcial V3-04a (fase 205).** Schema formal y validación estricta de Playbooks deterministas (`scripts/seclab_playbook.py`). Valida estructura, precondiciones, pasos, permisos y compatibilidad con el alcance (`target.yaml`). Incluye plantillas iniciales para reconocimiento web y descubrimiento de puertos en `playbooks/`, endpoints `GET /api/v1/playbooks` y `POST /api/v1/playbooks/validate`, y parser básico sin dependencia estricta de PyYAML. Detalle en [phase-205.md](phase-205.md).
+
 **Problema.** Una recomendación clara no basta si los requisitos, límites, salida esperada y condición de parada viven sólo en prosa o en el conocimiento del operador.
 
 **Trabajo.** Definir un schema validable por paso de playbook: objetivo, tipo de interacción, precondiciones, permisos, selector de targets, entradas, parámetros, timeout/límites, ejecución, salida esperada, parser, artefactos, evidencia mínima, criterio de éxito y condición de parada. Mantener un mismo estado de auditoría con dos niveles de detalle: guiado para entender la decisión y avanzado para inspeccionar comando, argumentos y raw output.
@@ -237,6 +248,10 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Motor adaptativo de enseñanza, gamificación, reemplazo de herramientas ni ejecución operada por IA.
 
 ### V3-05 — Copiloto con fuentes, límites y fallback (P1)
+
+**Entrega parcial V3-05j (fase 203).** Módulo determinista de detección y redacción automática de secretos y credenciales (`scripts/seclab_redact.py`). Enmascara claves de API, tokens Bearer, JWT, contraseñas embebidas y llaves privadas RSA/EC en PEM. Integrado con flag `--redact` en `pt-agent-context.py`, endpoint `POST /api/v1/copilot/redact` y botón reactivo «🛡️ Redactar Secretos» en el modal de revisión de contexto. Detalle en [phase-203.md](phase-203.md).
+
+**Entrega parcial V3-05i (fase 202).** Citas navegables y fuentes verificables en respuestas del Copiloto (`citations_service.py`). Parser de sintaxis `[ref:tipo:id]`, endpoints `POST /api/v1/copilot/citations/verify` y `GET /api/v1/copilot/chat/history`, e interactividad en UI que renderiza citas con estado visual (válido / no encontrado) y abre el modal o visor del artefacto citado. Detalle en [phase-202.md](phase-202.md).
 
 **Entrega parcial V3-05f (fase 196).** Antes de contactar al proveedor, el operador puede editar la pregunta y cada mensaje del historial u omitir mensajes previos, además de redactar el contexto. El token liga la revisión a la transcripción original y el proxy recibe solo la versión revisada; cambios intermedios devuelven 409. Los errores locales del Copiloto no se incorporan al siguiente envío. Detalle [phase-196.md](phase-196.md). No hay redacción automática, clasificación verificable de destinos `custom_llm`, citas navegables ni registro firmado de consentimiento.
 
@@ -264,6 +279,8 @@ Las prioridades indican orden de producto, no estimaciones de calendario. Cada i
 **No incluye.** Agente autónomo, ejecución de comandos, expansión de alcance o confirmación automática de findings.
 
 ### V3-06 — Vista ligera de supervisión y checkpoints (P2)
+
+**Entrega parcial V3-06a (fase 206).** Módulo de supervisión y checkpoints pedagógicos (`scripts/seclab_supervision.py`, `supervision_service.py`, `GET /api/v1/engagements/{eng_id}/supervision`). Evalúa de forma pura y desacoplada 4 checkpoints formativos (`cp_scope`, `cp_recon`, `cp_evidence`, `cp_report`), identifica el estado general del engagement (`BLOCKED`, `WARNING`, `PASS`) y resume acciones pendientes sin requerir un LMS complejo. Detalle en [phase-206.md](phase-206.md).
 
 **Problema.** Un instructor o supervisor necesita saber si la persona entiende la etapa, dónde está bloqueada y si su evidencia sostiene el hallazgo, sin administrar un LMS completo.
 

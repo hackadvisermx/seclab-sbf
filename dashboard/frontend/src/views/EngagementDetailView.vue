@@ -1833,6 +1833,265 @@
       </div>
     </div>
 
+    <!-- TAB: PLAYBOOKS DETERMINISTAS (V3-04c) -->
+    <div v-if="activeTab === 'playbooks'" class="space-y-6" data-testid="engagement-playbooks-view">
+      <div class="tactical-card space-y-4">
+        <!-- Cabecera de Playbooks -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-lg">📖</span>
+              <h2 class="text-sm font-mono font-bold text-slate-100 uppercase tracking-wider">Playbooks Deterministas</h2>
+              <span
+                v-if="selectedPlaybookDetail"
+                data-testid="playbook-valid-badge"
+                class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border"
+                :class="selectedPlaybookDetail.is_valid ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/40' : 'bg-rose-950/60 text-rose-400 border-rose-500/40'"
+              >
+                {{ selectedPlaybookDetail.is_valid ? 'SCHEMA VÁLIDO' : 'SCHEMA INVÁLIDO' }}
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+              Automatización reproducible y acotada con simulación dry-run previa y verificación continua contra el contrato de alcance.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <select
+              v-model="selectedPlaybookId"
+              @change="selectPlaybook(selectedPlaybookId)"
+              data-testid="playbook-select"
+              class="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-hidden focus:border-cyan-500"
+            >
+              <option v-for="pb in playbooksList" :key="pb.id" :value="pb.id">
+                {{ pb.title }} ({{ pb.id }})
+              </option>
+            </select>
+            <button
+              type="button"
+              @click="loadPlaybooks"
+              :disabled="playbookLoading"
+              data-testid="refresh-playbooks-btn"
+              class="px-3 py-1.5 rounded text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center space-x-1"
+            >
+              <span>🔄</span>
+              <span>{{ playbookLoading ? 'Cargando...' : 'Recargar' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Estado de Carga / Error -->
+        <div v-if="playbookLoading" data-testid="playbook-loading" class="text-center py-8 text-slate-400 font-mono text-xs">
+          Cargando playbooks disponibles...
+        </div>
+
+        <div v-else-if="playbookError" data-testid="playbook-error" class="p-3 bg-rose-950/40 border border-rose-800 text-rose-300 rounded text-xs font-mono">
+          {{ playbookError }}
+        </div>
+
+        <div v-else-if="selectedPlaybookDetail" class="space-y-6">
+          <!-- Detalle del Playbook Seleccionado -->
+          <div class="p-4 bg-slate-900/40 border border-slate-800 rounded-md space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-2">
+              <div>
+                <h3 class="text-xs font-mono font-bold text-cyan-300">{{ selectedPlaybookDetail.playbook.title }}</h3>
+                <p class="text-[11px] text-slate-400 font-mono mt-0.5">{{ selectedPlaybookDetail.playbook.description }}</p>
+              </div>
+              <div class="flex items-center space-x-2 text-[10px] font-mono text-slate-400">
+                <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">v{{ selectedPlaybookDetail.playbook.version || '1.0' }}</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Cat: {{ selectedPlaybookDetail.playbook.category || 'general' }}</span>
+                <span v-if="selectedPlaybookDetail.playbook.author" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Por: {{ selectedPlaybookDetail.playbook.author }}</span>
+              </div>
+            </div>
+
+            <!-- Evaluación de Alcance (Scope Guard) -->
+            <div v-if="playbookScopeEval" data-testid="playbook-scope-eval" class="p-2.5 rounded text-xs font-mono border" :class="playbookScopeEval.can_execute ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300' : 'bg-rose-950/20 border-rose-800/40 text-rose-300'">
+              <div class="flex items-center justify-between">
+                <span class="font-bold">
+                  {{ playbookScopeEval.can_execute ? '🛡️ ALCANCE VERIFICADO: AUTORIZADO PARA EJECUCIÓN' : '⛔ ALERTA: PASOS BLOQUEADOS POR POLÍTICA DE ALCANCE' }}
+                </span>
+                <span class="text-[10px] opacity-80">
+                  {{ playbookScopeEval.blocked_steps_count > 0 ? `${playbookScopeEval.blocked_steps_count} paso(s) activos sin autorización` : 'Todos los pasos permitidos' }}
+                </span>
+              </div>
+              <div v-if="playbookScopeEval.error" class="text-[11px] text-rose-400 mt-1">
+                {{ playbookScopeEval.error }}
+              </div>
+            </div>
+
+            <!-- Formulario de Parámetros Dinámicos -->
+            <div v-if="selectedPlaybookDetail.playbook.parameters && Object.keys(selectedPlaybookDetail.playbook.parameters).length > 0" class="pt-2 space-y-2">
+              <span class="text-xs font-mono font-semibold text-slate-300 block">Parámetros del Playbook:</span>
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <div v-for="(meta, pName) in selectedPlaybookDetail.playbook.parameters" :key="pName" class="space-y-1">
+                  <label class="block text-[11px] font-mono text-slate-400">
+                    {{ pName }} <span v-if="meta?.description" class="text-slate-500">({{ meta.description }})</span>
+                  </label>
+                  <input
+                    v-model="playbookParams[pName]"
+                    type="text"
+                    :data-testid="'param-input-' + pName"
+                    class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-hidden focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Controles de Ejecución -->
+            <div class="pt-3 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center space-x-3 text-xs font-mono">
+                <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300">
+                  <input
+                    type="checkbox"
+                    v-model="playbookDryRun"
+                    data-testid="playbook-dryrun-toggle"
+                    class="rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0"
+                  />
+                  <span>Simulación segura (Dry-Run)</span>
+                </label>
+                <div class="flex items-center space-x-1 text-slate-400">
+                  <span>Máx pasos:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    v-model.number="playbookMaxSteps"
+                    placeholder="Todos"
+                    class="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-xs font-mono text-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div class="flex items-center space-x-2">
+                <button
+                  type="button"
+                  @click="executePlaybook(true)"
+                  :disabled="playbookRunning"
+                  data-testid="playbook-simulate-btn"
+                  class="px-3 py-1.5 rounded text-xs font-mono font-bold bg-cyan-700 hover:bg-cyan-600 text-white transition-colors flex items-center space-x-1 disabled:opacity-50"
+                >
+                  <span>▶️</span>
+                  <span>{{ playbookRunning && playbookDryRun ? 'Simulando...' : 'Simular (Dry-Run)' }}</span>
+                </button>
+                <button
+                  type="button"
+                  @click="executePlaybook(false)"
+                  :disabled="playbookRunning"
+                  data-testid="playbook-run-btn"
+                  class="px-3 py-1.5 rounded text-xs font-mono font-bold bg-amber-600 hover:bg-amber-500 text-slate-950 transition-colors flex items-center space-x-1 disabled:opacity-50"
+                >
+                  <span>⚡</span>
+                  <span>{{ playbookRunning && !playbookDryRun ? 'Ejecutando...' : 'Ejecutar Playbook' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Resumen de Última Ejecución -->
+          <div v-if="playbookRunResult" data-testid="playbook-run-summary" class="p-4 rounded-md border space-y-3 font-mono text-xs" :class="{ 'bg-cyan-950/20 border-cyan-700/50': playbookRunResult.status === 'SIMULATED', 'bg-emerald-950/20 border-emerald-700/50': playbookRunResult.status === 'COMPLETED', 'bg-rose-950/20 border-rose-700/50': playbookRunResult.status === 'BLOCKED', 'bg-amber-950/20 border-amber-700/50': playbookRunResult.status === 'STOPPED' }">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-slate-200">Resultado de Corrida:</span>
+                <span
+                  data-testid="playbook-run-status"
+                  class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border"
+                  :class="{
+                    'bg-cyan-900/60 text-cyan-300 border-cyan-500': playbookRunResult.status === 'SIMULATED',
+                    'bg-emerald-900/60 text-emerald-300 border-emerald-500': playbookRunResult.status === 'COMPLETED',
+                    'bg-rose-900/60 text-rose-300 border-rose-500': playbookRunResult.status === 'BLOCKED',
+                    'bg-amber-900/60 text-amber-300 border-amber-500': playbookRunResult.status === 'STOPPED'
+                  }"
+                >
+                  {{ playbookRunResult.status }}
+                </span>
+                <span class="text-[10px] text-slate-400">
+                  ({{ playbookRunResult.dry_run ? 'Dry-Run Simulado' : 'Ejecución Real' }})
+                </span>
+              </div>
+              <span class="text-[11px] text-slate-300">
+                Pasos ejecutados: {{ playbookRunResult.executed_steps_count }} de {{ playbookRunResult.total_steps }}
+              </span>
+            </div>
+
+            <div v-if="playbookRunResult.reason" class="text-rose-300">
+              Motivo: {{ playbookRunResult.reason }}
+            </div>
+          </div>
+
+          <!-- Lista de Pasos -->
+          <div class="space-y-3">
+            <h4 class="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">
+              Pasos del Playbook ({{ selectedPlaybookDetail.playbook.steps.length }})
+            </h4>
+
+            <div class="space-y-3">
+              <div
+                v-for="(step, idx) in selectedPlaybookDetail.playbook.steps"
+                :key="step.id"
+                :data-testid="'playbook-step-' + step.id"
+                class="p-3.5 bg-slate-900/30 border border-slate-800 rounded-md space-y-2 font-mono text-xs"
+              >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-slate-400 font-bold">#{{ idx + 1 }}</span>
+                    <span class="font-bold text-slate-100">{{ step.title || step.name || step.id }}</span>
+                    <span class="text-slate-500 text-[10px]">({{ step.id }})</span>
+                  </div>
+                  <div class="flex items-center space-x-2">
+                    <!-- Insignia de Interacción -->
+                    <span
+                      :data-testid="'step-badge-' + step.id"
+                      class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border"
+                      :class="{
+                        'bg-cyan-950/70 text-cyan-400 border-cyan-800/60': step.interaction_type === 'passive' || step.interaction === 'passive',
+                        'bg-emerald-950/70 text-emerald-400 border-emerald-800/60': step.interaction_type === 'active_low' || step.interaction === 'active_low',
+                        'bg-amber-950/70 text-amber-400 border-amber-800/60': step.interaction_type === 'active_high' || step.interaction === 'active_high'
+                      }"
+                    >
+                      {{ step.interaction_type || step.interaction }}
+                    </span>
+
+                    <!-- Insignia de Estado de Corrida -->
+                    <span
+                      v-if="getStepRunResult(step.id)"
+                      :data-testid="'step-status-' + step.id"
+                      class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border"
+                      :class="{
+                        'bg-cyan-950 text-cyan-300 border-cyan-500': getStepRunResult(step.id).status === 'SIMULATED',
+                        'bg-emerald-950 text-emerald-300 border-emerald-500': getStepRunResult(step.id).status === 'SUCCESS' || getStepRunResult(step.id).status === 'COMPLETED',
+                        'bg-rose-950 text-rose-300 border-rose-500': getStepRunResult(step.id).status === 'BLOCKED' || getStepRunResult(step.id).status === 'FAILED' || getStepRunResult(step.id).status === 'ERROR',
+                        'bg-amber-950 text-amber-300 border-amber-500': getStepRunResult(step.id).status === 'TIMEOUT' || getStepRunResult(step.id).status === 'STOPPED'
+                      }"
+                    >
+                      {{ getStepRunResult(step.id).status }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Plantilla de Comando -->
+                <div class="mt-2 bg-slate-950 p-2 rounded border border-slate-800/80 font-mono text-[11px] text-slate-300 overflow-x-auto">
+                  <div class="text-[10px] text-slate-500 mb-0.5">Comando:</div>
+                  <code>{{ getStepRunResult(step.id)?.command || step.command_template || step.command }}</code>
+                </div>
+
+                <!-- Detalle de Salida o Bloqueo si fue ejecutado -->
+                <div v-if="getStepRunResult(step.id)" class="pt-1">
+                  <div v-if="getStepRunResult(step.id).status === 'BLOCKED'" class="text-rose-400 text-[11px]">
+                    ⛔ {{ getStepRunResult(step.id).output }}
+                  </div>
+                  <details v-else-if="getStepRunResult(step.id).output" class="text-[11px]">
+                    <summary class="text-slate-400 hover:text-slate-200 cursor-pointer">
+                      Ver salida del paso (código {{ getStepRunResult(step.id).exit_code }})
+                    </summary>
+                    <pre class="mt-1 p-2 bg-slate-950/90 border border-slate-800 rounded text-slate-300 whitespace-pre-wrap font-mono text-[10px] max-h-40 overflow-y-auto">{{ getStepRunResult(step.id).output }}</pre>
+                  </details>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
     <!-- MODAL REGISTRAR CREDENCIAL DE BOTÍN -->
     <div
       v-if="showCredModal"
@@ -2399,6 +2658,7 @@ const tabs = computed(() => {
       { id: 'artifacts', label: 'Artefactos & Dumps', icon: '📁', count: artifactFiles.value.length },
       { id: 'timeline', label: 'Línea de Tiempo', icon: '⏱️', count: timelineEvents.value.length },
       { id: 'supervision', label: 'Supervisión Pedagógica', icon: '🎓' },
+      { id: 'playbooks', label: 'Playbooks', icon: '📖', count: playbooksList.value.length },
       { id: 'logs', label: 'Terminal Logs', icon: '⚡' },
       { id: 'copilot', label: 'Copiloto CTF', icon: '🤖' },
       { id: 'notes', label: 'Solución (notes.md)', icon: '📝' },
@@ -2413,6 +2673,7 @@ const tabs = computed(() => {
     { id: 'artifacts', label: 'Artefactos (recon/)', icon: '📁', count: artifactFiles.value.length },
     { id: 'timeline', label: 'Línea de Tiempo', icon: '⏱️', count: timelineEvents.value.length },
     { id: 'supervision', label: 'Supervisión Pedagógica', icon: '🎓' },
+    { id: 'playbooks', label: 'Playbooks', icon: '📖', count: playbooksList.value.length },
     { id: 'logs', label: 'Terminal Logs', icon: '⚡' },
     { id: 'checklist', label: 'Metodología & Cobertura', icon: '📊' },
     { id: 'copilot', label: 'Copiloto Táctico', icon: '🤖' },
@@ -2509,6 +2770,105 @@ async function loadSupervision() {
   } finally {
     supervisionLoading.value = false
   }
+}
+
+// Playbooks Deterministas y Flujos de Automatización (V3-04)
+const playbooksList = ref([])
+const selectedPlaybookId = ref('')
+const selectedPlaybookDetail = ref(null)
+const playbookScopeEval = ref(null)
+const playbookLoading = ref(false)
+const playbookRunning = ref(false)
+const playbookError = ref('')
+const playbookRunResult = ref(null)
+const playbookParams = ref({})
+const playbookDryRun = ref(true)
+const playbookMaxSteps = ref(null)
+
+async function loadPlaybooks() {
+  playbookLoading.value = true
+  playbookError.value = ''
+  try {
+    const list = await api.getPlaybooks(engId.value, engType.value)
+    playbooksList.value = Array.isArray(list) ? list : []
+    if (playbooksList.value.length > 0) {
+      const targetId = selectedPlaybookId.value && playbooksList.value.some(p => p.id === selectedPlaybookId.value)
+        ? selectedPlaybookId.value
+        : playbooksList.value[0].id
+      await selectPlaybook(targetId)
+    } else {
+      selectedPlaybookId.value = ''
+      selectedPlaybookDetail.value = null
+    }
+  } catch (err) {
+    playbookError.value = err.message || 'Error al listar playbooks.'
+  } finally {
+    playbookLoading.value = false
+  }
+}
+
+async function selectPlaybook(id) {
+  if (!id) return
+  selectedPlaybookId.value = id
+  playbookLoading.value = true
+  playbookError.value = ''
+  playbookRunResult.value = null
+  try {
+    const detail = await api.getPlaybook(id, engId.value, engType.value)
+    selectedPlaybookDetail.value = detail
+    // Inicializar parámetros con valores por defecto
+    const params = {}
+    if (detail?.playbook?.parameters && typeof detail.playbook.parameters === 'object') {
+      for (const [key, meta] of Object.entries(detail.playbook.parameters)) {
+        params[key] = (meta && meta.default !== undefined) ? String(meta.default) : ''
+      }
+    }
+    // Si hay parámetro 'domain' vacío pero tenemos host en alcance, sugerirlo
+    if (params.domain === '' && inScopeDomainsText.value) {
+      params.domain = inScopeDomainsText.value.split('\n')[0].trim().replace(/^\*\./, '')
+    }
+    playbookParams.value = params
+
+    // Validar contra alcance si es válido
+    if (detail?.playbook) {
+      try {
+        const valRes = await api.validatePlaybook(detail.playbook, engId.value, engType.value)
+        playbookScopeEval.value = valRes.scope_evaluation
+      } catch {
+        playbookScopeEval.value = null
+      }
+    }
+  } catch (err) {
+    playbookError.value = err.message || `Error al cargar playbook '${id}'.`
+  } finally {
+    playbookLoading.value = false
+  }
+}
+
+async function executePlaybook(dryRun = true) {
+  if (!selectedPlaybookId.value) return
+  playbookRunning.value = true
+  playbookError.value = ''
+  try {
+    const payload = {
+      engagement_id: engId.value,
+      type: engType.value,
+      parameters: playbookParams.value,
+      dry_run: dryRun,
+      max_steps: playbookMaxSteps.value ? Number(playbookMaxSteps.value) : undefined
+    }
+    const result = await api.runPlaybook(selectedPlaybookId.value, payload)
+    playbookRunResult.value = result
+  } catch (err) {
+    playbookError.value = err.message || 'Error al ejecutar playbook.'
+  } finally {
+    playbookRunning.value = false
+  }
+}
+
+function getStepRunResult(stepId) {
+  if (!playbookRunResult.value?.steps_results) return null
+  return playbookRunResult.value.steps_results.find(s => s.step_id === stepId) || null
 }
 
 // Scope
@@ -3712,6 +4072,7 @@ watch(activeTab, tab => {
   if (tab === 'checklist') loadNextStep()
   if (tab === 'timeline') loadTimeline()
   if (tab === 'supervision') loadSupervision()
+  if (tab === 'playbooks') loadPlaybooks()
 })
 watch(() => [reconStatus.value.job?.run_id, reconStatus.value.job?.status, reconStatus.value.job?.outcome_revision,
   reconStatus.value.job?.outcome_review?.reviewed_at], (current, previous) => {

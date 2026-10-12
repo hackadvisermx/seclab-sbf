@@ -144,4 +144,23 @@ export const api = {
   runRecon: (id, data, type = 'engagement') => request(`/recon/${id}/run?type=${type}`, { method: 'POST', body: JSON.stringify(data) }),
   cancelRecon: (id, type = 'engagement') => request(`/recon/${id}/cancel?type=${type}`, { method: 'POST' }),
   getReconLog: (id, lines = 200, type = 'engagement') => request(`/recon/${id}/log?lines=${lines}&type=${type}`),
+
+  // Playbooks Deterministas & Automatización Controlada
+  getPlaybooks: (engagementId = null, type = 'engagement') => {
+    const qs = engagementId ? `?engagement_id=${encodeURIComponent(engagementId)}&type=${encodeURIComponent(type)}` : ''
+    return request(`/playbooks${qs}`)
+  },
+  getPlaybook: (id, engagementId = null, type = 'engagement') => {
+    const qs = engagementId ? `?engagement_id=${encodeURIComponent(engagementId)}&type=${encodeURIComponent(type)}` : ''
+    return request(`/playbooks/${encodeURIComponent(id)}${qs}`)
+  },
+  validatePlaybook: (playbook, engagementId = null, type = 'engagement') => request('/playbooks/validate', {
+    method: 'POST',
+    body: JSON.stringify({ playbook, engagement_id: engagementId, type })
+  }),
+  runPlaybook: (id, payload = {}) => request(`/playbooks/${encodeURIComponent(id)}/run`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
 }
+

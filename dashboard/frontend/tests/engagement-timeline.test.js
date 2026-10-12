@@ -188,3 +188,99 @@ test('el filtro de categoría en la línea de tiempo reduce los eventos mostrado
     view.cleanup()
   }
 })
+
+test('la búsqueda de texto en la línea de tiempo filtra eventos reactivamente', async () => {
+  const api = {
+    getEngagementTimeline: async (id, type) => ({
+      engagement_id: id,
+      type,
+      total_events: mockTimelineEvents.length,
+      events: mockTimelineEvents
+    }),
+    getScope: async () => ({ scope: {} }),
+    getFindings: async () => [],
+    getLogs: async () => ({ logs: [] }),
+    getChecklist: async () => ({ items: [] }),
+    getNotes: async () => ({ content: '' }),
+    getReport: async () => ({ content: '' }),
+    getFlags: async () => ({ flags: [] }),
+    getLoot: async () => ({ credentials: [], files: [] }),
+    getReconStatus: async () => ({ summary: {}, job: null }),
+    getReconHistory: async () => ({ jobs: [] }),
+  }
+
+  const view = await mount(api)
+  try {
+    await clickText(view.root, 'Línea de Tiempo')
+
+    const searchInput = view.root.querySelector('[data-testid="timeline-search-input"]')
+    assert.ok(searchInput, 'Debe existir el campo de búsqueda')
+
+    // Buscar "Inyección"
+    searchInput.value = 'Inyección'
+    searchInput.dispatchEvent(new browser.window.Event('input'))
+    await flush()
+
+    let items = view.root.querySelectorAll('[data-testid="timeline-event-item"]')
+    assert.equal(items.length, 1, 'Solo debe coincidir 1 evento con Inyección')
+    assert.match(items[0].textContent, /Inyección SQL/)
+
+    // Limpiar búsqueda usando el botón ✕
+    const clearBtn = view.root.querySelector('[data-testid="timeline-search-clear"]')
+    assert.ok(clearBtn, 'Debe aparecer el botón de limpiar búsqueda')
+    clearBtn.click()
+    await flush()
+
+    items = view.root.querySelectorAll('[data-testid="timeline-event-item"]')
+    assert.equal(items.length, 3, 'Deben restaurarse todos los eventos al limpiar')
+  } finally {
+    view.cleanup()
+  }
+})
+
+test('los botones de exportar línea de tiempo invocan la API con el formato correspondiente', async () => {
+  let exportedFormats = []
+  const api = {
+    getEngagementTimeline: async (id, type) => ({
+      engagement_id: id,
+      type,
+      total_events: mockTimelineEvents.length,
+      events: mockTimelineEvents
+    }),
+    exportEngagementTimeline: async (id, format, type) => {
+      exportedFormats.push(format)
+      return `# Exported ${format}`
+    },
+    getScope: async () => ({ scope: {} }),
+    getFindings: async () => [],
+    getLogs: async () => ({ logs: [] }),
+    getChecklist: async () => ({ items: [] }),
+    getNotes: async () => ({ content: '' }),
+    getReport: async () => ({ content: '' }),
+    getFlags: async () => ({ flags: [] }),
+    getLoot: async () => ({ credentials: [], files: [] }),
+    getReconStatus: async () => ({ summary: {}, job: null }),
+    getReconHistory: async () => ({ jobs: [] }),
+  }
+
+  const view = await mount(api)
+  try {
+    await clickText(view.root, 'Línea de Tiempo')
+
+    const exportMdBtn = view.root.querySelector('[data-testid="timeline-export-md-button"]')
+    const exportJsonBtn = view.root.querySelector('[data-testid="timeline-export-json-button"]')
+    assert.ok(exportMdBtn, 'Debe existir botón de exportar Markdown')
+    assert.ok(exportJsonBtn, 'Debe existir botón de exportar JSON')
+
+    exportMdBtn.click()
+    await flush()
+
+    exportJsonBtn.click()
+    await flush()
+
+    assert.deepEqual(exportedFormats, ['markdown', 'json'], 'Debió invocarse exportEngagementTimeline con markdown y json')
+  } finally {
+    view.cleanup()
+  }
+})
+

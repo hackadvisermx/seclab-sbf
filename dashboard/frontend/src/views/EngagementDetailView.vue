@@ -1672,6 +1672,24 @@
           </div>
           <div class="flex items-center space-x-2">
             <button
+              @click="exportTimeline('markdown')"
+              :disabled="timelineExporting || timelineLoading"
+              class="px-2.5 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-colors disabled:opacity-50"
+              data-testid="timeline-export-md-button"
+              title="Exportar línea de tiempo como Markdown"
+            >
+              📥 Markdown
+            </button>
+            <button
+              @click="exportTimeline('json')"
+              :disabled="timelineExporting || timelineLoading"
+              class="px-2.5 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-colors disabled:opacity-50"
+              data-testid="timeline-export-json-button"
+              title="Exportar línea de tiempo como JSON"
+            >
+              📥 JSON
+            </button>
+            <button
               @click="loadTimeline"
               :disabled="timelineLoading"
               class="px-3 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition-colors"
@@ -1682,26 +1700,49 @@
           </div>
         </div>
 
-        <!-- Filtro por categoría -->
-        <div class="flex flex-wrap items-center gap-2 pt-1" data-testid="timeline-category-filter">
-          <span class="text-xs font-mono text-slate-400">Filtrar por categoría:</span>
-          <button
-            v-for="cat in [
-              { id: 'all', label: 'Todos' },
-              { id: 'scope', label: 'Alcance' },
-              { id: 'recon', label: 'Reconocimiento' },
-              { id: 'finding', label: 'Hallazgos' },
-              { id: 'notes', label: 'Notas' },
-              { id: 'report', label: 'Reportes' }
-            ]"
-            :key="cat.id"
-            @click="selectedTimelineCategory = cat.id"
-            class="px-2.5 py-1 text-xs font-mono rounded-sm transition-colors"
-            :class="selectedTimelineCategory === cat.id ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400 hover:text-white'"
-            :data-testid="`timeline-filter-${cat.id}`"
-          >
-            {{ cat.label }}
-          </button>
+        <!-- Filtros y Búsqueda -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+          <!-- Filtro por categoría -->
+          <div class="flex flex-wrap items-center gap-2" data-testid="timeline-category-filter">
+            <span class="text-xs font-mono text-slate-400">Filtrar:</span>
+            <button
+              v-for="cat in [
+                { id: 'all', label: 'Todos' },
+                { id: 'scope', label: 'Alcance' },
+                { id: 'recon', label: 'Reconocimiento' },
+                { id: 'finding', label: 'Hallazgos' },
+                { id: 'notes', label: 'Notas' },
+                { id: 'report', label: 'Reportes' }
+              ]"
+              :key="cat.id"
+              @click="selectedTimelineCategory = cat.id"
+              class="px-2.5 py-1 text-xs font-mono rounded-sm transition-colors"
+              :class="selectedTimelineCategory === cat.id ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400 hover:text-white'"
+              :data-testid="`timeline-filter-${cat.id}`"
+            >
+              {{ cat.label }}
+            </button>
+          </div>
+
+          <!-- Búsqueda en texto de eventos -->
+          <div class="flex items-center gap-1.5">
+            <input
+              v-model="timelineSearchQuery"
+              type="text"
+              placeholder="Buscar en eventos..."
+              data-testid="timeline-search-input"
+              class="bg-slate-900 border border-slate-700 rounded-sm px-2.5 py-1 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 w-full sm:w-56"
+            />
+            <button
+              v-if="timelineSearchQuery"
+              @click="timelineSearchQuery = ''"
+              title="Limpiar búsqueda"
+              data-testid="timeline-search-clear"
+              class="px-1.5 py-1 text-xs font-mono text-slate-400 hover:text-white bg-slate-800 rounded-sm"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <!-- Alerta de Error -->
@@ -3200,10 +3241,12 @@ const tabs = computed(() => {
   ]
 })
 
-// Timeline (V3-02o)
+// Timeline (V3-02o / V3-02q)
 const timelineEvents = ref([])
 const timelineLoading = ref(false)
 const timelineError = ref('')
+const timelineExporting = ref(false)
+const timelineSearchQuery = ref('')
 const selectedTimelineCategory = ref('all')
 
 async function loadTimeline() {
@@ -3220,9 +3263,45 @@ async function loadTimeline() {
   }
 }
 
+async function exportTimeline(format = 'markdown') {
+  if (!engId.value) return
+  timelineExporting.value = true
+  timelineError.value = ''
+  try {
+    const content = await api.exportEngagementTimeline(engId.value, format, engType.value)
+    const ext = format === 'json' ? 'json' : 'md'
+    const mime = format === 'json' ? 'application/json' : 'text/markdown'
+    const blob = new Blob([content], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `timeline_${engId.value}.${ext}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    timelineError.value = err.message || 'Error al exportar la línea de tiempo'
+  } finally {
+    timelineExporting.value = false
+  }
+}
+
 const filteredTimelineEvents = computed(() => {
-  if (selectedTimelineCategory.value === 'all') return timelineEvents.value
-  return timelineEvents.value.filter(e => e.category === selectedTimelineCategory.value)
+  let list = timelineEvents.value
+  if (selectedTimelineCategory.value !== 'all') {
+    list = list.filter(e => e.category === selectedTimelineCategory.value)
+  }
+  if (timelineSearchQuery.value.trim()) {
+    const q = timelineSearchQuery.value.trim().toLowerCase()
+    list = list.filter(e =>
+      (e.title && e.title.toLowerCase().includes(q)) ||
+      (e.summary && e.summary.toLowerCase().includes(q)) ||
+      (e.category && e.category.toLowerCase().includes(q)) ||
+      (e.source_ref && e.source_ref.toLowerCase().includes(q))
+    )
+  }
+  return list
 })
 
 function getTimelineCategoryBadgeClass(category) {

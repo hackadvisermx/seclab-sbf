@@ -7,6 +7,7 @@ hallazgos registrados, notas y reportes técnicos.
 from __future__ import annotations
 
 import datetime
+import json
 import pathlib
 from typing import Any, Dict, List, Optional
 
@@ -242,6 +243,44 @@ class TimelineService:
             total_events=len(events),
             events=events,
         )
+
+    def export_timeline(self, eng_id: str, eng_type: str = "engagement", format: str = "json") -> str:
+        timeline = self.get_timeline(eng_id, eng_type)
+        fmt = (format or "json").lower()
+        if fmt == "json":
+            data = timeline.model_dump() if hasattr(timeline, "model_dump") else timeline.dict()
+            return json.dumps(data, indent=2, ensure_ascii=False)
+        elif fmt in ("markdown", "md"):
+            now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            lines = [
+                f"# Línea de Tiempo de Auditoría: {eng_id}",
+                "",
+                f"- **Tipo de Proyecto**: {eng_type}",
+                f"- **Total de Eventos**: {timeline.total_events}",
+                f"- **Fecha de Exportación**: {now_iso}",
+                "",
+                "## Eventos Cronológicos",
+                "",
+            ]
+            if not timeline.events:
+                lines.append("_No se registran eventos en la línea de tiempo._\n")
+            else:
+                lines.extend([
+                    "| Fecha / Hora (UTC) | Categoría | Estado | Título | Resumen | Referencia |",
+                    "| --- | --- | --- | --- | --- | --- |",
+                ])
+                for ev in timeline.events:
+                    ts = ev.timestamp or "-"
+                    cat = ev.category or "-"
+                    status = (ev.status or "info").upper()
+                    title = (ev.title or "-").replace("|", "\\|")
+                    summary = (ev.summary or "-").replace("|", "\\|").replace("\n", " ")
+                    ref = (ev.source_ref or "-").replace("|", "\\|")
+                    lines.append(f"| {ts} | {cat} | {status} | {title} | {summary} | {ref} |")
+                lines.append("")
+            return "\n".join(lines)
+        else:
+            raise HTTPException(status_code=400, detail=f"Formato no soportado: {format}")
 
 
 timeline_service = TimelineService()

@@ -37,6 +37,15 @@ export const api = {
   restoreProject: (entry) => request(`/trash/${encodeURIComponent(entry.entry_id)}/restore?project_id=${encodeURIComponent(entry.project_id)}&type=${encodeURIComponent(entry.type)}`, { method: 'POST' }),
   getEngagementDetail: (id, type = 'engagement') => request(`/engagements/${id}?type=${type}`),
   getEngagementTimeline: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/timeline?type=${encodeURIComponent(type)}`),
+  exportEngagementTimeline: async (id, format = 'json', type = 'engagement') => {
+    const url = `${API_BASE}/engagements/${encodeURIComponent(id)}/timeline/export?type=${encodeURIComponent(type)}&format=${encodeURIComponent(format)}`
+    const res = await fetch(url, { credentials: 'same-origin' })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(err || `Error ${res.status}`)
+    }
+    return res.text()
+  },
   getSupervision: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/supervision?type=${encodeURIComponent(type)}`),
   getMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
   getEngagementMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),

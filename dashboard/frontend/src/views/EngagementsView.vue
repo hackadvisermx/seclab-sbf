@@ -34,6 +34,103 @@
       </div>
     </div>
 
+    <!-- Tarjeta Resumen Global de Madurez & Auditorías (V3-07d) -->
+    <div
+      v-if="maturitySummary"
+      data-testid="cross-engagement-maturity-card"
+      class="tactical-card bg-[#0d1322] border border-cyan-500/30 p-4 rounded-lg space-y-3"
+    >
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1b253b] pb-2">
+        <div class="flex items-center space-x-2">
+          <span class="text-base">📊</span>
+          <span class="font-mono text-sm font-bold text-white uppercase tracking-wider">Postura & Madurez de Auditoría Global</span>
+          <span
+            v-if="maturitySummary.fully_audited_count > 0"
+            class="text-[10px] px-2 py-0.5 rounded-sm bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono"
+          >
+            {{ maturitySummary.fully_audited_count }} completados
+          </span>
+        </div>
+        <div class="flex items-center space-x-3 text-xs font-mono">
+          <span class="text-slate-400">Total Proyectos:</span>
+          <span data-testid="total-projects-count" class="text-cyan-400 font-bold">
+            {{ maturitySummary.total_projects }}
+          </span>
+          <span class="text-slate-600">|</span>
+          <span class="text-slate-400">Auditorías:</span>
+          <span class="text-slate-200 font-semibold">{{ maturitySummary.total_engagements }}</span>
+          <span class="text-slate-600">|</span>
+          <span class="text-slate-400">Retos:</span>
+          <span class="text-slate-200 font-semibold">{{ maturitySummary.total_retos }}</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+        <!-- Madurez Promedio -->
+        <div class="bg-[#070b14] border border-[#1b253b] p-2.5 rounded-sm flex flex-col justify-between">
+          <div class="text-[11px] font-mono text-slate-400 uppercase">Madurez Promedio</div>
+          <div class="flex items-baseline space-x-1.5 my-1">
+            <span data-testid="avg-readiness-score" class="text-xl font-bold font-mono text-cyan-300">
+              {{ maturitySummary.avg_readiness_score }}%
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">/ 100</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-xs h-1.5 overflow-hidden">
+            <div
+              class="h-full bg-gradient-to-r from-cyan-500 to-emerald-400"
+              :style="{ width: `${maturitySummary.avg_readiness_score}%` }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Hallazgos Totales -->
+        <div class="bg-[#070b14] border border-[#1b253b] p-2.5 rounded-sm flex flex-col justify-between">
+          <div class="text-[11px] font-mono text-slate-400 uppercase">Hallazgos Totales</div>
+          <div class="flex items-baseline space-x-2 my-1">
+            <span data-testid="total-findings-count" class="text-xl font-bold font-mono text-amber-300">
+              {{ maturitySummary.total_findings }}
+            </span>
+            <span class="text-[10px] font-mono text-emerald-400">
+              ({{ maturitySummary.confirmed_findings_count }} PROVEN)
+            </span>
+          </div>
+          <div class="text-[10px] font-mono text-slate-500 truncate">
+            Críticos: {{ maturitySummary.findings_by_severity?.critical || 0 }} · Altos: {{ maturitySummary.findings_by_severity?.high || 0 }}
+          </div>
+        </div>
+
+        <!-- Cobertura de Procedencia -->
+        <div class="bg-[#070b14] border border-[#1b253b] p-2.5 rounded-sm flex flex-col justify-between">
+          <div class="text-[11px] font-mono text-slate-400 uppercase">Trazabilidad de Evidencia</div>
+          <div class="flex items-baseline space-x-1.5 my-1">
+            <span data-testid="overall-provenance-pct" class="text-xl font-bold font-mono text-emerald-400">
+              {{ maturitySummary.overall_provenance_coverage_pct }}%
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">concedida</span>
+          </div>
+          <div class="text-[10px] font-mono text-slate-500 truncate">
+            {{ maturitySummary.total_findings_with_provenance }} de {{ maturitySummary.total_findings }} con job/stage
+          </div>
+        </div>
+
+        <!-- Jobs de Reconocimiento -->
+        <div class="bg-[#070b14] border border-[#1b253b] p-2.5 rounded-sm flex flex-col justify-between">
+          <div class="text-[11px] font-mono text-slate-400 uppercase">Corridas de Recon</div>
+          <div class="flex items-baseline space-x-2 my-1">
+            <span data-testid="total-recon-jobs" class="text-xl font-bold font-mono text-purple-300">
+              {{ maturitySummary.total_recon_jobs }}
+            </span>
+            <span class="text-[10px] font-mono text-slate-400">
+              ({{ maturitySummary.total_completed_jobs }} completados)
+            </span>
+          </div>
+          <div class="text-[10px] font-mono text-slate-500">
+            Trazabilidad en SQLite
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Filtros y Búsqueda -->
     <div class="space-y-3 bg-[#0d1322] border border-[#1b253b] p-3 rounded-lg">
       <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -319,6 +416,7 @@ const router = useRouter()
 import DeleteProjectButton from '../components/DeleteProjectButton.vue'
 
 const engagements = ref([])
+const maturitySummary = ref(null)
 function removeProject(project) {
   engagements.value = engagements.value.filter(item => item.id !== project.id || item.type !== project.type)
 }
@@ -426,7 +524,16 @@ async function submitCreate() {
   }
 }
 
+async function loadMaturitySummary() {
+  try {
+    maturitySummary.value = await api.getCrossEngagementMetricsSummary()
+  } catch (err) {
+    console.error('Error al cargar métricas globales:', err)
+  }
+}
+
 onMounted(() => {
   loadEngagements()
+  loadMaturitySummary()
 })
 </script>

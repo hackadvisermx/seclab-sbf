@@ -34,6 +34,15 @@ def create_engagement(payload: EngagementCreate):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/metrics/summary")
+def get_cross_engagement_metrics_summary():
+    """Obtiene el resumen consolidado de madurez, hallazgos y procedencia a través de todos los proyectos."""
+    try:
+        return metrics_service.get_cross_engagement_summary()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{eng_id}")
 def get_engagement_detail(eng_id: str, type: str = Query("engagement")):
     """Obtiene los detalles, notas y estadísticas del engagement."""

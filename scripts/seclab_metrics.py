@@ -338,3 +338,115 @@ def export_metrics_report(
     else:
         raise ValueError(f"Formato no soportado: '{format}'. Debe ser 'json' o 'markdown'.")
 
+
+def compute_cross_engagement_summary(workspace_dir: Union[str, pathlib.Path]) -> Dict[str, Any]:
+    """Calcula un resumen consolidado de madurez, hallazgos y cobertura a través de todos los proyectos."""
+    ws_path = pathlib.Path(workspace_dir)
+    if not ws_path.is_dir():
+        raise FileNotFoundError(f"Directorio de workspace no encontrado: {ws_path}")
+
+    found_projects = []
+    for cat in ("engagements", "retos"):
+        cat_dir = ws_path / cat
+        if cat_dir.is_dir() and not cat_dir.is_symlink():
+            for item in sorted(cat_dir.iterdir()):
+                if item.is_dir() and not item.is_symlink() and not item.name.startswith((".", "_")):
+                    found_projects.append((item.name, "reto" if cat == "retos" else "engagement", item))
+
+    if not found_projects:
+        for item in sorted(ws_path.iterdir()):
+            if item.is_dir() and not item.is_symlink() and not item.name.startswith((".", "_")):
+                if (item / "target.yaml").is_file():
+                    found_projects.append((item.name, "engagement", item))
+
+    if not found_projects:
+        return {
+            "total_engagements": 0,
+            "total_retos": 0,
+            "total_projects": 0,
+            "avg_readiness_score": 0.0,
+            "fully_audited_count": 0,
+            "total_findings": 0,
+            "confirmed_findings_count": 0,
+            "candidate_findings_count": 0,
+            "findings_by_severity": {
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "info": 0,
+            },
+            "total_findings_with_provenance": 0,
+            "overall_provenance_coverage_pct": 0.0,
+            "total_recon_jobs": 0,
+            "total_completed_jobs": 0,
+            "projects": [],
+        }
+
+    total_engagements = sum(1 for _, p_type, _ in found_projects if p_type == "engagement")
+    total_retos = sum(1 for _, p_type, _ in found_projects if p_type == "reto")
+    total_findings = 0
+    confirmed_findings_count = 0
+    candidate_findings_count = 0
+    findings_with_provenance = 0
+    severity_totals = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    total_recon_jobs = 0
+    total_completed_jobs = 0
+    scores = []
+    fully_audited_count = 0
+    projects_summary = []
+
+    for p_id, p_type, p_path in found_projects:
+        try:
+            m = compute_engagement_metrics(p_path)
+            score = m.get("audit_readiness_score", 0)
+            scores.append(score)
+            if m.get("is_fully_audited"):
+                fully_audited_count += 1
+
+            f_data = m.get("findings", {})
+            t_f = f_data.get("total_findings", 0)
+            total_findings += t_f
+            confirmed_findings_count += f_data.get("confirmed_count", 0)
+            candidate_findings_count += f_data.get("candidate_count", 0)
+            findings_with_provenance += f_data.get("findings_with_provenance", 0)
+
+            sev = f_data.get("severity_breakdown", {})
+            for k in severity_totals:
+                severity_totals[k] += sev.get(k, 0)
+
+            r_data = m.get("recon", {})
+            total_recon_jobs += r_data.get("total_jobs", 0)
+            total_completed_jobs += r_data.get("completed_jobs", 0)
+
+            projects_summary.append({
+                "id": p_id,
+                "type": p_type,
+                "audit_readiness_score": score,
+                "is_fully_audited": bool(m.get("is_fully_audited")),
+                "total_findings": t_f,
+                "provenance_coverage_pct": f_data.get("provenance_coverage_pct", 0.0),
+            })
+        except Exception:
+            continue
+
+    avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+    overall_prov_pct = round((findings_with_provenance / total_findings * 100), 1) if total_findings > 0 else 0.0
+
+    return {
+        "total_engagements": total_engagements,
+        "total_retos": total_retos,
+        "total_projects": len(found_projects),
+        "avg_readiness_score": avg_score,
+        "fully_audited_count": fully_audited_count,
+        "total_findings": total_findings,
+        "confirmed_findings_count": confirmed_findings_count,
+        "candidate_findings_count": candidate_findings_count,
+        "findings_by_severity": severity_totals,
+        "total_findings_with_provenance": findings_with_provenance,
+        "overall_provenance_coverage_pct": overall_prov_pct,
+        "total_recon_jobs": total_recon_jobs,
+        "total_completed_jobs": total_completed_jobs,
+        "projects": projects_summary,
+    }
+

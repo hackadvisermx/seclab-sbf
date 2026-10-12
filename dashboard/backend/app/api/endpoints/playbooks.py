@@ -206,3 +206,71 @@ def run_playbook_endpoint(playbook_id: str, payload: PlaybookRunRequest):
         raise HTTPException(status_code=400, detail=f"Error en la ejecución del playbook: {e}")
 
 
+class PlaybookStepRunRequest(BaseModel):
+    step_id: str
+    engagement_id: Optional[str] = None
+    type: str = "engagement"
+    parameters: Optional[Dict[str, Any]] = None
+    dry_run: bool = True
+
+
+@router.post("/{playbook_id}/step/run")
+def run_playbook_step_endpoint(playbook_id: str, payload: PlaybookStepRunRequest):
+    """Ejecuta o simula un paso específico individual de un playbook determinista."""
+    target_dir = None
+    target_yaml = None
+    if payload.engagement_id:
+        target_dir = WORKSPACE_DIR / ("retos" if payload.type == "reto" else "engagements") / payload.engagement_id
+        target_yaml = target_dir / "target.yaml"
+
+    playbook_data = None
+    for p_dir in _get_playbook_dirs(target_dir):
+        for f in sorted(p_dir.glob("*.yaml")) + sorted(p_dir.glob("*.yml")):
+            if f.is_file():
+                try:
+                    pb = load_playbook_file(f)
+                    if pb.get("id") == playbook_id:
+                        playbook_data = pb
+                        break
+                except Exception:
+                    continue
+        if playbook_data:
+            break
+
+    if not playbook_data:
+        raise HTTPException(status_code=404, detail=f"Playbook '{playbook_id}' no encontrado.")
+
+    # Buscar el paso por su id
+    step = next((s for s in playbook_data.get("steps", []) if s.get("id") == payload.step_id), None)
+    if not step:
+        raise HTTPException(status_code=404, detail=f"Paso '{payload.step_id}' no encontrado en playbook '{playbook_id}'.")
+
+    context = {
+        "parameters": payload.parameters or {},
+    }
+
+    if target_yaml and target_yaml.is_file():
+        scope_eval = validate_playbook_against_scope(playbook_data, target_yaml)
+        context["allow_passive"] = scope_eval["authorization_state"]["allow_passive"]
+        context["allow_active"] = scope_eval["authorization_state"]["allow_active"]
+    elif payload.dry_run:
+        context["allow_passive"] = True
+        context["allow_active"] = True
+
+    try:
+        step_result = execute_playbook_step(
+            step=step,
+            context=context,
+            dry_run=payload.dry_run,
+        )
+        return {
+            "playbook_id": playbook_id,
+            "step_id": payload.step_id,
+            "step_result": step_result,
+            "dry_run": payload.dry_run,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al ejecutar el paso: {e}")
+
+
+

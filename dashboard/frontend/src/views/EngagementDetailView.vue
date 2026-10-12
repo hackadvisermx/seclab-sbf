@@ -2814,6 +2814,76 @@
           No hay revisiones registradas en evidence/.revisions para esta ficha.
         </div>
 
+        <!-- Barra del Comparador Visual (V3-03bb) -->
+        <div v-if="findingRevisionsList.length >= 2" class="flex items-center justify-between bg-slate-900/40 p-2.5 rounded border border-slate-800 text-xs font-mono">
+          <span class="text-slate-400">Comparador visual de versiones:</span>
+          <button
+            @click="showRevisionComparator = !showRevisionComparator"
+            data-testid="toggle-comparator-btn"
+            class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 transition-colors"
+          >
+            {{ showRevisionComparator ? 'Ocultar Comparador' : '⚖️ Comparar Versiones' }}
+          </button>
+        </div>
+
+        <!-- Panel del comparador visual (V3-03bb) -->
+        <div
+          v-if="showRevisionComparator && findingRevisionsList.length >= 2"
+          data-testid="revision-comparator-panel"
+          class="p-3 bg-slate-950/90 border border-cyan-500/40 rounded space-y-3 text-xs font-mono"
+        >
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="revisions-compare-selector">
+            <div>
+              <label class="block text-slate-400 text-[11px] mb-1">Versión Base (A):</label>
+              <select
+                v-model="selectedRevisionA"
+                data-testid="comparator-select-a"
+                class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs"
+              >
+                <option v-for="(rev, idx) in findingRevisionsList" :key="rev.revision_id || idx" :value="rev">
+                  [{{ rev.action }}] {{ rev.timestamp }} ({{ rev.revision_id || idx }})
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-400 text-[11px] mb-1">Versión Comparada (B):</label>
+              <select
+                v-model="selectedRevisionB"
+                data-testid="comparator-select-b"
+                class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs"
+              >
+                <option v-for="(rev, idx) in findingRevisionsList" :key="rev.revision_id || idx" :value="rev">
+                  [{{ rev.action }}] {{ rev.timestamp }} ({{ rev.revision_id || idx }})
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Vista de diferencias -->
+          <div v-if="comparisonDiff" data-testid="revisions-diff-view" class="space-y-2 pt-2 border-t border-slate-800">
+            <div class="text-[11px] text-slate-400 font-bold">
+              Diferencias detectadas ({{ comparisonDiff.diffs.length }} campos modificados):
+            </div>
+            <div v-if="comparisonDiff.diffs.length === 0" class="text-slate-500 text-xs italic">
+              No hay diferencias entre las revisiones seleccionadas.
+            </div>
+            <div v-else class="space-y-1.5 max-h-48 overflow-y-auto">
+              <div
+                v-for="d in comparisonDiff.diffs"
+                :key="d.field"
+                class="p-2 bg-slate-900/80 border border-slate-800 rounded flex flex-wrap items-center justify-between gap-2"
+              >
+                <span class="font-bold text-cyan-300 text-[11px] uppercase">{{ d.field }}</span>
+                <div class="flex items-center space-x-2 text-[11px]">
+                  <span class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 line-through">{{ d.oldVal !== null && d.oldVal !== undefined ? d.oldVal : '(ninguno)' }}</span>
+                  <span class="text-slate-500">→</span>
+                  <span class="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 font-bold">{{ d.newVal !== null && d.newVal !== undefined ? d.newVal : '(eliminado)' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div v-else class="space-y-3 max-h-96 overflow-y-auto pr-1">
           <div
             v-for="(rev, idx) in findingRevisionsList"
@@ -2846,6 +2916,35 @@
 
             <div v-if="rev.modified_fields && rev.modified_fields.length > 0" class="text-[11px] text-slate-400">
               Campos modificados: <span class="text-cyan-300">{{ rev.modified_fields.join(', ') }}</span>
+            </div>
+
+            <!-- Diferencias por campo de la revisión (V3-03bb) -->
+            <div
+              v-if="rev.field_diffs && Object.keys(rev.field_diffs).length > 0"
+              data-testid="revision-field-diffs"
+              class="p-2 bg-slate-950/70 border border-slate-800/80 rounded space-y-1"
+            >
+              <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Cambios detallados:</div>
+              <div
+                v-for="(diff, f) in rev.field_diffs"
+                :key="f"
+                class="text-[11px] flex items-center gap-1.5 flex-wrap"
+              >
+                <span class="text-cyan-300">{{ f }}:</span>
+                <span class="px-1 py-0.2 rounded bg-rose-950/60 text-rose-400 line-through">{{ diff.old !== null && diff.old !== undefined ? diff.old : '(ninguno)' }}</span>
+                <span class="text-slate-500">→</span>
+                <span class="px-1 py-0.2 rounded bg-emerald-950/60 text-emerald-400 font-bold">{{ diff.new !== null && diff.new !== undefined ? diff.new : '(eliminado)' }}</span>
+              </div>
+            </div>
+
+            <div v-if="idx > 0" class="pt-1">
+              <button
+                @click="selectRevisionsForComparison(findingRevisionsList[idx - 1], rev)"
+                data-testid="compare-with-prev-btn"
+                class="text-[11px] text-cyan-400 hover:text-cyan-300 underline cursor-pointer"
+              >
+                ⚖️ Comparar con versión anterior
+              </button>
             </div>
 
             <div class="text-[10px] text-slate-500 space-y-0.5 pt-1 border-t border-slate-800/40">
@@ -3509,6 +3608,38 @@ const activeRevisionSlug = ref('')
 const findingRevisionsList = ref([])
 const findingRevisionsLoading = ref(false)
 const findingRevisionsError = ref('')
+const showRevisionComparator = ref(false)
+const selectedRevisionA = ref(null)
+const selectedRevisionB = ref(null)
+
+function selectRevisionsForComparison(revA, revB) {
+  selectedRevisionA.value = revA
+  selectedRevisionB.value = revB
+  showRevisionComparator.value = true
+}
+
+const comparisonDiff = computed(() => {
+  if (!selectedRevisionA.value || !selectedRevisionB.value) return null
+  const a = selectedRevisionA.value
+  const b = selectedRevisionB.value
+  const fields = ['title', 'severity', 'status', 'author', 'previous_sha256', 'new_sha256']
+  const diffs = []
+  for (const f of fields) {
+    const valA = a[f] ?? null
+    const valB = b[f] ?? null
+    if (valA !== valB) {
+      diffs.push({ field: f, oldVal: valA, newVal: valB })
+    }
+  }
+  if (b.field_diffs) {
+    for (const [k, v] of Object.entries(b.field_diffs)) {
+      if (!diffs.some(d => d.field === k)) {
+        diffs.push({ field: k, oldVal: v.old, newVal: v.new })
+      }
+    }
+  }
+  return { revA: a, revB: b, diffs }
+})
 
 async function viewFindingRevisions(slug) {
   if (!slug || !engId.value) return
@@ -3517,9 +3648,16 @@ async function viewFindingRevisions(slug) {
   findingRevisionsLoading.value = true
   findingRevisionsError.value = ''
   findingRevisionsList.value = []
+  showRevisionComparator.value = false
+  selectedRevisionA.value = null
+  selectedRevisionB.value = null
   try {
     const res = await api.getFindingRevisions(engId.value, slug, engType.value)
     findingRevisionsList.value = res.revisions || []
+    if (findingRevisionsList.value.length >= 2) {
+      selectedRevisionA.value = findingRevisionsList.value[findingRevisionsList.value.length - 2]
+      selectedRevisionB.value = findingRevisionsList.value[findingRevisionsList.value.length - 1]
+    }
   } catch (err) {
     findingRevisionsError.value = err.message || 'Error al obtener revisiones del hallazgo.'
   } finally {

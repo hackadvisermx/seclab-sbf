@@ -7,6 +7,8 @@ from seclab_playbook import (
     load_playbook_file,
     validate_playbook_schema,
     validate_playbook_against_scope,
+    run_playbook,
+    execute_playbook_step,
     PlaybookValidationError,
 )
 
@@ -119,3 +121,55 @@ def validate_playbook(payload: PlaybookValidateRequest):
         "errors": [],
         "scope_evaluation": scope_eval,
     }
+
+
+class PlaybookRunRequest(BaseModel):
+    engagement_id: Optional[str] = None
+    type: str = "engagement"
+    parameters: Optional[Dict[str, Any]] = None
+    dry_run: bool = True
+    max_steps: Optional[int] = None
+
+
+@router.post("/{playbook_id}/run")
+def run_playbook_endpoint(playbook_id: str, payload: PlaybookRunRequest):
+    """Ejecuta o simula (dry-run) un playbook determinista para el engagement indicado."""
+    target_dir = None
+    target_yaml = None
+    if payload.engagement_id:
+        target_dir = WORKSPACE_DIR / ("retos" if payload.type == "reto" else "engagements") / payload.engagement_id
+        target_yaml = target_dir / "target.yaml"
+
+    playbook_data = None
+    for p_dir in _get_playbook_dirs(target_dir):
+        for f in sorted(p_dir.glob("*.yaml")) + sorted(p_dir.glob("*.yml")):
+            if f.is_file():
+                try:
+                    pb = load_playbook_file(f)
+                    if pb.get("id") == playbook_id:
+                        playbook_data = pb
+                        break
+                except Exception:
+                    continue
+        if playbook_data:
+            break
+
+    if not playbook_data:
+        raise HTTPException(status_code=404, detail=f"Playbook '{playbook_id}' no encontrado.")
+
+    context = {
+        "parameters": payload.parameters or {},
+    }
+
+    try:
+        result = run_playbook(
+            playbook_data=playbook_data,
+            target_yaml_path=target_yaml if (target_yaml and target_yaml.is_file()) else None,
+            context=context,
+            dry_run=payload.dry_run,
+            max_steps=payload.max_steps,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error en la ejecución del playbook: {e}")
+

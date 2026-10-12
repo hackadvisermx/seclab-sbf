@@ -131,6 +131,66 @@ class TestSeclabPlaybook(unittest.TestCase):
         finally:
             seclab_playbook.yaml = orig_yaml
 
+    def test_interpolate_command_valid(self):
+        from seclab_playbook import interpolate_command
+        tpl = "curl -s -I {target}:{port}"
+        res = interpolate_command(tpl, {"target": "example.com", "port": 8080})
+        self.assertEqual(res, "curl -s -I example.com:8080")
+
+    def test_interpolate_command_rejects_dangerous_characters(self):
+        from seclab_playbook import interpolate_command, PlaybookValidationError
+        tpl = "ping {target}"
+        for bad_val in ("example.com; rm -rf /", "test | whoami", "host `id`", "target$(id)"):
+            with self.assertRaises(PlaybookValidationError):
+                interpolate_command(tpl, {"target": bad_val})
+
+    def test_execute_step_dry_run_simulation(self):
+        from seclab_playbook import execute_playbook_step
+        step = self.valid_playbook["steps"][0]
+        res = execute_playbook_step(step, context={"parameters": {"target": "example.com"}}, dry_run=True)
+        self.assertEqual(res["status"], "SIMULATED")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertTrue(res["is_simulated"])
+        self.assertIn("whois example.com", res["command"])
+
+    def test_execute_step_blocked_when_active_forbidden(self):
+        from seclab_playbook import execute_playbook_step
+        step = self.valid_playbook["steps"][1]  # active_low
+        res = execute_playbook_step(step, context={"allow_active": False, "parameters": {"target": "example.com"}}, dry_run=False)
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(res["exit_code"], 126)
+        self.assertTrue(res["stop_condition_met"])
+
+    def test_run_playbook_full_dry_run(self):
+        from seclab_playbook import run_playbook
+        target_yaml = self.tmp_path / "target.yaml"
+        target_yaml.write_text("authorization:\n  allow_passive: true\n  allow_active: true\n")
+        res = run_playbook(
+            self.valid_playbook,
+            target_yaml_path=target_yaml,
+            context={"parameters": {"target": "127.0.0.1"}},
+            dry_run=True,
+        )
+        self.assertEqual(res["status"], "SIMULATED")
+        self.assertEqual(res["total_steps"], 2)
+        self.assertEqual(res["executed_steps_count"], 2)
+        for s in res["steps_results"]:
+            self.assertEqual(s["status"], "SIMULATED")
+
+    def test_run_playbook_stops_on_blocked_step(self):
+        from seclab_playbook import run_playbook
+        target_yaml = self.tmp_path / "target.yaml"
+        target_yaml.write_text("authorization:\n  allow_passive: true\n  allow_active: false\n")
+        res = run_playbook(
+            self.valid_playbook,
+            target_yaml_path=target_yaml,
+            context={"parameters": {"target": "127.0.0.1"}},
+            dry_run=False,
+        )
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertFalse(res["can_execute"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

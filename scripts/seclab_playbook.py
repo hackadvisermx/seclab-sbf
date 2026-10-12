@@ -13,6 +13,8 @@ import json
 import os
 import pathlib
 import re
+import shlex
+import subprocess
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 try:
@@ -288,3 +290,210 @@ def validate_playbook_against_scope(
         },
         "steps_evaluation": steps_eval,
     }
+
+
+DANGEROUS_PARAM_CHARS = set(";&|`$\n\r")
+
+
+def interpolate_command(template: str, params: Dict[str, Any]) -> str:
+    """Interpola de forma segura parámetros en la plantilla del comando.
+    
+    Rechaza valores que contengan metacaracteres de inyección de shell.
+    """
+    for key, val in params.items():
+        val_str = str(val)
+        if any(c in val_str for c in DANGEROUS_PARAM_CHARS):
+            raise PlaybookValidationError(
+                f"Parámetro '{key}' contiene caracteres no permitidos para comando: '{val_str}'"
+            )
+        placeholder = f"{{{key}}}"
+        template = template.replace(placeholder, val_str)
+    return template
+
+
+def execute_playbook_step(
+    step: Dict[str, Any],
+    context: Optional[Dict[str, Any]] = None,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Ejecuta o simula un paso de playbook determinista.
+    
+    Verifica que el paso esté autorizado en el contexto y aplica dry_run de forma segura.
+    """
+    ctx = context or {}
+    params = ctx.get("parameters") or {}
+    allow_passive = bool(ctx.get("allow_passive", False))
+    allow_active = bool(ctx.get("allow_active", False))
+
+    step_id = step.get("id", "unknown_step")
+    title = step.get("title", step_id)
+    itype = step.get("interaction_type", "passive")
+    cmd_tpl = step.get("command_template", "")
+    timeout = step.get("timeout_seconds", 300)
+    expected_outputs = step.get("expected_outputs", [])
+
+    # Verificar autorización contra contexto si se proporciona
+    if itype in ("active_low", "active_high") and not allow_active:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "BLOCKED",
+            "command": cmd_tpl,
+            "exit_code": 126,
+            "output": "Bloqueado: La interacción activa no está autorizada en el contrato de alcance.",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": dry_run,
+        }
+
+    if itype == "passive" and not allow_passive and "allow_passive" in ctx:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "BLOCKED",
+            "command": cmd_tpl,
+            "exit_code": 126,
+            "output": "Bloqueado: La interacción pasiva no está autorizada en el contrato de alcance.",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": dry_run,
+        }
+
+    try:
+        cmd = interpolate_command(cmd_tpl, params)
+    except PlaybookValidationError as e:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "ERROR",
+            "command": cmd_tpl,
+            "exit_code": 1,
+            "output": f"Error de interpolación: {e}",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": dry_run,
+        }
+
+    if dry_run:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "SIMULATED",
+            "command": cmd,
+            "exit_code": 0,
+            "output": f"[dry-run] Simulación de paso '{step_id}' completada.",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": False,
+            "is_simulated": True,
+        }
+
+    # Modo ejecución real acotada
+    try:
+        proc = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        out = (proc.stdout + proc.stderr)[:131072]
+        status = "SUCCESS" if proc.returncode == 0 else "FAILED"
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": status,
+            "command": cmd,
+            "exit_code": proc.returncode,
+            "output": out,
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": proc.returncode != 0,
+            "is_simulated": False,
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "TIMEOUT",
+            "command": cmd,
+            "exit_code": 124,
+            "output": f"Tiempo de espera agotado ({timeout}s).",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": False,
+        }
+    except Exception as e:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "ERROR",
+            "command": cmd,
+            "exit_code": 1,
+            "output": f"Error al ejecutar paso: {e}",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": False,
+        }
+
+
+def run_playbook(
+    playbook_data: Dict[str, Any],
+    target_yaml_path: Optional[Union[str, pathlib.Path]] = None,
+    context: Optional[Dict[str, Any]] = None,
+    dry_run: bool = True,
+    max_steps: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Ejecuta secuencialmente los pasos de un playbook con salvaguardas y parada determinista."""
+    ctx = dict(context or {})
+
+    # Si se pasa target_yaml_path, extraer autorizaciones
+    if target_yaml_path:
+        scope_eval = validate_playbook_against_scope(playbook_data, target_yaml_path)
+        ctx["allow_passive"] = scope_eval["authorization_state"]["allow_passive"]
+        ctx["allow_active"] = scope_eval["authorization_state"]["allow_active"]
+        if not dry_run and not scope_eval["can_execute"]:
+            return {
+                "playbook_id": playbook_data.get("id"),
+                "title": playbook_data.get("title"),
+                "status": "BLOCKED",
+                "can_execute": False,
+                "reason": "El playbook contiene pasos activos o no autorizados por target.yaml.",
+                "total_steps": len(playbook_data.get("steps", [])),
+                "executed_steps_count": 0,
+                "dry_run": dry_run,
+                "steps_results": [],
+            }
+
+    steps = playbook_data.get("steps", [])
+    if max_steps is not None:
+        steps = steps[:max_steps]
+
+    steps_results: List[Dict[str, Any]] = []
+    overall_status = "COMPLETED" if not dry_run else "SIMULATED"
+
+    for step in steps:
+        res = execute_playbook_step(step, context=ctx, dry_run=dry_run)
+        steps_results.append(res)
+        if res.get("stop_condition_met") or res.get("status") in ("BLOCKED", "FAILED", "ERROR", "TIMEOUT"):
+            if res.get("status") == "BLOCKED":
+                overall_status = "BLOCKED"
+            else:
+                overall_status = "STOPPED"
+            break
+
+    return {
+        "playbook_id": playbook_data.get("id"),
+        "title": playbook_data.get("title"),
+        "status": overall_status,
+        "dry_run": dry_run,
+        "total_steps": len(playbook_data.get("steps", [])),
+        "executed_steps_count": len(steps_results),
+        "steps_results": steps_results,
+    }
+

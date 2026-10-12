@@ -1,7 +1,11 @@
 import pathlib
 from typing import Any, Dict
 from app.services.workspace_sync import workspace_service
-from seclab_metrics import compute_engagement_metrics, export_metrics_report
+from seclab_metrics import (
+    compute_engagement_metrics,
+    export_metrics_report,
+    compute_cross_engagement_summary,
+)
 
 
 class MetricsService:
@@ -18,6 +22,10 @@ class MetricsService:
         if not target_dir.exists():
             raise FileNotFoundError(f"Engagement {eng_id} no encontrado")
         return export_metrics_report(target_dir, format=format)
+
+    def get_cross_engagement_summary(self) -> Dict[str, Any]:
+        """Calcula el resumen consolidado de métricas operacionales a través de todo el workspace."""
+        return compute_cross_engagement_summary(workspace_service.ws_path)
 
 
 metrics_service = MetricsService()

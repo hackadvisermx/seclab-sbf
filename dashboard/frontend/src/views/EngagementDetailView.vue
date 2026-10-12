@@ -1919,6 +1919,26 @@
           <div class="flex items-center space-x-2">
             <button
               type="button"
+              @click="exportSupervision('markdown')"
+              :disabled="!supervisionData || supervisionExporting || supervisionLoading"
+              class="px-2.5 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-colors disabled:opacity-50"
+              data-testid="supervision-export-md-button"
+              title="Exportar supervisión pedagógica como Markdown"
+            >
+              📥 Markdown
+            </button>
+            <button
+              type="button"
+              @click="exportSupervision('json')"
+              :disabled="!supervisionData || supervisionExporting || supervisionLoading"
+              class="px-2.5 py-1.5 rounded-sm bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-colors disabled:opacity-50"
+              data-testid="supervision-export-json-button"
+              title="Exportar supervisión pedagógica como JSON"
+            >
+              📥 JSON
+            </button>
+            <button
+              type="button"
               @click="loadSupervision"
               :disabled="supervisionLoading"
               class="px-3 py-1.5 rounded text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center space-x-1"
@@ -3602,6 +3622,7 @@ function navigateToCitation(cit) {
 const supervisionData = ref(null)
 const supervisionLoading = ref(false)
 const supervisionError = ref('')
+const supervisionExporting = ref(false)
 
 async function loadSupervision() {
   if (!engId.value) return
@@ -3614,6 +3635,30 @@ async function loadSupervision() {
     supervisionError.value = err.message || 'Error al cargar supervisión pedagógica.'
   } finally {
     supervisionLoading.value = false
+  }
+}
+
+async function exportSupervision(format = 'markdown') {
+  if (!engId.value) return
+  supervisionExporting.value = true
+  supervisionError.value = ''
+  try {
+    const content = await api.exportSupervision(engId.value, format, engType.value)
+    const ext = format === 'json' ? 'json' : 'md'
+    const mime = format === 'json' ? 'application/json' : 'text/markdown'
+    const blob = new Blob([content], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `supervision_${engId.value}.${ext}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    supervisionError.value = err.message || 'Error al exportar supervisión pedagógica.'
+  } finally {
+    supervisionExporting.value = false
   }
 }
 

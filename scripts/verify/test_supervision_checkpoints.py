@@ -46,6 +46,32 @@ class TestSupervisionCheckpoints(unittest.TestCase):
         self.assertEqual(cp_map["cp_recon"]["status"], "PASSED")
         self.assertEqual(res["live_hosts_count"], 2)
 
+    def test_export_supervision_report(self):
+        import json
+        from seclab_supervision import export_supervision_report
+
+        (self.eng_dir / "target.yaml").write_text("authorization:\n  allow_passive: true\n")
+        recon_dir = self.eng_dir / "recon"
+        recon_dir.mkdir()
+        (recon_dir / "live_hosts.txt").write_text("10.10.10.1\n")
+
+        # JSON
+        json_str = export_supervision_report(self.eng_dir, format="json")
+        data = json.loads(json_str)
+        self.assertEqual(data["engagement"], "test-eng")
+        self.assertEqual(len(data["checkpoints"]), 4)
+
+        # Markdown
+        md_str = export_supervision_report(self.eng_dir, format="markdown")
+        self.assertIn("# Informe de Supervisión Pedagógica", md_str)
+        self.assertIn("Checkpoints Pedagógicos Formativos", md_str)
+        self.assertIn("Hosts vivos: 1", md_str)
+
+        # Invalid format
+        with self.assertRaises(ValueError):
+            export_supervision_report(self.eng_dir, format="invalid")
+
 
 if __name__ == "__main__":
     unittest.main()
+

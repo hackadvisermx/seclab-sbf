@@ -167,3 +167,53 @@ def evaluate_supervision_checkpoints(engagement_dir: Union[str, pathlib.Path]) -
         "deliverables_count": deliv_count,
         "checkpoints": checkpoints,
     }
+
+
+def export_supervision_markdown(state: Dict[str, Any]) -> str:
+    """Genera informe en Markdown de supervisión pedagógica a partir del diccionario de estado."""
+    eng_name = state.get("engagement") or state.get("engagement_id") or "engagement"
+    stage = state.get("current_stage", "scope")
+    lines = [
+        f"# Informe de Supervisión Pedagógica: {eng_name}",
+        "",
+        f"- **Etapa Actual**: `{stage}`",
+        "",
+        "## 1. Checkpoints Pedagógicos Formativos",
+        "",
+        "| Checkpoint | Etapa | Estado | Evaluación | Guía / Siguiente Acción |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for cp in state.get("checkpoints", []):
+        cid = cp.get("title", cp.get("id"))
+        stg = cp.get("stage", "-")
+        status = cp.get("status", "NOT_STARTED")
+        reason = (cp.get("reason") or "-").replace("|", "\\|")
+        hint = (cp.get("hint") or "-").replace("|", "\\|")
+        lines.append(f"| {cid} | {stg} | {status} | {reason} | {hint} |")
+
+    lines.extend([
+        "",
+        "## 2. Resumen Operacional por Disciplina",
+        "",
+        f"- **Reconocimiento y Sondeo**: Hosts vivos: {state.get('live_hosts_count', 0)} · Subdominios: {state.get('subdomains_count', 0)}",
+        f"- **Hallazgos y Evidencias**: Total hallazgos: {state.get('total_findings', 0)}",
+        f"- **Informe y Entregables**: REPORT.md: {'Presente' if state.get('report_present') else 'Pendiente'} · Entregables exportados: {state.get('deliverables_count', 0)}",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def export_supervision_report(
+    engagement_dir: Union[str, pathlib.Path],
+    format: str = "json",
+) -> str:
+    """Exporta el informe de supervisión pedagógica en formato JSON o Markdown."""
+    state = evaluate_supervision_checkpoints(engagement_dir)
+    fmt = (format or "json").lower()
+    if fmt == "json":
+        return json.dumps(state, indent=2, ensure_ascii=False)
+    elif fmt in ("markdown", "md"):
+        return export_supervision_markdown(state)
+    else:
+        raise ValueError(f"Formato no soportado: '{format}'. Debe ser 'json' o 'markdown'.")
+

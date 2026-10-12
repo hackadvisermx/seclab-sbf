@@ -1,4 +1,5 @@
 import datetime
+import json
 import pathlib
 from typing import Any, Dict, List, Optional
 from app.services.workspace_sync import workspace_service
@@ -183,5 +184,48 @@ class SupervisionService:
             "checkpoints": checkpoints,
         }
 
+    def export_supervision_report(self, eng_id: str, eng_type: str = "engagement", format: str = "json") -> str:
+        """Exporta el informe consolidado de supervisión pedagógica en formato JSON o Markdown."""
+        state = self.get_supervision_state(eng_id, eng_type)
+        fmt = (format or "json").lower()
+        if fmt == "json":
+            return json.dumps(state, indent=2, ensure_ascii=False)
+        elif fmt in ("markdown", "md"):
+            now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            lines = [
+                f"# Informe de Supervisión Pedagógica: {eng_id}",
+                "",
+                f"- **Tipo de Proyecto**: {eng_type}",
+                f"- **Etapa Actual**: `{state.get('current_stage', 'scope')}`",
+                f"- **Fecha de Evaluación**: {now_iso}",
+                "",
+                "## 1. Checkpoints Pedagógicos Formativos",
+                "",
+                "| Checkpoint | Etapa | Estado | Evaluación | Guía / Siguiente Acción |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+            for cp in state.get("checkpoints", []):
+                cid = cp.get("title", cp.get("id"))
+                stage = cp.get("stage", "-")
+                status = cp.get("status", "NOT_STARTED")
+                reason = (cp.get("reason") or "-").replace("|", "\\|")
+                hint = (cp.get("hint") or "-").replace("|", "\\|")
+                lines.append(f"| {cid} | {stage} | {status} | {reason} | {hint} |")
+
+            lines.extend([
+                "",
+                "## 2. Resumen Operacional por Disciplina",
+                "",
+                f"- **Alcance y Autorización**: target.yaml: {'Presente' if state['scope']['target_yaml_present'] else 'Ausente'} · Pasivo: {'Sí' if state['scope']['allow_passive'] else 'No'} · Activo: {'Sí' if state['scope']['allow_active'] else 'No'} · Objetivos en alcance: {state['scope']['targets_in_scope_count']}",
+                f"- **Reconocimiento y Sondeo**: Hosts vivos: {state['recon']['live_hosts_count']} · Subdominios: {state['recon']['subdomains_count']} · Último job: {state['recon']['latest_job_id'] or 'Ninguno'} ({state['recon']['latest_job_status'] or 'N/A'})",
+                f"- **Hallazgos y Evidencias**: Total: {state['findings']['total']} (Confirmados: {state['findings']['proven']}, Candidatos: {state['findings']['candidates']}, Descartados: {state['findings']['disproved']}) · Con evidencia vinculada: {state['findings']['with_evidence']} · Archivos de evidencia: {state['evidence']['total_files']}",
+                f"- **Informe y Entregables**: REPORT.md: {'Presente' if state['report']['report_present'] else 'Pendiente'} · Entregables exportados: {state['report']['deliverables_count']}",
+                "",
+            ])
+            return "\n".join(lines)
+        else:
+            raise ValueError(f"Formato no soportado: '{format}'. Debe ser 'json' o 'markdown'.")
+
 
 supervision_service = SupervisionService()
+

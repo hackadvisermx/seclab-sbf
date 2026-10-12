@@ -67,6 +67,53 @@ class TestSupervisionService(unittest.TestCase):
             self.assertIn("checkpoints", data)
             client.close()
 
+    def test_export_supervision_report(self):
+        import json
+        from app.services.supervision_service import supervision_service
+
+        with patch("app.services.supervision_service.workspace_service", self.ws_service), \
+             patch("app.services.supervision_service.recon_service.store.history", return_value={"jobs": []}):
+            # JSON format
+            json_out = supervision_service.export_supervision_report(self.eng_id, "engagement", format="json")
+            data = json.loads(json_out)
+            self.assertEqual(data["engagement_id"], self.eng_id)
+            self.assertEqual(len(data["checkpoints"]), 4)
+
+            # Markdown format
+            md_out = supervision_service.export_supervision_report(self.eng_id, "engagement", format="markdown")
+            self.assertIn("# Informe de Supervisión Pedagógica", md_out)
+            self.assertIn("Checkpoints Pedagógicos Formativos", md_out)
+            self.assertIn("cp_scope", md_out)
+
+    def test_export_supervision_endpoint(self):
+        from app.main import app
+        from app.api.endpoints import auth
+        from fastapi.testclient import TestClient
+
+        auth._attempts.clear()
+        with patch.object(auth, "TESTER_PASSWORD", "test-pass"), \
+             patch("app.services.supervision_service.workspace_service", self.ws_service), \
+             patch("app.services.supervision_service.recon_service.store.history", return_value={"jobs": []}):
+            client = TestClient(app)
+            login_res = client.post("/api/v1/auth/login", json={"password": "test-pass"})
+            self.assertEqual(login_res.status_code, 200)
+
+            # Export JSON
+            res_json = client.get(f"/api/v1/engagements/{self.eng_id}/supervision/export?format=json&type=engagement")
+            self.assertEqual(res_json.status_code, 200)
+            self.assertEqual(res_json.headers["content-type"], "application/json")
+            self.assertIn(f"supervision_{self.eng_id}.json", res_json.headers["content-disposition"])
+
+            # Export Markdown
+            res_md = client.get(f"/api/v1/engagements/{self.eng_id}/supervision/export?format=markdown&type=engagement")
+            self.assertEqual(res_md.status_code, 200)
+            self.assertIn("text/markdown", res_md.headers["content-type"])
+            self.assertIn(f"supervision_{self.eng_id}.md", res_md.headers["content-disposition"])
+            self.assertIn("Checkpoints Pedagógicos Formativos", res_md.text)
+
+            client.close()
+
 
 if __name__ == "__main__":
     unittest.main()
+

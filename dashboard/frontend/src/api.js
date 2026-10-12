@@ -58,7 +58,17 @@ export const api = {
   },
   getMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
   getEngagementMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
+  exportMetrics: async (id, format = 'json', type = 'engagement') => {
+    const url = `${API_BASE}/engagements/${encodeURIComponent(id)}/metrics/export?type=${encodeURIComponent(type)}&format=${encodeURIComponent(format)}`
+    const res = await fetch(url, { credentials: 'same-origin' })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(err || `Error ${res.status}`)
+    }
+    return res.text()
+  },
   updateNotes: (id, content, type = 'engagement') => request(`/engagements/${id}/notes?type=${type}`, { method: 'PUT', body: JSON.stringify({ content }) }),
+
 
 
   // Alcance

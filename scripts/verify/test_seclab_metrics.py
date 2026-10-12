@@ -157,7 +157,38 @@ class TestSeclabMetrics(unittest.TestCase):
         finally:
             seclab_metrics.yaml = orig_yaml
 
+    def test_export_metrics_report(self):
+        from seclab_metrics import export_metrics_report, export_metrics_markdown
+
+        eng_dir = self.tmp_path / "export_eng"
+        eng_dir.mkdir()
+
+        # target.yaml
+        target_yaml = eng_dir / "target.yaml"
+        target_yaml.write_text(
+            "authorization:\n  allow_passive: true\n  allow_active: false\n"
+            "domains:\n  - target.local\n"
+        )
+
+        # JSON format
+        json_out = export_metrics_report(eng_dir, format="json")
+        data = json.loads(json_out)
+        self.assertEqual(data["engagement_id"], "export_eng")
+        self.assertTrue(data["scope"]["has_scope"])
+
+        # Markdown format
+        md_out = export_metrics_report(eng_dir, format="markdown")
+        self.assertIn("# Informe de Métricas Operacionales de Auditoría: export_eng", md_out)
+        self.assertIn("Puntuación de Madurez de Auditoría", md_out)
+        self.assertIn("Alcance y Autorización", md_out)
+        self.assertIn("Dominios: 1", md_out)
+
+        # Invalid format
+        with self.assertRaises(ValueError):
+            export_metrics_report(eng_dir, format="pdf")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

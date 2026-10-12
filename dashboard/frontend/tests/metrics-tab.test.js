@@ -166,6 +166,24 @@ test('pestaña de métricas operacionales renderiza score de madurez, procedenci
     assert.match(reportCard.textContent, /REPORT\.md/)
     assert.match(reportCard.textContent, /Disponibles/)
     assert.match(reportCard.textContent, /8/)
+
+    // 8. Verificar botones de exportación (V3-07c)
+    const exportMdBtn = root.querySelector('[data-testid="metrics-export-md-button"]')
+    const exportJsonBtn = root.querySelector('[data-testid="metrics-export-json-button"]')
+    assert.ok(exportMdBtn, 'Botón de exportar Markdown debe existir')
+    assert.ok(exportJsonBtn, 'Botón de exportar JSON debe existir')
+
+    let calledExport = false
+    api.exportMetrics = async (id, format, type) => {
+      calledExport = true
+      assert.equal(id, 'test-proj')
+      assert.equal(format, 'markdown')
+      return '# Mock Metrics Export'
+    }
+
+    exportMdBtn.click()
+    await flush()
+    assert.equal(calledExport, true, 'api.exportMetrics debe ser invocado al pulsar el botón')
   } finally {
     cleanup()
   }

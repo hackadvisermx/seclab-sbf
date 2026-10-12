@@ -2331,6 +2331,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(redact_tests))
     artifact_manifest = load_module('artifact_manifest_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_artifact_manifest.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(artifact_manifest))
+    playbook_tests = load_module('playbook_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_seclab_playbook.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(playbook_tests))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

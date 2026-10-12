@@ -1,0 +1,24 @@
+# Playbook determinista: Descubrimiento de Puertos y Servicios
+id: "pb_port_discovery"
+title: "Escaneo y Mapeo de Puertos y Servicios"
+version: "1.0"
+category: "network_audit"
+description: "Identificación de puertos TCP abiertos y detección de versiones de servicios en hosts activos."
+author: "SecLab-SBF"
+
+steps:
+  - id: "step_01_syn_scan"
+    title: "Escaneo TCP SYN Sigiloso"
+    objective: "Escanear los 1000 puertos más comunes para identificar servicios expuestos."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_ips"
+    inputs:
+      - "recon/live_hosts.txt"
+    command_template: "nmap -sS --top-ports 1000 -T3 -oN recon/nmap_ports.txt {targets}"
+    timeout_seconds: 600
+    expected_outputs:
+      - "recon/nmap_ports.txt"
+    success_criteria:
+      file_exists: "recon/nmap_ports.txt"

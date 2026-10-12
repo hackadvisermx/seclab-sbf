@@ -1,0 +1,121 @@
+import pathlib
+from typing import Any, Dict, List, Optional
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
+from app.config import REPO_ROOT, WORKSPACE_DIR
+from seclab_playbook import (
+    load_playbook_file,
+    validate_playbook_schema,
+    validate_playbook_against_scope,
+    PlaybookValidationError,
+)
+
+router = APIRouter(prefix="/playbooks", tags=["Playbooks Deterministas"])
+
+
+def _get_playbook_dirs(target_dir: Optional[pathlib.Path] = None) -> List[pathlib.Path]:
+    dirs = [
+        REPO_ROOT / "workspace-seed" / "playbooks",
+        pathlib.Path("/usr/local/share/seclab/playbooks"),
+        WORKSPACE_DIR / "playbooks",
+    ]
+    if target_dir:
+        dirs.insert(0, target_dir / "playbooks")
+    return [d for d in dirs if d.is_dir()]
+
+
+class PlaybookValidateRequest(BaseModel):
+    playbook: Dict[str, Any]
+    engagement_id: Optional[str] = None
+    type: str = "engagement"
+
+
+@router.get("")
+def list_playbooks(engagement_id: Optional[str] = None, type: str = "engagement"):
+    """Lista todos los playbooks disponibles (semilla de fábrica y personalizados del proyecto)."""
+    target_dir = None
+    if engagement_id:
+        target_dir = WORKSPACE_DIR / ("retos" if type == "reto" else "engagements") / engagement_id
+
+    playbooks = []
+    seen_ids = set()
+
+    for p_dir in _get_playbook_dirs(target_dir):
+        for f in sorted(p_dir.glob("*.yaml")) + sorted(p_dir.glob("*.yml")):
+            if f.is_file():
+                try:
+                    pb = load_playbook_file(f)
+                    pb_id = pb.get("id")
+                    if pb_id and pb_id not in seen_ids:
+                        seen_ids.add(pb_id)
+                        is_valid, _ = validate_playbook_schema(pb)
+                        playbooks.append({
+                            "id": pb_id,
+                            "title": pb.get("title", f.stem),
+                            "version": pb.get("version", "1.0"),
+                            "category": pb.get("category", "general"),
+                            "description": pb.get("description", ""),
+                            "author": pb.get("author", ""),
+                            "steps_count": len(pb.get("steps", [])),
+                            "is_valid": is_valid,
+                            "file_path": str(f.name),
+                        })
+                except Exception:
+                    continue
+
+    return playbooks
+
+
+@router.get("/{playbook_id}")
+def get_playbook(playbook_id: str, engagement_id: Optional[str] = None, type: str = "engagement"):
+    """Devuelve la definición completa de un playbook por su ID."""
+    target_dir = None
+    if engagement_id:
+        target_dir = WORKSPACE_DIR / ("retos" if type == "reto" else "engagements") / engagement_id
+
+    for p_dir in _get_playbook_dirs(target_dir):
+        for f in sorted(p_dir.glob("*.yaml")) + sorted(p_dir.glob("*.yml")):
+            if f.is_file():
+                try:
+                    pb = load_playbook_file(f)
+                    if pb.get("id") == playbook_id:
+                        is_valid, errors = validate_playbook_schema(pb)
+                        return {
+                            "playbook": pb,
+                            "is_valid": is_valid,
+                            "errors": errors,
+                        }
+                except Exception:
+                    continue
+
+    raise HTTPException(status_code=404, detail=f"Playbook '{playbook_id}' no encontrado.")
+
+
+@router.post("/validate")
+def validate_playbook(payload: PlaybookValidateRequest):
+    """Valida un playbook contra el esquema formal y contra el contrato de alcance si se indica un engagement."""
+    is_valid, errors = validate_playbook_schema(payload.playbook)
+    if not is_valid:
+        return {
+            "is_valid": False,
+            "errors": errors,
+            "scope_evaluation": None,
+        }
+
+    scope_eval = None
+    if payload.engagement_id:
+        target_dir = WORKSPACE_DIR / ("retos" if payload.type == "reto" else "engagements") / payload.engagement_id
+        target_yaml = target_dir / "target.yaml"
+        if target_yaml.is_file():
+            scope_eval = validate_playbook_against_scope(payload.playbook, target_yaml)
+        else:
+            scope_eval = {
+                "can_execute": False,
+                "error": f"Falta target.yaml en {payload.engagement_id}",
+            }
+
+    return {
+        "is_valid": True,
+        "errors": [],
+        "scope_evaluation": scope_eval,
+    }

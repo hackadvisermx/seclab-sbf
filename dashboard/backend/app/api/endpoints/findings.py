@@ -1,7 +1,13 @@
+import sys
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Query
+from app.config import SCRIPTS_DIR
 from app.models.schemas import FindingDetail, FindingCreate
 from app.services.workspace_sync import workspace_service, FindingUpdateError
+
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from seclab_sarif import export_findings_to_sarif
 
 router = APIRouter(prefix="/findings", tags=["Hallazgos & Evidencias"])
 
@@ -103,4 +109,14 @@ def get_finding_revisions(eng_id: str, slug: str, type: str = Query("engagement"
         "total_revisions": len(revisions),
         "revisions": revisions,
     }
+
+
+@router.get("/{eng_id}/export/sarif")
+def export_findings_sarif(eng_id: str, type: str = Query("engagement")):
+    """Exporta los hallazgos del engagement en formato OASIS SARIF v2.1.0 estándar."""
+    target_dir = workspace_service._resolve_dir(eng_id, type)
+    if not target_dir.exists():
+        raise HTTPException(status_code=404, detail="Directorio del engagement no encontrado")
+    return export_findings_to_sarif(target_dir)
+
 

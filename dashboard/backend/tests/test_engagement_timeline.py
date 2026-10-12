@@ -134,4 +134,32 @@ class TestEngagementTimeline(unittest.TestCase):
             self.assertEqual(data["engagement_id"], "api-proj")
             self.assertEqual(data["type"], "engagement")
             self.assertIsInstance(data["events"], list)
+
+            # Export JSON
+            res_json = client.get("/api/v1/engagements/api-proj/timeline/export?type=engagement&format=json")
+            self.assertEqual(res_json.status_code, 200)
+            self.assertEqual(res_json.headers.get("content-type"), "application/json")
+            parsed_json = json.loads(res_json.content)
+            self.assertEqual(parsed_json["engagement_id"], "api-proj")
+
+            # Export Markdown
+            res_md = client.get("/api/v1/engagements/api-proj/timeline/export?type=engagement&format=markdown")
+            self.assertEqual(res_md.status_code, 200)
+            self.assertIn("text/markdown", res_md.headers.get("content-type"))
+            self.assertIn("# Línea de Tiempo de Auditoría: api-proj", res_md.text)
+            self.assertIn("target.yaml", res_md.text)
             client.close()
+
+    def test_timeline_export_service(self):
+        self.ws_service.create_engagement("export-proj", domain="export.example")
+        with patch("app.services.timeline_service.workspace_service", self.ws_service):
+            with patch("app.services.recon_service.recon_service.store.history", return_value={"jobs": []}):
+                md_out = self.timeline_service.export_timeline("export-proj", "engagement", format="markdown")
+                self.assertIn("# Línea de Tiempo de Auditoría: export-proj", md_out)
+                self.assertIn("Alcance Autorizado", md_out)
+
+                json_out = self.timeline_service.export_timeline("export-proj", "engagement", format="json")
+                parsed = json.loads(json_out)
+                self.assertEqual(parsed["engagement_id"], "export-proj")
+                self.assertIsInstance(parsed["events"], list)
+

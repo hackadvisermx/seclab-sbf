@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from app.models.schemas import EngagementSummary, EngagementCreate, EngagementTimelineResponse
 from app.services.workspace_sync import workspace_service
 from app.services.recon_service import recon_service
@@ -68,6 +68,28 @@ def update_notes(eng_id: str, payload: dict, type: str = Query("engagement")):
 def get_engagement_timeline(eng_id: str, type: str = Query("engagement")):
     """Obtiene la línea de tiempo unificada cronológica del engagement."""
     return timeline_service.get_timeline(eng_id, type)
+
+
+@router.get("/{eng_id}/timeline/export")
+def export_engagement_timeline(
+    eng_id: str,
+    type: str = Query("engagement"),
+    format: str = Query("json", pattern="^(json|markdown|md)$"),
+):
+    """Exporta la línea de tiempo unificada cronológica en formato JSON o Markdown."""
+    try:
+        content = timeline_service.export_timeline(eng_id, type, format)
+        media_type = "application/json" if format == "json" else "text/markdown; charset=utf-8"
+        ext = "json" if format == "json" else "md"
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="timeline_{eng_id}.{ext}"'},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/{eng_id}/supervision")

@@ -57,6 +57,43 @@
 
     <p v-if="reportError" role="alert" data-testid="report-error" class="text-xs font-mono text-rose-300">{{ reportError }}</p>
 
+    <!-- Franja de Siguiente Decisión Táctica (V3-02p) -->
+    <div
+      v-if="!nextStepLoading && (nextStepData?.next_step?.title || nextStepData?.recommendation)"
+      data-testid="audit-next-banner"
+      class="no-print p-3 rounded-sm bg-slate-950/90 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-3 text-xs font-mono"
+    >
+      <div class="flex items-center gap-2 flex-wrap min-w-0">
+        <span class="px-2 py-0.5 rounded-sm bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1">
+          <span>🎯</span> Siguiente Decisión
+        </span>
+        <span v-if="nextStepData.next_step?.phase" class="text-slate-400 font-semibold">
+          [{{ nextStepData.next_step.phase }}]
+        </span>
+        <span class="text-white font-medium">
+          {{ nextStepData.next_step?.title || nextStepData.recommendation }}
+        </span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          v-if="['scope', 'recon', 'findings', 'evidence', 'report', 'checklist', 'playbooks', 'metrics'].includes(nextStepData.next_step?.action?.view || nextStepData.next_step?.view)"
+          @click="openNextDecision"
+          data-testid="banner-next-action-btn"
+          class="px-3 py-1 rounded-sm bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 font-semibold cursor-pointer transition-colors"
+        >
+          {{ nextStepData.next_step?.action?.label || nextStepData.next_step?.label || 'Continuar' }} →
+        </button>
+        <button
+          @click="loadNextStep()"
+          :disabled="nextStepLoading"
+          title="Actualizar decisión táctica"
+          class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 disabled:opacity-50 cursor-pointer"
+        >
+          🔄
+        </button>
+      </div>
+    </div>
+
     <!-- Navegación por Pestañas Tácticas -->
     <div class="no-print flex items-center space-x-1 border-b border-[#1b253b] text-xs font-mono overflow-x-auto pb-1">
       <button
@@ -861,7 +898,7 @@
           <p v-if="nextStepData.decision_job" class="text-xs text-slate-400 break-all">Job {{ nextStepData.decision_job.run_id }} · {{ reconStageLabel(nextStepData.decision_job.stage) }} · {{ historyStatusLabel(nextStepData.decision_job.status) }}</p>
           <p v-if="nextStepData.outcome_review" class="text-xs text-cyan-300">Revisión del operador registrada: {{ new Date(nextStepData.outcome_review.reviewed_at).toLocaleString() }}</p>
           <p v-if="nextStepData.next_step?.reason" class="text-xs text-slate-300">{{ nextStepData.next_step.reason }}</p>
-          <button v-if="['scope', 'recon'].includes(nextStepData.next_step?.action?.view)" @click="openNextDecision" class="px-3 py-1 rounded-sm border border-cyan-500/40 text-cyan-300">{{ nextStepData.next_step.action.label }}</button>
+          <button v-if="['scope', 'recon', 'findings', 'evidence', 'report', 'checklist', 'playbooks', 'metrics'].includes(nextStepData.next_step?.action?.view || nextStepData.next_step?.view)" @click="openNextDecision" class="px-3 py-1 rounded-sm border border-cyan-500/40 text-cyan-300">{{ nextStepData.next_step?.action?.label || nextStepData.next_step?.label || 'Continuar' }}</button>
           <div v-if="nextStepData.next_step?.command" class="space-y-2 text-xs">
             <p class="text-slate-400">Comando sugerido: revisa el objetivo y el alcance antes de usarlo.</p>
             <code class="block whitespace-pre-wrap break-all text-cyan-300">{{ nextStepData.next_step.command }}</code>
@@ -956,7 +993,7 @@
               <p class="font-bold text-cyan-300">{{ nextStepData.next_step?.title || nextStepData.recommendation || 'No hay una recomendación disponible.' }}</p>
               <p v-if="nextStepData.next_step?.reason" class="text-slate-300">{{ nextStepData.next_step.reason }}</p>
               <p v-if="nextStepData.decision_job" class="text-slate-400 break-all">Job {{ nextStepData.decision_job.run_id }} · {{ reconStageLabel(nextStepData.decision_job.stage) }} · {{ historyStatusLabel(nextStepData.decision_job.status) }}</p>
-              <button v-if="['scope', 'recon'].includes(nextStepData.next_step?.action?.view)" @click="openNextDecision" class="px-3 py-1 rounded-sm border border-cyan-500/40 text-cyan-300">{{ nextStepData.next_step.action.label }}</button>
+              <button v-if="['scope', 'recon', 'findings', 'evidence', 'report', 'checklist', 'playbooks', 'metrics'].includes(nextStepData.next_step?.action?.view || nextStepData.next_step?.view)" @click="openNextDecision" class="px-3 py-1 rounded-sm border border-cyan-500/40 text-cyan-300">{{ nextStepData.next_step?.action?.label || nextStepData.next_step?.label || 'Continuar' }}</button>
               <div v-if="nextStepData.next_step?.command" class="space-y-1 text-slate-300">
                 <p>Comando sugerido: revisa objetivo y alcance antes de usarlo manualmente.</p>
                 <code class="block whitespace-pre-wrap break-all text-cyan-300">{{ nextStepData.next_step.command }}</code>
@@ -3875,9 +3912,14 @@ async function loadNextStepPrompt() {
 }
 
 function openNextDecision() {
-  const view = nextStepData.value.next_step?.action?.view
+  const view = nextStepData.value.next_step?.action?.view || nextStepData.value.next_step?.view
   if (view === 'scope') { activeTab.value = view; loadScope() }
-  if (view === 'recon') { activeTab.value = view; loadReconStatus(); loadReconLog(); loadReconHistory() }
+  else if (view === 'recon') { activeTab.value = view; loadReconStatus(); loadReconLog(); loadReconHistory() }
+  else if (view === 'findings' || view === 'evidence') { activeTab.value = 'findings'; loadFindings() }
+  else if (view === 'report') { activeTab.value = 'report'; loadReport() }
+  else if (view === 'checklist') { activeTab.value = 'checklist'; loadChecklist() }
+  else if (view === 'playbooks') { activeTab.value = 'playbooks'; loadPlaybooks() }
+  else if (view === 'metrics') { activeTab.value = 'metrics'; loadMetrics() }
 }
 
 async function loadNotes() {

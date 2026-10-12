@@ -1523,6 +1523,16 @@
             <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider">
               Artefactos del Laboratorio
             </h2>
+            <button
+              type="button"
+              @click="openArtifactVerificationModal"
+              data-testid="verify-artifacts-btn"
+              class="ml-3 px-2.5 py-1 rounded-sm bg-cyan-800 hover:bg-cyan-700 text-cyan-200 text-xs font-mono font-bold flex items-center space-x-1"
+              title="Verificar integridad criptográfica contra artifact-manifest.json"
+            >
+              <span>🛡️</span>
+              <span>Verificar Integridad</span>
+            </button>
           </div>
 
           <!-- Selector de Subcarpeta -->
@@ -2774,6 +2784,131 @@
         </div>
       </div>
     </div>
+
+    <!-- MODAL VERIFICACIÓN CRIPTOGRÁFICA DE ARTEFACTOS (V3-03aa) -->
+    <div
+      v-if="showArtifactVerificationModal"
+      data-testid="artifact-verification-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto"
+    >
+      <div class="bg-[#0d1322] border border-cyan-500/40 rounded-lg max-w-2xl w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center space-x-2">
+            <span class="text-base">🛡️</span>
+            <h2 class="text-sm font-mono font-bold text-white uppercase tracking-wider">
+              Verificación Criptográfica de Artefactos
+            </h2>
+            <span
+              v-if="artifactVerificationResult"
+              data-testid="artifact-verification-status"
+              class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border"
+              :class="artifactVerificationResult.is_valid ? 'bg-emerald-950/70 text-emerald-400 border-emerald-500/50' : 'bg-rose-950/70 text-rose-400 border-rose-500/50'"
+            >
+              {{ artifactVerificationResult.is_valid ? 'INTEGRIDAD VÁLIDA' : 'INTEGRIDAD COMPROMETIDA' }}
+            </span>
+          </div>
+          <button @click="showArtifactVerificationModal = false" class="text-slate-400 hover:text-white font-mono text-lg">&times;</button>
+        </div>
+
+        <p class="text-xs text-slate-400 font-mono">
+          Comprueba de forma determinista y sin egress cada artefacto contra su hash SHA-256 en artifact-manifest.json, detectando adulteraciones, archivos ausentes y enlaces simbólicos.
+        </p>
+
+        <!-- Loading State -->
+        <div v-if="artifactVerificationLoading" data-testid="artifact-verification-loading" class="text-center py-8 text-slate-400 font-mono text-xs">
+          Verificando integridad criptográfica de artefactos...
+        </div>
+
+        <!-- Error State -->
+        <div v-else-if="artifactVerificationError" data-testid="artifact-verification-error" class="p-3 bg-rose-950/40 border border-rose-800 text-rose-300 rounded text-xs font-mono">
+          {{ artifactVerificationError }}
+        </div>
+
+        <!-- Verification Results -->
+        <div v-else-if="artifactVerificationResult" class="space-y-4 font-mono text-xs">
+          <!-- Métricas Resumen -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div class="p-2.5 bg-slate-950/70 rounded border border-slate-800 text-center">
+              <span class="text-[10px] text-slate-400 block">Total Auditados</span>
+              <span class="text-sm font-bold text-slate-200">{{ artifactVerificationResult.total_artifacts ?? 0 }}</span>
+            </div>
+            <div class="p-2.5 bg-slate-950/70 rounded border border-emerald-900/60 text-center">
+              <span class="text-[10px] text-slate-400 block">Verificados (OK)</span>
+              <span class="text-sm font-bold text-emerald-400">{{ artifactVerificationResult.verified_count ?? 0 }}</span>
+            </div>
+            <div class="p-2.5 bg-slate-950/70 rounded border border-rose-900/60 text-center">
+              <span class="text-[10px] text-slate-400 block">Adulterados</span>
+              <span class="text-sm font-bold text-rose-400">{{ artifactVerificationResult.corrupted_count ?? 0 }}</span>
+            </div>
+            <div class="p-2.5 bg-slate-950/70 rounded border border-amber-900/60 text-center">
+              <span class="text-[10px] text-slate-400 block">Ausentes / Rechazados</span>
+              <span class="text-sm font-bold text-amber-400">{{ (artifactVerificationResult.missing_count ?? 0) + (artifactVerificationResult.rejected_count ?? 0) }}</span>
+            </div>
+          </div>
+
+          <!-- Lista Detallada de Artefactos -->
+          <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+            <div
+              v-for="(item, idx) in artifactVerificationResult.details"
+              :key="item.path || idx"
+              :data-testid="'artifact-verify-row-' + idx"
+              class="p-2.5 bg-slate-900/40 rounded border space-y-1"
+              :class="{
+                'border-emerald-800/50': item.status === 'verified',
+                'border-rose-800/60 bg-rose-950/20': item.status === 'hash_mismatch' || item.status === 'rejected' || item.status === 'symlink_rejected',
+                'border-amber-800/60 bg-amber-950/20': item.status === 'missing'
+              }"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-200 truncate">{{ item.path }}</span>
+                <span
+                  class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border"
+                  :class="{
+                    'bg-emerald-950 text-emerald-400 border-emerald-800': item.status === 'verified',
+                    'bg-rose-950 text-rose-400 border-rose-800': item.status === 'hash_mismatch' || item.status === 'rejected' || item.status === 'symlink_rejected',
+                    'bg-amber-950 text-amber-400 border-amber-800': item.status === 'missing'
+                  }"
+                >
+                  {{ item.status === 'verified' ? 'VÁLIDO' : item.status === 'hash_mismatch' ? 'HASH ADULTERADO' : item.status === 'missing' ? 'AUSENTE' : 'RECHAZADO' }}
+                </span>
+              </div>
+
+              <div class="text-[10px] text-slate-400 space-y-0.5">
+                <div v-if="item.expected_sha256" class="truncate">
+                  Esperado: <code class="text-slate-300">{{ item.expected_sha256 }}</code>
+                </div>
+                <div v-if="item.computed_sha256" class="truncate">
+                  Calculado: <code :class="item.status === 'verified' ? 'text-emerald-300' : 'text-rose-300'">{{ item.computed_sha256 }}</code>
+                </div>
+                <div v-if="item.error" class="text-rose-300 font-bold">
+                  Motivo: {{ item.error }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800 font-mono text-xs">
+          <button
+            type="button"
+            @click="runArtifactVerification"
+            :disabled="artifactVerificationLoading"
+            data-testid="reverify-artifacts-btn"
+            class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center space-x-1"
+          >
+            <span>🔄</span>
+            <span>Re-verificar</span>
+          </button>
+          <button
+            type="button"
+            @click="showArtifactVerificationModal = false"
+            class="px-4 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -2954,6 +3089,33 @@ const expectedArtifactSha = ref(null)
 const expectedArtifactJob = ref(null)
 const artifactReadFailed = ref(false)
 let artifactRequest = 0
+
+// Verificación Criptográfica de Artefactos (V3-03aa)
+const showArtifactVerificationModal = ref(false)
+const artifactVerificationLoading = ref(false)
+const artifactVerificationError = ref('')
+const artifactVerificationResult = ref(null)
+
+async function openArtifactVerificationModal() {
+  showArtifactVerificationModal.value = true
+  await runArtifactVerification()
+}
+
+async function runArtifactVerification() {
+  if (!engId.value) return
+  artifactVerificationLoading.value = true
+  artifactVerificationError.value = ''
+  artifactVerificationResult.value = null
+  try {
+    const res = await api.verifyArtifactManifest(engId.value, null, engType.value)
+    artifactVerificationResult.value = res
+  } catch (err) {
+    artifactVerificationError.value = err.message || 'Error al verificar integridad criptográfica de artefactos.'
+  } finally {
+    artifactVerificationLoading.value = false
+  }
+}
+
 
 const capturedFlagsCount = computed(() => {
   if (flagsData.value.subtype === 'jeopardy') {

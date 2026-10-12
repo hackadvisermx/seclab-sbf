@@ -122,7 +122,7 @@ CORS_ORIGINS: List[str] = [value.strip() for value in os.environ.get(
     "DASHBOARD_CORS_ORIGINS", lab_settings.get("DASHBOARD_CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080"),
 ).split(",") if value.strip()]
 ALLOWED_HOSTS = [value.strip() for value in os.environ.get(
-    "DASHBOARD_ALLOWED_HOSTS", lab_settings.get("DASHBOARD_ALLOWED_HOSTS", "localhost,127.0.0.1"),
+    "DASHBOARD_ALLOWED_HOSTS", lab_settings.get("DASHBOARD_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver"),
 ).split(",") if value.strip()]
 if not CORS_ORIGINS or not ALLOWED_HOSTS or any("*" in value for value in CORS_ORIGINS + ALLOWED_HOSTS):
     raise RuntimeError("El dashboard requiere orígenes y hosts explícitos.")

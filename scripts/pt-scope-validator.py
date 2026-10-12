@@ -24,10 +24,11 @@ from seclab_scope import (ScopeError, normalize_target, is_ip, domain_matches,
 
 # Patrones para extraer objetivos mencionados en texto libre (p. ej. la respuesta
 # de un modelo de lenguaje), usados por la accion "check-text" (backlog A20):
-# URLs completas, direcciones IPv4 sueltas y nombres de host con al menos un punto.
+# URLs completas, direcciones IPv4/IPv6 sueltas y nombres de host con al menos un punto.
 _URL_RE = re.compile(r"https?://[^\s<>\"'\)\]]+", re.IGNORECASE)
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-_HOST_RE = re.compile(r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b")
+_IPV6_RE = re.compile(r"\[([0-9a-fA-F:]+)\]|(?<![0-9a-zA-Z:])([0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{0,4}){1,7}|::|::[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{0,4}){1,6})(?![0-9a-zA-Z:])")
+_HOST_RE = re.compile(r"\b(?:[a-zA-Z0-9\u0080-\uffff](?:[a-zA-Z0-9\u0080-\uffff-]{0,61}[a-zA-Z0-9\u0080-\uffff])?\.)+[a-zA-Z\u0080-\uffff]{2,}\b")
 
 
 def extract_candidate_targets(text: str) -> List[str]:
@@ -52,6 +53,17 @@ def extract_candidate_targets(text: str) -> List[str]:
         if value not in seen:
             seen.add(value)
             candidates.append(value)
+    for match in _IPV6_RE.finditer(remainder):
+        raw_val = match.group(1) or match.group(2)
+        try:
+            addr = ipaddress.ip_address(raw_val)
+            if addr.version == 6:
+                val_str = str(addr)
+                if val_str not in seen:
+                    seen.add(val_str)
+                    candidates.append(val_str)
+        except ValueError:
+            pass
     for match in _HOST_RE.finditer(remainder):
         value = match.group(0).rstrip(".")
         if value in seen:

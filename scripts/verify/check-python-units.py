@@ -2337,6 +2337,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(supervision_tests))
     metrics_tests = load_module('metrics_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_seclab_metrics.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(metrics_tests))
+    scope_matrix_tests = load_module('scope_matrix_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_seclab_scope_matrix.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(scope_matrix_tests))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

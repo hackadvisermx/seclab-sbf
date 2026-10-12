@@ -3,6 +3,7 @@ import ast
 import datetime
 import ipaddress
 import pathlib
+import posixpath
 import re
 import urllib.parse
 
@@ -83,8 +84,13 @@ def initial_scope(target=None):
 
 
 def is_ip(target):
+    if not isinstance(target, str):
+        return False
+    value = target.strip()
+    if value.startswith('[') and value.endswith(']'):
+        value = value[1:-1]
     try:
-        ipaddress.ip_address(target)
+        ipaddress.ip_address(value)
         return True
     except ValueError:
         return False
@@ -96,6 +102,8 @@ def normalize_target(raw_target):
     value = raw_target.strip()
     if not value or any(character.isspace() or ord(character) < 32 for character in value):
         return ''
+    if value.startswith('[') and value.endswith(']'):
+        value = value[1:-1]
     try:
         address = ipaddress.ip_address(value)
         return str(address.ipv4_mapped or address) if address.version == 6 else str(address)
@@ -315,11 +323,25 @@ def endpoint_matches(target, endpoint):
     if not target.lower().startswith(('http://', 'https://')):
         return False
     candidate, rule = urllib.parse.urlsplit(target), urllib.parse.urlsplit(endpoint)
-    if (candidate.scheme.lower(), normalize_target(target), candidate.port or (443 if candidate.scheme.lower() == 'https' else 80)) != (
-            rule.scheme.lower(), normalize_target(endpoint), rule.port or (443 if rule.scheme.lower() == 'https' else 80)):
+    cand_norm_host = normalize_target(candidate.hostname or '')
+    rule_norm_host = normalize_target(rule.hostname or '')
+    if not cand_norm_host or not rule_norm_host:
         return False
-    path = rule.path.rstrip('/')
-    return (candidate.path or '/') == (path or '/') or (candidate.path or '/').startswith(path + '/')
+    cand_scheme = candidate.scheme.lower()
+    rule_scheme = rule.scheme.lower()
+    cand_port = candidate.port or (443 if cand_scheme == 'https' else 80)
+    rule_port = rule.port or (443 if rule_scheme == 'https' else 80)
+    if (cand_scheme, cand_norm_host, cand_port) != (rule_scheme, rule_norm_host, rule_port):
+        return False
+    cand_path = posixpath.normpath(candidate.path or '/')
+    if not cand_path.startswith('/'):
+        cand_path = '/' + cand_path
+    rule_path = posixpath.normpath(rule.path or '/')
+    if not rule_path.startswith('/'):
+        rule_path = '/' + rule_path
+    if rule_path == '/':
+        return True
+    return cand_path == rule_path or cand_path.startswith(rule_path.rstrip('/') + '/')
 
 
 def check_scope(target, scope_data):

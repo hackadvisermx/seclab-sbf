@@ -144,7 +144,26 @@ test('pestaña de supervisión pedagógica renderiza checkpoints formativos y es
 
     // 6. Verificar acciones pendientes
     assert.match(supervisionView.textContent, /Generar paquete de entregables con pt-report pack/)
+
+    // 7. Verificar botones de exportación (V3-06c)
+    const exportMdBtn = root.querySelector('[data-testid="supervision-export-md-button"]')
+    const exportJsonBtn = root.querySelector('[data-testid="supervision-export-json-button"]')
+    assert.ok(exportMdBtn, 'Botón de exportar Markdown debe existir')
+    assert.ok(exportJsonBtn, 'Botón de exportar JSON debe existir')
+
+    let calledExport = false
+    api.exportSupervision = async (id, format, type) => {
+      calledExport = true
+      assert.equal(id, 'test-proj')
+      assert.equal(format, 'markdown')
+      return '# Mock Supervision Export'
+    }
+
+    exportMdBtn.click()
+    await flush()
+    assert.equal(calledExport, true, 'api.exportSupervision debe ser invocado al pulsar el botón')
   } finally {
     cleanup()
   }
 })
+

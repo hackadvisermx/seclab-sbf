@@ -47,6 +47,15 @@ export const api = {
     return res.text()
   },
   getSupervision: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/supervision?type=${encodeURIComponent(type)}`),
+  exportSupervision: async (id, format = 'json', type = 'engagement') => {
+    const url = `${API_BASE}/engagements/${encodeURIComponent(id)}/supervision/export?type=${encodeURIComponent(type)}&format=${encodeURIComponent(format)}`
+    const res = await fetch(url, { credentials: 'same-origin' })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(err || `Error ${res.status}`)
+    }
+    return res.text()
+  },
   getMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
   getEngagementMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
   updateNotes: (id, content, type = 'engagement') => request(`/engagements/${id}/notes?type=${type}`, { method: 'PUT', body: JSON.stringify({ content }) }),

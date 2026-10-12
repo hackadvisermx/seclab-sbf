@@ -103,6 +103,31 @@ def get_engagement_supervision(eng_id: str, type: str = Query("engagement")):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/{eng_id}/supervision/export")
+def export_engagement_supervision(
+    eng_id: str,
+    type: str = Query("engagement"),
+    format: str = Query("json", pattern="^(json|markdown|md)$"),
+):
+    """Exporta el informe consolidado de supervisión pedagógica en formato JSON o Markdown."""
+    try:
+        content = supervision_service.export_supervision_report(eng_id, type, format)
+        media_type = "application/json" if format == "json" else "text/markdown; charset=utf-8"
+        ext = "json" if format == "json" else "md"
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="supervision_{eng_id}.{ext}"'},
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @router.get("/{eng_id}/metrics")
 def get_engagement_metrics(eng_id: str, type: str = Query("engagement")):
     """Obtiene las métricas operacionales locales y avance de calidad de la auditoría."""

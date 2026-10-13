@@ -889,6 +889,251 @@ class TestSeclabPlaybook(unittest.TestCase):
         self.assertFalse(res_run["can_execute"])
         self.assertEqual(res_run["executed_steps_count"], 0)
 
+    def test_b3_literal_targets_mixed_and_unrecognized_formats_blocked(self):
+        """B3: Bloqueo estricto de destinos literales mixtos (host/path, bare IPv6, esquema FTP)."""
+        from seclab_playbook import execute_playbook_step, run_playbook, validate_playbook_against_scope, extract_step_targets
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b3_mixed.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        # Caso 1: host/path mixto (target.local y evil.com/path)
+        step_mixed = {
+            "id": "step_mixed",
+            "title": "Paso mixto con host/path",
+            "objective": "Verificar que evil.com/path sea interceptado",
+            "interaction_type": "active_low",
+            "command_template": "curl https://target.local evil.com/path",
+        }
+        targets_mixed, _ = extract_step_targets(step_mixed, context={"target_yaml_path": target_yaml})
+        self.assertIn("https://target.local", targets_mixed)
+        self.assertTrue(any("evil.com" in t for t in targets_mixed))
+
+        pb_mixed = {
+            "id": "pb_mixed",
+            "title": "Playbook Mixto",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test B3 mixto",
+            "steps": [step_mixed],
+        }
+        val_mixed = validate_playbook_against_scope(pb_mixed, target_yaml)
+        self.assertFalse(val_mixed["can_execute"])
+        self.assertEqual(val_mixed["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("evil.com", val_mixed["steps_evaluation"][0]["reason"])
+
+        step_res_mixed = execute_playbook_step(step_mixed, context={"allow_active": True, "scope_data": scope_data}, dry_run=False)
+        self.assertEqual(step_res_mixed["status"], "BLOCKED")
+        self.assertEqual(step_res_mixed["exit_code"], 126)
+        self.assertIn("evil.com", step_res_mixed["output"])
+
+        # Caso 2: IPv6 sin corchetes no autorizado (2001:db8::bad)
+        step_ipv6 = {
+            "id": "step_ipv6",
+            "title": "Paso con IPv6 sin corchetes",
+            "objective": "Verificar intercepción de IPv6 sin corchetes",
+            "interaction_type": "active_low",
+            "command_template": "nmap target.local 2001:db8::bad",
+        }
+        targets_ipv6, _ = extract_step_targets(step_ipv6, context={"target_yaml_path": target_yaml})
+        self.assertIn("2001:db8::bad", targets_ipv6)
+
+        pb_ipv6 = {
+            "id": "pb_ipv6",
+            "title": "Playbook IPv6",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test B3 IPv6",
+            "steps": [step_ipv6],
+        }
+        val_ipv6 = validate_playbook_against_scope(pb_ipv6, target_yaml)
+        self.assertFalse(val_ipv6["can_execute"])
+        self.assertEqual(val_ipv6["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("2001:db8::bad", val_ipv6["steps_evaluation"][0]["reason"])
+
+        step_res_ipv6 = execute_playbook_step(step_ipv6, context={"allow_active": True, "scope_data": scope_data}, dry_run=False)
+        self.assertEqual(step_res_ipv6["status"], "BLOCKED")
+        self.assertEqual(step_res_ipv6["exit_code"], 126)
+        self.assertIn("2001:db8::bad", step_res_ipv6["output"])
+
+        # Caso 3: Esquema distinto de HTTP/HTTPS (ftp://evil.com)
+        step_ftp = {
+            "id": "step_ftp",
+            "title": "Paso con esquema FTP",
+            "objective": "Verificar intercepción de esquema FTP",
+            "interaction_type": "active_low",
+            "command_template": "wget https://target.local ftp://evil.com",
+        }
+        targets_ftp, _ = extract_step_targets(step_ftp, context={"target_yaml_path": target_yaml})
+        self.assertIn("ftp://evil.com", targets_ftp)
+
+        pb_ftp = {
+            "id": "pb_ftp",
+            "title": "Playbook FTP",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test B3 FTP",
+            "steps": [step_ftp],
+        }
+        val_ftp = validate_playbook_against_scope(pb_ftp, target_yaml)
+        self.assertFalse(val_ftp["can_execute"])
+        self.assertEqual(val_ftp["steps_evaluation"][0]["status"], "BLOCKED")
+
+        step_res_ftp = execute_playbook_step(step_ftp, context={"allow_active": True, "scope_data": scope_data}, dry_run=False)
+        self.assertEqual(step_res_ftp["status"], "BLOCKED")
+        self.assertEqual(step_res_ftp["exit_code"], 126)
+
+    def test_b3_literal_targets_in_scope_with_paths_and_ports_allowed(self):
+        """B3: Destinos literales en alcance con rutas y puertos son autorizados correctamente."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b3_allowed.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        step = {
+            "id": "step_allowed_literals",
+            "title": "Literales autorizados",
+            "objective": "Verificar paso activo con destinos literales en alcance",
+            "interaction_type": "active_low",
+            "command_template": "curl https://target.local/api target.local:443/test",
+        }
+        pb = {
+            "id": "pb_allowed_lit",
+            "title": "Playbook Autorizado",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test B3 permitido",
+            "steps": [step],
+        }
+        val = validate_playbook_against_scope(pb, target_yaml)
+        self.assertTrue(val["can_execute"])
+        self.assertEqual(val["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+    def test_b3_dynamic_shell_substitutions_blocked(self):
+        """B3: Destinos dinámicos no verificables ($VAR, `cmd`, $(cmd)) son bloqueados fail-closed."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b3_dynamic.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        for dynamic_cmd in ("curl $TARGET_HOST", "curl ${EVIL_TARGET}", "curl $(cat hosts.txt)", "curl `cat hosts.txt`"):
+            step = {
+                "id": "step_dyn",
+                "title": "Paso dinámico",
+                "objective": "Test dinámico",
+                "interaction_type": "active_low",
+                "command_template": dynamic_cmd,
+            }
+            pb = {
+                "id": "pb_dyn",
+                "title": "Playbook Dinámico",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Test B3 dinámico",
+                "steps": [step],
+            }
+            val = validate_playbook_against_scope(pb, target_yaml)
+            self.assertFalse(val["can_execute"])
+            self.assertEqual(val["steps_evaluation"][0]["status"], "BLOCKED")
+            self.assertIn("destinos dinámicos", val["steps_evaluation"][0]["reason"])
+
+            step_res = execute_playbook_step(step, context={"allow_active": True, "scope_data": scope_data}, dry_run=False)
+            self.assertEqual(step_res["status"], "BLOCKED")
+            self.assertEqual(step_res["exit_code"], 126)
+            self.assertIn("destinos dinámicos", step_res["output"])
+
+    def test_m4_m5_empty_input_file_blocks_and_differentiates_artifacts(self):
+        """M4/M5: Archivos de objetivos vacíos fallan cerrado y se diferencian de artefactos de entrada."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_m4_m5.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        recon_dir = self.tmp_path / "recon"
+        recon_dir.mkdir(parents=True, exist_ok=True)
+        empty_targets_file = recon_dir / "empty.txt"
+        empty_targets_file.write_text("", encoding="utf-8")
+
+        # 1. Paso activo con lista de objetivos vacía -> BLOCKED tanto estático como real (M4)
+        step_empty_input = {
+            "id": "step_empty_targets",
+            "title": "Paso con archivo vacío",
+            "objective": "Verificar bloqueo de paso activo con archivo de objetivos vacío",
+            "interaction_type": "active_low",
+            "inputs": ["recon/empty.txt"],
+            "command_template": "httpx -l recon/empty.txt",
+        }
+        pb_m4 = {
+            "id": "pb_m4",
+            "title": "Playbook M4",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test M4",
+            "steps": [step_empty_input],
+        }
+        val_m4 = validate_playbook_against_scope(pb_m4, target_yaml)
+        self.assertFalse(val_m4["can_execute"])
+        self.assertEqual(val_m4["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("recon/empty.txt", val_m4["steps_evaluation"][0]["reason"])
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        step_res_m4 = execute_playbook_step(
+            step_empty_input,
+            context={"engagement_dir": str(self.tmp_path), "allow_active": True, "scope_data": scope_data},
+            dry_run=False,
+        )
+        self.assertEqual(step_res_m4["status"], "BLOCKED")
+        self.assertEqual(step_res_m4["exit_code"], 126)
+        self.assertIn("recon/empty.txt", step_res_m4["output"])
+
+        # 2. Paso GraphQL con {domain} y artefacto JSON como input -> AUTHORIZED (M5)
+        # El archivo JSON es un artefacto de salida/dependencia de datos, NO una lista de objetivos.
+        step_graphql_artifact = {
+            "id": "step_graphql_field_probe",
+            "title": "Paso GraphQL con artefacto JSON",
+            "objective": "Verificar que el artefacto JSON no sea tratado como lista de objetivos",
+            "interaction_type": "active_low",
+            "target_selector": "in_scope_domains",
+            "inputs": ["recon/graphql_introspection.json"],
+            "command_template": "curl -s -X POST https://{domain}/graphql -H Content-Type:application/json -o recon/graphql_fields.json",
+        }
+        pb_m5 = {
+            "id": "pb_m5",
+            "title": "Playbook M5 GraphQL",
+            "version": "1.0",
+            "category": "api_audit",
+            "description": "Test M5",
+            "steps": [step_graphql_artifact],
+        }
+        val_m5 = validate_playbook_against_scope(pb_m5, target_yaml, parameters={"domain": "target.local"})
+        self.assertTrue(val_m5["can_execute"])
+        self.assertEqual(val_m5["steps_evaluation"][0]["status"], "AUTHORIZED")
+
 
 if __name__ == "__main__":
     unittest.main()

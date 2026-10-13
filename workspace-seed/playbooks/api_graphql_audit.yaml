@@ -1,0 +1,56 @@
+# Playbook determinista: Auditoría de Seguridad de APIs GraphQL
+id: "pb_api_graphql_audit"
+title: "Auditoría de Seguridad de APIs GraphQL"
+version: "1.0"
+category: "api_audit"
+description: "Evaluación de endpoints GraphQL: introspección de esquema, sugerencias de campos y análisis de profundidad de consultas."
+author: "SecLab-SBF"
+
+steps:
+  - id: "step_01_graphql_introspection"
+    title: "Introspección y Detección de Esquema"
+    objective: "Sondear introspección del esquema GraphQL (__schema) para auditar tipos y estructuras expuestas."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "target.yaml"
+    command_template: "curl -s -X POST https://{domain}/graphql -H Content-Type:application/json -d '{\"query\":\"{__schema{types{name}}}\"}' -o recon/graphql_introspection.json"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/graphql_introspection.json"
+    success_criteria:
+      file_exists: "recon/graphql_introspection.json"
+
+  - id: "step_02_field_suggestion_probing"
+    title: "Detección de Sugerencias y Fuzzing de Campos"
+    objective: "Verificar si la API expone sugerencias de campos ('Did you mean...?') ante consultas con errores sintácticos."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "recon/graphql_introspection.json"
+    command_template: "curl -s -X POST https://{domain}/graphql -H Content-Type:application/json -d '{\"query\":\"{__schema{queryType{fields{name}}}}\"}' -o recon/graphql_fields.json"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/graphql_fields.json"
+    success_criteria:
+      file_exists: "recon/graphql_fields.json"
+
+  - id: "step_03_query_depth_check"
+    title: "Sondeo de Profundidad y Consultas Circulares"
+    objective: "Comprobar si el motor GraphQL impone límites de profundidad o complejidad en consultas recursivas."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "recon/graphql_fields.json"
+    command_template: "curl -s -X POST https://{domain}/graphql -H Content-Type:application/json -d '{\"query\":\"{__typename}\"}' -o recon/graphql_depth.json"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/graphql_depth.json"
+    success_criteria:
+      file_exists: "recon/graphql_depth.json"

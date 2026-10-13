@@ -1,0 +1,56 @@
+# Playbook determinista: Auditoría de Seguridad de Endpoints OAuth2 y Tokens JWT
+id: "pb_oauth_jwt_audit"
+title: "Auditoría de Seguridad de Endpoints OAuth2 y Tokens JWT"
+version: "1.0"
+category: "api_audit"
+description: "Descubrimiento de metadatos OpenID Connect / OAuth2, inspección de endpoints JWKS y validación de endpoints de tokens."
+author: "SecLab-SBF"
+
+steps:
+  - id: "step_01_openid_discovery"
+    title: "Descubrimiento de Metadatos OpenID Connect y OAuth2"
+    objective: "Localizar endpoints de configuración pública (.well-known/openid-configuration o .well-known/oauth-authorization-server)."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "target.yaml"
+    command_template: "curl -s https://{domain}/.well-known/openid-configuration -o recon/openid_config.json"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/openid_config.json"
+    success_criteria:
+      file_exists: "recon/openid_config.json"
+
+  - id: "step_02_jwks_inspection"
+    title: "Inspección de Claves Públicas JWKS"
+    objective: "Recuperar el conjunto de claves JSON Web Key Set (.well-known/jwks.json) para analizar algoritmos y rotación."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "recon/openid_config.json"
+    command_template: "curl -s https://{domain}/.well-known/jwks.json -o recon/jwks.json"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/jwks.json"
+    success_criteria:
+      file_exists: "recon/jwks.json"
+
+  - id: "step_03_token_endpoint_probe"
+    title: "Sondeo de Seguridad en Endpoint de Emisión de Tokens"
+    objective: "Verificar respuestas del endpoint de tokens ante peticiones sin credenciales para auditar códigos de error e información revelada."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_domains"
+    inputs:
+      - "recon/openid_config.json"
+    command_template: "curl -s -X POST https://{domain}/oauth/token -H Content-Type:application/x-www-form-urlencoded -d grant_type=client_credentials -o recon/oauth_token_probe.json"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/oauth_token_probe.json"
+    success_criteria:
+      file_exists: "recon/oauth_token_probe.json"

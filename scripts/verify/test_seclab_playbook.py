@@ -19,6 +19,21 @@ from seclab_playbook import (
 )
 
 
+DEFAULT_SCOPE_YAML = (
+    "scope:\n"
+    "  in_scope:\n"
+    "    domains: ['target.local']\n"
+    "    ips: ['127.0.0.1']\n"
+    "    cidrs: []\n"
+    "    endpoints: []\n"
+    "  out_of_scope:\n"
+    "    domains: []\n"
+    "    ips: []\n"
+    "    cidrs: []\n"
+    "    endpoints: []\n"
+)
+
+
 class TestSeclabPlaybook(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -90,7 +105,7 @@ class TestSeclabPlaybook(unittest.TestCase):
     def test_scope_validation_allows_authorized_steps(self):
         from authorization_fixture import AUTHORIZATION_YAML
         target_yaml = self.tmp_path / "target.yaml"
-        target_yaml.write_text(AUTHORIZATION_YAML)
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
         res = validate_playbook_against_scope(self.valid_playbook, target_yaml)
         self.assertTrue(res["can_execute"])
         self.assertEqual(res["blocked_steps_count"], 0)
@@ -101,7 +116,7 @@ class TestSeclabPlaybook(unittest.TestCase):
         from authorization_fixture import AUTHORIZATION_YAML
         target_yaml = self.tmp_path / "target.yaml"
         target_yaml.write_text(
-            AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false")
+            DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false")
         )
         res = validate_playbook_against_scope(self.valid_playbook, target_yaml)
         self.assertFalse(res["can_execute"])
@@ -323,6 +338,7 @@ class TestSeclabPlaybook(unittest.TestCase):
         from seclab_playbook import validate_playbook_against_scope
         target_yaml = self.tmp_path / "target_expired.yaml"
         target_yaml.write_text(
+            DEFAULT_SCOPE_YAML +
             "authorization:\n"
             "  reference: 'EXP-123'\n"
             "  valid_from: '2026-01-01T00:00:00.000Z'\n"
@@ -345,6 +361,7 @@ class TestSeclabPlaybook(unittest.TestCase):
         from seclab_playbook import validate_playbook_against_scope
         target_yaml = self.tmp_path / "target_valid.yaml"
         target_yaml.write_text(
+            DEFAULT_SCOPE_YAML +
             "authorization:\n"
             "  reference: 'VAL-456'\n"
             "  valid_from: '2026-10-01T00:00:00.000Z'\n"
@@ -442,6 +459,7 @@ class TestSeclabPlaybook(unittest.TestCase):
         # target.yaml con allow_active: true pero sin reference, valid_from ni valid_until
         target_yaml = self.tmp_path / "target_incomplete.yaml"
         target_yaml.write_text(
+            DEFAULT_SCOPE_YAML +
             "authorization:\n"
             "  allow_passive: true\n"
             "  allow_active: true\n"
@@ -593,6 +611,146 @@ class TestSeclabPlaybook(unittest.TestCase):
         )
         self.assertEqual(res_exec["status"], "BLOCKED")
         self.assertEqual(res_exec["exit_code"], 126)
+
+
+    def test_valid_auth_with_missing_scope_blocks_real_run_and_steps(self):
+        from seclab_playbook import validate_playbook_against_scope, run_playbook, execute_playbook_step
+        target_yaml = self.tmp_path / "target_valid_auth_no_scope.yaml"
+        # Autorización 100% válida pero sin sección scope:
+        target_yaml.write_text(
+            "authorization:\n"
+            "  reference: 'REF-2026-CANONICAL'\n"
+            "  valid_from: '2020-01-01T00:00:00Z'\n"
+            "  valid_until: '2030-01-01T00:00:00Z'\n"
+            "  allow_passive: true\n"
+            "  allow_active: true\n",
+            encoding="utf-8",
+        )
+
+        # 1. validate_playbook_against_scope debe fallar cerrado
+        res_val = validate_playbook_against_scope(self.valid_playbook, target_yaml)
+        self.assertFalse(res_val["can_execute"])
+        self.assertEqual(res_val["blocked_steps_count"], 2)
+        self.assertIsNone(res_val["scope_data"])
+        self.assertIn("scope", res_val["scope_error"].lower())
+        for s in res_val["steps_evaluation"]:
+            self.assertEqual(s["status"], "BLOCKED")
+
+        # 2. run_playbook en ejecución real con comando inocuo sin placeholders debe bloquearse
+        pb_innocuous = {
+            "id": "pb_innocuous",
+            "title": "Comando Inocuo",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Comando sin destinos explícitos",
+            "steps": [
+                {
+                    "id": "step_01_cmd",
+                    "title": "Print Execution",
+                    "objective": "Verificar ejecución inocua",
+                    "interaction_type": "active_low",
+                    "command_template": "printf 'EXECUTED'",
+                }
+            ],
+        }
+        res_run = run_playbook(pb_innocuous, target_yaml_path=target_yaml, dry_run=False)
+        self.assertEqual(res_run["status"], "BLOCKED")
+        self.assertFalse(res_run["can_execute"])
+        self.assertEqual(res_run["executed_steps_count"], 0)
+        self.assertEqual(res_run["steps_results"], [])
+
+        # 3. execute_playbook_step con dry_run=False debe bloquearse
+        res_exec = execute_playbook_step(
+            step=pb_innocuous["steps"][0],
+            context={"target_yaml_path": target_yaml, "allow_active": True, "scope_data": None},
+            dry_run=False,
+        )
+        self.assertEqual(res_exec["status"], "BLOCKED")
+        self.assertEqual(res_exec["exit_code"], 126)
+        self.assertIn("alcance", res_exec["output"].lower())
+
+    def test_valid_auth_with_malformed_scope_blocks_real_run_and_steps(self):
+        from seclab_playbook import validate_playbook_against_scope, run_playbook, execute_playbook_step
+        target_yaml = self.tmp_path / "target_malformed_scope.yaml"
+        # Autorización válida pero scope malformado (scope es string en vez de dict)
+        target_yaml.write_text(
+            "scope: 'invalido_no_es_objeto'\n"
+            "authorization:\n"
+            "  reference: 'REF-2026-MALFORMED'\n"
+            "  valid_from: '2020-01-01T00:00:00Z'\n"
+            "  valid_until: '2030-01-01T00:00:00Z'\n"
+            "  allow_passive: true\n"
+            "  allow_active: true\n",
+            encoding="utf-8",
+        )
+
+        res_val = validate_playbook_against_scope(self.valid_playbook, target_yaml)
+        self.assertFalse(res_val["can_execute"])
+        self.assertEqual(res_val["blocked_steps_count"], 2)
+        self.assertIsNone(res_val["scope_data"])
+
+        pb_simple = {
+            "id": "pb_simple",
+            "title": "Simple",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test",
+            "steps": [
+                {
+                    "id": "step_01_hello",
+                    "title": "Step 1",
+                    "objective": "Objetivo de prueba",
+                    "interaction_type": "active_low",
+                    "command_template": "echo hello",
+                }
+            ],
+        }
+        res_run = run_playbook(pb_simple, target_yaml_path=target_yaml, dry_run=False)
+        self.assertEqual(res_run["status"], "BLOCKED")
+        self.assertFalse(res_run["can_execute"])
+        self.assertEqual(res_run["executed_steps_count"], 0)
+
+        res_step = execute_playbook_step(
+            step=pb_simple["steps"][0],
+            context={"target_yaml_path": target_yaml, "allow_active": True, "scope_data": {"scope": "invalido"}},
+            dry_run=False,
+        )
+        self.assertEqual(res_step["status"], "BLOCKED")
+        self.assertEqual(res_step["exit_code"], 126)
+
+    def test_target_selector_without_resolvable_targets_blocks_real_run(self):
+        from seclab_playbook import execute_playbook_step
+        step = {
+            "id": "step_probe_empty",
+            "title": "Sondeo Sin Destinos",
+            "interaction_type": "active_low",
+            "target_selector": "in_scope_domains",
+            "command_template": "curl https://example.local",
+        }
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": [], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        # En ejecución real, si requiere target_selector y no hay candidatos resolubles, debe bloquearse
+        res = execute_playbook_step(
+            step=step,
+            context={"parameters": {}, "allow_active": True, "scope_data": scope_data},
+            dry_run=False,
+        )
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(res["exit_code"], 126)
+        self.assertIn("in_scope_domains", res["output"])
+
+        # En dry-run sí debe permitirse la simulación
+        res_dry = execute_playbook_step(
+            step=step,
+            context={"parameters": {}, "allow_active": True, "scope_data": scope_data},
+            dry_run=True,
+        )
+        self.assertEqual(res_dry["status"], "SIMULATED")
+        self.assertEqual(res_dry["exit_code"], 0)
 
 
 if __name__ == "__main__":

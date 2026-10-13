@@ -252,12 +252,12 @@ def extract_step_targets(
     dry_run: bool = True,
 ) -> Tuple[List[str], Optional[str]]:
     """Extrae de manera exhaustiva todos los destinos que consumirá un paso.
-    
+
     Inspecciona:
     1. Placeholders en command_template que provienen de parameters (excluyendo flags operacionales).
     2. Parámetros provistos con nombres canónicos de destino (target, domain, endpoint, etc.).
     3. Archivos referenciados por target_selector o inputs (ej. recon/subdomains.txt).
-    
+
     Retorna una tupla (targets_list, missing_file_error).
     """
     ctx = context or {}
@@ -362,34 +362,63 @@ def validate_playbook_against_scope(
     auth_config = {}
     parsed: Dict[str, Any] = {}
     content = cfg_path.read_text(encoding="utf-8")
+    scope_valid = True
+    scope_error_msg = None
+
     try:
-        from seclab_scope import load_target_yaml
-        parsed = load_target_yaml(cfg_path)
-        if isinstance(parsed, dict):
-            auth_config = parsed.get("authorization", {})
-    except Exception:
+        from seclab_scope import load_target_yaml, ScopeError
+        try:
+            parsed = load_target_yaml(cfg_path)
+            if not isinstance(parsed, dict) or not isinstance(parsed.get("scope"), dict):
+                scope_valid = False
+                scope_error_msg = "El contrato de alcance requiere un objeto 'scope' válido."
+            else:
+                auth_config = parsed.get("authorization", {})
+        except ScopeError as se:
+            scope_valid = False
+            scope_error_msg = str(se)
+    except ImportError:
+        # Fallback solo si el módulo seclab_scope no puede ser importado
         if yaml is not None:
             try:
                 parsed = yaml.safe_load(content) or {}
-                if isinstance(parsed, dict):
+                if isinstance(parsed, dict) and isinstance(parsed.get("scope"), dict):
                     auth_config = parsed.get("authorization", {})
-            except Exception:
-                pass
+                else:
+                    scope_valid = False
+                    scope_error_msg = "El contrato de alcance requiere un objeto 'scope' válido."
+            except Exception as e:
+                scope_valid = False
+                scope_error_msg = f"Error al parsear target.yaml: {e}"
         else:
-            # Extracción básica de expresiones clave si PyYAML no está presente
-            for line in content.splitlines():
-                line = line.strip()
-                if line.startswith("allow_active:"):
-                    auth_config["allow_active"] = "true" in line.lower()
-                elif line.startswith("allow_passive:"):
-                    auth_config["allow_passive"] = "true" in line.lower()
-                elif line.startswith("valid_from:"):
-                    auth_config["valid_from"] = line.split(":", 1)[1].strip().strip("'\"")
-                elif line.startswith("valid_until:"):
-                    auth_config["valid_until"] = line.split(":", 1)[1].strip().strip("'\"")
-                elif line.startswith("reference:"):
-                    auth_config["reference"] = line.split(":", 1)[1].strip().strip("'\"")
-            parsed = {"authorization": auth_config}
+            scope_valid = False
+            scope_error_msg = "No se puede validar el alcance sin el módulo seclab_scope o PyYAML."
+
+    if not scope_valid:
+        steps_eval: List[Dict[str, Any]] = []
+        block_msg = f"Acción bloqueada: target.yaml no contiene un contrato de alcance válido ({scope_error_msg})."
+        for step in playbook["steps"]:
+            steps_eval.append({
+                "step_id": step.get("id"),
+                "title": step.get("title", step.get("id")),
+                "interaction_type": step.get("interaction_type"),
+                "status": "BLOCKED",
+                "reason": block_msg,
+            })
+        return {
+            "playbook_id": playbook.get("id"),
+            "title": playbook.get("title"),
+            "can_execute": False,
+            "total_steps": len(playbook["steps"]),
+            "blocked_steps_count": len(playbook["steps"]),
+            "authorization_state": {
+                "allow_passive": False,
+                "allow_active": False,
+            },
+            "scope_data": None,
+            "scope_error": block_msg,
+            "steps_evaluation": steps_eval,
+        }
 
     allow_passive = bool(auth_config.get("allow_passive", False))
     allow_active = bool(auth_config.get("allow_active", False))
@@ -462,7 +491,18 @@ def validate_playbook_against_scope(
                 },
                 dry_run=True,
             )
-            if check_scope is not None and isinstance(parsed, dict) and step_targets:
+            target_selector = step.get("target_selector")
+            if step_missing_err:
+                status = "BLOCKED"
+                reason = f"Error en archivos de objetivos: {step_missing_err}"
+                can_execute = False
+                blocked_count += 1
+            elif target_selector in ("in_scope_domains", "in_scope_ips") and not step_targets:
+                status = "BLOCKED"
+                reason = f"El paso requiere un selector de objetivos '{target_selector}' pero no se resolvieron destinos en alcance."
+                can_execute = False
+                blocked_count += 1
+            elif check_scope is not None and isinstance(parsed, dict) and step_targets:
                 for target_val in step_targets:
                     try:
                         verdict, v_reason = check_scope(target_val, parsed)
@@ -539,8 +579,22 @@ def execute_playbook_step(
     timeout = step.get("timeout_seconds", 300)
     expected_outputs = step.get("expected_outputs", [])
 
-    # B1: En ejecución real, se exige que las interacciones estén explícitamente autorizadas (fail-closed)
+    # B1 & B3: En ejecución real, se exige un contrato canónico de alcance (scope en target.yaml) y permisos explícitos (fail-closed)
     if not dry_run:
+        if not scope_data or not isinstance(scope_data, dict) or not isinstance(scope_data.get("scope"), dict):
+            return {
+                "step_id": step_id,
+                "title": title,
+                "interaction_type": itype,
+                "status": "BLOCKED",
+                "command": cmd_tpl,
+                "exit_code": 126,
+                "output": "Bloqueado: Se requiere un contrato de alcance válido (scope en target.yaml) para la ejecución real.",
+                "expected_outputs": expected_outputs,
+                "stop_condition_met": True,
+                "is_simulated": False,
+            }
+
         if itype in ("active_low", "active_high") and not allow_active:
             return {
                 "step_id": step_id,
@@ -662,7 +716,7 @@ def execute_playbook_step(
                     "stop_condition_met": True,
                     "is_simulated": dry_run,
                 }
-    elif not dry_run and target_selector in ("in_scope_domains", "in_scope_ips") and not scope_data:
+    elif not dry_run and target_selector in ("in_scope_domains", "in_scope_ips") and not target_candidates:
         return {
             "step_id": step_id,
             "title": title,
@@ -670,7 +724,7 @@ def execute_playbook_step(
             "status": "BLOCKED",
             "command": cmd_tpl,
             "exit_code": 126,
-            "output": "Bloqueado: Se requiere un contrato de alcance (target.yaml) para validar el selector de objetivos.",
+            "output": f"Bloqueado: El paso requiere el selector '{target_selector}' pero no se encontraron destinos en alcance.",
             "expected_outputs": expected_outputs,
             "stop_condition_met": True,
             "is_simulated": False,
@@ -785,7 +839,7 @@ def run_playbook(
                 "title": playbook_data.get("title"),
                 "status": "BLOCKED",
                 "can_execute": False,
-                "reason": "El playbook contiene pasos activos o no autorizados por target.yaml.",
+                "reason": scope_eval.get("scope_error") or "El playbook contiene pasos activos o no autorizados por target.yaml.",
                 "total_steps": len(playbook_data.get("steps", [])),
                 "executed_steps_count": 0,
                 "dry_run": dry_run,

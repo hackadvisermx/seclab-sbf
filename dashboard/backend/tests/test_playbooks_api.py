@@ -233,6 +233,63 @@ class TestPlaybooksAPI(unittest.TestCase):
             self.assertEqual(res_incomp.json()["status"], "BLOCKED")
             self.assertFalse(res_incomp.json()["can_execute"])
 
+            # B3: Autorización válida pero sin sección scope bloquea ejecución real (/run y /step/run)
+            target_yaml.write_text(
+                "authorization:\n"
+                "  reference: 'AUT-VALID'\n"
+                "  valid_from: '2026-10-01T00:00:00.000Z'\n"
+                "  valid_until: '2026-10-31T23:59:59.000Z'\n"
+                "  allow_passive: true\n"
+                "  allow_active: true\n"
+            )
+            res_no_scope_run = client.post(
+                "/api/v1/playbooks/pb_web_recon/run",
+                json={
+                    "engagement_id": "test-eng",
+                    "parameters": {"domain": "target.local"},
+                    "dry_run": False,
+                },
+            )
+            self.assertEqual(res_no_scope_run.status_code, 200)
+            self.assertEqual(res_no_scope_run.json()["status"], "BLOCKED")
+            self.assertFalse(res_no_scope_run.json()["can_execute"])
+
+            res_no_scope_step = client.post(
+                "/api/v1/playbooks/pb_web_recon/step/run",
+                json={
+                    "engagement_id": "test-eng",
+                    "step_id": "step_01_subdomain_discovery",
+                    "parameters": {"domain": "target.local"},
+                    "dry_run": False,
+                },
+            )
+            self.assertEqual(res_no_scope_step.status_code, 200)
+            step_blocked = res_no_scope_step.json()["step_result"]
+            self.assertEqual(step_blocked["status"], "BLOCKED")
+            self.assertEqual(step_blocked["exit_code"], 126)
+
+            # B3: Autorización válida pero scope malformado bloquea ejecución real
+            target_yaml.write_text(
+                "scope: 'not-a-valid-dict'\n"
+                "authorization:\n"
+                "  reference: 'AUT-VALID'\n"
+                "  valid_from: '2026-10-01T00:00:00.000Z'\n"
+                "  valid_until: '2026-10-31T23:59:59.000Z'\n"
+                "  allow_passive: true\n"
+                "  allow_active: true\n"
+            )
+            res_malformed_run = client.post(
+                "/api/v1/playbooks/pb_web_recon/run",
+                json={
+                    "engagement_id": "test-eng",
+                    "parameters": {"domain": "target.local"},
+                    "dry_run": False,
+                },
+            )
+            self.assertEqual(res_malformed_run.status_code, 200)
+            self.assertEqual(res_malformed_run.json()["status"], "BLOCKED")
+            self.assertFalse(res_malformed_run.json()["can_execute"])
+
             client.close()
 
 

@@ -8,7 +8,9 @@ import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "verify"))
 
+from authorization_fixture import AUTHORIZATION_YAML
 from seclab_playbook import (
     validate_playbook_schema,
     validate_playbook_against_scope,
@@ -86,10 +88,9 @@ class TestSeclabPlaybook(unittest.TestCase):
         self.assertTrue(any("interaction_type" in err for err in errors))
 
     def test_scope_validation_allows_authorized_steps(self):
+        from authorization_fixture import AUTHORIZATION_YAML
         target_yaml = self.tmp_path / "target.yaml"
-        target_yaml.write_text(
-            "authorization:\n  allow_passive: true\n  allow_active: true\n"
-        )
+        target_yaml.write_text(AUTHORIZATION_YAML)
         res = validate_playbook_against_scope(self.valid_playbook, target_yaml)
         self.assertTrue(res["can_execute"])
         self.assertEqual(res["blocked_steps_count"], 0)
@@ -97,9 +98,10 @@ class TestSeclabPlaybook(unittest.TestCase):
             self.assertEqual(s["status"], "AUTHORIZED")
 
     def test_scope_validation_blocks_active_when_disallowed(self):
+        from authorization_fixture import AUTHORIZATION_YAML
         target_yaml = self.tmp_path / "target.yaml"
         target_yaml.write_text(
-            "authorization:\n  allow_passive: true\n  allow_active: false\n"
+            AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false")
         )
         res = validate_playbook_against_scope(self.valid_playbook, target_yaml)
         self.assertFalse(res["can_execute"])
@@ -188,7 +190,11 @@ class TestSeclabPlaybook(unittest.TestCase):
     def test_run_playbook_full_dry_run(self):
         from seclab_playbook import run_playbook
         target_yaml = self.tmp_path / "target.yaml"
-        target_yaml.write_text("authorization:\n  allow_passive: true\n  allow_active: true\n")
+        target_yaml.write_text(
+            "scope:\n  in_scope:\n    ips: ['127.0.0.1']\n    domains: []\n    cidrs: []\n    endpoints: []\n"
+            "  out_of_scope:\n    ips: []\n    domains: []\n    cidrs: []\n    endpoints: []\n"
+            + AUTHORIZATION_YAML
+        )
         res = run_playbook(
             self.valid_playbook,
             target_yaml_path=target_yaml,
@@ -204,7 +210,11 @@ class TestSeclabPlaybook(unittest.TestCase):
     def test_run_playbook_stops_on_blocked_step(self):
         from seclab_playbook import run_playbook
         target_yaml = self.tmp_path / "target.yaml"
-        target_yaml.write_text("authorization:\n  allow_passive: true\n  allow_active: false\n")
+        target_yaml.write_text(
+            "scope:\n  in_scope:\n    ips: ['127.0.0.1']\n    domains: []\n    cidrs: []\n    endpoints: []\n"
+            "  out_of_scope:\n    ips: []\n    domains: []\n    cidrs: []\n    endpoints: []\n"
+            + AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false")
+        )
         res = run_playbook(
             self.valid_playbook,
             target_yaml_path=target_yaml,
@@ -426,6 +436,163 @@ class TestSeclabPlaybook(unittest.TestCase):
         self.assertEqual(res["status"], "BLOCKED")
         self.assertEqual(res["exit_code"], 126)
         self.assertTrue(res["stop_condition_met"])
+
+    def test_incomplete_authorization_missing_reference_or_dates_blocks_real_run(self):
+        from seclab_playbook import run_playbook, validate_playbook_against_scope
+        # target.yaml con allow_active: true pero sin reference, valid_from ni valid_until
+        target_yaml = self.tmp_path / "target_incomplete.yaml"
+        target_yaml.write_text(
+            "authorization:\n"
+            "  allow_passive: true\n"
+            "  allow_active: true\n"
+        )
+        res_val = validate_playbook_against_scope(self.valid_playbook, target_yaml)
+        self.assertFalse(res_val["can_execute"])
+        self.assertFalse(res_val["authorization_state"]["allow_active"])
+        self.assertFalse(res_val["authorization_state"]["allow_passive"])
+        for s in res_val["steps_evaluation"]:
+            self.assertEqual(s["status"], "BLOCKED")
+            self.assertIn("referencia, inicio y fin de autorización", s["reason"])
+
+        # En ejecución real, run_playbook debe quedar BLOCKED con 0 pasos ejecutados
+        pb_simple = {
+            "id": "pb_test_exec",
+            "title": "Prueba Inocua",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test",
+            "steps": [
+                {
+                    "id": "step_cmd",
+                    "title": "Cmd",
+                    "objective": "Test",
+                    "interaction_type": "active_low",
+                    "command_template": "printf 'EXECUTED'",
+                }
+            ],
+        }
+        res_run = run_playbook(pb_simple, target_yaml_path=target_yaml, dry_run=False)
+        self.assertEqual(res_run["status"], "BLOCKED")
+        self.assertFalse(res_run["can_execute"])
+        self.assertEqual(res_run["executed_steps_count"], 0)
+
+    def test_target_selector_with_arbitrary_placeholder_endpoint_blocked(self):
+        from seclab_playbook import execute_playbook_step
+        step = {
+            "id": "step_endpoint_probe",
+            "title": "Sondeo Endpoint",
+            "interaction_type": "active_low",
+            "target_selector": "in_scope_domains",
+            "command_template": "curl -s https://{endpoint}/api",
+        }
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": [], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        res = execute_playbook_step(
+            step=step,
+            context={
+                "parameters": {"endpoint": "evil.com"},
+                "allow_active": True,
+                "scope_data": scope_data,
+            },
+            dry_run=False,
+        )
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(res["exit_code"], 126)
+        self.assertTrue(res["stop_condition_met"])
+        self.assertIn("evil.com", res["output"])
+        self.assertIn("Scope Guard", res["output"])
+
+    def test_file_based_target_selector_blocks_when_file_contains_out_of_scope_destination(self):
+        from seclab_playbook import execute_playbook_step
+        recon_dir = self.tmp_path / "recon"
+        recon_dir.mkdir(parents=True, exist_ok=True)
+        subdomains_file = recon_dir / "subdomains.txt"
+        subdomains_file.write_text("sub1.target.local\nevil.com\n", encoding="utf-8")
+
+        step = {
+            "id": "step_probing",
+            "title": "Sondeo de subdominios",
+            "interaction_type": "active_low",
+            "target_selector": "recon/subdomains.txt",
+            "inputs": ["recon/subdomains.txt"],
+            "command_template": "httpx -l recon/subdomains.txt",
+        }
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local", "*.target.local"], "ips": [], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        res = execute_playbook_step(
+            step=step,
+            context={
+                "engagement_dir": str(self.tmp_path),
+                "allow_active": True,
+                "scope_data": scope_data,
+            },
+            dry_run=False,
+        )
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(res["exit_code"], 126)
+        self.assertIn("evil.com", res["output"])
+        self.assertIn("Scope Guard", res["output"])
+
+    def test_file_based_target_selector_blocks_when_file_is_missing_in_real_run(self):
+        from seclab_playbook import execute_playbook_step
+        step = {
+            "id": "step_probing_missing",
+            "title": "Sondeo con archivo faltante",
+            "interaction_type": "active_low",
+            "target_selector": "recon/nonexistent.txt",
+            "inputs": ["recon/nonexistent.txt"],
+            "command_template": "httpx -l recon/nonexistent.txt",
+        }
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": [], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        res = execute_playbook_step(
+            step=step,
+            context={
+                "engagement_dir": str(self.tmp_path),
+                "allow_active": True,
+                "scope_data": scope_data,
+            },
+            dry_run=False,
+        )
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(res["exit_code"], 126)
+        self.assertIn("recon/nonexistent.txt", res["output"])
+
+    def test_missing_scope_section_in_target_yaml_handled_gracefully(self):
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        target_yaml = self.tmp_path / "target_no_scope.yaml"
+        target_yaml.write_text("engagement:\n  name: Test\n", encoding="utf-8")
+
+        res_val = validate_playbook_against_scope(self.valid_playbook, target_yaml)
+        self.assertFalse(res_val["can_execute"])
+        self.assertEqual(res_val["blocked_steps_count"], 2)
+
+        # execute_playbook_step con target pero scope_data inválido
+        step = {
+            "id": "step_test",
+            "title": "Test",
+            "interaction_type": "active_low",
+            "command_template": "curl {endpoint}",
+        }
+        res_exec = execute_playbook_step(
+            step=step,
+            context={"parameters": {"endpoint": "target.local"}, "allow_active": True, "scope_data": {"invalid": True}},
+            dry_run=False,
+        )
+        self.assertEqual(res_exec["status"], "BLOCKED")
+        self.assertEqual(res_exec["exit_code"], 126)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "verify"))
 
 import seclab_playbook
 from seclab_playbook import (
@@ -65,9 +66,10 @@ class TestPlaybookInfraSeeds(unittest.TestCase):
             seclab_playbook.yaml = orig_yaml
 
     def test_scope_validation_with_authorized_target(self):
+        from authorization_fixture import AUTHORIZATION_YAML
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_yaml = pathlib.Path(tmp_dir) / "target.yaml"
-            target_yaml.write_text("authorization:\n  allow_passive: true\n  allow_active: true\n")
+            target_yaml.write_text(AUTHORIZATION_YAML)
             for path in [self.smb_path, self.pivot_path]:
                 pb = load_playbook_file(path)
                 res = validate_playbook_against_scope(pb, target_yaml)
@@ -75,9 +77,10 @@ class TestPlaybookInfraSeeds(unittest.TestCase):
                 self.assertEqual(res["blocked_steps_count"], 0)
 
     def test_scope_validation_blocks_active_steps_when_active_disallowed(self):
+        from authorization_fixture import AUTHORIZATION_YAML
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_yaml = pathlib.Path(tmp_dir) / "target.yaml"
-            target_yaml.write_text("authorization:\n  allow_passive: true\n  allow_active: false\n")
+            target_yaml.write_text(AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false"))
 
             # SMB tiene 3 pasos active_low -> bloquea los 3
             pb_smb = load_playbook_file(self.smb_path)

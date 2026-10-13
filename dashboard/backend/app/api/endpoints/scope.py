@@ -18,6 +18,17 @@ def get_scope_revisions(eng_id: str, type: str = Query("engagement")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/{eng_id}/dns-drift")
+def get_dns_drift(eng_id: str, type: str = Query("engagement")):
+    """Evalúa la resolución y deriva DNS de los dominios en target.yaml (V3-01i)."""
+    try:
+        return workspace_service.get_dns_drift(eng_id, type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{eng_id}")
 def get_scope_config(eng_id: str, type: str = Query("engagement")):
     """Obtiene la configuración de alcance desde target.yaml."""

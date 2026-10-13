@@ -569,6 +569,12 @@ class WorkspaceSyncService:
         from seclab_scope import get_scope_revisions
         return get_scope_revisions(target_dir)
 
+    def get_dns_drift(self, eng_id: str, eng_type: str = "engagement") -> Dict[str, Any]:
+        """Evalúa la deriva DNS de los dominios del engagement (V3-01i)."""
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        from seclab_scope import evaluate_engagement_dns_drift
+        return evaluate_engagement_dns_drift(target_dir)
+
     def list_findings(self, eng_id: str, eng_type: str = "engagement") -> List[FindingDetail]:
         """Obtiene todas las fichas de hallazgos en evidence/*.md."""
         ev_dir = self._resolve_dir(eng_id, eng_type) / "evidence"

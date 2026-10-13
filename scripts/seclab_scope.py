@@ -8,6 +8,7 @@ import json
 import pathlib
 import posixpath
 import re
+import socket
 import urllib.parse
 import uuid
 from typing import Any, Dict, List, Optional, Union
@@ -494,4 +495,159 @@ def get_scope_revisions(engagement_dir: Union[str, pathlib.Path]) -> List[Dict[s
         pass
     revisions.reverse()
     return revisions
+
+
+def check_dns_drift(
+    domain: str,
+    scope_data: Dict[str, Any],
+    known_ips: Optional[List[str]] = None,
+    mock_resolver: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Evalúa la resolución DNS actual de un dominio frente al alcance y el historial conocido.
+    
+    Detecta si las direcciones IP resueltas:
+    1. Se desvían de las IPs previamente conocidas (Drift).
+    2. Violan las fronteras de Scope Guard (IPs fuera de in_scope o explícitamente en out_of_scope).
+    """
+    domain_norm = normalize_target(domain)
+    resolved_ips: List[str] = []
+    error_msg: Optional[str] = None
+
+    if mock_resolver is not None:
+        try:
+            raw_ips = mock_resolver(domain_norm)
+            resolved_ips = sorted(list({normalize_target(ip) for ip in raw_ips if normalize_target(ip)}))
+        except Exception as e:
+            error_msg = f"Error en resolución simulada: {e}"
+    else:
+        try:
+            addr_info = socket.getaddrinfo(domain_norm, None, proto=socket.IPPROTO_TCP)
+            ips = {sockaddr[0] for _, _, _, _, sockaddr in addr_info}
+            resolved_ips = sorted(list({normalize_target(ip) for ip in ips if normalize_target(ip)}))
+        except socket.gaierror as e:
+            error_msg = f"No se pudo resolver el dominio: {e}"
+        except Exception as e:
+            error_msg = f"Error de resolución DNS: {e}"
+
+    if error_msg or not resolved_ips:
+        return {
+            "domain": domain_norm,
+            "resolved_ips": [],
+            "known_ips": sorted(list({normalize_target(ip) for ip in (known_ips or []) if normalize_target(ip)})),
+            "status": "UNRESOLVED",
+            "is_in_scope": False,
+            "has_drift": False,
+            "added_ips": [],
+            "removed_ips": [],
+            "out_of_scope_ips": [],
+            "error": error_msg or "Dominio sin registros de dirección IP",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+
+    known_set = {normalize_target(ip) for ip in (known_ips or []) if normalize_target(ip)}
+    resolved_set = set(resolved_ips)
+
+    added_ips = sorted(list(resolved_set - known_set)) if known_set else []
+    removed_ips = sorted(list(known_set - resolved_set)) if known_set else []
+    has_drift = bool(known_set and (added_ips or removed_ips))
+
+    out_of_scope_ips = []
+    ip_verdicts = {}
+    for ip in resolved_ips:
+        verdict, reason = check_scope(ip, scope_data)
+        ip_verdicts[ip] = {"verdict": verdict, "reason": reason}
+        if verdict != "IN_SCOPE":
+            out_of_scope_ips.append(ip)
+
+    all_in_scope = len(out_of_scope_ips) == 0
+
+    if not all_in_scope:
+        status = "OUT_OF_SCOPE_VIOLATION"
+    elif has_drift:
+        status = "DRIFT_WITHIN_SCOPE"
+    else:
+        status = "IN_SCOPE_STABLE"
+
+    return {
+        "domain": domain_norm,
+        "resolved_ips": resolved_ips,
+        "known_ips": sorted(list(known_set)),
+        "status": status,
+        "is_in_scope": all_in_scope,
+        "has_drift": has_drift,
+        "added_ips": added_ips,
+        "removed_ips": removed_ips,
+        "out_of_scope_ips": out_of_scope_ips,
+        "ip_verdicts": ip_verdicts,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+
+
+def evaluate_engagement_dns_drift(
+    engagement_dir: Union[str, pathlib.Path],
+    mock_resolver: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Evalúa la deriva DNS de todos los dominios configurados en target.yaml para un engagement."""
+    eng_path = pathlib.Path(engagement_dir)
+    target_file = eng_path / "target.yaml"
+    if not target_file.is_file():
+        raise FileNotFoundError(f"target.yaml no encontrado en {eng_path}")
+
+    scope_data = load_target_yaml(target_file)
+    validate_scope(scope_data)
+
+    domains = scope_data.get("scope", {}).get("in_scope", {}).get("domains", [])
+
+    cache_file = eng_path / "evidence" / ".dns_records.json"
+    known_cache: Dict[str, List[str]] = {}
+    if cache_file.is_file():
+        try:
+            known_cache = json.loads(cache_file.read_text(encoding="utf-8"))
+        except Exception:
+            known_cache = {}
+
+    results = []
+    updated_cache = dict(known_cache)
+    violations_count = 0
+    drift_count = 0
+
+    for dom in domains:
+        dom_norm = normalize_target(dom)
+        known_ips = known_cache.get(dom_norm, [])
+        res = check_dns_drift(
+            domain=dom_norm,
+            scope_data=scope_data,
+            known_ips=known_ips,
+            mock_resolver=mock_resolver,
+        )
+        results.append(res)
+        if res["status"] == "OUT_OF_SCOPE_VIOLATION":
+            violations_count += 1
+        elif res["status"] == "DRIFT_WITHIN_SCOPE":
+            drift_count += 1
+
+        if res["resolved_ips"]:
+            updated_cache[dom_norm] = res["resolved_ips"]
+
+    try:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(updated_cache, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+    overall_status = "OK"
+    if violations_count > 0:
+        overall_status = "VIOLATION"
+    elif drift_count > 0:
+        overall_status = "WARNING"
+
+    return {
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "status": overall_status,
+        "domains_count": len(domains),
+        "violations_count": violations_count,
+        "drift_count": drift_count,
+        "results": results,
+    }
+
 

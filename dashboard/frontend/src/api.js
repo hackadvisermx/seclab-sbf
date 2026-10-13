@@ -47,6 +47,7 @@ export const api = {
     return res.text()
   },
   getSupervision: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/supervision?type=${encodeURIComponent(type)}`),
+  getCohortSupervisionSummary: () => request('/engagements/supervision/cohort/summary'),
   respondSupervisionCheckpoint: (id, cpId, payload, type = 'engagement') =>
     request(`/engagements/${encodeURIComponent(id)}/supervision/checkpoints/${encodeURIComponent(cpId)}/respond?type=${encodeURIComponent(type)}`, {
       method: 'POST',

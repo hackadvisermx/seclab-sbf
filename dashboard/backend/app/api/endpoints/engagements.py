@@ -44,6 +44,15 @@ def get_cross_engagement_metrics_summary():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/supervision/cohort/summary")
+def get_cohort_supervision_summary():
+    """Obtiene el resumen consolidado de supervisión pedagógica para la cohorte docente a través de todo el workspace (V3-06e)."""
+    try:
+        return supervision_service.get_cohort_supervision_summary()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{eng_id}")
 def get_engagement_detail(eng_id: str, type: str = Query("engagement")):
     """Obtiene los detalles, notas y estadísticas del engagement."""

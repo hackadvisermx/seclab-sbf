@@ -3524,6 +3524,35 @@
             </div>
           </div>
 
+          <!-- Firma Criptográfica de No Repudio (V3-03ee) -->
+          <div class="p-3 bg-slate-950/80 rounded border border-slate-800 space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-bold text-cyan-300">SELLO DE NO REPUDIO (HMAC-SHA256)</span>
+                <span
+                  data-testid="artifact-signature-badge"
+                  class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border"
+                  :class="artifactVerificationResult.signature?.valid ? 'bg-emerald-950/70 text-emerald-400 border-emerald-500/50' : 'bg-slate-800 text-slate-400 border-slate-700'"
+                >
+                  {{ artifactVerificationResult.signature?.valid ? 'FIRMADO Y VERIFICADO' : (artifactVerificationResult.signature?.status === 'unsigned' ? 'SIN FIRMA' : 'NO VÁLIDO') }}
+                </span>
+              </div>
+              <button
+                @click="signCurrentManifest"
+                :disabled="isSigningManifest"
+                data-testid="sign-artifact-manifest-btn"
+                class="px-2.5 py-1 rounded bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-200 border border-cyan-500/40 text-[11px] transition-colors disabled:opacity-50"
+              >
+                {{ isSigningManifest ? 'Firmando...' : '✍️ Firmar Manifiesto' }}
+              </button>
+            </div>
+            <div v-if="artifactVerificationResult.signature?.valid && artifactVerificationResult.signature?.signature" class="text-[11px] text-slate-400 space-y-0.5">
+              <div>Firmante: <span class="text-slate-200 font-bold">{{ artifactVerificationResult.signature.signature.signer }}</span> (Key ID: {{ artifactVerificationResult.signature.signature.key_id }})</div>
+              <div>Fecha: <span class="text-slate-300">{{ artifactVerificationResult.signature.signature.signed_at }}</span></div>
+              <div class="truncate text-[10px] text-slate-500">Hash: {{ artifactVerificationResult.signature.signature.manifest_hash }}</div>
+            </div>
+          </div>
+
           <!-- Lista Detallada de Artefactos -->
           <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
             <div
@@ -3994,6 +4023,21 @@ async function runArtifactVerification() {
     artifactVerificationError.value = err.message || 'Error al verificar integridad criptográfica de artefactos.'
   } finally {
     artifactVerificationLoading.value = false
+  }
+}
+
+const isSigningManifest = ref(false)
+
+async function signCurrentManifest() {
+  if (!engId.value) return
+  isSigningManifest.value = true
+  try {
+    await api.signArtifactManifest(engId.value, 'Lead Auditor', engType.value)
+    await runArtifactVerification()
+  } catch (err) {
+    artifactVerificationError.value = err.message || 'Error al firmar manifiesto de artefactos'
+  } finally {
+    isSigningManifest.value = false
   }
 }
 

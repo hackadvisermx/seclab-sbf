@@ -90,3 +90,35 @@ def verify_artifacts(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.post("/{eng_id}/artifacts/sign")
+def sign_artifacts(
+    eng_id: str,
+    payload: Optional[Dict[str, Any]] = None,
+    signer: Optional[str] = Query("Lead Auditor"),
+    type: str = Query("engagement"),
+):
+    """Firma criptográficamente el artifact-manifest.json del engagement."""
+    try:
+        signer_id = (payload.get("signer") if payload else None) or signer or "Lead Auditor"
+        return workspace_service.sign_artifact_manifest(eng_id, signer=signer_id, eng_type=type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{eng_id}/artifacts/signature")
+def get_artifacts_signature(
+    eng_id: str,
+    type: str = Query("engagement"),
+):
+    """Obtiene y verifica la firma criptográfica del artifact-manifest.json."""
+    try:
+        return workspace_service.get_manifest_signature(eng_id, eng_type=type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+

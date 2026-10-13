@@ -178,6 +178,8 @@ export const api = {
   getArtifactContent: (id, path, type = 'engagement') => request(`/loot/${id}/artifacts/content?path=${encodeURIComponent(path)}&type=${type}`),
   getArtifactManifest: (id, type = 'engagement') => request(`/loot/${id}/artifacts/manifest?type=${type}`),
   verifyArtifactManifest: (id, data = null, type = 'engagement') => request(`/loot/${id}/artifacts/verify?type=${type}`, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+  signArtifactManifest: (id, signer = 'Lead Auditor', type = 'engagement') => request(`/loot/${id}/artifacts/sign?type=${type}`, { method: 'POST', body: JSON.stringify({ signer }) }),
+  getArtifactManifestSignature: (id, type = 'engagement') => request(`/loot/${id}/artifacts/signature?type=${type}`),
 
   // Reportes & Descarga
   compileReport: (id, type = 'engagement') => request(`/reports/${id}/compile?type=${type}`, { method: 'POST' }),

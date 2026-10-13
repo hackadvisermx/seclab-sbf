@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seclab_artifacts import read_artifact_snapshot, HASH_LIMIT
 from seclab_findings import requires_finding_review, finding_status_from_markdown, read_finding_source
+from seclab_signature import sign_artifact_manifest, verify_manifest_signature, get_or_create_signing_key
 
 # Patrones para sanitización automática de credenciales
 RE_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b")
@@ -823,6 +824,13 @@ def verify_artifact_manifest(
 
     is_valid = (corrupted_count == 0 and missing_count == 0)
 
+    signature_check = None
+    if target_p.is_dir():
+        try:
+            signature_check = verify_manifest_signature(target_p)
+        except Exception:
+            pass
+
     return {
         "status": "success" if is_valid else "integrity_failed",
         "engagement": eng_name,
@@ -832,6 +840,7 @@ def verify_artifact_manifest(
         "corrupted_count": corrupted_count,
         "missing_count": missing_count,
         "verified_at": now_iso,
+        "signature": signature_check,
         "details": details,
     }
 
@@ -1017,6 +1026,17 @@ def main() -> int:
     p_ver.add_argument("-m", "--manifest", help="Ruta a un archivo artifact-manifest.json o bundle exportado")
     p_ver.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
 
+    # sign-manifest
+    p_sign = subparsers.add_parser("sign-manifest", help="Firma criptográficamente el artifact-manifest.json del engagement")
+    p_sign.add_argument("engagement", help="Ruta o nombre del engagement a firmar")
+    p_sign.add_argument("--signer", default="Lead Auditor", help="Identidad del firmante")
+    p_sign.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
+
+    # verify-signature
+    p_vsig = subparsers.add_parser("verify-signature", help="Verifica la firma criptográfica de artifact-manifest.json")
+    p_vsig.add_argument("engagement", help="Ruta o nombre del engagement a verificar")
+    p_vsig.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
+
     parser.add_argument("--verify-manifest", nargs="?", const="default", help="Verifica la integridad de los artefactos contra artifact-manifest.json")
     parser.add_argument("-m", "--manifest", help="Ruta a un archivo artifact-manifest.json o bundle exportado")
     parser.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
@@ -1149,6 +1169,62 @@ def main() -> int:
         print("    2. Detén la bitácora si sigue grabando:   pt-log stop")
         print("    3. Genera el entregable sanitizado:       pt-eng pack --sanitize\n")
         return 0
+
+    elif args.subcommand == "sign-manifest":
+        eng_dir = resolve_engagement_dir(args.engagement)
+        if not eng_dir or not eng_dir.is_dir():
+            err_msg = f"No se pudo localizar el directorio del engagement: {args.engagement}"
+            if args.json:
+                print(json.dumps({"status": "error", "message": err_msg}, ensure_ascii=False))
+            else:
+                print(f"Error: {err_msg}", file=sys.stderr)
+            return 1
+        try:
+            res = sign_artifact_manifest(eng_dir, signer=args.signer)
+            if args.json:
+                print(json.dumps(res, indent=2, ensure_ascii=False))
+            else:
+                print(f"\n\033[32m[+] Manifiesto de artefactos firmado exitosamente:\033[0m")
+                print(f"    Firmante:        {res['signer']}")
+                print(f"    Algoritmo:       {res['algorithm']}")
+                print(f"    Hash Manifiesto: {res['manifest_hash']}")
+                print(f"    Firma (HMAC):    {res['signature'][:16]}...\n")
+            return 0
+        except Exception as e:
+            if args.json:
+                print(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False))
+            else:
+                print(f"Error al firmar: {e}", file=sys.stderr)
+            return 1
+
+    elif args.subcommand == "verify-signature":
+        eng_dir = resolve_engagement_dir(args.engagement)
+        if not eng_dir or not eng_dir.is_dir():
+            err_msg = f"No se pudo localizar el directorio del engagement: {args.engagement}"
+            if args.json:
+                print(json.dumps({"status": "error", "message": err_msg}, ensure_ascii=False))
+            else:
+                print(f"Error: {err_msg}", file=sys.stderr)
+            return 1
+        try:
+            res = verify_manifest_signature(eng_dir)
+            if args.json:
+                print(json.dumps(res, indent=2, ensure_ascii=False))
+            else:
+                if res.get("valid"):
+                    print(f"\n\033[32m[+] Firma de manifiesto válida:\033[0m")
+                    print(f"    Firmante:        {res['signature'].get('signer')}")
+                    print(f"    Fecha:           {res['signature'].get('signed_at')}")
+                    print(f"    Hash verificado: {res['signature'].get('manifest_hash')}\n")
+                else:
+                    print(f"\n\033[31m[!] Verificación de firma fallida:\033[0m {res.get('message')}\n")
+            return 0 if res.get("valid") else 1
+        except Exception as e:
+            if args.json:
+                print(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False))
+            else:
+                print(f"Error: {e}", file=sys.stderr)
+            return 1
 
     return 0
 

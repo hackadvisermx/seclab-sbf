@@ -67,10 +67,15 @@ class TestPlaybookApiSeeds(unittest.TestCase):
         scope_yaml = (
             "scope:\n"
             "  in_scope:\n"
-            "    domains:\n"
-            "      - api.target.local\n"
-            "      - target.local\n"
-            "  out_of_scope: {}\n"
+            "    domains: ['api.target.local', 'target.local']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+            "  out_of_scope:\n"
+            "    domains: []\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_yaml = pathlib.Path(tmp_dir) / "target.yaml"
@@ -90,10 +95,15 @@ class TestPlaybookApiSeeds(unittest.TestCase):
         scope_yaml = (
             "scope:\n"
             "  in_scope:\n"
-            "    domains:\n"
-            "      - api.target.local\n"
-            "      - target.local\n"
-            "  out_of_scope: {}\n"
+            "    domains: ['api.target.local', 'target.local']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+            "  out_of_scope:\n"
+            "    domains: []\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_yaml = pathlib.Path(tmp_dir) / "target.yaml"

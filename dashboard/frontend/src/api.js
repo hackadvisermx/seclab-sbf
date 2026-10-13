@@ -62,6 +62,8 @@ export const api = {
     return res.text()
   },
   getMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
+  getMetricsHistory: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics/history?type=${encodeURIComponent(type)}`),
+  recordMetricsSnapshot: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics/snapshot?type=${encodeURIComponent(type)}`, { method: 'POST' }),
   getCrossEngagementMetricsSummary: () => request('/engagements/metrics/summary'),
   getEngagementMetrics: (id, type = 'engagement') => request(`/engagements/${encodeURIComponent(id)}/metrics?type=${encodeURIComponent(type)}`),
   exportMetrics: async (id, format = 'json', type = 'engagement') => {

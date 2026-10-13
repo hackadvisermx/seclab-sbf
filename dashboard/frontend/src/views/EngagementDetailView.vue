@@ -2928,6 +2928,73 @@
                 </div>
               </div>
             </div>
+
+            <!-- Sección Historial Longitudinal de Métricas (V3-07e) -->
+            <div data-testid="metrics-history-section" class="p-4 bg-slate-900/30 border border-slate-800 rounded-md space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div class="flex items-center space-x-2">
+                  <span class="text-base">📈</span>
+                  <span class="font-bold text-slate-200">Evolución Temporal de Madurez (Snapshots)</span>
+                  <span class="text-slate-400 text-[11px]">({{ metricsHistory.length }} capturas)</span>
+                </div>
+                <button
+                  type="button"
+                  data-testid="record-metrics-snapshot-btn"
+                  @click="captureMetricsSnapshot"
+                  :disabled="capturingSnapshot || !metricsData"
+                  class="px-2.5 py-1 text-xs font-mono bg-cyan-950 hover:bg-cyan-900 border border-cyan-800/60 text-cyan-300 rounded transition disabled:opacity-50"
+                >
+                  {{ capturingSnapshot ? 'Guardando...' : '📸 Capturar Snapshot' }}
+                </button>
+              </div>
+
+              <div v-if="metricsHistory.length === 0" class="text-slate-400 text-xs italic py-2">
+                No hay capturas históricas registradas todavía. Haz clic en "Capturar Snapshot" para registrar la evolución de preparación.
+              </div>
+
+              <div v-else class="space-y-2 max-h-60 overflow-y-auto pr-1 font-mono text-xs">
+                <div
+                  v-for="snap in metricsHistory"
+                  :key="snap.snapshot_id"
+                  data-testid="metrics-history-item"
+                  class="p-2.5 rounded bg-slate-950/70 border border-slate-800/80 flex items-center justify-between gap-3"
+                >
+                  <div class="space-y-0.5">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-cyan-400 font-bold">#{{ snap.snapshot_id }}</span>
+                      <span class="text-slate-400 text-[11px]">{{ new Date(snap.timestamp).toLocaleString() }}</span>
+                      <span class="text-slate-500 text-[10px]">por {{ snap.author || 'tester' }}</span>
+                    </div>
+                    <div class="flex items-center space-x-2 text-[10px] text-slate-400">
+                      <span>Alcance: {{ snap.pillars?.scope?.score ?? 0 }}%</span>
+                      <span>·</span>
+                      <span>Recon: {{ snap.pillars?.recon?.score ?? 0 }}%</span>
+                      <span>·</span>
+                      <span>Hallazgos: {{ snap.pillars?.findings?.score ?? 0 }}%</span>
+                      <span>·</span>
+                      <span>Entregables: {{ snap.pillars?.deliverables?.score ?? 0 }}%</span>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center space-x-3 text-right">
+                    <div>
+                      <div class="text-sm font-bold text-white">{{ snap.audit_readiness_score }} / 100</div>
+                      <div
+                        data-testid="metrics-history-delta"
+                        class="text-[10px] font-bold"
+                        :class="{
+                          'text-emerald-400': snap.delta_score > 0,
+                          'text-rose-400': snap.delta_score < 0,
+                          'text-slate-500': snap.delta_score === 0
+                        }"
+                      >
+                        {{ snap.delta_score > 0 ? '+' : '' }}{{ snap.delta_score }}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -4570,11 +4637,39 @@ async function runSingleStep(stepId) {
 }
 
 
-// Métricas Operacionales de Auditoría (V3-07b, V3-07c)
+// Métricas Operacionales de Auditoría (V3-07b, V3-07c, V3-07e)
 const metricsData = ref(null)
 const metricsLoading = ref(false)
 const metricsExporting = ref(false)
 const metricsError = ref('')
+const metricsHistory = ref([])
+const loadingMetricsHistory = ref(false)
+const capturingSnapshot = ref(false)
+
+async function loadMetricsHistory() {
+  if (!engId.value) return
+  loadingMetricsHistory.value = true
+  try {
+    metricsHistory.value = await api.getMetricsHistory(engId.value, engType.value)
+  } catch (err) {
+    console.error('Error al cargar historial de métricas:', err)
+  } finally {
+    loadingMetricsHistory.value = false
+  }
+}
+
+async function captureMetricsSnapshot() {
+  if (!engId.value) return
+  capturingSnapshot.value = true
+  try {
+    await api.recordMetricsSnapshot(engId.value, engType.value)
+    await loadMetricsHistory()
+  } catch (err) {
+    alert('Error al capturar instantánea de métricas: ' + err.message)
+  } finally {
+    capturingSnapshot.value = false
+  }
+}
 
 async function loadMetrics() {
   if (!engId.value) return
@@ -4583,6 +4678,7 @@ async function loadMetrics() {
   try {
     const res = await api.getMetrics(engId.value, engType.value)
     metricsData.value = res
+    await loadMetricsHistory()
   } catch (err) {
     metricsError.value = err.message || 'Error al cargar métricas operacionales.'
   } finally {

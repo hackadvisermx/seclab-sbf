@@ -176,6 +176,28 @@ def get_engagement_metrics(eng_id: str, type: str = Query("engagement")):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/{eng_id}/metrics/history")
+def get_engagement_metrics_history(eng_id: str, type: str = Query("engagement")):
+    """Devuelve la cronología longitudinal de instantáneas de métricas del proyecto (V3-07e)."""
+    try:
+        return metrics_service.get_history(eng_id, type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{eng_id}/metrics/snapshot")
+def capture_engagement_metrics_snapshot(eng_id: str, type: str = Query("engagement")):
+    """Captura y persiste una instantánea de métricas en el historial del proyecto (V3-07e)."""
+    try:
+        return metrics_service.record_snapshot(eng_id, type)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{eng_id}/metrics/export")
 def export_engagement_metrics(
     eng_id: str,

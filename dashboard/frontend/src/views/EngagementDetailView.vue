@@ -291,6 +291,80 @@
               </div>
             </div>
           </div>
+
+          <!-- Tarjeta de Deriva DNS Scope Guard (V3-01i) -->
+          <div data-testid="scope-dns-drift-card" class="tactical-card space-y-3 text-xs font-mono">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h3 class="font-bold text-cyan-400 uppercase tracking-wider flex items-center space-x-1.5">
+                <span>🌐 Deriva DNS (Scope Guard)</span>
+              </h3>
+              <button
+                data-testid="check-dns-drift-btn"
+                @click="checkDnsDrift()"
+                :disabled="loadingDnsDrift"
+                class="px-2 py-0.5 text-[10px] bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-800/60 text-cyan-300 rounded transition disabled:opacity-50"
+              >
+                {{ loadingDnsDrift ? 'Analizando...' : 'Verificar DNS' }}
+              </button>
+            </div>
+            <p class="text-slate-400 text-[11px] leading-relaxed">
+              Verifica re-resolución dinámica de dominios antes del despacho activo para prevenir impacto fuera de alcance.
+            </p>
+
+            <div v-if="dnsDriftData" class="space-y-2 pt-1">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-[11px]">Estado general:</span>
+                <span
+                  data-testid="dns-drift-status-badge"
+                  class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase"
+                  :class="{
+                    'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60': dnsDriftData.status === 'OK',
+                    'bg-amber-950/80 text-amber-300 border border-amber-800/60': dnsDriftData.status === 'WARNING',
+                    'bg-rose-950/80 text-rose-300 border border-rose-800/60': dnsDriftData.status === 'VIOLATION' || dnsDriftData.status === 'ERROR'
+                  }"
+                >
+                  {{ dnsDriftData.status === 'OK' ? 'EN ALCANCE' : dnsDriftData.status === 'WARNING' ? 'DERIVA DETECTADA' : 'VIOLACIÓN DE ALCANCE' }}
+                </span>
+              </div>
+
+              <div v-if="dnsDriftData.results && dnsDriftData.results.length > 0" class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                <div
+                  v-for="res in dnsDriftData.results"
+                  :key="res.domain"
+                  data-testid="domain-drift-row"
+                  class="p-2 rounded bg-slate-900/60 border border-slate-800 space-y-1"
+                >
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-white">{{ res.domain }}</span>
+                    <span
+                      class="text-[9px] font-bold uppercase px-1 py-0.5 rounded"
+                      :class="{
+                        'text-emerald-400 bg-emerald-950/50': res.status === 'IN_SCOPE_STABLE',
+                        'text-amber-400 bg-amber-950/50': res.status === 'DRIFT_WITHIN_SCOPE',
+                        'text-rose-400 bg-rose-950/50': res.status === 'OUT_OF_SCOPE_VIOLATION',
+                        'text-slate-400 bg-slate-800': res.status === 'UNRESOLVED'
+                      }"
+                    >
+                      {{ res.status }}
+                    </span>
+                  </div>
+                  <div v-if="res.resolved_ips && res.resolved_ips.length" class="text-[10px] text-slate-400">
+                    <span>IPs: {{ res.resolved_ips.join(', ') }}</span>
+                  </div>
+                  <div v-if="res.has_drift" class="text-[10px] text-amber-300">
+                    <span v-if="res.added_ips && res.added_ips.length">+{{ res.added_ips.join(', ') }} </span>
+                    <span v-if="res.removed_ips && res.removed_ips.length">-{{ res.removed_ips.join(', ') }}</span>
+                  </div>
+                  <div v-if="res.error" class="text-[10px] text-slate-500">
+                    {{ res.error }}
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="dnsDriftData.results && dnsDriftData.results.length === 0" class="text-[11px] text-slate-500 italic">
+                No hay dominios configurados en el alcance.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -4856,6 +4930,22 @@ async function openScopeRevisionsModal() {
     scopeRevisions.value = []
   } finally {
     loadingScopeRevisions.value = false
+  }
+}
+
+const dnsDriftData = ref(null)
+const loadingDnsDrift = ref(false)
+
+async function checkDnsDrift() {
+  if (!engId.value) return
+  loadingDnsDrift.value = true
+  try {
+    dnsDriftData.value = await api.getDnsDrift(engId.value, engType.value)
+  } catch (err) {
+    console.error('Error al verificar deriva DNS:', err)
+    dnsDriftData.value = { status: 'ERROR', error: err.message, results: [] }
+  } finally {
+    loadingDnsDrift.value = false
   }
 }
 

@@ -185,6 +185,54 @@ class TestPlaybooksAPI(unittest.TestCase):
             self.assertIn("evil.com", step_res["output"])
             self.assertIn("Scope Guard", step_res["output"])
 
+            # B3: Selector basado en archivo (recon/subdomains.txt) con destino fuera de alcance
+            recon_dir = eng_dir / "recon"
+            recon_dir.mkdir(parents=True, exist_ok=True)
+            (recon_dir / "subdomains.txt").write_text("evil.com\n", encoding="utf-8")
+            res_file_step = client.post(
+                "/api/v1/playbooks/pb_web_recon/step/run",
+                json={
+                    "engagement_id": "test-eng",
+                    "step_id": "step_02_web_probing",
+                    "dry_run": False,
+                },
+            )
+            self.assertEqual(res_file_step.status_code, 200)
+            file_step_res = res_file_step.json()["step_result"]
+            self.assertEqual(file_step_res["status"], "BLOCKED")
+            self.assertEqual(file_step_res["exit_code"], 126)
+            self.assertIn("evil.com", file_step_res["output"])
+
+            # B2: Autorización incompleta (falta reference y vigencia) bloquea la ejecución
+            target_yaml.write_text(
+                "version: '1.0'\n"
+                "scope:\n"
+                "  in_scope:\n"
+                "    domains: ['target.local']\n"
+                "    ips: []\n"
+                "    cidrs: []\n"
+                "    endpoints: []\n"
+                "  out_of_scope:\n"
+                "    domains: []\n"
+                "    ips: []\n"
+                "    cidrs: []\n"
+                "    notes: []\n"
+                "authorization:\n"
+                "  allow_passive: true\n"
+                "  allow_active: true\n"
+            )
+            res_incomp = client.post(
+                "/api/v1/playbooks/pb_web_recon/run",
+                json={
+                    "engagement_id": "test-eng",
+                    "parameters": {"domain": "target.local"},
+                    "dry_run": False,
+                },
+            )
+            self.assertEqual(res_incomp.status_code, 200)
+            self.assertEqual(res_incomp.json()["status"], "BLOCKED")
+            self.assertFalse(res_incomp.json()["can_execute"])
+
             client.close()
 
 

@@ -206,6 +206,138 @@ def validate_playbook_schema(playbook: Dict[str, Any]) -> Tuple[bool, List[str]]
     return len(errors) == 0, errors
 
 
+NON_TARGET_PLACEHOLDERS = {
+    "wordlist",
+    "wordlists",
+    "timeout",
+    "timeout_seconds",
+    "format",
+    "threads",
+    "output",
+    "rate",
+    "delay",
+    "proxy",
+    "user_agent",
+    "cookie",
+    "header",
+    "headers",
+    "port",
+    "ports",
+}
+
+TARGET_KEY_HINTS = {
+    "target",
+    "targets",
+    "domain",
+    "domains",
+    "host",
+    "hosts",
+    "ip",
+    "ips",
+    "nameserver",
+    "nameservers",
+    "endpoint",
+    "endpoints",
+    "url",
+    "urls",
+    "fqdn",
+    "hostname",
+    "vhost",
+}
+
+
+def extract_step_targets(
+    step: Dict[str, Any],
+    context: Optional[Dict[str, Any]] = None,
+    dry_run: bool = True,
+) -> Tuple[List[str], Optional[str]]:
+    """Extrae de manera exhaustiva todos los destinos que consumirá un paso.
+    
+    Inspecciona:
+    1. Placeholders en command_template que provienen de parameters (excluyendo flags operacionales).
+    2. Parámetros provistos con nombres canónicos de destino (target, domain, endpoint, etc.).
+    3. Archivos referenciados por target_selector o inputs (ej. recon/subdomains.txt).
+    
+    Retorna una tupla (targets_list, missing_file_error).
+    """
+    ctx = context or {}
+    params = ctx.get("parameters") or {}
+    cmd_tpl = step.get("command_template", "")
+    target_selector = str(step.get("target_selector") or "").strip()
+    inputs = step.get("inputs") or []
+
+    targets: List[str] = []
+    missing_file_error: Optional[str] = None
+
+    # 1. Placeholders en la plantilla de comandos
+    placeholders = re.findall(r"\{([a-zA-Z0-9_]+)\}", cmd_tpl)
+    for p in placeholders:
+        p_lower = p.lower()
+        if p_lower not in NON_TARGET_PLACEHOLDERS and p in params and params[p] is not None:
+            val = str(params[p]).strip()
+            if val:
+                parts = [part.strip() for part in re.split(r"[,\s]+", val) if part.strip()]
+                for part in parts:
+                    if part not in targets:
+                        targets.append(part)
+
+    # 2. Claves de parámetros canónicos que puedan contener destinos
+    for k, v in params.items():
+        if v is not None and k.lower() in TARGET_KEY_HINTS:
+            val = str(v).strip()
+            if val:
+                parts = [part.strip() for part in re.split(r"[,\s]+", val) if part.strip()]
+                for part in parts:
+                    if part not in targets:
+                        targets.append(part)
+
+    # 3. Selectores o insumos basados en archivos (ej. recon/subdomains.txt)
+    file_candidates: List[str] = []
+    if target_selector and (
+        target_selector.endswith((".txt", ".lst", ".csv", ".json"))
+        or "/" in target_selector
+        or "\\" in target_selector
+    ) and target_selector not in ("in_scope_domains", "in_scope_ips", "local_gateway"):
+        file_candidates.append(target_selector)
+
+    for inp in inputs:
+        if isinstance(inp, str):
+            inp_clean = inp.strip()
+            if (
+                inp_clean.endswith((".txt", ".lst", ".csv"))
+                and inp_clean not in ("target.yaml", "scope.txt")
+                and inp_clean not in file_candidates
+            ):
+                file_candidates.append(inp_clean)
+
+    # Resolver archivos en engagement_dir
+    engagement_dir = ctx.get("engagement_dir")
+    if not engagement_dir and ctx.get("target_yaml_path"):
+        engagement_dir = str(pathlib.Path(ctx["target_yaml_path"]).parent)
+
+    for f_rel in file_candidates:
+        f_path = (pathlib.Path(engagement_dir) / f_rel) if engagement_dir else pathlib.Path(f_rel)
+        if f_path.is_file():
+            try:
+                lines = [
+                    line.strip()
+                    for line in f_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip() and not line.strip().startswith("#")
+                ]
+                if not lines and not dry_run:
+                    missing_file_error = f"El archivo de objetivos '{f_rel}' está vacío."
+                for line in lines:
+                    if line not in targets:
+                        targets.append(line)
+            except Exception as e:
+                if not dry_run:
+                    missing_file_error = f"Error al leer archivo de objetivos '{f_rel}': {e}"
+        elif not dry_run:
+            missing_file_error = f"El archivo de objetivos '{f_rel}' no existe en el proyecto."
+
+    return targets, missing_file_error
+
+
 def validate_playbook_against_scope(
     playbook: Dict[str, Any],
     target_yaml_path: Union[str, pathlib.Path],
@@ -258,17 +390,17 @@ def validate_playbook_against_scope(
     active_block_reason = "Acción activa bloqueada: el contrato de alcance (target.yaml) tiene 'allow_active: false'."
     passive_block_reason = "Acción pasiva bloqueada: el contrato de alcance (target.yaml) tiene 'allow_passive: false'."
 
-    # B2: Validación canónica de vigencia temporal si se especifican fechas o contrato de autorización
+    # B2: Validación canónica universal de autorización y vigencia temporal (fail-closed)
     current_time = now or datetime.now(timezone.utc)
     try:
         from seclab_scope import require_authorization, ScopeError
-        if allow_passive and ("valid_from" in auth_config or "valid_until" in auth_config or "reference" in auth_config):
+        if allow_passive:
             try:
                 require_authorization(parsed, "passive", now=current_time)
             except ScopeError as se:
                 allow_passive = False
                 passive_block_reason = f"Acción pasiva bloqueada: {se}"
-        if allow_active and ("valid_from" in auth_config or "valid_until" in auth_config or "reference" in auth_config):
+        if allow_active:
             try:
                 require_authorization(parsed, "active", now=current_time)
             except ScopeError as se:
@@ -279,7 +411,7 @@ def validate_playbook_against_scope(
 
     # B3: Cargar funciones de Scope Guard para comprobación de parámetros si se proporcionan
     try:
-        from seclab_scope import check_scope
+        from seclab_scope import check_scope, ScopeError
     except ImportError:
         check_scope = None
 
@@ -287,15 +419,8 @@ def validate_playbook_against_scope(
     can_execute = True
     blocked_count = 0
 
-    # Extraer destinos candidatos de parameters si están provistos
     params = parameters or {}
-    param_targets = []
-    for k in ("target", "targets", "domain", "domains", "host", "hosts", "ip", "ips", "nameserver"):
-        if k in params and params[k] is not None:
-            val = str(params[k]).strip()
-            if val:
-                parts = [p.strip() for p in re.split(r"[,\s]+", val) if p.strip()]
-                param_targets.extend(parts)
+    engagement_dir = str(cfg_path.parent)
 
     for step in playbook["steps"]:
         s_id = step["id"]
@@ -320,16 +445,29 @@ def validate_playbook_against_scope(
             reason = active_block_reason if active_block_reason != "Acción activa bloqueada: el contrato de alcance (target.yaml) tiene 'allow_active: false'." else "Permiso 'active' requerido pero no autorizado en target.yaml."
             can_execute = False
             blocked_count += 1
-        elif param_targets and check_scope is not None and isinstance(parsed, dict) and "scope" in parsed:
-            # Validar destinos contra Scope Guard
-            for target_val in param_targets:
-                verdict, v_reason = check_scope(target_val, parsed)
-                if verdict != "IN_SCOPE":
-                    status = "BLOCKED"
-                    reason = f"Destino '{target_val}' fuera de alcance según Scope Guard ({verdict}: {v_reason})."
-                    can_execute = False
-                    blocked_count += 1
-                    break
+        else:
+            # B3: Extraer destinos para este paso específico y evaluar contra Scope Guard
+            step_targets, step_missing_err = extract_step_targets(
+                step,
+                context={
+                    "parameters": params,
+                    "target_yaml_path": cfg_path,
+                    "engagement_dir": engagement_dir,
+                },
+                dry_run=True,
+            )
+            if check_scope is not None and isinstance(parsed, dict) and step_targets:
+                for target_val in step_targets:
+                    try:
+                        verdict, v_reason = check_scope(target_val, parsed)
+                    except ScopeError as se:
+                        verdict, v_reason = "UNKNOWN", str(se)
+                    if verdict != "IN_SCOPE":
+                        status = "BLOCKED"
+                        reason = f"Destino '{target_val}' fuera de alcance según Scope Guard ({verdict}: {v_reason})."
+                        can_execute = False
+                        blocked_count += 1
+                        break
 
         steps_eval.append({
             "step_id": s_id,
@@ -424,6 +562,28 @@ def execute_playbook_step(
                 "stop_condition_met": True,
                 "is_simulated": False,
             }
+
+        # B2: Validación adicional en profundidad de contrato de autorización y vigencia
+        if scope_data and isinstance(scope_data, dict) and "authorization" in scope_data:
+            try:
+                from seclab_scope import require_authorization, ScopeError
+                if itype in ("active_low", "active_high"):
+                    require_authorization(scope_data, "active")
+                elif itype == "passive":
+                    require_authorization(scope_data, "passive")
+            except ScopeError as se:
+                return {
+                    "step_id": step_id,
+                    "title": title,
+                    "interaction_type": itype,
+                    "status": "BLOCKED",
+                    "command": cmd_tpl,
+                    "exit_code": 126,
+                    "output": f"Bloqueado: {se}",
+                    "expected_outputs": expected_outputs,
+                    "stop_condition_met": True,
+                    "is_simulated": False,
+                }
     else:
         # En simulación previa (dry_run), evaluar contra contexto si está configurado
         if itype in ("active_low", "active_high") and not allow_active and "allow_active" in ctx:
@@ -454,24 +614,35 @@ def execute_playbook_step(
                 "is_simulated": True,
             }
 
-    # B3: Validación de destinos contra Scope Guard (check_scope)
+    # B3: Cargar funciones de Scope Guard para comprobación de parámetros si se proporcionan
     try:
-        from seclab_scope import check_scope
+        from seclab_scope import check_scope, ScopeError
     except ImportError:
         check_scope = None
 
     target_selector = step.get("target_selector")
-    target_candidates = []
-    for k in ("target", "targets", "domain", "domains", "host", "hosts", "ip", "ips", "nameserver"):
-        if k in params and params[k] is not None:
-            val = str(params[k]).strip()
-            if val:
-                parts = [p.strip() for p in re.split(r"[,\s]+", val) if p.strip()]
-                target_candidates.extend(parts)
+    target_candidates, missing_file_err = extract_step_targets(step, context=ctx, dry_run=dry_run)
 
-    if scope_data and isinstance(scope_data, dict) and "scope" in scope_data and check_scope is not None and target_candidates:
+    if missing_file_err and not dry_run:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "BLOCKED",
+            "command": cmd_tpl,
+            "exit_code": 126,
+            "output": f"Bloqueado: {missing_file_err}",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": False,
+        }
+
+    if scope_data and isinstance(scope_data, dict) and check_scope is not None and target_candidates:
         for candidate in target_candidates:
-            verdict, reason = check_scope(candidate, scope_data)
+            try:
+                verdict, reason = check_scope(candidate, scope_data)
+            except ScopeError as se:
+                verdict, reason = "UNKNOWN", str(se)
             if verdict != "IN_SCOPE":
                 return {
                     "step_id": step_id,
@@ -592,6 +763,8 @@ def run_playbook(
 
     # Si se pasa target_yaml_path, extraer autorizaciones
     if target_yaml_path:
+        ctx.setdefault("target_yaml_path", str(target_yaml_path))
+        ctx.setdefault("engagement_dir", str(pathlib.Path(target_yaml_path).parent.resolve()))
         scope_eval = validate_playbook_against_scope(
             playbook=playbook_data,
             target_yaml_path=target_yaml_path,

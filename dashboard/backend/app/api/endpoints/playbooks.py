@@ -120,7 +120,13 @@ def validate_playbook(payload: PlaybookValidateRequest):
             raise HTTPException(status_code=404, detail=f"Engagement '{payload.engagement_id}' no encontrado.")
         target_yaml = target_dir / "target.yaml"
         if target_yaml.is_file():
-            scope_eval = validate_playbook_against_scope(payload.playbook, target_yaml)
+            try:
+                scope_eval = validate_playbook_against_scope(payload.playbook, target_yaml)
+            except Exception as e:
+                scope_eval = {
+                    "can_execute": False,
+                    "error": str(e),
+                }
         else:
             scope_eval = {
                 "can_execute": False,
@@ -200,13 +206,19 @@ def run_playbook_endpoint(playbook_id: str, payload: PlaybookRunRequest):
     context = {
         "parameters": payload.parameters or {},
     }
+    if target_dir:
+        context["engagement_dir"] = str(target_dir)
 
     if target_yaml and target_yaml.is_file():
-        scope_eval = validate_playbook_against_scope(
-            playbook=playbook_data,
-            target_yaml_path=target_yaml,
-            parameters=context["parameters"],
-        )
+        context["target_yaml_path"] = str(target_yaml)
+        try:
+            scope_eval = validate_playbook_against_scope(
+                playbook=playbook_data,
+                target_yaml_path=target_yaml,
+                parameters=context["parameters"],
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error en validación de alcance: {e}")
         context["allow_passive"] = scope_eval["authorization_state"]["allow_passive"]
         context["allow_active"] = scope_eval["authorization_state"]["allow_active"]
         context["scope_data"] = scope_eval.get("scope_data")
@@ -287,13 +299,19 @@ def run_playbook_step_endpoint(playbook_id: str, payload: PlaybookStepRunRequest
     context = {
         "parameters": payload.parameters or {},
     }
+    if target_dir:
+        context["engagement_dir"] = str(target_dir)
 
     if target_yaml and target_yaml.is_file():
-        scope_eval = validate_playbook_against_scope(
-            playbook=playbook_data,
-            target_yaml_path=target_yaml,
-            parameters=context["parameters"],
-        )
+        context["target_yaml_path"] = str(target_yaml)
+        try:
+            scope_eval = validate_playbook_against_scope(
+                playbook=playbook_data,
+                target_yaml_path=target_yaml,
+                parameters=context["parameters"],
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error en validación de alcance: {e}")
         context["allow_passive"] = scope_eval["authorization_state"]["allow_passive"]
         context["allow_active"] = scope_eval["authorization_state"]["allow_active"]
         context["scope_data"] = scope_eval.get("scope_data")

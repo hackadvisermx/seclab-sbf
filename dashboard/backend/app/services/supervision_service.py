@@ -247,6 +247,11 @@ class SupervisionService:
             raise FileNotFoundError(f"Engagement {eng_id} no encontrado")
         return save_checkpoint_response(target_dir, checkpoint_id, justification, learner_action)
 
+    def get_cohort_supervision_summary(self) -> Dict[str, Any]:
+        """Calcula el resumen agregado de supervisión pedagógica para la cohorte docente a través de todo el workspace (V3-06e)."""
+        from seclab_supervision import compute_cohort_supervision_summary
+        return compute_cohort_supervision_summary(workspace_service.ws_path)
+
 
 supervision_service = SupervisionService()
 

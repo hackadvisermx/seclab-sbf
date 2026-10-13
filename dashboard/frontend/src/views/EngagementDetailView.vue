@@ -2368,6 +2368,91 @@
               <li v-for="(action, idx) in supervisionData.pending_actions" :key="idx">{{ action }}</li>
             </ul>
           </div>
+
+          <!-- Vista Agregada de Supervisión de Cohorte Docente (V3-06e) -->
+          <div data-testid="cohort-supervision-overview-card" class="p-4 bg-slate-900/30 border border-slate-800 rounded-md space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <div class="flex items-center space-x-2">
+                <span class="text-base">👥</span>
+                <h3 class="text-xs font-mono font-bold text-slate-100 uppercase tracking-wider">Supervisión de Cohorte Docente (Vista Aula)</h3>
+                <span
+                  v-if="cohortSupervisionData"
+                  data-testid="cohort-completion-pct"
+                  class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950/70 text-cyan-300 border border-cyan-800/50"
+                >
+                  Cumplimiento Aula: {{ cohortSupervisionData.cohort_completion_pct }}%
+                </span>
+              </div>
+              <button
+                type="button"
+                data-testid="refresh-cohort-supervision-btn"
+                @click="loadCohortSupervision"
+                :disabled="loadingCohortSupervision"
+                class="px-2.5 py-1 text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded transition disabled:opacity-50"
+              >
+                {{ loadingCohortSupervision ? 'Actualizando...' : '🔄 Actualizar Cohorte' }}
+              </button>
+            </div>
+
+            <div v-if="cohortSupervisionData" class="space-y-3 font-mono text-xs">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div class="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span class="text-slate-400 block text-[10px]">Proyectos Totales:</span>
+                  <span class="text-sm font-bold text-white">{{ cohortSupervisionData.total_cohort_projects }}</span>
+                </div>
+                <div class="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span class="text-slate-400 block text-[10px]">Checkpoints Aprobados:</span>
+                  <span class="text-sm font-bold text-emerald-400">{{ cohortSupervisionData.cohort_passed_checkpoints }} / {{ cohortSupervisionData.cohort_total_checkpoints }}</span>
+                </div>
+                <div class="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span class="text-slate-400 block text-[10px]">Proyectos Bloqueados:</span>
+                  <span class="text-sm font-bold" :class="cohortSupervisionData.blocked_projects_count > 0 ? 'text-rose-400' : 'text-slate-400'">
+                    {{ cohortSupervisionData.blocked_projects_count }}
+                  </span>
+                </div>
+                <div class="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span class="text-slate-400 block text-[10px]">Completados al 100%:</span>
+                  <span class="text-sm font-bold text-cyan-400">{{ cohortSupervisionData.fully_completed_projects_count }}</span>
+                </div>
+              </div>
+
+              <div v-if="cohortSupervisionData.projects && cohortSupervisionData.projects.length > 0" class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                <div
+                  v-for="p in cohortSupervisionData.projects"
+                  :key="p.id"
+                  data-testid="cohort-project-row"
+                  class="p-2 rounded bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-2"
+                >
+                  <div class="space-y-0.5">
+                    <div class="flex items-center space-x-2">
+                      <span class="font-bold text-slate-200">{{ p.id }}</span>
+                      <span class="text-[10px] text-slate-500 uppercase">({{ p.type }})</span>
+                      <span
+                        v-if="p.is_blocked"
+                        class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-rose-950 text-rose-300 border border-rose-800"
+                      >
+                        BLOQUEADO
+                      </span>
+                    </div>
+                  </div>
+                  <div class="flex items-center space-x-3 text-right">
+                    <span class="text-[11px] font-bold text-slate-300">{{ p.passed_count }} / 4 checkpoints</span>
+                    <span
+                      class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded"
+                      :class="{
+                        'bg-emerald-950 text-emerald-400': p.overall_status === 'PASS',
+                        'bg-amber-950 text-amber-400': p.overall_status === 'WARNING',
+                        'bg-rose-950 text-rose-400': p.overall_status === 'BLOCKED',
+                        'bg-slate-800 text-slate-400': p.overall_status === 'NOT_STARTED'
+                      }"
+                    >
+                      {{ p.overall_status }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -4425,6 +4510,19 @@ const supervisionData = ref(null)
 const supervisionLoading = ref(false)
 const supervisionError = ref('')
 const supervisionExporting = ref(false)
+const cohortSupervisionData = ref(null)
+const loadingCohortSupervision = ref(false)
+
+async function loadCohortSupervision() {
+  loadingCohortSupervision.value = true
+  try {
+    cohortSupervisionData.value = await api.getCohortSupervisionSummary()
+  } catch (err) {
+    console.error('Error al cargar supervisión de cohorte:', err)
+  } finally {
+    loadingCohortSupervision.value = false
+  }
+}
 
 async function loadSupervision() {
   if (!engId.value) return
@@ -4433,6 +4531,7 @@ async function loadSupervision() {
   try {
     const res = await api.getSupervision(engId.value, engType.value)
     supervisionData.value = res
+    await loadCohortSupervision()
   } catch (err) {
     supervisionError.value = err.message || 'Error al cargar supervisión pedagógica.'
   } finally {

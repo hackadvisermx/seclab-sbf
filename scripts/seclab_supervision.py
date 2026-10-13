@@ -293,3 +293,113 @@ def export_supervision_report(
     else:
         raise ValueError(f"Formato no soportado: '{format}'. Debe ser 'json' o 'markdown'.")
 
+
+def compute_cohort_supervision_summary(workspace_dir: Union[str, pathlib.Path]) -> Dict[str, Any]:
+    """Calcula la vista agregada de supervisión pedagógica para la cohorte del aula docente (V3-06e)."""
+    ws_path = pathlib.Path(workspace_dir)
+    found_projects = []
+
+    eng_root = ws_path / "engagements"
+    if eng_root.is_dir():
+        for d in eng_root.iterdir():
+            if d.is_dir() and not d.name.startswith("."):
+                found_projects.append((d.name, "engagement", d))
+
+    retos_root = ws_path / "retos"
+    if retos_root.is_dir():
+        for d in retos_root.iterdir():
+            if d.is_dir() and not d.name.startswith("."):
+                found_projects.append((d.name, "reto", d))
+
+    total_projects = len(found_projects)
+    if total_projects == 0:
+        return {
+            "total_cohort_projects": 0,
+            "cohort_total_checkpoints": 0,
+            "cohort_passed_checkpoints": 0,
+            "cohort_completion_pct": 0.0,
+            "blocked_projects_count": 0,
+            "fully_completed_projects_count": 0,
+            "checkpoint_breakdown": {
+                "cp_scope": {"title": "Alcance & Reglas", "passed": 0, "blocked": 0, "in_progress": 0, "not_started": 0},
+                "cp_recon": {"title": "Superficie & Hosts", "passed": 0, "blocked": 0, "in_progress": 0, "not_started": 0},
+                "cp_evidence": {"title": "Hallazgos & Evidencias", "passed": 0, "blocked": 0, "in_progress": 0, "not_started": 0},
+                "cp_report": {"title": "Informe Técnico", "passed": 0, "blocked": 0, "in_progress": 0, "not_started": 0},
+            },
+            "projects": [],
+        }
+
+    cohort_passed_checkpoints = 0
+    blocked_projects_count = 0
+    fully_completed_count = 0
+
+    cp_stats = {
+        "cp_scope": {"title": "Alcance & Reglas", "passed": 0, "blocked": 0, "in_progress": 0, "not_started": 0},
+        "cp_recon": {"title": "Superficie & Hosts", "passed": 0, "blocked": 0, "in_progress": 0, "not_started": 0},
+        "cp_evidence": {"title": "Hallazgos & Evidencias", "passed": 0, "blocked": 0, "in_progress": 0, "not_started": 0},
+        "cp_report": {"title": "Informe Técnico", "passed": 0, "blocked": 0, "in_progress": 0, "not_started": 0},
+    }
+
+    projects_summary = []
+
+    for p_id, p_type, p_path in found_projects:
+        try:
+            state = evaluate_supervision_checkpoints(p_path)
+            passed_cps = 0
+            has_blocked = False
+
+            cps_data = []
+            for cp in state.get("checkpoints", []):
+                cid = cp.get("id")
+                status = cp.get("status", "NOT_STARTED")
+                if cid in cp_stats:
+                    if status == "PASSED":
+                        cp_stats[cid]["passed"] += 1
+                        passed_cps += 1
+                    elif status == "BLOCKED":
+                        cp_stats[cid]["blocked"] += 1
+                        has_blocked = True
+                    elif status == "IN_PROGRESS":
+                        cp_stats[cid]["in_progress"] += 1
+                    else:
+                        cp_stats[cid]["not_started"] += 1
+
+                cps_data.append({
+                    "id": cid,
+                    "title": cp.get("title", cid),
+                    "status": status,
+                    "reason": cp.get("reason", ""),
+                })
+
+            cohort_passed_checkpoints += passed_cps
+            if has_blocked or state.get("is_blocked"):
+                blocked_projects_count += 1
+            if passed_cps == 4:
+                fully_completed_count += 1
+
+            projects_summary.append({
+                "id": p_id,
+                "type": p_type,
+                "overall_status": state.get("overall_status", "NOT_STARTED"),
+                "passed_count": passed_cps,
+                "is_blocked": bool(has_blocked or state.get("is_blocked")),
+                "checkpoints": cps_data,
+            })
+        except Exception:
+            continue
+
+    total_cps = total_projects * 4
+    completion_pct = round((cohort_passed_checkpoints / total_cps * 100), 1) if total_cps > 0 else 0.0
+
+    return {
+        "total_cohort_projects": total_projects,
+        "cohort_total_checkpoints": total_cps,
+        "cohort_passed_checkpoints": cohort_passed_checkpoints,
+        "cohort_completion_pct": completion_pct,
+        "blocked_projects_count": blocked_projects_count,
+        "fully_completed_projects_count": fully_completed_count,
+        "checkpoint_breakdown": cp_stats,
+        "projects": projects_summary,
+    }
+
+

@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from app.config import REPO_ROOT, WORKSPACE_DIR
+from app.core.workspace_paths import project_directory, UnsafeWorkspacePath
 from seclab_playbook import (
     load_playbook_file,
     validate_playbook_schema,
@@ -17,13 +18,23 @@ from seclab_playbook import (
 router = APIRouter(prefix="/playbooks", tags=["Playbooks Deterministas"])
 
 
+def _resolve_target_dir(engagement_id: Optional[str], eng_type: str = "engagement") -> Optional[pathlib.Path]:
+    """Resuelve de forma segura el directorio del proyecto evitando path traversal y symlinks."""
+    if not engagement_id:
+        return None
+    try:
+        return project_directory(WORKSPACE_DIR, engagement_id, eng_type)
+    except UnsafeWorkspacePath as exc:
+        raise HTTPException(status_code=400, detail=f"Identificador de proyecto no válido: {exc}")
+
+
 def _get_playbook_dirs(target_dir: Optional[pathlib.Path] = None) -> List[pathlib.Path]:
     dirs = [
         REPO_ROOT / "workspace-seed" / "playbooks",
         pathlib.Path("/usr/local/share/seclab/playbooks"),
         WORKSPACE_DIR / "playbooks",
     ]
-    if target_dir:
+    if target_dir and target_dir.is_dir():
         dirs.insert(0, target_dir / "playbooks")
     return [d for d in dirs if d.is_dir()]
 
@@ -37,9 +48,7 @@ class PlaybookValidateRequest(BaseModel):
 @router.get("")
 def list_playbooks(engagement_id: Optional[str] = None, type: str = "engagement"):
     """Lista todos los playbooks disponibles (semilla de fábrica y personalizados del proyecto)."""
-    target_dir = None
-    if engagement_id:
-        target_dir = WORKSPACE_DIR / ("retos" if type == "reto" else "engagements") / engagement_id
+    target_dir = _resolve_target_dir(engagement_id, type)
 
     playbooks = []
     seen_ids = set()
@@ -73,9 +82,7 @@ def list_playbooks(engagement_id: Optional[str] = None, type: str = "engagement"
 @router.get("/{playbook_id}")
 def get_playbook(playbook_id: str, engagement_id: Optional[str] = None, type: str = "engagement"):
     """Devuelve la definición completa de un playbook por su ID."""
-    target_dir = None
-    if engagement_id:
-        target_dir = WORKSPACE_DIR / ("retos" if type == "reto" else "engagements") / engagement_id
+    target_dir = _resolve_target_dir(engagement_id, type)
 
     for p_dir in _get_playbook_dirs(target_dir):
         for f in sorted(p_dir.glob("*.yaml")) + sorted(p_dir.glob("*.yml")):
@@ -108,7 +115,9 @@ def validate_playbook(payload: PlaybookValidateRequest):
 
     scope_eval = None
     if payload.engagement_id:
-        target_dir = WORKSPACE_DIR / ("retos" if payload.type == "reto" else "engagements") / payload.engagement_id
+        target_dir = _resolve_target_dir(payload.engagement_id, payload.type)
+        if not target_dir or not target_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"Engagement '{payload.engagement_id}' no encontrado.")
         target_yaml = target_dir / "target.yaml"
         if target_yaml.is_file():
             scope_eval = validate_playbook_against_scope(payload.playbook, target_yaml)
@@ -137,8 +146,8 @@ class PlaybookRunRequest(BaseModel):
 @router.get("/runs/all")
 def get_all_playbook_runs(engagement_id: str = Query(...), type: str = "engagement"):
     """Lista todas las ejecuciones registradas de playbooks como evidencia en el engagement."""
-    target_dir = WORKSPACE_DIR / ("retos" if type == "reto" else "engagements") / engagement_id
-    if not target_dir.is_dir():
+    target_dir = _resolve_target_dir(engagement_id, type)
+    if not target_dir or not target_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Engagement '{engagement_id}' no encontrado.")
     return list_playbook_runs(target_dir)
 
@@ -146,8 +155,8 @@ def get_all_playbook_runs(engagement_id: str = Query(...), type: str = "engageme
 @router.get("/{playbook_id}/runs")
 def get_playbook_runs_endpoint(playbook_id: str, engagement_id: str = Query(...), type: str = "engagement"):
     """Lista las ejecuciones registradas para un playbook específico en el engagement."""
-    target_dir = WORKSPACE_DIR / ("retos" if type == "reto" else "engagements") / engagement_id
-    if not target_dir.is_dir():
+    target_dir = _resolve_target_dir(engagement_id, type)
+    if not target_dir or not target_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Engagement '{engagement_id}' no encontrado.")
     return list_playbook_runs(target_dir, playbook_id=playbook_id)
 
@@ -157,9 +166,19 @@ def run_playbook_endpoint(playbook_id: str, payload: PlaybookRunRequest):
     """Ejecuta o simula (dry-run) un playbook determinista para el engagement indicado."""
     target_dir = None
     target_yaml = None
-    if payload.engagement_id:
-        target_dir = WORKSPACE_DIR / ("retos" if payload.type == "reto" else "engagements") / payload.engagement_id
+    if not payload.dry_run:
+        # B1 / M2: En ejecución real, engagement_id y target.yaml son obligatorios (fail-closed)
+        if not payload.engagement_id:
+            raise HTTPException(status_code=400, detail="Ejecución real denegada: se requiere 'engagement_id'.")
+        target_dir = _resolve_target_dir(payload.engagement_id, payload.type)
+        if not target_dir or not target_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"Engagement '{payload.engagement_id}' no encontrado.")
         target_yaml = target_dir / "target.yaml"
+        if not target_yaml.is_file():
+            raise HTTPException(status_code=400, detail=f"Ejecución real denegada: falta target.yaml en {payload.engagement_id}.")
+    else:
+        target_dir = _resolve_target_dir(payload.engagement_id, payload.type) if payload.engagement_id else None
+        target_yaml = (target_dir / "target.yaml") if (target_dir and target_dir.is_dir()) else None
 
     playbook_data = None
     for p_dir in _get_playbook_dirs(target_dir):
@@ -181,6 +200,16 @@ def run_playbook_endpoint(playbook_id: str, payload: PlaybookRunRequest):
     context = {
         "parameters": payload.parameters or {},
     }
+
+    if target_yaml and target_yaml.is_file():
+        scope_eval = validate_playbook_against_scope(
+            playbook=playbook_data,
+            target_yaml_path=target_yaml,
+            parameters=context["parameters"],
+        )
+        context["allow_passive"] = scope_eval["authorization_state"]["allow_passive"]
+        context["allow_active"] = scope_eval["authorization_state"]["allow_active"]
+        context["scope_data"] = scope_eval.get("scope_data")
 
     try:
         result = run_playbook(
@@ -219,9 +248,19 @@ def run_playbook_step_endpoint(playbook_id: str, payload: PlaybookStepRunRequest
     """Ejecuta o simula un paso específico individual de un playbook determinista."""
     target_dir = None
     target_yaml = None
-    if payload.engagement_id:
-        target_dir = WORKSPACE_DIR / ("retos" if payload.type == "reto" else "engagements") / payload.engagement_id
+    if not payload.dry_run:
+        # B1 / M2: En ejecución real, engagement_id y target.yaml son obligatorios (fail-closed)
+        if not payload.engagement_id:
+            raise HTTPException(status_code=400, detail="Ejecución real denegada: se requiere 'engagement_id'.")
+        target_dir = _resolve_target_dir(payload.engagement_id, payload.type)
+        if not target_dir or not target_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"Engagement '{payload.engagement_id}' no encontrado.")
         target_yaml = target_dir / "target.yaml"
+        if not target_yaml.is_file():
+            raise HTTPException(status_code=400, detail=f"Ejecución real denegada: falta target.yaml en {payload.engagement_id}.")
+    else:
+        target_dir = _resolve_target_dir(payload.engagement_id, payload.type) if payload.engagement_id else None
+        target_yaml = (target_dir / "target.yaml") if (target_dir and target_dir.is_dir()) else None
 
     playbook_data = None
     for p_dir in _get_playbook_dirs(target_dir):
@@ -250,9 +289,14 @@ def run_playbook_step_endpoint(playbook_id: str, payload: PlaybookStepRunRequest
     }
 
     if target_yaml and target_yaml.is_file():
-        scope_eval = validate_playbook_against_scope(playbook_data, target_yaml)
+        scope_eval = validate_playbook_against_scope(
+            playbook=playbook_data,
+            target_yaml_path=target_yaml,
+            parameters=context["parameters"],
+        )
         context["allow_passive"] = scope_eval["authorization_state"]["allow_passive"]
         context["allow_active"] = scope_eval["authorization_state"]["allow_active"]
+        context["scope_data"] = scope_eval.get("scope_data")
     elif payload.dry_run:
         context["allow_passive"] = True
         context["allow_active"] = True

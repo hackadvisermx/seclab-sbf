@@ -297,6 +297,136 @@ class TestSeclabPlaybook(unittest.TestCase):
         self.assertEqual(runs_pb2[0]["playbook_id"], "pb_02")
         self.assertTrue(runs_pb2[0]["dry_run"])
 
+    def test_real_run_without_target_yaml_fails_closed(self):
+        from seclab_playbook import run_playbook
+        res = run_playbook(
+            self.valid_playbook,
+            target_yaml_path=None,
+            dry_run=False,
+        )
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertFalse(res["can_execute"])
+        self.assertIn("target.yaml", res["reason"])
+
+    def test_expired_authorization_window_blocks_active_and_passive(self):
+        from datetime import datetime, timezone
+        from seclab_playbook import validate_playbook_against_scope
+        target_yaml = self.tmp_path / "target_expired.yaml"
+        target_yaml.write_text(
+            "authorization:\n"
+            "  reference: 'EXP-123'\n"
+            "  valid_from: '2026-01-01T00:00:00.000Z'\n"
+            "  valid_until: '2026-01-02T00:00:00.000Z'\n"
+            "  allow_passive: true\n"
+            "  allow_active: true\n"
+        )
+        # Evaluando en fecha posterior al fin de vigencia
+        eval_time = datetime(2026, 10, 12, 12, 0, 0, tzinfo=timezone.utc)
+        res = validate_playbook_against_scope(self.valid_playbook, target_yaml, now=eval_time)
+        self.assertFalse(res["can_execute"])
+        self.assertFalse(res["authorization_state"]["allow_active"])
+        self.assertFalse(res["authorization_state"]["allow_passive"])
+        for s in res["steps_evaluation"]:
+            self.assertEqual(s["status"], "BLOCKED")
+            self.assertIn("vigencia", s["reason"])
+
+    def test_valid_authorization_window_allows_execution(self):
+        from datetime import datetime, timezone
+        from seclab_playbook import validate_playbook_against_scope
+        target_yaml = self.tmp_path / "target_valid.yaml"
+        target_yaml.write_text(
+            "authorization:\n"
+            "  reference: 'VAL-456'\n"
+            "  valid_from: '2026-10-01T00:00:00.000Z'\n"
+            "  valid_until: '2026-10-31T23:59:59.000Z'\n"
+            "  allow_passive: true\n"
+            "  allow_active: true\n"
+        )
+        eval_time = datetime(2026, 10, 12, 12, 0, 0, tzinfo=timezone.utc)
+        res = validate_playbook_against_scope(self.valid_playbook, target_yaml, now=eval_time)
+        self.assertTrue(res["can_execute"])
+        self.assertTrue(res["authorization_state"]["allow_active"])
+        self.assertTrue(res["authorization_state"]["allow_passive"])
+        self.assertEqual(res["blocked_steps_count"], 0)
+
+    def test_target_selector_blocks_out_of_scope_target(self):
+        from seclab_playbook import execute_playbook_step
+        step = {
+            "id": "step_probe",
+            "title": "Sondeo Web",
+            "interaction_type": "active_low",
+            "target_selector": "in_scope_domains",
+            "command_template": "curl https://{domain}",
+        }
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": [], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        # Parámetro apunta a dominio fuera de alcance
+        res = execute_playbook_step(
+            step=step,
+            context={
+                "parameters": {"domain": "evil.com"},
+                "allow_active": True,
+                "scope_data": scope_data,
+            },
+            dry_run=False,
+        )
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(res["exit_code"], 126)
+        self.assertTrue(res["stop_condition_met"])
+        self.assertIn("evil.com", res["output"])
+        self.assertIn("Scope Guard", res["output"])
+
+    def test_target_selector_allows_in_scope_target(self):
+        from seclab_playbook import execute_playbook_step
+        step = {
+            "id": "step_probe",
+            "title": "Sondeo Web",
+            "interaction_type": "active_low",
+            "target_selector": "in_scope_domains",
+            "command_template": "curl https://{domain}",
+        }
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": [], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        # Parámetro dentro de alcance en simulación
+        res = execute_playbook_step(
+            step=step,
+            context={
+                "parameters": {"domain": "target.local"},
+                "allow_active": True,
+                "scope_data": scope_data,
+            },
+            dry_run=True,
+        )
+        self.assertEqual(res["status"], "SIMULATED")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn("target.local", res["command"])
+
+    def test_execute_passive_step_blocked_when_disallowed_in_real_run(self):
+        from seclab_playbook import execute_playbook_step
+        step = {
+            "id": "step_passive",
+            "title": "Reconocimiento Pasivo",
+            "interaction_type": "passive",
+            "command_template": "whois {domain}",
+        }
+        # Sin permiso pasivo en ejecución real
+        res = execute_playbook_step(
+            step=step,
+            context={"parameters": {"domain": "target.local"}, "allow_passive": False},
+            dry_run=False,
+        )
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(res["exit_code"], 126)
+        self.assertTrue(res["stop_condition_met"])
+
 
 if __name__ == "__main__":
     unittest.main()

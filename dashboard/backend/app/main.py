@@ -73,7 +73,7 @@ if dist_dir.exists() and (dist_dir / "index.html").exists():
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
-    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
     def serve_spa(full_path: str):
         potential_file = (dist_dir / full_path).resolve()
         if not potential_file.is_relative_to(dist_dir.resolve()):

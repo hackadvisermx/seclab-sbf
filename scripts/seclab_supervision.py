@@ -240,16 +240,17 @@ def export_supervision_markdown(state: Dict[str, Any]) -> str:
         "",
         "## 1. Checkpoints Pedagógicos Formativos",
         "",
-        "| Checkpoint | Etapa | Estado | Evaluación | Guía / Siguiente Acción |",
-        "| --- | --- | --- | --- | --- |",
+        "| ID | Checkpoint | Etapa | Estado | Evaluación | Guía / Siguiente Acción |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for cp in state.get("checkpoints", []):
-        cid = cp.get("title", cp.get("id"))
+        cid = cp.get("id", "-")
+        title = (cp.get("title") or cid).replace("|", "\\|")
         stg = cp.get("stage", "-")
         status = cp.get("status", "NOT_STARTED")
         reason = (cp.get("reason") or "-").replace("|", "\\|")
         hint = (cp.get("hint") or "-").replace("|", "\\|")
-        lines.append(f"| {cid} | {stg} | {status} | {reason} | {hint} |")
+        lines.append(f"| `{cid}` | {title} | {stg} | {status} | {reason} | {hint} |")
 
     lines.extend([
         "",

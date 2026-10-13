@@ -209,11 +209,15 @@ def validate_playbook_schema(playbook: Dict[str, Any]) -> Tuple[bool, List[str]]
 def validate_playbook_against_scope(
     playbook: Dict[str, Any],
     target_yaml_path: Union[str, pathlib.Path],
+    parameters: Optional[Dict[str, Any]] = None,
+    now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Evalúa los permisos de cada paso del playbook contra la autorización de target.yaml.
+    """Evalúa los permisos de cada paso del playbook contra la autorización y alcance de target.yaml.
     
     Verifica que las interacciones activas ('active_low', 'active_high') cuenten con
-    'allow_active: true' y las pasivas con 'allow_passive: true' en el target.yaml.
+    'allow_active: true', las pasivas con 'allow_passive: true', la ventana de vigencia
+    esté activa en el momento evaluado (require_authorization), y los destinos provistos
+    en parameters cumplan con Scope Guard (check_scope).
     """
     is_valid, errors = validate_playbook_schema(playbook)
     if not is_valid:
@@ -224,11 +228,13 @@ def validate_playbook_against_scope(
         raise FileNotFoundError(f"target.yaml no encontrado en: {cfg_path}")
 
     auth_config = {}
+    parsed: Dict[str, Any] = {}
     content = cfg_path.read_text(encoding="utf-8")
     if yaml is not None:
         try:
             parsed = yaml.safe_load(content) or {}
-            auth_config = parsed.get("authorization", {})
+            if isinstance(parsed, dict):
+                auth_config = parsed.get("authorization", {})
         except Exception:
             pass
     else:
@@ -239,13 +245,57 @@ def validate_playbook_against_scope(
                 auth_config["allow_active"] = "true" in line.lower()
             elif line.startswith("allow_passive:"):
                 auth_config["allow_passive"] = "true" in line.lower()
+            elif line.startswith("valid_from:"):
+                auth_config["valid_from"] = line.split(":", 1)[1].strip().strip("'\"")
+            elif line.startswith("valid_until:"):
+                auth_config["valid_until"] = line.split(":", 1)[1].strip().strip("'\"")
+            elif line.startswith("reference:"):
+                auth_config["reference"] = line.split(":", 1)[1].strip().strip("'\"")
+        parsed = {"authorization": auth_config}
 
     allow_passive = bool(auth_config.get("allow_passive", False))
     allow_active = bool(auth_config.get("allow_active", False))
+    active_block_reason = "Acción activa bloqueada: el contrato de alcance (target.yaml) tiene 'allow_active: false'."
+    passive_block_reason = "Acción pasiva bloqueada: el contrato de alcance (target.yaml) tiene 'allow_passive: false'."
+
+    # B2: Validación canónica de vigencia temporal si se especifican fechas o contrato de autorización
+    current_time = now or datetime.now(timezone.utc)
+    try:
+        from seclab_scope import require_authorization, ScopeError
+        if allow_passive and ("valid_from" in auth_config or "valid_until" in auth_config or "reference" in auth_config):
+            try:
+                require_authorization(parsed, "passive", now=current_time)
+            except ScopeError as se:
+                allow_passive = False
+                passive_block_reason = f"Acción pasiva bloqueada: {se}"
+        if allow_active and ("valid_from" in auth_config or "valid_until" in auth_config or "reference" in auth_config):
+            try:
+                require_authorization(parsed, "active", now=current_time)
+            except ScopeError as se:
+                allow_active = False
+                active_block_reason = f"Acción activa bloqueada: {se}"
+    except ImportError:
+        pass
+
+    # B3: Cargar funciones de Scope Guard para comprobación de parámetros si se proporcionan
+    try:
+        from seclab_scope import check_scope
+    except ImportError:
+        check_scope = None
 
     steps_eval: List[Dict[str, Any]] = []
     can_execute = True
     blocked_count = 0
+
+    # Extraer destinos candidatos de parameters si están provistos
+    params = parameters or {}
+    param_targets = []
+    for k in ("target", "targets", "domain", "domains", "host", "hosts", "ip", "ips", "nameserver"):
+        if k in params and params[k] is not None:
+            val = str(params[k]).strip()
+            if val:
+                parts = [p.strip() for p in re.split(r"[,\s]+", val) if p.strip()]
+                param_targets.extend(parts)
 
     for step in playbook["steps"]:
         s_id = step["id"]
@@ -257,19 +307,29 @@ def validate_playbook_against_scope(
 
         if itype in ("active_low", "active_high") and not allow_active:
             status = "BLOCKED"
-            reason = "Acción activa bloqueada: el contrato de alcance (target.yaml) tiene 'allow_active: false'."
+            reason = active_block_reason
             can_execute = False
             blocked_count += 1
         elif itype == "passive" and not allow_passive:
             status = "BLOCKED"
-            reason = "Acción pasiva bloqueada: el contrato de alcance (target.yaml) tiene 'allow_passive: false'."
+            reason = passive_block_reason
             can_execute = False
             blocked_count += 1
         elif "active" in req_perms and not allow_active:
             status = "BLOCKED"
-            reason = "Permiso 'active' requerido pero no autorizado en target.yaml."
+            reason = active_block_reason if active_block_reason != "Acción activa bloqueada: el contrato de alcance (target.yaml) tiene 'allow_active: false'." else "Permiso 'active' requerido pero no autorizado en target.yaml."
             can_execute = False
             blocked_count += 1
+        elif param_targets and check_scope is not None and isinstance(parsed, dict) and "scope" in parsed:
+            # Validar destinos contra Scope Guard
+            for target_val in param_targets:
+                verdict, v_reason = check_scope(target_val, parsed)
+                if verdict != "IN_SCOPE":
+                    status = "BLOCKED"
+                    reason = f"Destino '{target_val}' fuera de alcance según Scope Guard ({verdict}: {v_reason})."
+                    can_execute = False
+                    blocked_count += 1
+                    break
 
         steps_eval.append({
             "step_id": s_id,
@@ -289,6 +349,7 @@ def validate_playbook_against_scope(
             "allow_passive": allow_passive,
             "allow_active": allow_active,
         },
+        "scope_data": parsed,
         "steps_evaluation": steps_eval,
     }
 
@@ -325,6 +386,7 @@ def execute_playbook_step(
     params = ctx.get("parameters") or {}
     allow_passive = bool(ctx.get("allow_passive", False))
     allow_active = bool(ctx.get("allow_active", False))
+    scope_data = ctx.get("scope_data")
 
     step_id = step.get("id", "unknown_step")
     title = step.get("title", step_id)
@@ -333,22 +395,97 @@ def execute_playbook_step(
     timeout = step.get("timeout_seconds", 300)
     expected_outputs = step.get("expected_outputs", [])
 
-    # Verificar autorización contra contexto si se proporciona
-    if itype in ("active_low", "active_high") and not allow_active:
-        return {
-            "step_id": step_id,
-            "title": title,
-            "interaction_type": itype,
-            "status": "BLOCKED",
-            "command": cmd_tpl,
-            "exit_code": 126,
-            "output": "Bloqueado: La interacción activa no está autorizada en el contrato de alcance.",
-            "expected_outputs": expected_outputs,
-            "stop_condition_met": True,
-            "is_simulated": dry_run,
-        }
+    # B1: En ejecución real, se exige que las interacciones estén explícitamente autorizadas (fail-closed)
+    if not dry_run:
+        if itype in ("active_low", "active_high") and not allow_active:
+            return {
+                "step_id": step_id,
+                "title": title,
+                "interaction_type": itype,
+                "status": "BLOCKED",
+                "command": cmd_tpl,
+                "exit_code": 126,
+                "output": "Bloqueado: La interacción activa no está autorizada en el contrato de alcance.",
+                "expected_outputs": expected_outputs,
+                "stop_condition_met": True,
+                "is_simulated": False,
+            }
 
-    if itype == "passive" and not allow_passive and "allow_passive" in ctx:
+        if itype == "passive" and not allow_passive:
+            return {
+                "step_id": step_id,
+                "title": title,
+                "interaction_type": itype,
+                "status": "BLOCKED",
+                "command": cmd_tpl,
+                "exit_code": 126,
+                "output": "Bloqueado: La interacción pasiva no está autorizada en el contrato de alcance.",
+                "expected_outputs": expected_outputs,
+                "stop_condition_met": True,
+                "is_simulated": False,
+            }
+    else:
+        # En simulación previa (dry_run), evaluar contra contexto si está configurado
+        if itype in ("active_low", "active_high") and not allow_active and "allow_active" in ctx:
+            return {
+                "step_id": step_id,
+                "title": title,
+                "interaction_type": itype,
+                "status": "BLOCKED",
+                "command": cmd_tpl,
+                "exit_code": 126,
+                "output": "Bloqueado: La interacción activa no está autorizada en el contrato de alcance.",
+                "expected_outputs": expected_outputs,
+                "stop_condition_met": True,
+                "is_simulated": True,
+            }
+
+        if itype == "passive" and not allow_passive and "allow_passive" in ctx:
+            return {
+                "step_id": step_id,
+                "title": title,
+                "interaction_type": itype,
+                "status": "BLOCKED",
+                "command": cmd_tpl,
+                "exit_code": 126,
+                "output": "Bloqueado: La interacción pasiva no está autorizada en el contrato de alcance.",
+                "expected_outputs": expected_outputs,
+                "stop_condition_met": True,
+                "is_simulated": True,
+            }
+
+    # B3: Validación de destinos contra Scope Guard (check_scope)
+    try:
+        from seclab_scope import check_scope
+    except ImportError:
+        check_scope = None
+
+    target_selector = step.get("target_selector")
+    target_candidates = []
+    for k in ("target", "targets", "domain", "domains", "host", "hosts", "ip", "ips", "nameserver"):
+        if k in params and params[k] is not None:
+            val = str(params[k]).strip()
+            if val:
+                parts = [p.strip() for p in re.split(r"[,\s]+", val) if p.strip()]
+                target_candidates.extend(parts)
+
+    if scope_data and isinstance(scope_data, dict) and "scope" in scope_data and check_scope is not None and target_candidates:
+        for candidate in target_candidates:
+            verdict, reason = check_scope(candidate, scope_data)
+            if verdict != "IN_SCOPE":
+                return {
+                    "step_id": step_id,
+                    "title": title,
+                    "interaction_type": itype,
+                    "status": "BLOCKED",
+                    "command": cmd_tpl,
+                    "exit_code": 126,
+                    "output": f"Bloqueado por Scope Guard: El objetivo '{candidate}' no está autorizado en el alcance ({verdict}: {reason}).",
+                    "expected_outputs": expected_outputs,
+                    "stop_condition_met": True,
+                    "is_simulated": dry_run,
+                }
+    elif not dry_run and target_selector in ("in_scope_domains", "in_scope_ips") and not scope_data:
         return {
             "step_id": step_id,
             "title": title,
@@ -356,10 +493,10 @@ def execute_playbook_step(
             "status": "BLOCKED",
             "command": cmd_tpl,
             "exit_code": 126,
-            "output": "Bloqueado: La interacción pasiva no está autorizada en el contrato de alcance.",
+            "output": "Bloqueado: Se requiere un contrato de alcance (target.yaml) para validar el selector de objetivos.",
             "expected_outputs": expected_outputs,
             "stop_condition_met": True,
-            "is_simulated": dry_run,
+            "is_simulated": False,
         }
 
     try:
@@ -455,9 +592,14 @@ def run_playbook(
 
     # Si se pasa target_yaml_path, extraer autorizaciones
     if target_yaml_path:
-        scope_eval = validate_playbook_against_scope(playbook_data, target_yaml_path)
+        scope_eval = validate_playbook_against_scope(
+            playbook=playbook_data,
+            target_yaml_path=target_yaml_path,
+            parameters=ctx.get("parameters"),
+        )
         ctx["allow_passive"] = scope_eval["authorization_state"]["allow_passive"]
         ctx["allow_active"] = scope_eval["authorization_state"]["allow_active"]
+        ctx["scope_data"] = scope_eval.get("scope_data")
         if not dry_run and not scope_eval["can_execute"]:
             return {
                 "playbook_id": playbook_data.get("id"),
@@ -470,6 +612,19 @@ def run_playbook(
                 "dry_run": dry_run,
                 "steps_results": [],
             }
+    elif not dry_run:
+        # B1: Rechazo fail-closed inmediato en ejecución real sin target.yaml
+        return {
+            "playbook_id": playbook_data.get("id"),
+            "title": playbook_data.get("title"),
+            "status": "BLOCKED",
+            "can_execute": False,
+            "reason": "Ejecución real denegada: se requiere un proyecto y un contrato de alcance (target.yaml) válidos.",
+            "total_steps": len(playbook_data.get("steps", [])),
+            "executed_steps_count": 0,
+            "dry_run": False,
+            "steps_results": [],
+        }
     elif dry_run:
         # En simulación previa sin target.yaml (previsualización de plantilla),
         # se permite la simulación determinista sin tráfico real

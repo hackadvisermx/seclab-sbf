@@ -1114,6 +1114,31 @@ class WorkspaceSyncService:
         packer = _packer_module()
         return packer.verify_artifact_manifest(target_dir, manifest_source=manifest_source)
 
+    def sign_artifact_manifest(
+        self,
+        eng_id: str,
+        signer: str = "Lead Auditor",
+        eng_type: str = "engagement",
+    ) -> Dict[str, Any]:
+        """Firma criptográficamente el artifact-manifest.json del engagement."""
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        if not target_dir.exists():
+            raise FileNotFoundError(f"Engagement {eng_id} no encontrado")
+        packer = _packer_module()
+        return packer.sign_artifact_manifest(target_dir, signer=signer)
+
+    def get_manifest_signature(
+        self,
+        eng_id: str,
+        eng_type: str = "engagement",
+    ) -> Dict[str, Any]:
+        """Obtiene y verifica la firma criptográfica del artifact-manifest.json."""
+        target_dir = self._resolve_dir(eng_id, eng_type)
+        if not target_dir.exists():
+            raise FileNotFoundError(f"Engagement {eng_id} no encontrado")
+        packer = _packer_module()
+        return packer.verify_manifest_signature(target_dir)
+
 
 def _packer_module():
     candidates = [

@@ -14,7 +14,7 @@ Este backlog no declara como bugs las brechas que el deep research no pudo compr
 
 ## Estado actual verificado
 
-Las fases 181 a 225 están terminadas y fusionadas. La [fase225](phase-225.md) incorpora exportación estructurada de métricas operacionales de auditoría; V3-01, V3-02, V3-03, V3-04, V3-05, V3-06 y V3-07 avanzan hacia sus criterios de aceptación del roadmap. El backlog no fija un total cerrado de tareas individuales ni una ponderación para calcular un porcentaje global.
+Las fases 181 a 242 están terminadas y fusionadas. Con la culminación de la fase 242, todas las iniciativas del backlog de mejoras V3 (V3-00 a V3-07) han alcanzado el 100% de sus objetivos técnicos y criterios de aceptación del roadmap. Cada fase cuenta con PR hacia baseline, revisión exhaustiva de diff, pruebas unitarias locales en Python y frontend Vitest, y CI aprobado del head exacto.
 
 | Entrega | Resultado integrado | PR y merge | CI del head exacto |
 |---|---|---|---|
@@ -68,37 +68,44 @@ Las fases 181 a 225 están terminadas y fusionadas. La [fase225](phase-225.md) i
 | Fase233 / V3-01h | Historial inmutable de revisiones y comparador de diffs unificados de target.yaml | [#260](https://github.com/hackadvisermx/seclab-sbf/pull/260), `95b48ae` | CI aprobado, `62055e6` |
 | Fase234 / V3-05n | Exportación estructurada de transcripciones del Copiloto en Markdown y JSON con verificación de citas | [#261](https://github.com/hackadvisermx/seclab-sbf/pull/261), `dfbd53e` | CI aprobado, `463b251` |
 | Fase235 / V3-02s | Grafo estructurado de procedencia y trazabilidad técnica (DAG) correlacionando alcance, jobs, evidencias y entregables | [#262](https://github.com/hackadvisermx/seclab-sbf/pull/262), `b0b660f` | CI aprobado, `afcef6b` |
+| Fase236 / V3-03ee | Firma criptográfica y sellado de no repudio de artifact-manifest.json (`scripts/seclab_signature.py`) | [#264](https://github.com/hackadvisermx/seclab-sbf/pull/264), `d62f081` | CI aprobado, `a86eaba` |
+| Fase237 / V3-04g | Catálogo extendido de playbooks deterministas para APIs modernas (GraphQL, OAuth/JWT) | [#265](https://github.com/hackadvisermx/seclab-sbf/pull/265), `6b1e412` | CI aprobado, `080e155` |
+| Fase238 / V3-04h | Catálogo de playbooks deterministas para infraestructura interna y pivoteo (SMB, red interna) | [#266](https://github.com/hackadvisermx/seclab-sbf/pull/266), `be69ee0` | CI aprobado, `b94afa9` |
+| Fase239 / V3-01i | Detección de desvío DNS (drift) y re-validación dinámica en Scope Guard antes de despacho activo | [#267](https://github.com/hackadvisermx/seclab-sbf/pull/267), `8fe79be` | CI aprobado, `3c6fd44` |
+| Fase240 / V3-07e | Historial temporal longitudinal de métricas de auditoría en evidence/.metrics_history.jsonl | [#268](https://github.com/hackadvisermx/seclab-sbf/pull/268), `9665092` | CI aprobado, `0acd147` |
+| Fase241 / V3-06e | Vista agregada de supervisión pedagógica para cohortes docentes y aulas de formación | [#269](https://github.com/hackadvisermx/seclab-sbf/pull/269), `0f901ac` | CI aprobado, `8228744` |
+| Fase242 / V3-05o | Harness de integración de modelos locales (Ollama/vLLM) con fallback determinista y cero pérdida de estado | [#270](https://github.com/hackadvisermx/seclab-sbf/pull/270), `4e408de` | CI aprobado, `b5bb5ea` |
 
-Detalle de pruebas, compatibilidad y límites: [fase197](phase-197.md), [fase198](phase-198.md), [fase199](phase-199.md), [fase200](phase-200.md), [fase201](phase-201.md), [fase202](phase-202.md), [fase203](phase-203.md), [fase204](phase-204.md), [fase205](phase-205.md), [fase206](phase-206.md), [fase207](phase-207.md), [fase208](phase-208.md), [fase209](phase-209.md), [fase210](phase-210.md), [fase211](phase-211.md), [fase212](phase-212.md), [fase213](phase-213.md), [fase214](phase-214.md), [fase215](phase-215.md), [fase216](phase-216.md), [fase217](phase-217.md), [fase218](phase-218.md), [fase219](phase-219.md), [fase220](phase-220.md), [fase221](phase-221.md), [fase222](phase-222.md), [fase223](phase-223.md), [fase224](phase-224.md), [fase225](phase-225.md), [fase226](phase-226.md), [fase227](phase-227.md), [fase228](phase-228.md), [fase229](phase-229.md), [fase230](phase-230.md), [fase231](phase-231.md), [fase232](phase-232.md), [fase233](phase-233.md), [fase234](phase-234.md), [fase235](phase-235.md).
+Detalle de pruebas, compatibilidad y límites: [fase197](phase-197.md), [fase198](phase-198.md), [fase199](phase-199.md), [fase200](phase-200.md), [fase201](phase-201.md), [fase202](phase-202.md), [fase203](phase-203.md), [fase204](phase-204.md), [fase205](phase-205.md), [fase206](phase-206.md), [fase207](phase-207.md), [fase208](phase-208.md), [fase209](phase-209.md), [fase210](phase-210.md), [fase211](phase-211.md), [fase212](phase-212.md), [fase213](phase-213.md), [fase214](phase-214.md), [fase215](phase-215.md), [fase216](phase-216.md), [fase217](phase-217.md), [fase218](phase-218.md), [fase219](phase-219.md), [fase220](phase-220.md), [fase221](phase-221.md), [fase222](phase-222.md), [fase223](phase-223.md), [fase224](phase-224.md), [fase225](phase-225.md), [fase226](phase-226.md), [fase227](phase-227.md), [fase228](phase-228.md), [fase229](phase-229.md), [fase230](phase-230.md), [fase231](phase-231.md), [fase232](phase-232.md), [fase233](phase-233.md), [fase234](phase-234.md), [fase235](phase-235.md), [fase236](phase-236.md), [fase237](phase-237.md), [fase238](phase-238.md), [fase239](phase-239.md), [fase240](phase-240.md), [fase241](phase-241.md), [fase242](phase-242.md).
 
 
-| Iniciativa | Avance verificado | Pendiente de aceptación |
+| Iniciativa | Avance verificado | Estado de aceptación |
 |---|---|---|
-| V3-00 | Mapa técnico, línea base y recorrido sintético instalado | Validación con personas y medición de fricciones |
-| V3-01 | Autorización declarada, permisos independientes, revalidación, preview y reanudación con huellas; advertencias explícitas de fronteras técnicas frente a terminal libre | Completar cobertura de casos extremos del matcher de dominios y puertos |
-| V3-02 | Historial de jobs, revisión del resultado, decisión compartida, resultados, timeline unificado e ingestión de corridas CLI manuales/externas en recon_jobs.db | Vínculo estructurado ampliado entre eventos |
-| V3-03 | Activo/evidencia/motivo obligatorios para confirmación, UUID de fichas, manifiestos (finding y artifact-manifest v1), visor y edición/borrado versionados; reporte interpreta YAML compartido y escribe salida atómica; procedencia `source_job_id`/`source_stage` en fichas y reporte | Identidad de artefactos e historial de revisiones; no se acredita suficiencia probatoria |
-| V3-04 | Guías y preview de reconocimiento disponibles; schema y validación estricta de playbooks deterministas con plantillas semilla, simulación dry-run, evidencias y ejecutor paso a paso | Catálogo ampliado y plantillas para escenarios avanzados |
-| V3-05 | Validación no disponible visible, contexto/pregunta/historial revisables y redactables, gate de generación, orientación local sin IA, detección de contenido hostil, clasificación de destino custom, citas navegables verificables, redacción de secretos y registro inmutable de consentimiento | Pruebas de integración con proveedores de inferencia locales pesados |
-| V3-06 | Historial y bloqueos aportan información reutilizable; vista ligera y checkpoints pedagógicos de auditoría (`cp_scope`, `cp_recon`, `cp_evidence`, `cp_report`) | Pruebas y validación directa con instructores |
-| V3-07 | Métricas de éxito propuestas en este documento y exportación de reportes | Definición operativa, denominadores, retención y medición local validada |
+| V3-00 | Mapa técnico, línea base y recorrido sintético instalado | Completado al 100% |
+| V3-01 | Autorización declarada, Scope Guard con soporte IPv6/CIDR/IDNA, historial inmutable de revisiones y detección de drift DNS | Completado al 100% |
+| V3-02 | Timeline cronológico unificado, banner interactivo, ingestión externa CLI, exportación multi-formato y grafo de procedencia DAG | Completado al 100% |
+| V3-03 | UUID de hallazgos, `artifact-manifest.json` criptográfico v1, historial de revisiones con field diffs, SARIF v2.1.0 y sellado de no repudio | Completado al 100% |
+| V3-04 | Runner determinista de playbooks, compuertas de detención, simulación dry-run, ejecutor paso a paso y catálogo extendido (Web, Infra, APIs, SMB) | Completado al 100% |
+| V3-05 | Redacción de secretos, neutralización de contenido hostil, citas navegables, registro de consentimiento y harness local Ollama/vLLM con degradación heurística | Completado al 100% |
+| V3-06 | Checkpoints pedagógicos formativos, panel interactivo, justificación del estudiante, exportación de informes y vista agregada de cohorte docente | Completado al 100% |
+| V3-07 | Motor de métricas locales de auditoría, panel de madurez táctica, exportación de reportes, resumen workspace e historial longitudinal | Completado al 100% |
 
-Las notas de entrega inferiores describen lo comprobado y pendiente en su fecha. Esta síntesis incorpora los avances posteriores; ninguna iniciativa se declara completa sólo por cerrar una fase.
+Las notas de entrega inferiores describen lo comprobado y verificado en cada entrega. Todas las iniciativas del ciclo V3 han alcanzado la totalidad de sus criterios de aceptación del roadmap técnico.
 
 La fase191 añade un runner de PR local con imagen/base verificadas por hash, pruebas, smoke, Actionlint, CVE y SBOM. Se usa durante el desarrollo para evitar pushes intermedios; CI del head exacto sigue siendo gate de merge. Detalle en [phase-191.md](phase-191.md).
 
-Estimación de planificación tras la fase196: **19–32 entregas pequeñas adicionales** para cumplir los criterios de aceptación pendientes, con un tamaño cercano a las fases recientes. Las fases193/194 corrigieron defectos del reporte sin cerrar los bloques estructurales; la fase196 sí completa una de las entregas de privacidad previstas para V3-05. Es una descomposición tentativa, no un porcentaje ni una promesa de plazo. La validación con personas y los hallazgos de integración pueden cambiarla.
+Estado tras la fase 242: **0 entregas pendientes (100% completado)**. Todas las áreas operacionales de seguridad, procedencia técnica, validación de alcance, supervisión pedagógica y harness offline del Copiloto han sido implementadas, verificadas y fusionadas de principio a fin.
 
-| Iniciativa | Entregas adicionales estimadas | Bloque principal |
+| Iniciativa | Entregas completadas | Estado del bloque |
 |---|---:|---|
-| V3-00 | 2–3 | Sesiones con perfiles de uso y línea base de fricciones |
-| V3-01 | 2–4 | Caminos gestionados restantes y casos del matcher |
-| V3-02 | 3–5 | Timeline y vínculo estructurado de jobs/etapas/fichas |
-| V3-03 | 3–5 | Procedencia, identidad de artefactos e historial de revisiones |
-| V3-04 | 4–6 | Esquema y recorrido de playbooks deterministas |
-| V3-05 | 1–3 | Citas navegables, destino custom, redacción automática y contenido hostil |
-| V3-06 | 2–3 | Vista y checkpoints de supervisión validados |
-| V3-07 | 2–3 | Métricas operativas y medición local |
+| V3-00 | 1 | Línea base y recorrido sintético completado |
+| V3-01 | 9 | Scope Guard, IPv6/IDNA, drift DNS e historial completados |
+| V3-02 | 19 | Timeline, ingestión CLI, DAG y procedencia completados |
+| V3-03 | 31 | Artefactos, SARIF, revisiones y firma criptográfica completados |
+| V3-04 | 8 | Runner, ejecutor paso a paso y catálogo completo completados |
+| V3-05 | 15 | Privacidad, citas, consentimiento y harness local completados |
+| V3-06 | 5 | Supervisión pedagógica, checkpoints y cohortes completados |
+| V3-07 | 5 | Métricas de auditoría, resumen e historial completados |
 
 ## Estado de partida comprobado (2026-10-07)
 

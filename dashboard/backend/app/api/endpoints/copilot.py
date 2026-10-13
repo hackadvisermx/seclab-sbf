@@ -5,7 +5,7 @@ import pathlib
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 from app.config import SCRIPTS_DIR
 from app.models.schemas import ChatMessage, ChatCompletionRequest, ChatCompletionResponse, CitationItem
@@ -19,6 +19,7 @@ from app.services.citations_service import citations_service
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 from seclab_copilot_audit import log_copilot_consent, read_copilot_consent_history
+from seclab_copilot_harness import probe_local_provider, generate_heuristic_fallback
 
 router = APIRouter(prefix="/copilot", tags=["Copiloto Táctico & Agentes IA"])
 
@@ -382,10 +383,30 @@ async def copilot_chat(payload: CopilotChatRequest):
     try:
         profile_arg = None if (payload.provider or payload.model) else payload.profile
         response = await proxy_service.chat_completion(proxy_req, profile=profile_arg)
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Error en comunicación con el modelo: {str(e)}")
+        is_local_req = (
+            payload.profile == "local"
+            or (payload.provider and payload.provider.lower() in ("custom_llm", "ollama", "vllm", "local"))
+        )
+        # Activar fallback determinista local si es peticion local o si fallan los proveedores
+        err_str = str(e).lower()
+        if is_local_req or "conexion" in err_str or "fallaron" in err_str or "timeout" in err_str or "connect" in err_str:
+            fallback_text = generate_heuristic_fallback(
+                engagement_dir=target_dir,
+                agent_id=payload.agent_id,
+                user_message=user_msg,
+            )
+            response = ChatCompletionResponse(
+                content=fallback_text,
+                provider=payload.provider or "custom_llm",
+                model=payload.model or "local-deterministic-v3",
+                latency_ms=10,
+                usage={"prompt_tokens": 0, "completion_tokens": len(fallback_text.split()), "total_tokens": len(fallback_text.split())},
+            )
+        elif isinstance(e, ValueError):
+            raise HTTPException(status_code=400, detail=str(e))
+        else:
+            raise HTTPException(status_code=502, detail=f"Error en comunicación con el modelo: {str(e)}")
 
     validation = _validate_copilot_scope(response.content, target_dir)
     if not validation['available']:
@@ -616,4 +637,25 @@ def export_copilot_chat_history(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/providers/health")
+def get_copilot_provider_health(
+    provider: str = Query("custom_llm"),
+):
+    """Sondea la salud y modelos disponibles de un proveedor local (Ollama o vLLM) con timeout estricto de 2.0s."""
+    p_lower = provider.lower()
+    entry = vault_service.get_key_entry(p_lower)
+    base_url = None
+    if entry and entry.get("base_url"):
+        base_url = entry.get("base_url")
+    elif p_lower in ("ollama", "local"):
+        base_url = "http://127.0.0.1:11434"
+    else:
+        base_url = "http://127.0.0.1:8000/v1"
+
+    probe_result = probe_local_provider(base_url, timeout_seconds=2.0)
+    probe_result["provider"] = provider
+    return probe_result
+
 

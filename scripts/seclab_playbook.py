@@ -362,28 +362,34 @@ def validate_playbook_against_scope(
     auth_config = {}
     parsed: Dict[str, Any] = {}
     content = cfg_path.read_text(encoding="utf-8")
-    if yaml is not None:
-        try:
-            parsed = yaml.safe_load(content) or {}
-            if isinstance(parsed, dict):
-                auth_config = parsed.get("authorization", {})
-        except Exception:
-            pass
-    else:
-        # Extracción básica de expresiones clave si PyYAML no está presente
-        for line in content.splitlines():
-            line = line.strip()
-            if line.startswith("allow_active:"):
-                auth_config["allow_active"] = "true" in line.lower()
-            elif line.startswith("allow_passive:"):
-                auth_config["allow_passive"] = "true" in line.lower()
-            elif line.startswith("valid_from:"):
-                auth_config["valid_from"] = line.split(":", 1)[1].strip().strip("'\"")
-            elif line.startswith("valid_until:"):
-                auth_config["valid_until"] = line.split(":", 1)[1].strip().strip("'\"")
-            elif line.startswith("reference:"):
-                auth_config["reference"] = line.split(":", 1)[1].strip().strip("'\"")
-        parsed = {"authorization": auth_config}
+    try:
+        from seclab_scope import load_target_yaml
+        parsed = load_target_yaml(cfg_path)
+        if isinstance(parsed, dict):
+            auth_config = parsed.get("authorization", {})
+    except Exception:
+        if yaml is not None:
+            try:
+                parsed = yaml.safe_load(content) or {}
+                if isinstance(parsed, dict):
+                    auth_config = parsed.get("authorization", {})
+            except Exception:
+                pass
+        else:
+            # Extracción básica de expresiones clave si PyYAML no está presente
+            for line in content.splitlines():
+                line = line.strip()
+                if line.startswith("allow_active:"):
+                    auth_config["allow_active"] = "true" in line.lower()
+                elif line.startswith("allow_passive:"):
+                    auth_config["allow_passive"] = "true" in line.lower()
+                elif line.startswith("valid_from:"):
+                    auth_config["valid_from"] = line.split(":", 1)[1].strip().strip("'\"")
+                elif line.startswith("valid_until:"):
+                    auth_config["valid_until"] = line.split(":", 1)[1].strip().strip("'\"")
+                elif line.startswith("reference:"):
+                    auth_config["reference"] = line.split(":", 1)[1].strip().strip("'\"")
+            parsed = {"authorization": auth_config}
 
     allow_passive = bool(auth_config.get("allow_passive", False))
     allow_active = bool(auth_config.get("allow_active", False))

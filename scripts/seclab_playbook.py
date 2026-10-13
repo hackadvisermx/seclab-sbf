@@ -276,6 +276,119 @@ EXCLUDED_FILE_EXTENSIONS = {
 }
 
 
+DYNAMIC_SHELL_PATTERN = re.compile(r"(\$[A-Za-z_][A-Za-z0-9_]*|\$\{[^}]+\}|\$\([^)]+\)|`[^`]+`)")
+
+
+def step_has_unverified_dynamic_targets(cmd_tpl: str) -> bool:
+    """Detecta si el comando usa sustituciones shell dinámicas ($VAR, `cmd`, $(cmd)) no verificables."""
+    return bool(DYNAMIC_SHELL_PATTERN.search(cmd_tpl))
+
+
+def _extract_literal_targets(cmd_tpl: str) -> List[str]:
+    """Extrae de forma exhaustiva todos los destinos literales de red en una plantilla de comando.
+
+    Identifica:
+    - URIs con cualquier esquema de red (http://, https://, ftp://, ws://, etc.).
+    - Direcciones IPv6 sin corchetes (ej. 2001:db8::bad) y con corchetes/puertos ([2001:db8::bad]:8080).
+    - Direcciones IPv4 directas, con puertos o rutas (192.168.1.1:8080, 192.168.1.1/api).
+    - Nombres de host/dominio/FQDN con o sin puertos y rutas (evil.com/path, evil.com:8080/path).
+    - Asignaciones de flags de comandos (--url=ftp://evil.com, -u=evil.com/path).
+    - Tokens sospechosos de red para verificación estricta en Scope Guard.
+    """
+    targets: List[str] = []
+
+    # 1. URIs completas con cualquier esquema (http, https, ftp, ws, etc.)
+    for url in re.findall(r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s'\"`;|<>&]+", cmd_tpl):
+        if "{" not in url and "}" not in url:
+            if url not in targets:
+                targets.append(url)
+
+    # 2. Tokens crudos e inspección de flags
+    raw_tokens = re.findall(r"[^\s'\"`;|<>&]+", cmd_tpl)
+    tokens_to_inspect: List[str] = []
+    for tok in raw_tokens:
+        tok_clean = tok.strip("'\"")
+        if tok_clean.startswith(("-", "--")) and "=" in tok_clean:
+            tokens_to_inspect.append(tok_clean.split("=", 1)[1].strip("'\""))
+        elif not tok_clean.startswith(("-", "@", "/")):
+            tokens_to_inspect.append(tok_clean)
+
+    for tok in tokens_to_inspect:
+        clean = tok.rstrip(",;")
+        if not clean or clean in targets or "://" in clean:
+            continue
+
+        # IPv6 entre corchetes: [2001:db8::bad] o [2001:db8::bad]:8080
+        if clean.startswith("[") and "]" in clean:
+            b_cand = clean[1:clean.index("]")]
+            try:
+                ipaddress.ip_address(b_cand)
+                if b_cand not in targets:
+                    targets.append(b_cand)
+                continue
+            except ValueError:
+                pass
+
+        # IP directa (IPv4 o IPv6 sin corchetes como 2001:db8::bad)
+        try:
+            ipaddress.ip_address(clean)
+            if clean not in targets:
+                targets.append(clean)
+            continue
+        except ValueError:
+            pass
+
+        # IPv4 con puerto (ej. 192.168.1.1:8080)
+        if ":" in clean and clean.count(":") == 1:
+            h, _, p = clean.partition(":")
+            p_val = p.split("/")[0]
+            if p_val.isdigit():
+                try:
+                    ipaddress.ip_address(h)
+                    if h not in targets:
+                        targets.append(h)
+                    continue
+                except ValueError:
+                    pass
+
+        # IP con ruta (ej. 192.168.1.1/api o 2001:db8::bad/path)
+        if "/" in clean:
+            h = clean.split("/")[0]
+            try:
+                ipaddress.ip_address(h)
+                if clean not in targets:
+                    targets.append(clean)
+                if h not in targets:
+                    targets.append(h)
+                continue
+            except ValueError:
+                pass
+
+        # Nombres de host / dominio / FQDN (con o sin puerto, con o sin ruta)
+        host = clean.split("/")[0]
+        if ":" in host and not host.startswith("["):
+            host = host.split(":")[0]
+        if host.startswith("[") and "]" in host:
+            host = host[1:host.index("]")]
+
+        if "." in host and not host.startswith((".", "-")):
+            ext = "." + host.rsplit(".", 1)[-1].lower()
+            if ext not in EXCLUDED_FILE_EXTENSIONS:
+                if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host):
+                    if clean not in targets:
+                        targets.append(clean)
+                    if host not in targets:
+                        targets.append(host)
+                    continue
+
+        # Posible IPv6 con múltiples colones que falló sintaxis estricta (para que Scope Guard evalúe y bloquee)
+        if clean.count(":") >= 2:
+            if clean not in targets:
+                targets.append(clean)
+
+    return targets
+
+
 def extract_step_targets(
     step: Dict[str, Any],
     context: Optional[Dict[str, Any]] = None,
@@ -286,7 +399,7 @@ def extract_step_targets(
     Inspecciona:
     1. Placeholders en command_template que provienen de parameters (excluyendo flags operacionales).
     2. Parámetros provistos con nombres canónicos de destino (target, domain, endpoint, etc.).
-    3. Archivos referenciados por target_selector o inputs (ej. recon/subdomains.txt).
+    3. Archivos referenciados por target_selector o inputs destinados como listas de objetivos.
     4. Destinos literales en command_template (URLs, IPs y dominios no mediados por placeholders).
 
     Retorna una tupla (targets_list, missing_file_error).
@@ -322,14 +435,20 @@ def extract_step_targets(
                     if part not in targets:
                         targets.append(part)
 
-    # 3. Selectores o insumos basados en archivos (ej. recon/subdomains.txt)
+    # 3. Selectores o insumos basados en archivos (M5: distinguir listas de objetivos vs artefactos)
     file_candidates: List[str] = []
     if target_selector and (
-        target_selector.endswith((".txt", ".lst", ".csv", ".json"))
+        target_selector.endswith((".txt", ".lst", ".csv"))
         or "/" in target_selector
         or "\\" in target_selector
-    ) and target_selector not in ("in_scope_domains", "in_scope_ips", "local_gateway"):
+    ) and target_selector not in ("in_scope_domains", "in_scope_ips", "local_gateway", "domains", "ips", "live_hosts"):
         file_candidates.append(target_selector)
+
+    has_target_placeholders = any(
+        p.lower() not in NON_TARGET_PLACEHOLDERS
+        for p in placeholders
+    )
+    is_standard_selector = target_selector in ("in_scope_domains", "in_scope_ips", "domains", "ips", "live_hosts")
 
     for inp in inputs:
         if isinstance(inp, str):
@@ -339,7 +458,12 @@ def extract_step_targets(
                 and inp_clean not in ("target.yaml", "scope.txt")
                 and inp_clean not in file_candidates
             ):
-                file_candidates.append(inp_clean)
+                # Solo se considera fuente de objetivos si el paso no tiene placeholders de destino
+                # ni selector canónico, o si el archivo está explícitamente en el comando
+                if not has_target_placeholders and not is_standard_selector:
+                    file_candidates.append(inp_clean)
+                elif inp_clean in cmd_tpl:
+                    file_candidates.append(inp_clean)
 
     # Resolver archivos en engagement_dir
     engagement_dir = ctx.get("engagement_dir")
@@ -355,47 +479,20 @@ def extract_step_targets(
                     for line in f_path.read_text(encoding="utf-8").splitlines()
                     if line.strip() and not line.strip().startswith("#")
                 ]
-                if not lines and not dry_run:
+                if not lines:
                     missing_file_error = f"El archivo de objetivos '{f_rel}' está vacío."
                 for line in lines:
                     if line not in targets:
                         targets.append(line)
             except Exception as e:
-                if not dry_run:
-                    missing_file_error = f"Error al leer archivo de objetivos '{f_rel}': {e}"
+                missing_file_error = f"Error al leer archivo de objetivos '{f_rel}': {e}"
         elif not dry_run:
             missing_file_error = f"El archivo de objetivos '{f_rel}' no existe en el proyecto."
 
-    # 4. Destinos literales en command_template (URLs, IPs y dominios no mediados por placeholders)
-    # 4a. URLs completas http:// o https://
-    for url in re.findall(r"https?://[^\s'\"`;|&<>]+", cmd_tpl):
-        if "{" not in url:
-            if url not in targets:
-                targets.append(url)
-
-    # 4b. Tokens literales: IPs y dominios
-    raw_tokens = re.findall(r"[^\s'\"`;|&<>]+", cmd_tpl)
-    for tok in raw_tokens:
-        if tok.startswith("@"):
-            continue
-        host_candidate = tok.split(":")[0] if ":" in tok and not tok.startswith("[") else tok
-        if host_candidate.startswith("[") and "]" in host_candidate:
-            host_candidate = host_candidate[1:host_candidate.index("]")]
-        try:
-            addr = ipaddress.ip_address(host_candidate)
-            if str(addr) not in targets:
-                targets.append(str(addr))
-            continue
-        except ValueError:
-            pass
-
-        # 4c. Nombres de dominio / FQDN con punto
-        if "." in host_candidate and not host_candidate.startswith(("-", "/", ".")):
-            ext = "." + host_candidate.rsplit(".", 1)[-1].lower()
-            if ext not in EXCLUDED_FILE_EXTENSIONS:
-                if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host_candidate):
-                    if host_candidate not in targets:
-                        targets.append(host_candidate)
+    # 4. Destinos literales en command_template mediante extractor canónico unificado
+    for lit_target in _extract_literal_targets(cmd_tpl):
+        if lit_target not in targets:
+            targets.append(lit_target)
 
     return targets, missing_file_error
 
@@ -412,26 +509,9 @@ def step_has_declared_target_source(step: Dict[str, Any]) -> bool:
     for p in placeholders:
         if p.lower() not in NON_TARGET_PLACEHOLDERS:
             return True
-    # Destinos literales en el comando (URLs, IPs, dominios)
-    if re.search(r"https?://[^\s'\"`;|&<>]+", cmd_tpl):
+    # Destinos literales en el comando usando el extractor canónico unificado
+    if _extract_literal_targets(cmd_tpl):
         return True
-    raw_tokens = re.findall(r"[^\s'\"`;|&<>]+", cmd_tpl)
-    for tok in raw_tokens:
-        if tok.startswith("@"):
-            continue
-        host = tok.split(":")[0] if ":" in tok and not tok.startswith("[") else tok
-        if host.startswith("[") and "]" in host:
-            host = host[1:host.index("]")]
-        try:
-            ipaddress.ip_address(host)
-            return True
-        except ValueError:
-            pass
-        if "." in host and not host.startswith(("-", "/", ".")):
-            ext = "." + host.rsplit(".", 1)[-1].lower()
-            if ext not in EXCLUDED_FILE_EXTENSIONS:
-                if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host):
-                    return True
     return False
 
 
@@ -579,8 +659,18 @@ def validate_playbook_against_scope(
             target_selector = step.get("target_selector")
             is_active_step = itype in ("active_low", "active_high") or "active" in req_perms
             has_declared_source = step_has_declared_target_source(step)
+            has_dynamic_targets = step_has_unverified_dynamic_targets(step.get("command_template", ""))
+            unexpanded_target_placeholders = [
+                p for p in re.findall(r"\{([a-zA-Z0-9_]+)\}", step.get("command_template", ""))
+                if p.lower() not in NON_TARGET_PLACEHOLDERS
+            ]
 
-            if step_missing_err:
+            if is_active_step and has_dynamic_targets:
+                status = "BLOCKED"
+                reason = "El paso activo contiene destinos dinámicos o sustituciones de shell no verificables contra Scope Guard."
+                can_execute = False
+                blocked_count += 1
+            elif step_missing_err:
                 status = "BLOCKED"
                 reason = f"Error en archivos de objetivos: {step_missing_err}"
                 can_execute = False
@@ -593,6 +683,11 @@ def validate_playbook_against_scope(
             elif is_active_step and not has_declared_source:
                 status = "BLOCKED"
                 reason = "El paso activo requiere un objetivo verificable contra Scope Guard pero no declara una fuente de destino resoluble."
+                can_execute = False
+                blocked_count += 1
+            elif is_active_step and not step_targets and not unexpanded_target_placeholders:
+                status = "BLOCKED"
+                reason = "El paso activo requiere al menos un objetivo resoluble y verificable contra Scope Guard pero no produjo ningún candidato."
                 can_execute = False
                 blocked_count += 1
             elif check_scope is None:
@@ -781,6 +876,20 @@ def execute_playbook_step(
     target_selector = step.get("target_selector")
     target_candidates, missing_file_err = extract_step_targets(step, context=ctx, dry_run=dry_run)
     is_active_step = itype in ("active_low", "active_high") or "active" in (step.get("required_permissions") or [])
+
+    if not dry_run and is_active_step and step_has_unverified_dynamic_targets(cmd_tpl):
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "BLOCKED",
+            "command": cmd_tpl,
+            "exit_code": 126,
+            "output": "Bloqueado: El paso activo contiene destinos dinámicos o sustituciones de shell no verificables contra Scope Guard.",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": False,
+        }
 
     if missing_file_err and not dry_run:
         return {

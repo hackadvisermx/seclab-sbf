@@ -67,30 +67,62 @@ class TestPlaybookInfraSeeds(unittest.TestCase):
 
     def test_scope_validation_with_authorized_target(self):
         from authorization_fixture import AUTHORIZATION_YAML
+        scope_yaml = (
+            "scope:\n"
+            "  in_scope:\n"
+            "    domains: []\n"
+            "    ips:\n"
+            "      - 192.168.1.10\n"
+            "    cidrs:\n"
+            "      - 192.168.1.0/24\n"
+            "  out_of_scope: {}\n"
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_yaml = pathlib.Path(tmp_dir) / "target.yaml"
-            target_yaml.write_text(AUTHORIZATION_YAML)
+            target_yaml.write_text(scope_yaml + AUTHORIZATION_YAML)
             for path in [self.smb_path, self.pivot_path]:
                 pb = load_playbook_file(path)
-                res = validate_playbook_against_scope(pb, target_yaml)
+                res = validate_playbook_against_scope(
+                    pb,
+                    target_yaml,
+                    parameters={"target": "192.168.1.10"},
+                )
                 self.assertTrue(res["can_execute"], f"No se pudo ejecutar {path.name} con active permitido")
                 self.assertEqual(res["blocked_steps_count"], 0)
 
     def test_scope_validation_blocks_active_steps_when_active_disallowed(self):
         from authorization_fixture import AUTHORIZATION_YAML
+        scope_yaml = (
+            "scope:\n"
+            "  in_scope:\n"
+            "    domains: []\n"
+            "    ips:\n"
+            "      - 192.168.1.10\n"
+            "    cidrs:\n"
+            "      - 192.168.1.0/24\n"
+            "  out_of_scope: {}\n"
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_yaml = pathlib.Path(tmp_dir) / "target.yaml"
-            target_yaml.write_text(AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false"))
+            target_yaml.write_text(scope_yaml + AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false"))
 
             # SMB tiene 3 pasos active_low -> bloquea los 3
             pb_smb = load_playbook_file(self.smb_path)
-            res_smb = validate_playbook_against_scope(pb_smb, target_yaml)
+            res_smb = validate_playbook_against_scope(
+                pb_smb,
+                target_yaml,
+                parameters={"target": "192.168.1.10"},
+            )
             self.assertFalse(res_smb["can_execute"])
             self.assertEqual(res_smb["blocked_steps_count"], 3)
 
             # Pivot interno tiene 1 pasivo y 2 active_low -> el pasivo se autoriza, los 2 activos se bloquean
             pb_pivot = load_playbook_file(self.pivot_path)
-            res_pivot = validate_playbook_against_scope(pb_pivot, target_yaml)
+            res_pivot = validate_playbook_against_scope(
+                pb_pivot,
+                target_yaml,
+                parameters={"target": "192.168.1.10"},
+            )
             self.assertFalse(res_pivot["can_execute"])
             self.assertEqual(res_pivot["blocked_steps_count"], 2)
             self.assertEqual(res_pivot["steps_evaluation"][0]["status"], "AUTHORIZED")

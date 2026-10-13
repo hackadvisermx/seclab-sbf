@@ -9,6 +9,7 @@ alcance (target.yaml) antes de cualquier ejecución.
 Sin dependencias externas obligatorias (Python 3 stdlib + yaml si disponible).
 """
 
+import ipaddress
 import json
 import os
 import pathlib
@@ -245,6 +246,35 @@ TARGET_KEY_HINTS = {
     "vhost",
 }
 
+EXCLUDED_FILE_EXTENSIONS = {
+    ".txt",
+    ".lst",
+    ".csv",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".sh",
+    ".py",
+    ".md",
+    ".log",
+    ".db",
+    ".conf",
+    ".sql",
+    ".html",
+    ".xml",
+    ".tar",
+    ".gz",
+    ".zip",
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".svg",
+    ".lock",
+    ".bak",
+    ".tmp",
+    ".swp",
+}
+
 
 def extract_step_targets(
     step: Dict[str, Any],
@@ -257,6 +287,7 @@ def extract_step_targets(
     1. Placeholders en command_template que provienen de parameters (excluyendo flags operacionales).
     2. Parámetros provistos con nombres canónicos de destino (target, domain, endpoint, etc.).
     3. Archivos referenciados por target_selector o inputs (ej. recon/subdomains.txt).
+    4. Destinos literales en command_template (URLs, IPs y dominios no mediados por placeholders).
 
     Retorna una tupla (targets_list, missing_file_error).
     """
@@ -335,7 +366,73 @@ def extract_step_targets(
         elif not dry_run:
             missing_file_error = f"El archivo de objetivos '{f_rel}' no existe en el proyecto."
 
+    # 4. Destinos literales en command_template (URLs, IPs y dominios no mediados por placeholders)
+    # 4a. URLs completas http:// o https://
+    for url in re.findall(r"https?://[^\s'\"`;|&<>]+", cmd_tpl):
+        if "{" not in url:
+            if url not in targets:
+                targets.append(url)
+
+    # 4b. Tokens literales: IPs y dominios
+    raw_tokens = re.findall(r"[^\s'\"`;|&<>]+", cmd_tpl)
+    for tok in raw_tokens:
+        if tok.startswith("@"):
+            continue
+        host_candidate = tok.split(":")[0] if ":" in tok and not tok.startswith("[") else tok
+        if host_candidate.startswith("[") and "]" in host_candidate:
+            host_candidate = host_candidate[1:host_candidate.index("]")]
+        try:
+            addr = ipaddress.ip_address(host_candidate)
+            if str(addr) not in targets:
+                targets.append(str(addr))
+            continue
+        except ValueError:
+            pass
+
+        # 4c. Nombres de dominio / FQDN con punto
+        if "." in host_candidate and not host_candidate.startswith(("-", "/", ".")):
+            ext = "." + host_candidate.rsplit(".", 1)[-1].lower()
+            if ext not in EXCLUDED_FILE_EXTENSIONS:
+                if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host_candidate):
+                    if host_candidate not in targets:
+                        targets.append(host_candidate)
+
     return targets, missing_file_error
+
+
+def step_has_declared_target_source(step: Dict[str, Any]) -> bool:
+    """Comprueba si un paso declara una fuente explícita para resolver objetivos de alcance."""
+    target_selector = str(step.get("target_selector") or "").strip()
+    if target_selector:
+        return True
+    if step.get("inputs"):
+        return True
+    cmd_tpl = step.get("command_template", "")
+    placeholders = re.findall(r"\{([a-zA-Z0-9_]+)\}", cmd_tpl)
+    for p in placeholders:
+        if p.lower() not in NON_TARGET_PLACEHOLDERS:
+            return True
+    # Destinos literales en el comando (URLs, IPs, dominios)
+    if re.search(r"https?://[^\s'\"`;|&<>]+", cmd_tpl):
+        return True
+    raw_tokens = re.findall(r"[^\s'\"`;|&<>]+", cmd_tpl)
+    for tok in raw_tokens:
+        if tok.startswith("@"):
+            continue
+        host = tok.split(":")[0] if ":" in tok and not tok.startswith("[") else tok
+        if host.startswith("[") and "]" in host:
+            host = host[1:host.index("]")]
+        try:
+            ipaddress.ip_address(host)
+            return True
+        except ValueError:
+            pass
+        if "." in host and not host.startswith(("-", "/", ".")):
+            ext = "." + host.rsplit(".", 1)[-1].lower()
+            if ext not in EXCLUDED_FILE_EXTENSIONS:
+                if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host):
+                    return True
+    return False
 
 
 def validate_playbook_against_scope(
@@ -378,21 +475,9 @@ def validate_playbook_against_scope(
             scope_valid = False
             scope_error_msg = str(se)
     except ImportError:
-        # Fallback solo si el módulo seclab_scope no puede ser importado
-        if yaml is not None:
-            try:
-                parsed = yaml.safe_load(content) or {}
-                if isinstance(parsed, dict) and isinstance(parsed.get("scope"), dict):
-                    auth_config = parsed.get("authorization", {})
-                else:
-                    scope_valid = False
-                    scope_error_msg = "El contrato de alcance requiere un objeto 'scope' válido."
-            except Exception as e:
-                scope_valid = False
-                scope_error_msg = f"Error al parsear target.yaml: {e}"
-        else:
-            scope_valid = False
-            scope_error_msg = "No se puede validar el alcance sin el módulo seclab_scope o PyYAML."
+        # Fallback fail-closed si el módulo seclab_scope no puede ser importado
+        scope_valid = False
+        scope_error_msg = "Módulo seclab_scope no disponible para validación de alcance (fail-closed)."
 
     if not scope_valid:
         steps_eval: List[Dict[str, Any]] = []
@@ -492,6 +577,9 @@ def validate_playbook_against_scope(
                 dry_run=True,
             )
             target_selector = step.get("target_selector")
+            is_active_step = itype in ("active_low", "active_high") or "active" in req_perms
+            has_declared_source = step_has_declared_target_source(step)
+
             if step_missing_err:
                 status = "BLOCKED"
                 reason = f"Error en archivos de objetivos: {step_missing_err}"
@@ -502,7 +590,17 @@ def validate_playbook_against_scope(
                 reason = f"El paso requiere un selector de objetivos '{target_selector}' pero no se resolvieron destinos en alcance."
                 can_execute = False
                 blocked_count += 1
-            elif check_scope is not None and isinstance(parsed, dict) and step_targets:
+            elif is_active_step and not has_declared_source:
+                status = "BLOCKED"
+                reason = "El paso activo requiere un objetivo verificable contra Scope Guard pero no declara una fuente de destino resoluble."
+                can_execute = False
+                blocked_count += 1
+            elif check_scope is None:
+                status = "BLOCKED"
+                reason = "Módulo seclab_scope no disponible para comprobar destinos contra Scope Guard."
+                can_execute = False
+                blocked_count += 1
+            elif isinstance(parsed, dict) and step_targets:
                 for target_val in step_targets:
                     try:
                         verdict, v_reason = check_scope(target_val, parsed)
@@ -682,6 +780,7 @@ def execute_playbook_step(
 
     target_selector = step.get("target_selector")
     target_candidates, missing_file_err = extract_step_targets(step, context=ctx, dry_run=dry_run)
+    is_active_step = itype in ("active_low", "active_high") or "active" in (step.get("required_permissions") or [])
 
     if missing_file_err and not dry_run:
         return {
@@ -692,6 +791,48 @@ def execute_playbook_step(
             "command": cmd_tpl,
             "exit_code": 126,
             "output": f"Bloqueado: {missing_file_err}",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": False,
+        }
+
+    if not dry_run and check_scope is None:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "BLOCKED",
+            "command": cmd_tpl,
+            "exit_code": 126,
+            "output": "Bloqueado: Módulo de seguridad Scope Guard (seclab_scope) no disponible para ejecución real.",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": False,
+        }
+
+    if not dry_run and target_selector in ("in_scope_domains", "in_scope_ips") and not target_candidates:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "BLOCKED",
+            "command": cmd_tpl,
+            "exit_code": 126,
+            "output": f"Bloqueado: El paso requiere el selector '{target_selector}' pero no se encontraron destinos en alcance.",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": False,
+        }
+
+    if not dry_run and is_active_step and not target_candidates:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "BLOCKED",
+            "command": cmd_tpl,
+            "exit_code": 126,
+            "output": "Bloqueado: El paso activo requiere un objetivo verificable contra Scope Guard pero no declara ni resuelve ningún destino.",
             "expected_outputs": expected_outputs,
             "stop_condition_met": True,
             "is_simulated": False,
@@ -716,19 +857,6 @@ def execute_playbook_step(
                     "stop_condition_met": True,
                     "is_simulated": dry_run,
                 }
-    elif not dry_run and target_selector in ("in_scope_domains", "in_scope_ips") and not target_candidates:
-        return {
-            "step_id": step_id,
-            "title": title,
-            "interaction_type": itype,
-            "status": "BLOCKED",
-            "command": cmd_tpl,
-            "exit_code": 126,
-            "output": f"Bloqueado: El paso requiere el selector '{target_selector}' pero no se encontraron destinos en alcance.",
-            "expected_outputs": expected_outputs,
-            "stop_condition_met": True,
-            "is_simulated": False,
-        }
 
     try:
         cmd = interpolate_command(cmd_tpl, params)

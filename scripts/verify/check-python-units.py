@@ -2339,6 +2339,8 @@ def main():
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(metrics_tests))
     scope_matrix_tests = load_module('scope_matrix_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_seclab_scope_matrix.py')
     suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(scope_matrix_tests))
+    copilot_harness_tests = load_module('copilot_harness_tests', REPO_ROOT / 'scripts' / 'verify' / 'test_copilot_local_harness.py')
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(copilot_harness_tests))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     if result.wasSuccessful():

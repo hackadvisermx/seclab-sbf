@@ -1124,6 +1124,25 @@
             >
               📥 Exportar Chat (.md)
             </button>
+            <button
+              @click="checkCopilotProviderHealth"
+              data-testid="check-provider-health-btn"
+              :disabled="isCheckingProviderHealth"
+              class="px-2.5 py-1 rounded-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition-colors disabled:opacity-50"
+              title="Comprobar conectividad del modelo local (Ollama / vLLM)"
+            >
+              <span v-if="isCheckingProviderHealth">⏳ Sondeando...</span>
+              <span v-else>🔌 Estado Local</span>
+            </button>
+            <span
+              v-if="copilotProviderHealth"
+              data-testid="copilot-provider-health-pill"
+              class="px-2 py-0.5 rounded-xs text-[10px] font-mono border"
+              :class="copilotProviderHealth.status === 'ONLINE' ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60' : 'bg-rose-950/80 text-rose-300 border-rose-700/60'"
+              :title="copilotProviderHealth.error || (copilotProviderHealth.models && copilotProviderHealth.models.length ? `Modelos: ${copilotProviderHealth.models.join(', ')}` : 'Sin modelos detectados')"
+            >
+              {{ copilotProviderHealth.status === 'ONLINE' ? `🟢 ${copilotProviderHealth.models?.[0] || 'Local'} (${copilotProviderHealth.latency_ms}ms)` : '🔴 Local Offline' }}
+            </span>
           </div>
         </div>
 
@@ -1218,6 +1237,13 @@
               >
                 <span>{{ getCitationCoverage(m.citations).state === 'full' ? '✓' : getCitationCoverage(m.citations).state === 'partial' ? '⚠️' : getCitationCoverage(m.citations).state === 'unverified' ? '✗' : 'ℹ️' }}</span>
                 <span>Citas: {{ getCitationCoverage(m.citations).label }}</span>
+              </span>
+              <span
+                v-if="m.role === 'assistant' && (m.content && m.content.includes('Modo Degradación Determinista Local'))"
+                data-testid="copilot-fallback-active-badge"
+                class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase border bg-amber-950/80 text-amber-300 border-amber-600/70"
+              >
+                ⚡ Fallback Heurístico Local
               </span>
             </div>
             <div
@@ -5776,6 +5802,31 @@ async function exportCopilotChat(format = 'markdown') {
     console.error('Error al exportar transcripción de Copiloto:', err)
   } finally {
     exportingCopilotChat.value = false
+  }
+}
+
+const copilotProviderHealth = ref(null)
+const isCheckingProviderHealth = ref(false)
+
+async function checkCopilotProviderHealth() {
+  isCheckingProviderHealth.value = true
+  try {
+    let prov = 'custom_llm'
+    if (copilotSelectedModel.value.startsWith('profile:local')) {
+      prov = 'custom_llm'
+    } else if (copilotSelectedModel.value.includes(':')) {
+      prov = copilotSelectedModel.value.split(':')[0]
+    }
+    copilotProviderHealth.value = await api.getCopilotProviderHealth(prov)
+  } catch (err) {
+    copilotProviderHealth.value = {
+      status: 'OFFLINE',
+      latency_ms: 0,
+      error: err.message || 'Error al conectar con proveedor local',
+      models: [],
+    }
+  } finally {
+    isCheckingProviderHealth.value = false
   }
 }
 

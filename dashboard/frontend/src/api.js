@@ -144,6 +144,7 @@ export const api = {
   getCopilotChatHistory: (engId, type = 'engagement') => request(`/copilot/chat/history?engagement_id=${encodeURIComponent(engId)}&type=${encodeURIComponent(type)}`),
   getCopilotConsentHistory: (engId, type = 'engagement', limit = 50) => request(`/copilot/consent/history?engagement_id=${encodeURIComponent(engId)}&type=${encodeURIComponent(type)}&limit=${limit}`),
   autoRedactText: (text) => request('/copilot/redact', { method: 'POST', body: JSON.stringify({ text }) }),
+  getCopilotProviderHealth: (provider = 'custom_llm') => request(`/copilot/providers/health?provider=${encodeURIComponent(provider)}`),
   exportCopilotChat: async (engId, format = 'markdown', type = 'engagement') => {
     const url = `${API_BASE}/copilot/chat/export?engagement_id=${encodeURIComponent(engId)}&type=${encodeURIComponent(type)}&format=${encodeURIComponent(format)}`
     const res = await fetch(url, { credentials: 'same-origin' })

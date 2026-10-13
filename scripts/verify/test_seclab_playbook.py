@@ -117,6 +117,8 @@ class TestSeclabPlaybook(unittest.TestCase):
             "ssl_tls_audit.yaml",
             "dns_zone_recon.yaml",
             "api_endpoint_discovery.yaml",
+            "api_graphql_audit.yaml",
+            "oauth_jwt_audit.yaml",
         ]
         for name in playbook_files:
             pb_path = REPO_ROOT / "workspace-seed" / "playbooks" / name
@@ -137,6 +139,8 @@ class TestSeclabPlaybook(unittest.TestCase):
                 "ssl_tls_audit.yaml",
                 "dns_zone_recon.yaml",
                 "api_endpoint_discovery.yaml",
+                "api_graphql_audit.yaml",
+                "oauth_jwt_audit.yaml",
             ]
             for name in playbook_files:
                 pb_path = REPO_ROOT / "workspace-seed" / "playbooks" / name

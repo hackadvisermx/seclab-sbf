@@ -725,7 +725,7 @@ class TestSeclabPlaybook(unittest.TestCase):
             "title": "Sondeo Sin Destinos",
             "interaction_type": "active_low",
             "target_selector": "in_scope_domains",
-            "command_template": "curl https://example.local",
+            "command_template": "curl https://{domain}",
         }
         scope_data = {
             "scope": {
@@ -751,6 +751,143 @@ class TestSeclabPlaybook(unittest.TestCase):
         )
         self.assertEqual(res_dry["status"], "SIMULATED")
         self.assertEqual(res_dry["exit_code"], 0)
+
+    def test_active_step_with_literal_out_of_scope_target_is_blocked(self):
+        """B3: Paso activo con destino literal fuera de alcance es bloqueado por Scope Guard."""
+        from seclab_playbook import execute_playbook_step, run_playbook, validate_playbook_against_scope
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_literal.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        pb = {
+            "id": "pb_literal_out_of_scope",
+            "title": "Prueba Literal Fuera de Alcance",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test B3",
+            "steps": [
+                {
+                    "id": "step_literal_curl",
+                    "title": "Curl Literal",
+                    "objective": "Verificar bloqueo de destino literal no autorizado",
+                    "interaction_type": "active_low",
+                    "command_template": "curl https://destino-fuera-de-alcance",
+                }
+            ],
+        }
+
+        # 1. Validación estática contra alcance
+        res_val = validate_playbook_against_scope(pb, target_yaml)
+        self.assertFalse(res_val["can_execute"])
+        self.assertEqual(res_val["blocked_steps_count"], 1)
+        self.assertEqual(res_val["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("fuera de alcance según Scope Guard", res_val["steps_evaluation"][0]["reason"])
+
+        # 2. Ejecución real paso a paso
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": [], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        res_step = execute_playbook_step(
+            step=pb["steps"][0],
+            context={"allow_active": True, "scope_data": scope_data},
+            dry_run=False,
+        )
+        self.assertEqual(res_step["status"], "BLOCKED")
+        self.assertEqual(res_step["exit_code"], 126)
+        self.assertTrue(res_step["stop_condition_met"])
+        self.assertIn("destino-fuera-de-alcance", res_step["output"])
+
+        # 3. Ejecución completa del playbook
+        res_run = run_playbook(pb, target_yaml_path=target_yaml, dry_run=False)
+        self.assertEqual(res_run["status"], "BLOCKED")
+        self.assertFalse(res_run["can_execute"])
+        self.assertEqual(res_run["executed_steps_count"], 0)
+
+    def test_active_step_with_literal_in_scope_target_is_authorized(self):
+        """B3: Paso activo con destino literal en alcance es autorizado correctamente."""
+        from seclab_playbook import validate_playbook_against_scope
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_literal_in_scope.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        pb = {
+            "id": "pb_literal_in_scope",
+            "title": "Prueba Literal En Alcance",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test B3 in scope",
+            "steps": [
+                {
+                    "id": "step_literal_curl_in",
+                    "title": "Curl En Alcance",
+                    "objective": "Verificar autorización de destino literal autorizado",
+                    "interaction_type": "active_low",
+                    "command_template": "curl https://target.local/api",
+                }
+            ],
+        }
+
+        res_val = validate_playbook_against_scope(pb, target_yaml)
+        self.assertTrue(res_val["can_execute"])
+        self.assertEqual(res_val["blocked_steps_count"], 0)
+        self.assertEqual(res_val["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+    def test_active_step_without_targets_is_blocked(self):
+        """B3: Paso activo sin destino resoluble ni declarado (ej. printf) es bloqueado en ejecución real."""
+        from seclab_playbook import execute_playbook_step, run_playbook, validate_playbook_against_scope
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_no_targets.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        pb = {
+            "id": "pb_no_targets",
+            "title": "Prueba Sin Destinos",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Test B3 sin destinos",
+            "steps": [
+                {
+                    "id": "step_cmd_printf",
+                    "title": "Printf Sin Destino",
+                    "objective": "Comando inocuo sin objetivos de red",
+                    "interaction_type": "active_low",
+                    "command_template": "printf 'EXECUTED'",
+                }
+            ],
+        }
+
+        # Validación estática debe bloquear por falta de destino declarable
+        res_val = validate_playbook_against_scope(pb, target_yaml)
+        self.assertFalse(res_val["can_execute"])
+        self.assertEqual(res_val["blocked_steps_count"], 1)
+        self.assertEqual(res_val["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("no declara una fuente de destino resoluble", res_val["steps_evaluation"][0]["reason"])
+
+        # Ejecución real debe bloquear con código 126
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": [], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        res_step = execute_playbook_step(
+            step=pb["steps"][0],
+            context={"allow_active": True, "scope_data": scope_data},
+            dry_run=False,
+        )
+        self.assertEqual(res_step["status"], "BLOCKED")
+        self.assertEqual(res_step["exit_code"], 126)
+        self.assertTrue(res_step["stop_condition_met"])
+        self.assertIn("requiere un objetivo verificable", res_step["output"])
+
+        # Ejecución en run_playbook
+        res_run = run_playbook(pb, target_yaml_path=target_yaml, dry_run=False)
+        self.assertEqual(res_run["status"], "BLOCKED")
+        self.assertFalse(res_run["can_execute"])
+        self.assertEqual(res_run["executed_steps_count"], 0)
 
 
 if __name__ == "__main__":

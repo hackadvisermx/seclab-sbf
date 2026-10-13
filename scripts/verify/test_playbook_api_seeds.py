@@ -64,23 +64,57 @@ class TestPlaybookApiSeeds(unittest.TestCase):
 
     def test_scope_validation_with_authorized_target(self):
         from authorization_fixture import AUTHORIZATION_YAML
+        scope_yaml = (
+            "scope:\n"
+            "  in_scope:\n"
+            "    domains: ['api.target.local', 'target.local']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+            "  out_of_scope:\n"
+            "    domains: []\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_yaml = pathlib.Path(tmp_dir) / "target.yaml"
-            target_yaml.write_text(AUTHORIZATION_YAML)
+            target_yaml.write_text(scope_yaml + AUTHORIZATION_YAML)
             for path in [self.graphql_path, self.oauth_path]:
                 pb = load_playbook_file(path)
-                res = validate_playbook_against_scope(pb, target_yaml)
+                res = validate_playbook_against_scope(
+                    pb,
+                    target_yaml,
+                    parameters={"domain": "api.target.local"},
+                )
                 self.assertTrue(res["can_execute"], f"No se pudo ejecutar {path.name} con active permitido")
                 self.assertEqual(res["blocked_steps_count"], 0)
 
     def test_scope_validation_blocks_when_active_disallowed(self):
         from authorization_fixture import AUTHORIZATION_YAML
+        scope_yaml = (
+            "scope:\n"
+            "  in_scope:\n"
+            "    domains: ['api.target.local', 'target.local']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+            "  out_of_scope:\n"
+            "    domains: []\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_yaml = pathlib.Path(tmp_dir) / "target.yaml"
-            target_yaml.write_text(AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false"))
+            target_yaml.write_text(scope_yaml + AUTHORIZATION_YAML.replace("allow_active: true", "allow_active: false"))
             for path in [self.graphql_path, self.oauth_path]:
                 pb = load_playbook_file(path)
-                res = validate_playbook_against_scope(pb, target_yaml)
+                res = validate_playbook_against_scope(
+                    pb,
+                    target_yaml,
+                    parameters={"domain": "api.target.local"},
+                )
                 self.assertFalse(res["can_execute"], f"No debió permitirse {path.name} con active deshabilitado")
                 self.assertEqual(res["blocked_steps_count"], 3)
 

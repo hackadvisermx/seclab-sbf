@@ -7,10 +7,12 @@ REPORT.md y artifact-manifest.json).
 Sin egress de datos ni telemetría remota.
 """
 
+import datetime
 import json
 import os
 import pathlib
 import sqlite3
+import uuid
 from typing import Any, Dict, List, Optional, Union
 
 try:
@@ -449,4 +451,81 @@ def compute_cross_engagement_summary(workspace_dir: Union[str, pathlib.Path]) ->
         "total_completed_jobs": total_completed_jobs,
         "projects": projects_summary,
     }
+
+
+def record_metrics_snapshot(
+    engagement_dir: Union[str, pathlib.Path],
+    metrics_data: Optional[Dict[str, Any]] = None,
+    author: str = "tester",
+) -> Dict[str, Any]:
+    """Registra una captura histórica inmutable de métricas en evidence/.metrics_history.jsonl (V3-07e)."""
+    eng_path = pathlib.Path(engagement_dir)
+    if not eng_path.is_dir():
+        raise FileNotFoundError(f"Directorio de engagement no encontrado: {eng_path}")
+
+    if metrics_data is None:
+        metrics_data = compute_engagement_metrics(eng_path)
+
+    snapshot_id = uuid.uuid4().hex[:8]
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    readiness_score = float(metrics_data.get("audit_readiness_score", 0.0))
+
+    pillars_raw = metrics_data.get("pillars", {})
+    pillars = {
+        k: {
+            "status": v.get("status", "PENDING"),
+            "score": v.get("score", 0),
+        }
+        for k, v in pillars_raw.items()
+    }
+
+    findings_info = metrics_data.get("findings", {})
+    entry = {
+        "snapshot_id": snapshot_id,
+        "timestamp": timestamp,
+        "audit_readiness_score": readiness_score,
+        "is_fully_audited": bool(metrics_data.get("is_fully_audited", False)),
+        "pillars": pillars,
+        "total_findings": findings_info.get("total_findings", 0),
+        "provenance_coverage_pct": findings_info.get("provenance_coverage_pct", 0.0),
+        "recon_jobs_completed": metrics_data.get("recon", {}).get("completed_jobs", 0),
+        "author": author,
+    }
+
+    history_file = eng_path / "evidence" / ".metrics_history.jsonl"
+    history_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(history_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return entry
+
+
+def get_metrics_history(engagement_dir: Union[str, pathlib.Path]) -> List[Dict[str, Any]]:
+    """Devuelve la cronología longitudinal de métricas de preparación para auditoría en orden inverso."""
+    eng_path = pathlib.Path(engagement_dir)
+    history_file = eng_path / "evidence" / ".metrics_history.jsonl"
+    if not history_file.is_file():
+        return []
+
+    snapshots = []
+    try:
+        with open(history_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    snapshots.append(json.loads(line))
+    except Exception:
+        return []
+
+    # Calcular deltas cronológicos secuenciales
+    for i, snap in enumerate(snapshots):
+        if i == 0:
+            snap["delta_score"] = 0.0
+        else:
+            prev_score = snapshots[i - 1].get("audit_readiness_score", 0.0)
+            snap["delta_score"] = round(snap.get("audit_readiness_score", 0.0) - prev_score, 1)
+
+    snapshots.reverse()
+    return snapshots
+
 

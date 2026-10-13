@@ -68,6 +68,7 @@ test('tras crear un engagement, redirige al detalle en vez de volver a la lista'
   const view = await mountView('views/EngagementsView.vue', {
     getEngagements: async () => [],
     createEngagement: async () => created,
+    getCrossEngagementMetricsSummary: async () => null,
   })
   try {
     view.root.querySelector('button').click()
@@ -89,6 +90,7 @@ test('tras crear un reto, redirige al detalle del reto (no al de engagement)', a
   const view = await mountView('views/EngagementsView.vue', {
     getEngagements: async () => [],
     createEngagement: async () => created,
+    getCrossEngagementMetricsSummary: async () => null,
   })
   try {
     view.root.querySelector('button').click()

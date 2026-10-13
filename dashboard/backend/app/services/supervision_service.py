@@ -208,16 +208,17 @@ class SupervisionService:
                 "",
                 "## 1. Checkpoints Pedagógicos Formativos",
                 "",
-                "| Checkpoint | Etapa | Estado | Evaluación | Guía / Siguiente Acción |",
-                "| --- | --- | --- | --- | --- |",
+                "| ID | Checkpoint | Etapa | Estado | Evaluación | Guía / Siguiente Acción |",
+                "| --- | --- | --- | --- | --- | --- |",
             ]
             for cp in state.get("checkpoints", []):
-                cid = cp.get("title", cp.get("id"))
+                cid = cp.get("id", "-")
+                title = (cp.get("title") or cid).replace("|", "\\|")
                 stage = cp.get("stage", "-")
                 status = cp.get("status", "NOT_STARTED")
                 reason = (cp.get("reason") or "-").replace("|", "\\|")
                 hint = (cp.get("hint") or "-").replace("|", "\\|")
-                lines.append(f"| {cid} | {stage} | {status} | {reason} | {hint} |")
+                lines.append(f"| `{cid}` | {title} | {stage} | {status} | {reason} | {hint} |")
 
             lines.extend([
                 "",

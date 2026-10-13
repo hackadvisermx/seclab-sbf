@@ -1,0 +1,56 @@
+# Playbook determinista: Auditoría y Mapeo de Infraestructura de Red Interna
+id: "pb_internal_pivot_audit"
+title: "Auditoría y Mapeo de Infraestructura de Red Interna"
+version: "1.0"
+category: "infra_audit"
+description: "Mapeo defensivo de topología interna: inspección de vecinos ARP, banners SSH y puertos de administración local."
+author: "SecLab-SBF"
+
+steps:
+  - id: "step_01_arp_cache_inspection"
+    title: "Inspección de Vecinos y Tabla ARP Local"
+    objective: "Mapear direcciones IP y MAC de sistemas adyacentes en el segmento local mediante la tabla de vecinos del sistema."
+    interaction_type: "passive"
+    required_permissions:
+      - "allow_passive"
+    target_selector: "local_gateway"
+    inputs:
+      - "target.yaml"
+    command_template: "ip neighbor show > recon/arp_neighbors.txt"
+    timeout_seconds: 30
+    expected_outputs:
+      - "recon/arp_neighbors.txt"
+    success_criteria:
+      file_exists: "recon/arp_neighbors.txt"
+
+  - id: "step_02_ssh_banner_probe"
+    title: "Detección y Sondeo de Banners SSH"
+    objective: "Recuperar banners de versión SSH en hosts del segmento para identificar versiones desactualizadas y suites de cifrado débiles."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_ips"
+    inputs:
+      - "recon/arp_neighbors.txt"
+    command_template: "nc -w 3 -z -v {target} 22 > recon/ssh_banners.txt 2>&1"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/ssh_banners.txt"
+    success_criteria:
+      file_exists: "recon/ssh_banners.txt"
+
+  - id: "step_03_local_mgmt_ports"
+    title: "Mapeo de Puertos de Administración en Red Local"
+    objective: "Escanear puertos de gestión crítica (22, 80, 443, 3389, 8080) en los objetivos autorizados."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_ips"
+    inputs:
+      - "target.yaml"
+    command_template: "nmap -sT -p 22,80,443,3389,8080 {target} -oN recon/mgmt_ports.txt"
+    timeout_seconds: 120
+    expected_outputs:
+      - "recon/mgmt_ports.txt"
+    success_criteria:
+      file_exists: "recon/mgmt_ports.txt"

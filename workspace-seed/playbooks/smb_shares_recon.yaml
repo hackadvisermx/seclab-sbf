@@ -1,0 +1,56 @@
+# Playbook determinista: Auditoría y Reconocimiento de SMB y Recursos Compartidos
+id: "pb_smb_shares_recon"
+title: "Auditoría y Reconocimiento de SMB y Recursos Compartidos"
+version: "1.0"
+category: "infra_audit"
+description: "Inspección de servicios SMB: sondeo de versiones, validación de firma obligatoria y enumeración de recursos compartidos."
+author: "SecLab-SBF"
+
+steps:
+  - id: "step_01_smb_version_probe"
+    title: "Detección y Sondeo de Versión SMB"
+    objective: "Identificar la versión de dialecto SMB y sistema operativo expuesto en puertos 139/445."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_ips"
+    inputs:
+      - "target.yaml"
+    command_template: "nmap -sV -p 139,445 --script smb-os-discovery {target} -oN recon/smb_os.txt"
+    timeout_seconds: 120
+    expected_outputs:
+      - "recon/smb_os.txt"
+    success_criteria:
+      file_exists: "recon/smb_os.txt"
+
+  - id: "step_02_smb_signing_check"
+    title: "Inspección de Firma SMB Obligatoria"
+    objective: "Verificar si la firma SMB (SMB Signing) está configurada como requerida o deshabilitada frente a ataques de retransmisión (relay)."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_ips"
+    inputs:
+      - "recon/smb_os.txt"
+    command_template: "nmap -p 445 --script smb2-security-mode {target} -oN recon/smb_signing.txt"
+    timeout_seconds: 60
+    expected_outputs:
+      - "recon/smb_signing.txt"
+    success_criteria:
+      file_exists: "recon/smb_signing.txt"
+
+  - id: "step_03_smb_share_enum"
+    title: "Enumeración de Recursos Compartidos y Permisos de Acceso"
+    objective: "Listar recursos compartidos (shares) y comprobar acceso con sesiones nulas o cuentas anónimas (guest)."
+    interaction_type: "active_low"
+    required_permissions:
+      - "allow_active"
+    target_selector: "in_scope_ips"
+    inputs:
+      - "recon/smb_signing.txt"
+    command_template: "nmap -p 139,445 --script smb-enum-shares {target} -oN recon/smb_shares.txt"
+    timeout_seconds: 180
+    expected_outputs:
+      - "recon/smb_shares.txt"
+    success_criteria:
+      file_exists: "recon/smb_shares.txt"

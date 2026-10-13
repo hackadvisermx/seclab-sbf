@@ -119,6 +119,8 @@ class TestSeclabPlaybook(unittest.TestCase):
             "api_endpoint_discovery.yaml",
             "api_graphql_audit.yaml",
             "oauth_jwt_audit.yaml",
+            "smb_shares_recon.yaml",
+            "internal_pivot_audit.yaml",
         ]
         for name in playbook_files:
             pb_path = REPO_ROOT / "workspace-seed" / "playbooks" / name
@@ -141,6 +143,8 @@ class TestSeclabPlaybook(unittest.TestCase):
                 "api_endpoint_discovery.yaml",
                 "api_graphql_audit.yaml",
                 "oauth_jwt_audit.yaml",
+                "smb_shares_recon.yaml",
+                "internal_pivot_audit.yaml",
             ]
             for name in playbook_files:
                 pb_path = REPO_ROOT / "workspace-seed" / "playbooks" / name

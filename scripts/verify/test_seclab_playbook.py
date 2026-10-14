@@ -1744,6 +1744,246 @@ class TestSeclabPlaybook(unittest.TestCase):
         self.assertTrue(val_ok["can_execute"])
         self.assertEqual(val_ok["steps_evaluation"][0]["status"], "AUTHORIZED")
 
+    def test_b1_target_flag_precedence_over_non_target_name_and_trailing_dot_fqdn(self):
+        """B1: La posición inequívoca de destino prevalece sobre el nombre del placeholder y FQDN con punto terminal se extrae y bloquea."""
+        from seclab_playbook import (
+            validate_playbook_against_scope,
+            execute_playbook_step,
+            extract_step_targets,
+            is_target_placeholder,
+            _extract_literal_targets,
+        )
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b1_proxy_precedence.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        # 1. Verificación sintáctica directa: la posición de bandera prevalece sobre NON_TARGET_PLACEHOLDERS ('method')
+        cmd_proxy = "curl --proxy {method} https://target.local"
+        self.assertTrue(is_target_placeholder("method", cmd_proxy))
+        self.assertTrue(is_target_placeholder("method", "curl -x {method} https://target.local"))
+        self.assertTrue(is_target_placeholder("method", "curl -x{method} https://target.local"))
+        self.assertTrue(is_target_placeholder("method", "curl -sSx {method} https://target.local"))
+        self.assertTrue(is_target_placeholder("method", "curl -sSx{method} https://target.local"))
+        self.assertTrue(is_target_placeholder("method", "curl --proxy={method} https://target.local"))
+        self.assertTrue(is_target_placeholder("method", "openssl s_client -connect {method}:443"))
+
+        # Falso positivo prevenido: en posición no-objetivo sigue siendo no-objetivo
+        self.assertFalse(is_target_placeholder("method", "curl -X {method} https://target.local"))
+
+        # 2. Extractor literal reconoce FQDNs con punto terminal DNS
+        lit_extracted = _extract_literal_targets("curl --proxy evil.com. https://target.local")
+        self.assertIn("evil.com.", lit_extracted)
+        self.assertIn("evil.com", lit_extracted)
+        self.assertIn("https://target.local", lit_extracted)
+
+        step = {
+            "id": "step_proxy_method",
+            "title": "Paso Proxy Method",
+            "objective": "Verificar precedencia de bandera de proxy sobre nombre method",
+            "interaction_type": "active_low",
+            "command_template": cmd_proxy,
+        }
+        pb = {
+            "id": "pb_proxy_test",
+            "title": "Playbook Proxy Test",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Prueba de bandera proxy con nombre no canónico y FQDN con punto terminal",
+            "steps": [step],
+        }
+
+        # 3. Caso auditoría: method="evil.com." (proxy fuera de alcance con punto terminal)
+        targets_extracted, _ = extract_step_targets(
+            step,
+            context={"parameters": {"method": "evil.com."}},
+            dry_run=True,
+        )
+        self.assertTrue(any("evil.com" in t for t in targets_extracted))
+        self.assertIn("https://target.local", targets_extracted)
+
+        val_evil = validate_playbook_against_scope(pb, target_yaml, parameters={"method": "evil.com."})
+        self.assertFalse(val_evil["can_execute"])
+        self.assertEqual(val_evil["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("evil.com", val_evil["steps_evaluation"][0]["reason"])
+
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_evil = execute_playbook_step(
+                step,
+                context={
+                    "allow_active": True,
+                    "scope_data": scope_data,
+                    "parameters": {"method": "evil.com."},
+                },
+                dry_run=False,
+            )
+            self.assertEqual(res_evil["status"], "BLOCKED")
+            self.assertEqual(res_evil["exit_code"], 126)
+            self.assertTrue(res_evil["stop_condition_met"])
+            mock_run.assert_not_called()
+
+        # 4. Sin parámetro: debe fallar cerrado por placeholder sin resolver
+        val_no_param = validate_playbook_against_scope(pb, target_yaml, parameters={})
+        self.assertFalse(val_no_param["can_execute"])
+        self.assertEqual(val_no_param["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("method", val_no_param["steps_evaluation"][0]["reason"])
+
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_no_param = execute_playbook_step(
+                step,
+                context={"allow_active": True, "scope_data": scope_data, "parameters": {}},
+                dry_run=False,
+            )
+            self.assertEqual(res_no_param["status"], "BLOCKED")
+            self.assertEqual(res_no_param["exit_code"], 126)
+            self.assertTrue(res_no_param["stop_condition_met"])
+            mock_run.assert_not_called()
+
+        # 5. Control positivo: method="target.local" (proxy en alcance)
+        val_ok = validate_playbook_against_scope(pb, target_yaml, parameters={"method": "target.local"})
+        self.assertTrue(val_ok["can_execute"])
+        self.assertEqual(val_ok["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            mock_proc = unittest.mock.MagicMock(returncode=0, stdout="OK", stderr="")
+            mock_run.return_value = mock_proc
+            res_ok = execute_playbook_step(
+                step,
+                context={
+                    "allow_active": True,
+                    "scope_data": scope_data,
+                    "parameters": {"method": "target.local"},
+                },
+                dry_run=False,
+            )
+            self.assertEqual(res_ok["status"], "SUCCESS")
+            mock_run.assert_called_once()
+
+    def test_m1_non_target_payload_url_exclusion_and_context_preservation(self):
+        """M1: El análisis postinterpolación preserva el contexto no-objetivo (-d, -H) y no bloquea URLs en payloads de datos."""
+        from seclab_playbook import (
+            validate_playbook_against_scope,
+            execute_playbook_step,
+            extract_step_targets,
+            _extract_literal_targets,
+        )
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_m1_payload_context.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["client.example"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        # 1. Extractor literal excluye URLs contenidas exclusivamente en banderas de datos (-d, --data, -H)
+        cmd_interp_data = "curl -d 'https://client.example/callback' https://target.local"
+        extracted_data = _extract_literal_targets(cmd_interp_data)
+        self.assertIn("https://target.local", extracted_data)
+        self.assertNotIn("https://client.example/callback", extracted_data)
+        self.assertNotIn("client.example", extracted_data)
+
+        cmd_interp_header = "curl -H 'Referer: https://client.example/callback' https://target.local"
+        extracted_header = _extract_literal_targets(cmd_interp_header)
+        self.assertIn("https://target.local", extracted_header)
+        self.assertNotIn("https://client.example/callback", extracted_header)
+
+        # 2. Paso activo con payload conteniendo URL externa bajo -d
+        step_payload = {
+            "id": "step_oauth_callback_payload",
+            "title": "Paso OAuth Payload",
+            "objective": "Enviar callback URL como payload de datos a target.local",
+            "interaction_type": "active_low",
+            "command_template": "curl -d '{payload}' https://target.local",
+        }
+        pb_payload = {
+            "id": "pb_oauth_test",
+            "title": "Playbook OAuth Payload Test",
+            "version": "1.0",
+            "category": "api",
+            "description": "Prueba de no clasificación errónea de URLs en payloads",
+            "steps": [step_payload],
+        }
+
+        # Extracción previa no agrega client.example a targets
+        targets_extracted, _ = extract_step_targets(
+            step_payload,
+            context={"parameters": {"payload": "https://client.example/callback"}},
+            dry_run=True,
+        )
+        self.assertIn("https://target.local", targets_extracted)
+        self.assertNotIn("https://client.example/callback", targets_extracted)
+        self.assertNotIn("client.example", targets_extracted)
+
+        # Validación estática aprueba porque el destino real es target.local
+        val_payload = validate_playbook_against_scope(
+            pb_payload,
+            target_yaml,
+            parameters={"payload": "https://client.example/callback"},
+        )
+        self.assertTrue(val_payload["can_execute"])
+        self.assertEqual(val_payload["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+        # Ejecución real autorizada llama a subprocess.run con el comando interpolado
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            mock_proc = unittest.mock.MagicMock(returncode=0, stdout='{"success": true}', stderr="")
+            mock_run.return_value = mock_proc
+            res_payload = execute_playbook_step(
+                step_payload,
+                context={
+                    "allow_active": True,
+                    "scope_data": scope_data,
+                    "parameters": {"payload": "https://client.example/callback"},
+                },
+                dry_run=False,
+            )
+            self.assertEqual(res_payload["status"], "SUCCESS")
+            mock_run.assert_called_once()
+            call_cmd = mock_run.call_args[0][0]
+            self.assertIn("https://client.example/callback", call_cmd)
+            self.assertIn("https://target.local", call_cmd)
+
+        # 3. Control de seguridad: la MISMA URL como destino real bloquea estática y dinámicamente
+        step_real_target = {
+            "id": "step_real_target",
+            "title": "Paso Destino Real Fuera de Alcance",
+            "objective": "Verificar que la misma URL cuando es objetivo real se bloquea",
+            "interaction_type": "active_low",
+            "command_template": "curl https://client.example/callback",
+        }
+        pb_real = {
+            "id": "pb_real_target_test",
+            "title": "Playbook Real Target Test",
+            "version": "1.0",
+            "category": "api",
+            "description": "Prueba de control de destino real fuera de alcance",
+            "steps": [step_real_target],
+        }
+
+        val_real = validate_playbook_against_scope(pb_real, target_yaml)
+        self.assertFalse(val_real["can_execute"])
+        self.assertEqual(val_real["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("client.example", val_real["steps_evaluation"][0]["reason"])
+
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_real = execute_playbook_step(
+                step_real_target,
+                context={"allow_active": True, "scope_data": scope_data},
+                dry_run=False,
+            )
+            self.assertEqual(res_real["status"], "BLOCKED")
+            self.assertEqual(res_real["exit_code"], 126)
+            self.assertTrue(res_real["stop_condition_met"])
+            mock_run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

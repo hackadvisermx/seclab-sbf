@@ -563,6 +563,210 @@ class TestPlaybooksAPI(unittest.TestCase):
 
             client.close()
 
+    def test_playbooks_api_b1_target_flag_precedence_over_non_target_name(self):
+        """B1: En /validate, las banderas de destino prevalecen sobre nombres de placeholders y FQDNs con punto terminal fallan cerrado."""
+        from app.main import app
+        from app.api.endpoints import auth, playbooks
+        from fastapi.testclient import TestClient
+
+        ws_dir = pathlib.Path(self.tmp.name) / "workspace"
+        eng_dir = ws_dir / "engagements" / "test-eng-b1"
+        eng_dir.mkdir(parents=True, exist_ok=True)
+        (ws_dir / "retos").mkdir(parents=True, exist_ok=True)
+
+        target_yaml = eng_dir / "target.yaml"
+        target_yaml.write_text(
+            "version: '1.0'\n"
+            "scope:\n"
+            "  in_scope:\n"
+            "    domains: ['target.local']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+            "  out_of_scope:\n"
+            "    domains: ['evil.com']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    notes: []\n"
+            "authorization:\n"
+            "  reference: 'AUT-001'\n"
+            "  valid_from: '2026-10-01T00:00:00.000Z'\n"
+            "  valid_until: '2026-10-31T23:59:59.000Z'\n"
+            "  allow_passive: true\n"
+            "  allow_active: true\n"
+        )
+
+        auth._attempts.clear()
+        with patch.object(auth, "TESTER_PASSWORD", "test-pass"), \
+             patch.object(playbooks, "WORKSPACE_DIR", ws_dir):
+            client = TestClient(app)
+            login_res = client.post("/api/v1/auth/login", json={"password": "test-pass"})
+            self.assertEqual(login_res.status_code, 200)
+
+            pb_proxy = {
+                "id": "pb_proxy_api_test",
+                "title": "Playbook Proxy API Test",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba API bandera proxy con placeholder method y FQDN con punto terminal",
+                "steps": [
+                    {
+                        "id": "step_proxy",
+                        "title": "Paso Proxy",
+                        "objective": "Verificar bloqueo de proxy fuera de alcance con punto terminal",
+                        "interaction_type": "active_low",
+                        "command_template": "curl --proxy {method} https://target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+
+            # 1. /validate con method="evil.com." (fuera de alcance): bloqueado
+            res_evil = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_proxy,
+                    "engagement_id": "test-eng-b1",
+                    "parameters": {"method": "evil.com."},
+                },
+            )
+            self.assertEqual(res_evil.status_code, 200)
+            self.assertFalse(res_evil.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_evil.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+            self.assertIn("evil.com", res_evil.json()["scope_evaluation"]["steps_evaluation"][0]["reason"])
+
+            # 2. /validate sin method: bloqueado por placeholder sin resolver
+            res_none = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_proxy,
+                    "engagement_id": "test-eng-b1",
+                    "parameters": {},
+                },
+            )
+            self.assertEqual(res_none.status_code, 200)
+            self.assertFalse(res_none.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_none.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # 3. /validate con method="target.local" (en alcance): autorizado
+            res_ok = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_proxy,
+                    "engagement_id": "test-eng-b1",
+                    "parameters": {"method": "target.local"},
+                },
+            )
+            self.assertEqual(res_ok.status_code, 200)
+            self.assertTrue(res_ok.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_ok.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+            client.close()
+
+    def test_playbooks_api_m1_non_target_payload_url_authorized(self):
+        """M1: En /validate, URLs en payloads de datos bajo banderas no-objetivo (-d, -H) son autorizadas y no bloquean el paso."""
+        from app.main import app
+        from app.api.endpoints import auth, playbooks
+        from fastapi.testclient import TestClient
+
+        ws_dir = pathlib.Path(self.tmp.name) / "workspace"
+        eng_dir = ws_dir / "engagements" / "test-eng-m1"
+        eng_dir.mkdir(parents=True, exist_ok=True)
+        (ws_dir / "retos").mkdir(parents=True, exist_ok=True)
+
+        target_yaml = eng_dir / "target.yaml"
+        target_yaml.write_text(
+            "version: '1.0'\n"
+            "scope:\n"
+            "  in_scope:\n"
+            "    domains: ['target.local']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+            "  out_of_scope:\n"
+            "    domains: ['client.example']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    notes: []\n"
+            "authorization:\n"
+            "  reference: 'AUT-001'\n"
+            "  valid_from: '2026-10-01T00:00:00.000Z'\n"
+            "  valid_until: '2026-10-31T23:59:59.000Z'\n"
+            "  allow_passive: true\n"
+            "  allow_active: true\n"
+        )
+
+        auth._attempts.clear()
+        with patch.object(auth, "TESTER_PASSWORD", "test-pass"), \
+             patch.object(playbooks, "WORKSPACE_DIR", ws_dir):
+            client = TestClient(app)
+            login_res = client.post("/api/v1/auth/login", json={"password": "test-pass"})
+            self.assertEqual(login_res.status_code, 200)
+
+            # Paso con URL externa dentro de payload bajo -d
+            pb_payload = {
+                "id": "pb_oauth_callback_api_test",
+                "title": "Playbook OAuth Callback API Test",
+                "version": "1.0",
+                "category": "api",
+                "description": "Prueba API payload no-objetivo con URL",
+                "steps": [
+                    {
+                        "id": "step_oauth_callback",
+                        "title": "Paso OAuth Callback",
+                        "objective": "Enviar callback URL a destino en alcance",
+                        "interaction_type": "active_low",
+                        "command_template": "curl -d '{payload}' https://target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+
+            # 1. /validate con payload conteniendo URL externa: autorizado (target.local es el destino real)
+            res_payload = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_payload,
+                    "engagement_id": "test-eng-m1",
+                    "parameters": {"payload": "https://client.example/callback"},
+                },
+            )
+            self.assertEqual(res_payload.status_code, 200)
+            self.assertTrue(res_payload.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_payload.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+            # 2. Control de seguridad: la MISMA URL externa como destino real en /validate es bloqueada
+            pb_direct_url = {
+                "id": "pb_direct_url_test",
+                "title": "Playbook Direct URL Test",
+                "version": "1.0",
+                "category": "api",
+                "description": "Prueba de control con URL directa fuera de alcance",
+                "steps": [
+                    {
+                        "id": "step_direct_url",
+                        "title": "Paso Direct URL",
+                        "objective": "Verificar bloqueo de URL directa fuera de alcance",
+                        "interaction_type": "active_low",
+                        "command_template": "curl https://client.example/callback",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            res_direct = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_direct_url,
+                    "engagement_id": "test-eng-m1",
+                },
+            )
+            self.assertEqual(res_direct.status_code, 200)
+            self.assertFalse(res_direct.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_direct.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+            self.assertIn("client.example", res_direct.json()["scope_evaluation"]["steps_evaluation"][0]["reason"])
+
+            client.close()
+
 
 if __name__ == "__main__":
     unittest.main()

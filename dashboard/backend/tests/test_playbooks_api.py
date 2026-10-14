@@ -503,6 +503,64 @@ class TestPlaybooksAPI(unittest.TestCase):
             self.assertTrue(res_conn_ok.json()["scope_evaluation"]["can_execute"])
             self.assertEqual(res_conn_ok.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
 
+            # B3: Parámetro posicional no canónico {asset}
+            pb_asset = {
+                "id": "pb_asset_api_test",
+                "title": "Playbook Asset API Test",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba API placeholder posicional no canónico",
+                "steps": [
+                    {
+                        "id": "step_asset",
+                        "title": "Paso Asset",
+                        "objective": "Verificar bloqueo de asset",
+                        "interaction_type": "active_low",
+                        "command_template": "curl {asset} target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            # Con asset=evil.com fuera de alcance: bloquea
+            res_asset_evil = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_asset,
+                    "engagement_id": "test-eng",
+                    "parameters": {"asset": "evil.com"},
+                },
+            )
+            self.assertEqual(res_asset_evil.status_code, 200)
+            self.assertFalse(res_asset_evil.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_asset_evil.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+            self.assertIn("evil.com", res_asset_evil.json()["scope_evaluation"]["steps_evaluation"][0]["reason"])
+
+            # Sin asset: bloquea por placeholder no expandido
+            res_asset_none = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_asset,
+                    "engagement_id": "test-eng",
+                    "parameters": {},
+                },
+            )
+            self.assertEqual(res_asset_none.status_code, 200)
+            self.assertFalse(res_asset_none.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_asset_none.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # Con asset=target.local en alcance: autoriza
+            res_asset_ok = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_asset,
+                    "engagement_id": "test-eng",
+                    "parameters": {"asset": "target.local"},
+                },
+            )
+            self.assertEqual(res_asset_ok.status_code, 200)
+            self.assertTrue(res_asset_ok.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_asset_ok.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
+
             client.close()
 
 

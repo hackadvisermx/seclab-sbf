@@ -223,6 +223,8 @@ NON_TARGET_PLACEHOLDERS = {
     "headers",
     "port",
     "ports",
+    "method",
+    "methods",
 }
 
 TARGET_KEY_HINTS = {
@@ -293,7 +295,7 @@ def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
     space_flags = _flag_alternation(TARGET_FLAGS_WITH_VALUE)
     eq_flags = _flag_alternation(TARGET_FLAG_NAMES)
     compact_flags = _flag_alternation(COMPACT_TARGET_SHORT_FLAGS)
-    patterns = [
+    target_patterns = [
         r"://[^\s'\"`;|<>&]*" + ph,
         r"@\{" + escaped + r"\}",
         r"(?<!\S)(?:" + space_flags + r")\s+['\"]?" + value_suffix,
@@ -301,7 +303,24 @@ def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
         r"(?<!\S)(?:" + compact_flags + r")['\"]?" + value_suffix,
         r"(?<!\S)-[a-zA-Z0-9]*x['\"]?" + value_suffix,
     ]
-    return any(re.search(pat, cmd_tpl) for pat in patterns)
+    if any(re.search(pat, cmd_tpl) for pat in target_patterns):
+        return True
+
+    # Comprobar si está tras una bandera explícitamente no-objetivo (ej. -X {verb}, -d '...{name}...')
+    non_target_flags = _flag_alternation(FLAGS_EXPECTING_NON_TARGET_VALUE)
+    non_target_patterns = [
+        r"(?<!\S)(?:" + non_target_flags + r")\s+['\"]?[^\s'\"`;|<>&]*" + ph,
+        r"(?<!\S)(?:" + non_target_flags + r")=['\"]?[^\s'\"`;|<>&]*" + ph,
+        r"(?<!\S)(?:" + non_target_flags + r")\s+'[^']*" + ph,
+        r'(?<!\S)(?:' + non_target_flags + r')\s+"[^"]*' + ph,
+        r"(?<!\S)(?:" + non_target_flags + r")='[^']*" + ph,
+        r'(?<!\S)(?:' + non_target_flags + r')="[^"]*' + ph,
+    ]
+    if any(re.search(pat, cmd_tpl) for pat in non_target_patterns):
+        return False
+
+    # Por defecto en pasos activos: cualquier placeholder posicional o ambiguo se considera candidato a destino (fail-closed)
+    return True
 
 
 EXCLUDED_FILE_EXTENSIONS = {
@@ -663,6 +682,16 @@ def extract_step_targets(
     for lit_target in _extract_literal_targets(cmd_tpl):
         if lit_target not in targets:
             targets.append(lit_target)
+
+    # 5. Si hay parámetros provistos, extraer también destinos literales del comando interpolado
+    if params:
+        try:
+            interp_cmd = interpolate_command(cmd_tpl, params)
+            for lit_target in _extract_literal_targets(interp_cmd):
+                if lit_target not in targets:
+                    targets.append(lit_target)
+        except Exception:
+            pass
 
     return targets, missing_file_error
 
@@ -1175,6 +1204,27 @@ def execute_playbook_step(
             "stop_condition_met": True,
             "is_simulated": dry_run,
         }
+
+    # Salvaguarda fail-closed: verificar que el comando interpolado no contenga destinos fuera de alcance
+    if not dry_run and is_active_step and scope_data and check_scope is not None:
+        for lit in _extract_literal_targets(cmd):
+            try:
+                verdict, reason = check_scope(lit, scope_data)
+            except ScopeError as se:
+                verdict, reason = "UNKNOWN", str(se)
+            if verdict != "IN_SCOPE":
+                return {
+                    "step_id": step_id,
+                    "title": title,
+                    "interaction_type": itype,
+                    "status": "BLOCKED",
+                    "command": cmd_tpl,
+                    "exit_code": 126,
+                    "output": f"Bloqueado por Scope Guard: El objetivo interpolado '{lit}' no está autorizado en el alcance ({verdict}: {reason}).",
+                    "expected_outputs": expected_outputs,
+                    "stop_condition_met": True,
+                    "is_simulated": False,
+                }
 
     if dry_run:
         return {

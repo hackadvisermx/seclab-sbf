@@ -1663,6 +1663,87 @@ class TestSeclabPlaybook(unittest.TestCase):
             self.assertFalse(val["can_execute"], f"Validación debió bloquear '{cmd_tpl}'")
             self.assertEqual(val["steps_evaluation"][0]["status"], "BLOCKED")
 
+    def test_b3_interpolated_positional_parameter_validates_against_scope(self):
+        """B3: Parámetros posicionales no canónicos interpolados son validados contra Scope Guard y fallan cerrado."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step, extract_step_targets
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b3_asset_param.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        step = {
+            "id": "step_asset_positional",
+            "title": "Paso Posicional Asset",
+            "objective": "Verificar validación de parámetro asset",
+            "interaction_type": "active_low",
+            "command_template": "curl {asset} target.local",
+        }
+        pb = {
+            "id": "pb_asset_test",
+            "title": "Playbook Asset Test",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Prueba de parámetro posicional no canónico",
+            "steps": [step],
+        }
+
+        # 1. Caso auditoría: parameters={"asset": "evil.com"} (fuera de alcance)
+        targets_extracted, _ = extract_step_targets(
+            step,
+            context={"parameters": {"asset": "evil.com"}},
+            dry_run=True,
+        )
+        self.assertIn("evil.com", targets_extracted)
+        self.assertIn("target.local", targets_extracted)
+
+        val_evil = validate_playbook_against_scope(pb, target_yaml, parameters={"asset": "evil.com"})
+        self.assertFalse(val_evil["can_execute"])
+        self.assertEqual(val_evil["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("evil.com", val_evil["steps_evaluation"][0]["reason"])
+
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_evil = execute_playbook_step(
+                step,
+                context={
+                    "allow_active": True,
+                    "scope_data": scope_data,
+                    "parameters": {"asset": "evil.com"},
+                },
+                dry_run=False,
+            )
+            self.assertEqual(res_evil["status"], "BLOCKED")
+            self.assertEqual(res_evil["exit_code"], 126)
+            self.assertTrue(res_evil["stop_condition_met"])
+            mock_run.assert_not_called()
+
+        # 2. Sin parámetro: debe bloquear por placeholder sin resolver
+        val_no_param = validate_playbook_against_scope(pb, target_yaml, parameters={})
+        self.assertFalse(val_no_param["can_execute"])
+        self.assertEqual(val_no_param["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("asset", val_no_param["steps_evaluation"][0]["reason"])
+
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_no_param = execute_playbook_step(
+                step,
+                context={"allow_active": True, "scope_data": scope_data, "parameters": {}},
+                dry_run=False,
+            )
+            self.assertEqual(res_no_param["status"], "BLOCKED")
+            self.assertEqual(res_no_param["exit_code"], 126)
+            self.assertTrue(res_no_param["stop_condition_met"])
+            mock_run.assert_not_called()
+
+        # 3. Control: parameters={"asset": "target.local"} (autorizado)
+        val_ok = validate_playbook_against_scope(pb, target_yaml, parameters={"asset": "target.local"})
+        self.assertTrue(val_ok["can_execute"])
+        self.assertEqual(val_ok["steps_evaluation"][0]["status"], "AUTHORIZED")
+
 
 if __name__ == "__main__":
     unittest.main()

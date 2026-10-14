@@ -274,6 +274,8 @@ FLAGS_EXPECTING_NON_TARGET_VALUE = {
     "-T3", "-T4", "--timeout", "-timeout", "-mc", "-H", "--header",
     "-d", "--data", "-f", "--format", "-l", "-b", "--cookie",
     "-A", "--user-agent", "-user-agent", "--data-raw", "--data-binary",
+    "--data-urlencode", "--data-ascii", "--json", "-F", "--form", "-e", "--referer",
+    "--post-data",
 }
 
 
@@ -283,12 +285,18 @@ def _flag_alternation(flags) -> str:
 
 
 def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
-    """Determina si un placeholder corresponde a un destino de red verificable contra Scope Guard."""
+    """Determina si un placeholder corresponde a un destino de red verificable contra Scope Guard.
+
+    REGLA DE PRECEDENCIA:
+    1. Una posición inequívoca de destino en el comando (--proxy {p}, -x {p}, --url {p}, ://{p}, etc.)
+       SIEMPRE prevalece sobre cualquier nombre o exclusión en NON_TARGET_PLACEHOLDERS. El contexto manda.
+    2. Una posición explícita tras una bandera no-objetivo (-X {p}, -d {p}, -H {p}, etc.)
+       excluye el placeholder como destino de red.
+    3. Exclusiones declaradas por nombre (NON_TARGET_PLACEHOLDERS).
+    4. Indicios canónicos por nombre (TARGET_KEY_HINTS).
+    5. Por defecto en pasos activos: clasificación fail-closed (True) ante placeholders ambiguos.
+    """
     p_lower = placeholder.lower()
-    if p_lower in NON_TARGET_PLACEHOLDERS:
-        return False
-    if p_lower in TARGET_KEY_HINTS:
-        return True
     escaped = re.escape(placeholder)
     ph = r"\{" + escaped + r"\}"
     value_suffix = r"[^\s'\"`;|<>&]*" + ph + r"[^\s'\"`;|<>&]*"
@@ -301,12 +309,13 @@ def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
         r"(?<!\S)(?:" + space_flags + r")\s+['\"]?" + value_suffix,
         r"(?<!\S)(?:" + eq_flags + r")=['\"]?" + value_suffix,
         r"(?<!\S)(?:" + compact_flags + r")['\"]?" + value_suffix,
-        r"(?<!\S)-[a-zA-Z0-9]*x['\"]?" + value_suffix,
+        r"(?<!\S)-[a-zA-Z0-9]*x(?:\s+|['\"])?" + value_suffix,
     ]
+    # 1. Posición inequívoca de destino de red prevalece sobre cualquier exclusión por nombre
     if any(re.search(pat, cmd_tpl) for pat in target_patterns):
         return True
 
-    # Comprobar si está tras una bandera explícitamente no-objetivo (ej. -X {verb}, -d '...{name}...')
+    # 2. Comprobar si está tras una bandera explícitamente no-objetivo (ej. -X {verb}, -d '...{name}...')
     non_target_flags = _flag_alternation(FLAGS_EXPECTING_NON_TARGET_VALUE)
     non_target_patterns = [
         r"(?<!\S)(?:" + non_target_flags + r")\s+['\"]?[^\s'\"`;|<>&]*" + ph,
@@ -319,7 +328,15 @@ def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
     if any(re.search(pat, cmd_tpl) for pat in non_target_patterns):
         return False
 
-    # Por defecto en pasos activos: cualquier placeholder posicional o ambiguo se considera candidato a destino (fail-closed)
+    # 3. Exclusiones declaradas por nombre
+    if p_lower in NON_TARGET_PLACEHOLDERS:
+        return False
+
+    # 4. Indicios canónicos por nombre
+    if p_lower in TARGET_KEY_HINTS:
+        return True
+
+    # 5. Por defecto en pasos activos: cualquier placeholder posicional o ambiguo se considera candidato a destino (fail-closed)
     return True
 
 
@@ -384,13 +401,7 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
     """
     targets: List[str] = []
 
-    # 1. URIs completas con cualquier esquema (http, https, ftp, ws, etc.)
-    for url in re.findall(r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s'\"`;|<>&]+", cmd_tpl):
-        if "{" not in url and "}" not in url:
-            if url not in targets:
-                targets.append(url)
-
-    # 2. Dividir comando en segmentos por operadores de control y tubería (;, |, &&, ||)
+    # Dividir comando en segmentos por operadores de control y tubería (;, |, &&, ||)
     segments = re.split(r";|&&|\|\||\|", cmd_tpl)
     tokens_to_inspect: List[str] = []
 
@@ -483,7 +494,25 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
 
     for tok in tokens_to_inspect:
         clean = tok.rstrip(",;")
-        if not clean or clean in targets or "://" in clean or clean.startswith("{") or clean.endswith("}"):
+        if not clean or clean.startswith("{") or clean.endswith("}"):
+            continue
+
+        # URIs con cualquier esquema de red (http://, https://, ftp://, ws://, etc.)
+        if "://" in clean:
+            for url in re.findall(r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s'\"`;|<>&]+", clean):
+                if "{" not in url and "}" not in url:
+                    if url not in targets:
+                        targets.append(url)
+                    try:
+                        p = urllib.parse.urlsplit(url)
+                        if p.hostname:
+                            h = p.hostname
+                            if h not in targets:
+                                targets.append(h)
+                            if h.endswith(".") and h.rstrip(".") not in targets:
+                                targets.append(h.rstrip("."))
+                    except Exception:
+                        pass
             continue
 
         # Excluir rutas de archivos por extensión
@@ -548,27 +577,33 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
         if host.startswith("[") and "]" in host:
             host = host[1:host.index("]")]
 
+        host_stripped = host.rstrip(".")
+
         # Excluir si la parte de host termina con extensión de archivo
-        if "." in host and not host.startswith((".", "-")):
-            ext = "." + host.rsplit(".", 1)[-1].lower()
+        if "." in host_stripped and not host_stripped.startswith((".", "-")):
+            ext = "." + host_stripped.rsplit(".", 1)[-1].lower()
             if ext in EXCLUDED_FILE_EXTENSIONS:
                 continue
 
-        # Dominio con punto (FQDN)
-        if "." in host and not host.startswith((".", "-")):
-            if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host):
+        # Dominio con punto (FQDN, soportando notación canónica DNS con punto terminal)
+        if "." in host_stripped and not host_stripped.startswith((".", "-")):
+            if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host_stripped):
                 if clean not in targets:
                     targets.append(clean)
                 if host not in targets:
                     targets.append(host)
+                if host_stripped not in targets:
+                    targets.append(host_stripped)
                 continue
 
-        # Host de una sola etiqueta (RFC 1123: localhost, db, service, test, get, etc.)
-        if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?", host):
+        # Host de una sola etiqueta (RFC 1123: localhost, db, service, test, get, etc., con o sin punto final)
+        if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?", host_stripped):
             if clean not in targets:
                 targets.append(clean)
             if host not in targets:
                 targets.append(host)
+            if host_stripped not in targets:
+                targets.append(host_stripped)
             continue
 
         # Posible IPv6 con múltiples colones que falló sintaxis estricta (para que Scope Guard evalúe y bloquee)
@@ -613,6 +648,10 @@ def extract_step_targets(
                 for part in parts:
                     if part not in targets:
                         targets.append(part)
+                    if part.endswith(".") and len(part) > 1 and not part.startswith("."):
+                        p_stripped = part.rstrip(".")
+                        if p_stripped not in targets:
+                            targets.append(p_stripped)
 
     # 2. Claves de parámetros canónicos que puedan contener destinos
     for k, v in params.items():
@@ -623,6 +662,10 @@ def extract_step_targets(
                 for part in parts:
                     if part not in targets:
                         targets.append(part)
+                    if part.endswith(".") and len(part) > 1 and not part.startswith("."):
+                        p_stripped = part.rstrip(".")
+                        if p_stripped not in targets:
+                            targets.append(p_stripped)
 
     # 3. Selectores o insumos basados en archivos (M5: distinguir listas de objetivos vs artefactos)
     file_candidates: List[str] = []
@@ -634,7 +677,7 @@ def extract_step_targets(
         file_candidates.append(target_selector)
 
     has_target_placeholders = any(
-        p.lower() not in NON_TARGET_PLACEHOLDERS
+        is_target_placeholder(p, cmd_tpl)
         for p in placeholders
     )
     is_standard_selector = target_selector in ("in_scope_domains", "in_scope_ips", "domains", "ips", "live_hosts")
@@ -706,7 +749,7 @@ def step_has_declared_target_source(step: Dict[str, Any]) -> bool:
     cmd_tpl = step.get("command_template", "")
     placeholders = re.findall(r"\{([a-zA-Z0-9_]+)\}", cmd_tpl)
     for p in placeholders:
-        if p.lower() not in NON_TARGET_PLACEHOLDERS:
+        if is_target_placeholder(p, cmd_tpl):
             return True
     # Destinos literales en el comando usando el extractor canónico unificado
     if _extract_literal_targets(cmd_tpl):

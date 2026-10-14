@@ -5,6 +5,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -1312,7 +1313,7 @@ class TestSeclabPlaybook(unittest.TestCase):
         val_no_param = validate_playbook_against_scope(pb, target_yaml)
         self.assertFalse(val_no_param["can_execute"])
         self.assertEqual(val_no_param["steps_evaluation"][0]["status"], "BLOCKED")
-        self.assertIn("no produjo ningún candidato", val_no_param["steps_evaluation"][0]["reason"])
+        self.assertIn("placeholders de destino sin resolver", val_no_param["steps_evaluation"][0]["reason"])
 
         # 2. Sin parámetro domain provisto en ejecución real -> execute_playbook_step bloquea con exit code 126
         scope_data = {
@@ -1332,6 +1333,168 @@ class TestSeclabPlaybook(unittest.TestCase):
 
         # 3. Con parámetro domain provisto en alcance -> autorizado estáticamente
         val_with_param = validate_playbook_against_scope(pb, target_yaml, parameters={"domain": "target.local"})
+        self.assertTrue(val_with_param["can_execute"])
+        self.assertEqual(val_with_param["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+    def test_b3_proxy_flags_extraction_and_blocking(self):
+        """B3: Banderas de proxy (-x, --proxy, -x=, --proxy=) extraen destinos y bloquean tráfico no autorizado."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step, _extract_literal_targets
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b3_proxies.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        proxy_cases = [
+            ("curl -x evil.com https://target.local", ["https://target.local", "evil.com"]),
+            ("curl --proxy evil.com https://target.local", ["https://target.local", "evil.com"]),
+            ("curl --proxy=evil.com https://target.local", ["https://target.local", "evil.com"]),
+            ("curl -x=evil.com https://target.local", ["https://target.local", "evil.com"]),
+            ("curl -x localhost https://target.local", ["https://target.local", "localhost"]),
+        ]
+
+        for cmd, expected_targets in proxy_cases:
+            # 1. Extracción sintáctica exhaustiva de proxy
+            extracted = _extract_literal_targets(cmd)
+            for exp in expected_targets:
+                self.assertIn(exp, extracted, f"Fallo extracción de {exp} en '{cmd}': {extracted}")
+
+            # 2. Validación estática contra alcance (evil.com o localhost fuera de alcance)
+            step = {
+                "id": "step_proxy_audit",
+                "title": "Prueba de Proxy",
+                "objective": "Verificar bloqueo de proxies no autorizados",
+                "interaction_type": "active_low",
+                "command_template": cmd,
+            }
+            pb = {
+                "id": "pb_proxy_test",
+                "title": "Playbook Proxy Test",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba de B3 proxy flags",
+                "steps": [step],
+            }
+            val = validate_playbook_against_scope(pb, target_yaml)
+            self.assertFalse(val["can_execute"], f"Validación estática autorizó indebidamente '{cmd}'")
+            self.assertEqual(val["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # 3. Verificación mockeada en ejecución real: subprocess.run NUNCA debe ser llamado
+            with unittest.mock.patch("subprocess.run") as mock_run:
+                res = execute_playbook_step(
+                    step,
+                    context={"allow_active": True, "scope_data": scope_data},
+                    dry_run=False,
+                )
+                self.assertEqual(res["status"], "BLOCKED")
+                self.assertEqual(res["exit_code"], 126)
+                self.assertTrue(res["stop_condition_met"])
+                mock_run.assert_not_called()
+
+    def test_b3_flag_case_sensitivity_and_non_target_flags(self):
+        """B3: Sensibilidad a mayúsculas (-X vs -x) y preservación de flags como -O."""
+        from seclab_playbook import validate_playbook_against_scope, _extract_literal_targets
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b3_flags.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        # 1. -X (método HTTP) vs -x (proxy): POST nunca debe ser extraído como host
+        extracted_post = _extract_literal_targets("curl -X POST https://target.local")
+        self.assertEqual(extracted_post, ["https://target.local"])
+        self.assertNotIn("POST", extracted_post)
+
+        # 2. -O (remote-name output) no consume el destino siguiente
+        extracted_o = _extract_literal_targets("curl -O https://target.local")
+        self.assertEqual(extracted_o, ["https://target.local"])
+
+        # 3. Banderas combinadas complejas
+        cmd_complex = "curl -s -X POST https://target.local -H Content-Type:application/json -o recon/out.json"
+        extracted_complex = _extract_literal_targets(cmd_complex)
+        self.assertEqual(extracted_complex, ["https://target.local"])
+
+        # 4. Ambos comandos son autorizados contra target_yaml porque sus destinos son válidos
+        for cmd in ["curl -X POST https://target.local", "curl -O https://target.local"]:
+            pb = {
+                "id": "pb_flag_test",
+                "title": "Playbook Flag Test",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba flags válidos",
+                "steps": [
+                    {
+                        "id": "step_flag_valid",
+                        "title": "Paso Flag Válido",
+                        "objective": "Verificar autorización",
+                        "interaction_type": "active_low",
+                        "command_template": cmd,
+                    }
+                ],
+            }
+            val = validate_playbook_against_scope(pb, target_yaml)
+            self.assertTrue(val["can_execute"], f"Fallo autorización de '{cmd}': {val}")
+            self.assertEqual(val["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+    def test_m4_mixed_unexpanded_placeholders_fail_closed(self):
+        """M4: Comandos mixtos con placeholder no expandido y destino literal autorizado fallan cerrado."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_m4_mixed.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        # Comando activo mixto: {domain} sin valor junto a target.local autorizado
+        step_mixed = {
+            "id": "step_active_mixed",
+            "title": "Paso Activo Mixto",
+            "objective": "Verificar paridad fail-closed en comandos mixtos",
+            "interaction_type": "active_low",
+            "command_template": "curl https://{domain} target.local",
+        }
+        pb_mixed = {
+            "id": "pb_m4_mixed",
+            "title": "Playbook M4 Mixed",
+            "version": "1.0",
+            "category": "recon",
+            "description": "M4 test mixed placeholder with valid literal",
+            "steps": [step_mixed],
+        }
+
+        # 1. Sin parámetros: validación estática DEBE bloquearse a pesar de target.local en alcance
+        val_no_param = validate_playbook_against_scope(pb_mixed, target_yaml)
+        self.assertFalse(val_no_param["can_execute"])
+        self.assertEqual(val_no_param["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("placeholders de destino sin resolver: domain", val_no_param["steps_evaluation"][0]["reason"])
+
+        # 2. Sin parámetros: ejecución real bloquea con exit code 126 y mock de subprocess.run confirma 0 llamadas
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_exec = execute_playbook_step(
+                step_mixed,
+                context={"allow_active": True, "scope_data": scope_data},
+                dry_run=False,
+            )
+            self.assertEqual(res_exec["status"], "BLOCKED")
+            self.assertEqual(res_exec["exit_code"], 126)
+            self.assertTrue(res_exec["stop_condition_met"])
+            self.assertIn("placeholders de destino sin resolver (domain)", res_exec["output"])
+            mock_run.assert_not_called()
+
+        # 3. Con parámetro suministrado y autorizado: validación estática autoriza
+        val_with_param = validate_playbook_against_scope(
+            pb_mixed,
+            target_yaml,
+            parameters={"domain": "target.local"},
+        )
         self.assertTrue(val_with_param["can_execute"])
         self.assertEqual(val_with_param["steps_evaluation"][0]["status"], "AUTHORIZED")
 

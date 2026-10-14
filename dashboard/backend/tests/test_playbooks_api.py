@@ -344,6 +344,98 @@ class TestPlaybooksAPI(unittest.TestCase):
             self.assertEqual(step_res_no_param["status"], "BLOCKED")
             self.assertEqual(step_res_no_param["exit_code"], 126)
 
+            # B3 API: Playbook con bandera proxy no autorizada (-x evil.com) bloquea estáticamente
+            pb_proxy_api = {
+                "id": "pb_proxy_api",
+                "title": "Playbook Proxy API",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba API B3 proxy",
+                "steps": [
+                    {
+                        "id": "step_proxy_call",
+                        "title": "Paso Proxy",
+                        "objective": "Verificar bloqueo de proxy fuera de alcance",
+                        "interaction_type": "active_low",
+                        "command_template": "curl -x evil.com https://target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            res_val_proxy = client.post(
+                "/api/v1/playbooks/validate",
+                json={"playbook": pb_proxy_api, "engagement_id": "test-eng"},
+            )
+            self.assertEqual(res_val_proxy.status_code, 200)
+            self.assertFalse(res_val_proxy.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_val_proxy.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # M4 API: Playbook mixto ({domain} sin valor + target.local autorizado)
+            pb_mixed_api = {
+                "id": "pb_mixed_api",
+                "title": "Playbook Mixto API",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba API M4 placeholders mixtos",
+                "steps": [
+                    {
+                        "id": "step_mixed_call",
+                        "title": "Paso Mixto",
+                        "objective": "Verificar bloqueo de placeholder no expandido",
+                        "interaction_type": "active_low",
+                        "command_template": "curl https://{domain} target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            # Sin parámetro domain: DEBE bloquear
+            res_val_mixed = client.post(
+                "/api/v1/playbooks/validate",
+                json={"playbook": pb_mixed_api, "engagement_id": "test-eng"},
+            )
+            self.assertEqual(res_val_mixed.status_code, 200)
+            self.assertFalse(res_val_mixed.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_val_mixed.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # Con parámetro domain autorizado: DEBE autorizar
+            res_val_mixed_ok = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_mixed_api,
+                    "engagement_id": "test-eng",
+                    "parameters": {"domain": "target.local"},
+                },
+            )
+            self.assertEqual(res_val_mixed_ok.status_code, 200)
+            self.assertTrue(res_val_mixed_ok.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_val_mixed_ok.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+            # B3 API: Sensibilidad a mayúsculas con -X POST no extrae POST como host y autoriza
+            pb_method_api = {
+                "id": "pb_method_api",
+                "title": "Playbook Method POST API",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba API método POST",
+                "steps": [
+                    {
+                        "id": "step_post_call",
+                        "title": "Paso POST",
+                        "objective": "Verificar que POST no sea host",
+                        "interaction_type": "active_low",
+                        "command_template": "curl -X POST https://target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            res_val_method = client.post(
+                "/api/v1/playbooks/validate",
+                json={"playbook": pb_method_api, "engagement_id": "test-eng"},
+            )
+            self.assertEqual(res_val_method.status_code, 200)
+            self.assertTrue(res_val_method.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_val_method.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
+
             client.close()
 
 

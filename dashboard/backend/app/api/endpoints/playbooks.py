@@ -43,6 +43,7 @@ class PlaybookValidateRequest(BaseModel):
     playbook: Dict[str, Any]
     engagement_id: Optional[str] = None
     type: str = "engagement"
+    parameters: Optional[Dict[str, Any]] = None
 
 
 @router.get("")
@@ -121,7 +122,11 @@ def validate_playbook(payload: PlaybookValidateRequest):
         target_yaml = target_dir / "target.yaml"
         if target_yaml.is_file():
             try:
-                scope_eval = validate_playbook_against_scope(payload.playbook, target_yaml)
+                scope_eval = validate_playbook_against_scope(
+                    payload.playbook,
+                    target_yaml,
+                    parameters=payload.parameters,
+                )
             except Exception as e:
                 scope_eval = {
                     "can_execute": False,

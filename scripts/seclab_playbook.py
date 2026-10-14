@@ -217,7 +217,6 @@ NON_TARGET_PLACEHOLDERS = {
     "output",
     "rate",
     "delay",
-    "proxy",
     "user_agent",
     "cookie",
     "header",
@@ -244,7 +243,29 @@ TARGET_KEY_HINTS = {
     "fqdn",
     "hostname",
     "vhost",
+    "proxy",
+    "proxy_host",
+    "proxy_url",
+    "dest",
+    "destination",
 }
+
+
+def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
+    """Determina si un placeholder corresponde a un destino de red verificable contra Scope Guard."""
+    p_lower = placeholder.lower()
+    if p_lower in NON_TARGET_PLACEHOLDERS:
+        return False
+    if p_lower in TARGET_KEY_HINTS:
+        return True
+    escaped = re.escape(placeholder)
+    patterns = [
+        r"://[^\s'\"`;|<>&]*\{" + escaped + r"\}",
+        r"@\{" + escaped + r"\}",
+        r"(?:-u|--url|--target|--host|--domain|--proxy|-x)\s+\{" + escaped + r"\}",
+        r"(?:-u|--url|--target|--host|--domain|--proxy|-x)=\{" + escaped + r"\}",
+    ]
+    return any(re.search(pat, cmd_tpl) for pat in patterns)
 
 EXCLUDED_FILE_EXTENSIONS = {
     ".txt",
@@ -284,10 +305,26 @@ def step_has_unverified_dynamic_targets(cmd_tpl: str) -> bool:
     return bool(DYNAMIC_SHELL_PATTERN.search(cmd_tpl))
 
 
+TARGET_FLAGS_WITH_VALUE = {
+    "-x", "--proxy", "--proxy-server", "--http-proxy", "--https-proxy",
+    "--socks4", "--socks4a", "--socks5", "--socks5-hostname", "--doh-url", "--preproxy",
+    "-u", "--url", "--target", "--host", "--domain",
+    "-connect", "--connect", "-servername", "--servername",
+}
+
+TARGET_FLAG_NAMES = {
+    "-x", "--proxy", "--proxy-server", "--http-proxy", "--https-proxy",
+    "--socks4", "--socks4a", "--socks5", "--socks5-hostname", "--doh-url", "--preproxy",
+    "-u", "--url", "--target", "--host", "--domain",
+    "-s", "--server", "-connect", "--connect", "-servername", "--servername",
+}
+
 FLAGS_EXPECTING_NON_TARGET_VALUE = {
-    "-x", "-m", "--method", "-w", "--wordlist", "-o", "-on", "-oj", "-ox",
-    "--script", "--script-args", "-p", "--ports", "-t", "-t3", "-t4", "-timeout",
-    "-mc", "-h", "-content-type", "-d", "--data", "-f", "--format", "-l",
+    "-X", "-m", "--method", "-w", "--wordlist", "-o", "-oN", "-oJ", "-oX",
+    "--output", "--script", "--script-args", "-p", "--ports", "-t", "-T",
+    "-T3", "-T4", "--timeout", "-timeout", "-mc", "-H", "--header",
+    "-d", "--data", "-f", "--format", "-l", "-b", "--cookie",
+    "-A", "--user-agent", "-user-agent", "--data-raw", "--data-binary",
 }
 
 DNS_QUERY_TYPES = {
@@ -341,12 +378,19 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
         args = tokens[1:]
 
         skip_next = False
+        expect_target_next = False
         for tok in args:
             tok_clean = tok.strip("'\"")
 
             if skip_next:
                 skip_next = False
                 continue
+
+            if expect_target_next:
+                expect_target_next = False
+                if not tok_clean.startswith(("-", "@", "+")):
+                    tokens_to_inspect.append(tok_clean)
+                    continue
 
             # Redirecciones
             if tok_clean in (">", ">>", "<", "2>&1", "1>&2", ">&"):
@@ -359,13 +403,18 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
             if tok_clean.startswith(("-", "--")) and "=" in tok_clean:
                 flag_name, flag_val = tok_clean.split("=", 1)
                 flag_val = flag_val.strip("'\"")
-                if flag_name.lower() in ("-u", "--url", "--target", "--host", "--domain", "-s", "--server"):
+                if flag_name in TARGET_FLAG_NAMES or flag_name.lower() in TARGET_FLAG_NAMES:
                     if flag_val and flag_val not in targets and "{" not in flag_val:
                         tokens_to_inspect.append(flag_val)
                 continue
 
-            # Banderas que consumen el siguiente argumento no-objetivo
-            if tok_clean.lower() in FLAGS_EXPECTING_NON_TARGET_VALUE:
+            # Banderas que esperan un destino de red
+            if tok_clean in TARGET_FLAGS_WITH_VALUE:
+                expect_target_next = True
+                continue
+
+            # Banderas que consumen el siguiente argumento no-objetivo (sensible a mayúsculas)
+            if tok_clean in FLAGS_EXPECTING_NON_TARGET_VALUE:
                 skip_next = True
                 continue
 
@@ -752,7 +801,7 @@ def validate_playbook_against_scope(
             has_dynamic_targets = step_has_unverified_dynamic_targets(step.get("command_template", ""))
             unexpanded_target_placeholders = [
                 p for p in re.findall(r"\{([a-zA-Z0-9_]+)\}", step.get("command_template", ""))
-                if p.lower() not in NON_TARGET_PLACEHOLDERS
+                if is_target_placeholder(p, step.get("command_template", "")) and (not params or p not in params or params[p] is None or str(params[p]).strip() == "")
             ]
 
             if is_active_step and has_dynamic_targets:
@@ -768,6 +817,11 @@ def validate_playbook_against_scope(
             elif target_selector in ("in_scope_domains", "in_scope_ips") and not step_targets:
                 status = "BLOCKED"
                 reason = f"El paso requiere un selector de objetivos '{target_selector}' pero no se resolvieron destinos en alcance."
+                can_execute = False
+                blocked_count += 1
+            elif is_active_step and unexpanded_target_placeholders:
+                status = "BLOCKED"
+                reason = f"El paso activo contiene placeholders de destino sin resolver: {', '.join(unexpanded_target_placeholders)}."
                 can_execute = False
                 blocked_count += 1
             elif is_active_step and not has_declared_source:
@@ -966,6 +1020,10 @@ def execute_playbook_step(
     target_selector = step.get("target_selector")
     target_candidates, missing_file_err = extract_step_targets(step, context=ctx, dry_run=dry_run)
     is_active_step = itype in ("active_low", "active_high") or "active" in (step.get("required_permissions") or [])
+    unexpanded_target_placeholders = [
+        p for p in re.findall(r"\{([a-zA-Z0-9_]+)\}", cmd_tpl)
+        if is_target_placeholder(p, cmd_tpl) and (not params or p not in params or params[p] is None or str(params[p]).strip() == "")
+    ]
 
     if not dry_run and is_active_step and step_has_unverified_dynamic_targets(cmd_tpl):
         return {
@@ -1018,6 +1076,20 @@ def execute_playbook_step(
             "command": cmd_tpl,
             "exit_code": 126,
             "output": f"Bloqueado: El paso requiere el selector '{target_selector}' pero no se encontraron destinos en alcance.",
+            "expected_outputs": expected_outputs,
+            "stop_condition_met": True,
+            "is_simulated": False,
+        }
+
+    if not dry_run and is_active_step and unexpanded_target_placeholders:
+        return {
+            "step_id": step_id,
+            "title": title,
+            "interaction_type": itype,
+            "status": "BLOCKED",
+            "command": cmd_tpl,
+            "exit_code": 126,
+            "output": f"Bloqueado: El paso activo contiene placeholders de destino sin resolver ({', '.join(unexpanded_target_placeholders)}).",
             "expected_outputs": expected_outputs,
             "stop_condition_met": True,
             "is_simulated": False,

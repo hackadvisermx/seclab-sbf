@@ -436,6 +436,73 @@ class TestPlaybooksAPI(unittest.TestCase):
             self.assertTrue(res_val_method.json()["scope_evaluation"]["can_execute"])
             self.assertEqual(res_val_method.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
 
+            # B3 API: Proxy compacto (-xevil.com) y agrupado (-sSxevil.com) bloquean estáticamente
+            for compact_cmd in ["curl -xevil.com https://target.local", "curl -sSxevil.com https://target.local"]:
+                pb_compact = {
+                    "id": "pb_compact_proxy",
+                    "title": "Playbook Compact Proxy",
+                    "version": "1.0",
+                    "category": "recon",
+                    "description": "Prueba API proxy compacto",
+                    "steps": [
+                        {
+                            "id": "step_cproxy",
+                            "title": "Paso Compact Proxy",
+                            "objective": "Verificar bloqueo",
+                            "interaction_type": "active_low",
+                            "command_template": compact_cmd,
+                            "timeout_seconds": 30,
+                        }
+                    ],
+                }
+                res_c = client.post(
+                    "/api/v1/playbooks/validate",
+                    json={"playbook": pb_compact, "engagement_id": "test-eng"},
+                )
+                self.assertEqual(res_c.status_code, 200)
+                self.assertFalse(res_c.json()["scope_evaluation"]["can_execute"])
+                self.assertEqual(res_c.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # M4 API: Placeholder bajo bandera de destino (openssl s_client -connect {peer}:443)
+            pb_connect = {
+                "id": "pb_connect_ph",
+                "title": "Playbook Connect Placeholder",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba API placeholder bajo flag",
+                "steps": [
+                    {
+                        "id": "step_conn",
+                        "title": "Paso Connect",
+                        "objective": "Verificar bloqueo de peer",
+                        "interaction_type": "active_low",
+                        "command_template": "openssl s_client -connect {peer}:443 -servername target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            # Sin peer: bloquea
+            res_conn_no = client.post(
+                "/api/v1/playbooks/validate",
+                json={"playbook": pb_connect, "engagement_id": "test-eng"},
+            )
+            self.assertEqual(res_conn_no.status_code, 200)
+            self.assertFalse(res_conn_no.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_conn_no.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # Con peer autorizado: autoriza
+            res_conn_ok = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_connect,
+                    "engagement_id": "test-eng",
+                    "parameters": {"peer": "target.local"},
+                },
+            )
+            self.assertEqual(res_conn_ok.status_code, 200)
+            self.assertTrue(res_conn_ok.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_conn_ok.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
+
             client.close()
 
 

@@ -274,14 +274,34 @@ FLAGS_EXPECTING_NON_TARGET_VALUE = {
     "-T3", "-T4", "--timeout", "-timeout", "-mc", "-H", "--header",
     "-d", "--data", "-f", "--format", "-l", "-b", "--cookie",
     "-A", "--user-agent", "-user-agent", "--data-raw", "--data-binary",
-    "--data-urlencode", "--data-ascii", "--json", "-F", "--form", "-e", "--referer",
+    "--data-urlencode", "--data-ascii", "--json", "--form", "-e", "--referer",
     "--post-data",
+}
+
+TOOL_SPECIFIC_NON_TARGET_FLAGS: Dict[str, Set[str]] = {
+    "curl": {"-F"},
 }
 
 
 def _flag_alternation(flags) -> str:
     # Orden descendente por longitud para que prefijos cortos no eclipsen banderas compuestas
     return "|".join(re.escape(f) for f in sorted(flags, key=len, reverse=True))
+
+
+def _get_non_target_flags(cmd_tpl: str, placeholder: str) -> str:
+    flags = set(FLAGS_EXPECTING_NON_TARGET_VALUE)
+    for seg in re.split(r";|&&|\|\||\|", cmd_tpl):
+        if f"{{{placeholder}}}" in seg:
+            try:
+                tokens = shlex.split(seg)
+            except ValueError:
+                tokens = seg.split()
+            if tokens:
+                bin_name = tokens[0].lower().strip("'\"")
+                if bin_name in TOOL_SPECIFIC_NON_TARGET_FLAGS:
+                    flags.update(TOOL_SPECIFIC_NON_TARGET_FLAGS[bin_name])
+            break
+    return _flag_alternation(flags)
 
 
 def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
@@ -316,7 +336,7 @@ def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
         return True
 
     # 2. Comprobar si está tras una bandera explícitamente no-objetivo (ej. -X {verb}, -d '...{name}...')
-    non_target_flags = _flag_alternation(FLAGS_EXPECTING_NON_TARGET_VALUE)
+    non_target_flags = _get_non_target_flags(cmd_tpl, placeholder)
     non_target_patterns = [
         r"(?<!\S)(?:" + non_target_flags + r")\s+['\"]?[^\s'\"`;|<>&]*" + ph,
         r"(?<!\S)(?:" + non_target_flags + r")=['\"]?[^\s'\"`;|<>&]*" + ph,
@@ -476,7 +496,8 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
                 continue
 
             # Banderas que consumen el siguiente argumento no-objetivo (sensible a mayúsculas)
-            if tok_clean in FLAGS_EXPECTING_NON_TARGET_VALUE:
+            tool_non_target = TOOL_SPECIFIC_NON_TARGET_FLAGS.get(cmd_bin, set())
+            if tok_clean in FLAGS_EXPECTING_NON_TARGET_VALUE or tok_clean in tool_non_target:
                 skip_next = True
                 continue
 
@@ -503,16 +524,6 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
                 if "{" not in url and "}" not in url:
                     if url not in targets:
                         targets.append(url)
-                    try:
-                        p = urllib.parse.urlsplit(url)
-                        if p.hostname:
-                            h = p.hostname
-                            if h not in targets:
-                                targets.append(h)
-                            if h.endswith(".") and h.rstrip(".") not in targets:
-                                targets.append(h.rstrip("."))
-                    except Exception:
-                        pass
             continue
 
         # Excluir rutas de archivos por extensión

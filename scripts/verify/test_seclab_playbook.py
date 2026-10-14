@@ -1984,6 +1984,143 @@ class TestSeclabPlaybook(unittest.TestCase):
             self.assertTrue(res_real["stop_condition_met"])
             mock_run.assert_not_called()
 
+    def test_b2_binary_specific_flags_nmap_fast_mode_vs_curl_form(self):
+        """B2: Banderas con distinta semántica según binario (-F en curl vs nmap) no descartan destinos reales en nmap."""
+        from seclab_playbook import (
+            validate_playbook_against_scope,
+            execute_playbook_step,
+            extract_step_targets,
+            is_target_placeholder,
+            _extract_literal_targets,
+        )
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b2_nmap_curl.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        # 1. En curl, -F consume el valor no-objetivo (formulario)
+        curl_cmd = "curl -F file=@data.txt https://target.local"
+        curl_targets = _extract_literal_targets(curl_cmd)
+        self.assertIn("https://target.local", curl_targets)
+        self.assertNotIn("file=@data.txt", curl_targets)
+
+        curl_payload_cmd = "curl -F 'data=https://client.example/callback' https://target.local"
+        curl_payload_targets = _extract_literal_targets(curl_payload_cmd)
+        self.assertIn("https://target.local", curl_payload_targets)
+        self.assertNotIn("https://client.example/callback", curl_payload_targets)
+        self.assertNotIn("client.example", curl_payload_targets)
+
+        self.assertFalse(is_target_placeholder("payload", "curl -F '{payload}' https://target.local"))
+
+        step_curl = {
+            "id": "step_curl_form",
+            "title": "Paso Curl Form",
+            "objective": "Enviar formulario a target.local",
+            "interaction_type": "active_low",
+            "command_template": "curl -F 'data=test' https://target.local",
+        }
+        val_curl = validate_playbook_against_scope(
+            {"id": "pb_curl", "title": "PB Curl", "version": "1.0", "category": "recon", "description": "T", "steps": [step_curl]},
+            target_yaml,
+        )
+        self.assertTrue(val_curl["can_execute"])
+        self.assertEqual(val_curl["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+        # 2. En nmap, -F es booleano ("Fast mode") y NO consume el siguiente argumento
+        nmap_cmd = "nmap -F evil.com target.local"
+        nmap_targets = _extract_literal_targets(nmap_cmd)
+        self.assertIn("evil.com", nmap_targets)
+        self.assertIn("target.local", nmap_targets)
+
+        step_nmap = {
+            "id": "step_nmap_fast",
+            "title": "Paso Nmap Fast Mode",
+            "objective": "Escanear puertos rápidos",
+            "interaction_type": "active_low",
+            "command_template": nmap_cmd,
+        }
+        pb_nmap = {
+            "id": "pb_nmap_test",
+            "title": "Playbook Nmap Test",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Prueba nmap -F con objetivo fuera de alcance",
+            "steps": [step_nmap],
+        }
+
+        # 2a. Validación estática bloquea nmap -F evil.com target.local
+        val_nmap = validate_playbook_against_scope(pb_nmap, target_yaml)
+        self.assertFalse(val_nmap["can_execute"])
+        self.assertEqual(val_nmap["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("evil.com", val_nmap["steps_evaluation"][0]["reason"])
+
+        # 2b. Ejecución real bloquea con exit_code 126 y mock_run no es invocado
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_nmap = execute_playbook_step(
+                step_nmap,
+                context={"allow_active": True, "scope_data": scope_data},
+                dry_run=False,
+            )
+            self.assertEqual(res_nmap["status"], "BLOCKED")
+            self.assertEqual(res_nmap["exit_code"], 126)
+            self.assertTrue(res_nmap["stop_condition_met"])
+            mock_run.assert_not_called()
+
+        # 3. Variante con placeholder: nmap -F {asset} target.local con asset="evil.com"
+        self.assertTrue(is_target_placeholder("asset", "nmap -F {asset} target.local"))
+
+        step_nmap_ph = {
+            "id": "step_nmap_ph",
+            "title": "Paso Nmap Placeholder",
+            "objective": "Verificar placeholder tras -F en nmap",
+            "interaction_type": "active_low",
+            "command_template": "nmap -F {asset} target.local",
+        }
+        pb_nmap_ph = {
+            "id": "pb_nmap_ph_test",
+            "title": "Playbook Nmap Placeholder Test",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Prueba nmap -F {asset}",
+            "steps": [step_nmap_ph],
+        }
+
+        # Con asset="evil.com": bloquea estática y dinámicamente
+        targets_ph, _ = extract_step_targets(
+            step_nmap_ph,
+            context={"parameters": {"asset": "evil.com"}},
+            dry_run=True,
+        )
+        self.assertIn("evil.com", targets_ph)
+        self.assertIn("target.local", targets_ph)
+
+        val_ph = validate_playbook_against_scope(pb_nmap_ph, target_yaml, parameters={"asset": "evil.com"})
+        self.assertFalse(val_ph["can_execute"])
+        self.assertEqual(val_ph["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("evil.com", val_ph["steps_evaluation"][0]["reason"])
+
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_ph = execute_playbook_step(
+                step_nmap_ph,
+                context={"allow_active": True, "scope_data": scope_data, "parameters": {"asset": "evil.com"}},
+                dry_run=False,
+            )
+            self.assertEqual(res_ph["status"], "BLOCKED")
+            self.assertEqual(res_ph["exit_code"], 126)
+            self.assertTrue(res_ph["stop_condition_met"])
+            mock_run.assert_not_called()
+
+        # Control positivo: nmap -F {asset} con asset="target.local" en alcance
+        val_ph_ok = validate_playbook_against_scope(pb_nmap_ph, target_yaml, parameters={"asset": "target.local"})
+        self.assertTrue(val_ph_ok["can_execute"])
+        self.assertEqual(val_ph_ok["steps_evaluation"][0]["status"], "AUTHORIZED")
+
 
 if __name__ == "__main__":
     unittest.main()

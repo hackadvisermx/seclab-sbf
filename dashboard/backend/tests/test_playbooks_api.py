@@ -767,6 +767,101 @@ class TestPlaybooksAPI(unittest.TestCase):
 
             client.close()
 
+    def test_playbooks_api_b2_nmap_fast_mode_blocked_vs_curl_form_authorized(self):
+        """B2: En /validate, nmap -F no descarta objetivos fuera de alcance (bloquea) mientras curl -F autoriza formularios legítimos."""
+        from app.main import app
+        from app.api.endpoints import auth, playbooks
+        from fastapi.testclient import TestClient
+
+        ws_dir = pathlib.Path(self.tmp.name) / "workspace"
+        eng_dir = ws_dir / "engagements" / "test-eng-b2"
+        eng_dir.mkdir(parents=True, exist_ok=True)
+        (ws_dir / "retos").mkdir(parents=True, exist_ok=True)
+
+        target_yaml = eng_dir / "target.yaml"
+        target_yaml.write_text(
+            "version: '1.0'\n"
+            "scope:\n"
+            "  in_scope:\n"
+            "    domains: ['target.local']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+            "  out_of_scope:\n"
+            "    domains: ['evil.com', 'client.example']\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    notes: []\n"
+            "authorization:\n"
+            "  reference: 'AUT-001'\n"
+            "  valid_from: '2026-10-01T00:00:00.000Z'\n"
+            "  valid_until: '2026-10-31T23:59:59.000Z'\n"
+            "  allow_passive: true\n"
+            "  allow_active: true\n"
+        )
+
+        auth._attempts.clear()
+        with patch.object(auth, "TESTER_PASSWORD", "test-pass"), \
+             patch.object(playbooks, "WORKSPACE_DIR", ws_dir):
+            client = TestClient(app)
+            login_res = client.post("/api/v1/auth/login", json={"password": "test-pass"})
+            self.assertEqual(login_res.status_code, 200)
+
+            # 1. nmap -F con objetivo fuera de alcance: bloquea
+            pb_nmap = {
+                "id": "pb_nmap_b2_test",
+                "title": "Playbook Nmap B2 Test",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba API nmap -F",
+                "steps": [
+                    {
+                        "id": "step_nmap",
+                        "title": "Paso Nmap Fast",
+                        "objective": "Escanear puertos con -F",
+                        "interaction_type": "active_low",
+                        "command_template": "nmap -F evil.com target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            res_nmap = client.post(
+                "/api/v1/playbooks/validate",
+                json={"playbook": pb_nmap, "engagement_id": "test-eng-b2"},
+            )
+            self.assertEqual(res_nmap.status_code, 200)
+            self.assertFalse(res_nmap.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_nmap.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "BLOCKED")
+            self.assertIn("evil.com", res_nmap.json()["scope_evaluation"]["steps_evaluation"][0]["reason"])
+
+            # 2. curl -F con payload que contiene URL externa: autoriza
+            pb_curl = {
+                "id": "pb_curl_b2_test",
+                "title": "Playbook Curl B2 Test",
+                "version": "1.0",
+                "category": "api",
+                "description": "Prueba API curl -F",
+                "steps": [
+                    {
+                        "id": "step_curl",
+                        "title": "Paso Curl Form",
+                        "objective": "Enviar form con -F",
+                        "interaction_type": "active_low",
+                        "command_template": "curl -F 'data=https://client.example/callback' https://target.local",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            res_curl = client.post(
+                "/api/v1/playbooks/validate",
+                json={"playbook": pb_curl, "engagement_id": "test-eng-b2"},
+            )
+            self.assertEqual(res_curl.status_code, 200)
+            self.assertTrue(res_curl.json()["scope_evaluation"]["can_execute"])
+            self.assertEqual(res_curl.json()["scope_evaluation"]["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+            client.close()
+
 
 if __name__ == "__main__":
     unittest.main()

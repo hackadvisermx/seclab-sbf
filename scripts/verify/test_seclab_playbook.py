@@ -1498,6 +1498,171 @@ class TestSeclabPlaybook(unittest.TestCase):
         self.assertTrue(val_with_param["can_execute"])
         self.assertEqual(val_with_param["steps_evaluation"][0]["status"], "AUTHORIZED")
 
+    def test_b3_compact_and_clustered_proxy_flags(self):
+        """B3: Formas compactas (-xVALOR) y agrupadas (-sSxVALOR, -sSx VALOR) extraen destinos y bloquean tráfico no autorizado."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step, _extract_literal_targets
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b3_compact_proxies.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": ["evil.com"], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        cases = [
+            ("curl -xevil.com https://target.local", ["https://target.local", "evil.com"]),
+            ("curl -sSxevil.com https://target.local", ["https://target.local", "evil.com"]),
+            ("curl -sSx evil.com https://target.local", ["https://target.local", "evil.com"]),
+        ]
+
+        for cmd, expected_targets in cases:
+            # 1. Extracción sintáctica exhaustiva de proxy compacto/agrupado
+            extracted = _extract_literal_targets(cmd)
+            for exp in expected_targets:
+                self.assertIn(exp, extracted, f"Fallo extracción de {exp} en '{cmd}': {extracted}")
+
+            step = {
+                "id": "step_compact_proxy",
+                "title": "Prueba Proxy Compacto",
+                "objective": "Verificar bloqueo de proxy compacto fuera de alcance",
+                "interaction_type": "active_low",
+                "command_template": cmd,
+            }
+            pb = {
+                "id": "pb_compact_proxy_test",
+                "title": "Playbook Compact Proxy Test",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba de B3 compact proxy flags",
+                "steps": [step],
+            }
+
+            # 2. Validación estática bloquea
+            val = validate_playbook_against_scope(pb, target_yaml)
+            self.assertFalse(val["can_execute"], f"Validación estática autorizó indebidamente '{cmd}'")
+            self.assertEqual(val["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # 3. Verificación con mock: subprocess.run NUNCA debe ser llamado
+            with unittest.mock.patch("subprocess.run") as mock_run:
+                res = execute_playbook_step(
+                    step,
+                    context={"allow_active": True, "scope_data": scope_data},
+                    dry_run=False,
+                )
+                self.assertEqual(res["status"], "BLOCKED")
+                self.assertEqual(res["exit_code"], 126)
+                self.assertTrue(res["stop_condition_met"])
+                mock_run.assert_not_called()
+
+        # Control: proxy compacto autorizado
+        pb_control = {
+            "id": "pb_control",
+            "title": "Control",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Control",
+            "steps": [
+                {
+                    "id": "step_ctrl",
+                    "title": "Ctrl",
+                    "objective": "Ctrl",
+                    "interaction_type": "active_low",
+                    "command_template": "curl -xtarget.local https://target.local",
+                }
+            ],
+        }
+        val_ctrl = validate_playbook_against_scope(pb_control, target_yaml)
+        self.assertTrue(val_ctrl["can_execute"])
+        self.assertEqual(val_ctrl["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+    def test_m4_placeholders_under_target_flags_fail_closed(self):
+        """M4: Placeholders sin resolver bajo cualquier bandera de destino declarada fallan cerrado."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_m4_flags.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        # 1. Caso de auditoría: openssl s_client -connect {peer}:443 -servername target.local
+        step_openssl = {
+            "id": "step_openssl",
+            "title": "OpenSSL S_Client Step",
+            "objective": "Verificar placeholder bajo -connect",
+            "interaction_type": "active_low",
+            "command_template": "openssl s_client -connect {peer}:443 -servername target.local",
+        }
+        pb_openssl = {
+            "id": "pb_openssl_test",
+            "title": "OpenSSL Connect Test",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Prueba placeholder peer",
+            "steps": [step_openssl],
+        }
+
+        # Sin parámetro peer: bloquea estáticamente
+        val_no_peer = validate_playbook_against_scope(pb_openssl, target_yaml)
+        self.assertFalse(val_no_peer["can_execute"])
+        self.assertEqual(val_no_peer["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("placeholders de destino sin resolver: peer", val_no_peer["steps_evaluation"][0]["reason"])
+
+        # Sin parámetro peer: ejecución real bloquea con código 126 y subprocess.run no se invoca
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            res_exec = execute_playbook_step(
+                step_openssl,
+                context={"allow_active": True, "scope_data": scope_data},
+                dry_run=False,
+            )
+            self.assertEqual(res_exec["status"], "BLOCKED")
+            self.assertEqual(res_exec["exit_code"], 126)
+            self.assertTrue(res_exec["stop_condition_met"])
+            mock_run.assert_not_called()
+
+        # Con parámetro peer autorizado: autoriza
+        val_peer_ok = validate_playbook_against_scope(
+            pb_openssl,
+            target_yaml,
+            parameters={"peer": "target.local"},
+        )
+        self.assertTrue(val_peer_ok["can_execute"])
+        self.assertEqual(val_peer_ok["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+        # 2. Casos paramétricos bajo diversas banderas de destino
+        unexpanded_flag_cases = [
+            ("curl --proxy {p} https://target.local", "p"),
+            ("curl --socks5 {p}:1080 https://target.local", "p"),
+            ("curl -x{p} https://target.local", "p"),
+            ("curl -sSx{p} https://target.local", "p"),
+        ]
+        for cmd_tpl, ph_name in unexpanded_flag_cases:
+            step = {
+                "id": "step_flag_ph",
+                "title": "Paso Placeholder Flag",
+                "objective": "Verificar bloqueo",
+                "interaction_type": "active_low",
+                "command_template": cmd_tpl,
+            }
+            pb = {
+                "id": "pb_test",
+                "title": "PB Test",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Test",
+                "steps": [step],
+            }
+            val = validate_playbook_against_scope(pb, target_yaml)
+            self.assertFalse(val["can_execute"], f"Validación debió bloquear '{cmd_tpl}'")
+            self.assertEqual(val["steps_evaluation"][0]["status"], "BLOCKED")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -250,6 +250,35 @@ TARGET_KEY_HINTS = {
     "destination",
 }
 
+COMPACT_TARGET_SHORT_FLAGS = {"-x"}
+
+TARGET_FLAGS_WITH_VALUE = {
+    "-x", "--proxy", "--proxy-server", "--http-proxy", "--https-proxy",
+    "--socks4", "--socks4a", "--socks5", "--socks5-hostname", "--doh-url", "--preproxy",
+    "-u", "--url", "--target", "--host", "--domain",
+    "-connect", "--connect", "-servername", "--servername",
+}
+
+TARGET_FLAG_NAMES = {
+    "-x", "--proxy", "--proxy-server", "--http-proxy", "--https-proxy",
+    "--socks4", "--socks4a", "--socks5", "--socks5-hostname", "--doh-url", "--preproxy",
+    "-u", "--url", "--target", "--host", "--domain",
+    "-s", "--server", "-connect", "--connect", "-servername", "--servername",
+}
+
+FLAGS_EXPECTING_NON_TARGET_VALUE = {
+    "-X", "-m", "--method", "-w", "--wordlist", "-o", "-oN", "-oJ", "-oX",
+    "--output", "--script", "--script-args", "-p", "--ports", "-t", "-T",
+    "-T3", "-T4", "--timeout", "-timeout", "-mc", "-H", "--header",
+    "-d", "--data", "-f", "--format", "-l", "-b", "--cookie",
+    "-A", "--user-agent", "-user-agent", "--data-raw", "--data-binary",
+}
+
+
+def _flag_alternation(flags) -> str:
+    # Orden descendente por longitud para que prefijos cortos no eclipsen banderas compuestas
+    return "|".join(re.escape(f) for f in sorted(flags, key=len, reverse=True))
+
 
 def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
     """Determina si un placeholder corresponde a un destino de red verificable contra Scope Guard."""
@@ -259,13 +288,21 @@ def is_target_placeholder(placeholder: str, cmd_tpl: str) -> bool:
     if p_lower in TARGET_KEY_HINTS:
         return True
     escaped = re.escape(placeholder)
+    ph = r"\{" + escaped + r"\}"
+    value_suffix = r"[^\s'\"`;|<>&]*" + ph + r"[^\s'\"`;|<>&]*"
+    space_flags = _flag_alternation(TARGET_FLAGS_WITH_VALUE)
+    eq_flags = _flag_alternation(TARGET_FLAG_NAMES)
+    compact_flags = _flag_alternation(COMPACT_TARGET_SHORT_FLAGS)
     patterns = [
-        r"://[^\s'\"`;|<>&]*\{" + escaped + r"\}",
+        r"://[^\s'\"`;|<>&]*" + ph,
         r"@\{" + escaped + r"\}",
-        r"(?:-u|--url|--target|--host|--domain|--proxy|-x)\s+\{" + escaped + r"\}",
-        r"(?:-u|--url|--target|--host|--domain|--proxy|-x)=\{" + escaped + r"\}",
+        r"(?<!\S)(?:" + space_flags + r")\s+['\"]?" + value_suffix,
+        r"(?<!\S)(?:" + eq_flags + r")=['\"]?" + value_suffix,
+        r"(?<!\S)(?:" + compact_flags + r")['\"]?" + value_suffix,
+        r"(?<!\S)-[a-zA-Z0-9]*x['\"]?" + value_suffix,
     ]
     return any(re.search(pat, cmd_tpl) for pat in patterns)
+
 
 EXCLUDED_FILE_EXTENSIONS = {
     ".txt",
@@ -303,29 +340,6 @@ DYNAMIC_SHELL_PATTERN = re.compile(r"(\$[A-Za-z_][A-Za-z0-9_]*|\$\{[^}]+\}|\$\([
 def step_has_unverified_dynamic_targets(cmd_tpl: str) -> bool:
     """Detecta si el comando usa sustituciones shell dinámicas ($VAR, `cmd`, $(cmd)) no verificables."""
     return bool(DYNAMIC_SHELL_PATTERN.search(cmd_tpl))
-
-
-TARGET_FLAGS_WITH_VALUE = {
-    "-x", "--proxy", "--proxy-server", "--http-proxy", "--https-proxy",
-    "--socks4", "--socks4a", "--socks5", "--socks5-hostname", "--doh-url", "--preproxy",
-    "-u", "--url", "--target", "--host", "--domain",
-    "-connect", "--connect", "-servername", "--servername",
-}
-
-TARGET_FLAG_NAMES = {
-    "-x", "--proxy", "--proxy-server", "--http-proxy", "--https-proxy",
-    "--socks4", "--socks4a", "--socks5", "--socks5-hostname", "--doh-url", "--preproxy",
-    "-u", "--url", "--target", "--host", "--domain",
-    "-s", "--server", "-connect", "--connect", "-servername", "--servername",
-}
-
-FLAGS_EXPECTING_NON_TARGET_VALUE = {
-    "-X", "-m", "--method", "-w", "--wordlist", "-o", "-oN", "-oJ", "-oX",
-    "--output", "--script", "--script-args", "-p", "--ports", "-t", "-T",
-    "-T3", "-T4", "--timeout", "-timeout", "-mc", "-H", "--header",
-    "-d", "--data", "-f", "--format", "-l", "-b", "--cookie",
-    "-A", "--user-agent", "-user-agent", "--data-raw", "--data-binary",
-}
 
 DNS_QUERY_TYPES = {
     "any", "a", "aaaa", "cname", "mx", "ns", "ptr", "soa", "srv", "txt", "axfr", "ixfr",
@@ -407,6 +421,24 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
                     if flag_val and flag_val not in targets and "{" not in flag_val:
                         tokens_to_inspect.append(flag_val)
                 continue
+
+            # Banderas compactas de proxy (-xVALOR) o agrupadas en curl (-sSxVALOR o -sSx VALOR)
+            if tok_clean.startswith("-") and not tok_clean.startswith("--"):
+                if cmd_bin == "curl" and "x" in tok_clean:
+                    m_clustered = re.match(r"^-[a-zA-Z0-9]*x(.+)$", tok_clean)
+                    if m_clustered:
+                        compact_val = m_clustered.group(1).strip("'\"")
+                        if compact_val and compact_val not in targets and "{" not in compact_val:
+                            tokens_to_inspect.append(compact_val)
+                        continue
+                    elif re.match(r"^-[a-zA-Z0-9]*x$", tok_clean):
+                        expect_target_next = True
+                        continue
+                elif tok_clean.startswith("-x") and len(tok_clean) > 2:
+                    compact_val = tok_clean[2:].strip("'\"")
+                    if compact_val and compact_val not in targets and "{" not in compact_val:
+                        tokens_to_inspect.append(compact_val)
+                    continue
 
             # Banderas que esperan un destino de red
             if tok_clean in TARGET_FLAGS_WITH_VALUE:
@@ -555,8 +587,7 @@ def extract_step_targets(
     # 1. Placeholders en la plantilla de comandos
     placeholders = re.findall(r"\{([a-zA-Z0-9_]+)\}", cmd_tpl)
     for p in placeholders:
-        p_lower = p.lower()
-        if p_lower not in NON_TARGET_PLACEHOLDERS and p in params and params[p] is not None:
+        if is_target_placeholder(p, cmd_tpl) and p in params and params[p] is not None:
             val = str(params[p]).strip()
             if val:
                 parts = [part.strip() for part in re.split(r"[,\s]+", val) if part.strip()]

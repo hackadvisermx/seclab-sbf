@@ -278,17 +278,71 @@ class TestPlaybooksAPI(unittest.TestCase):
                 "  allow_passive: true\n"
                 "  allow_active: true\n"
             )
-            res_malformed_run = client.post(
-                "/api/v1/playbooks/pb_web_recon/run",
+            # M4: Endpoint /validate, /run y /step/run con {domain} sin parámetros falla cerrado
+            target_yaml.write_text(
+                "version: '1.0'\n"
+                "scope:\n"
+                "  in_scope:\n"
+                "    domains: ['target.local']\n"
+                "    ips: []\n"
+                "    cidrs: []\n"
+                "    endpoints: []\n"
+                "  out_of_scope:\n"
+                "    domains: []\n"
+                "    ips: []\n"
+                "    cidrs: []\n"
+                "    notes: []\n"
+                "authorization:\n"
+                "  reference: 'AUT-VALID'\n"
+                "  valid_from: '2026-10-01T00:00:00.000Z'\n"
+                "  valid_until: '2026-10-31T23:59:59.000Z'\n"
+                "  allow_passive: true\n"
+                "  allow_active: true\n"
+            )
+            pb_active_no_param = {
+                "id": "pb_active_no_param",
+                "title": "Playbook Activo Sin Parámetro",
+                "version": "1.0",
+                "category": "recon",
+                "description": "Prueba API M4",
+                "steps": [
+                    {
+                        "id": "step_active_placeholder",
+                        "title": "Paso Activo",
+                        "objective": "Verificar bloqueo estático",
+                        "interaction_type": "active_low",
+                        "command_template": "curl https://{domain}",
+                        "timeout_seconds": 30,
+                    }
+                ],
+            }
+            # /validate con engagement_id y sin parámetros
+            res_val_no_param = client.post(
+                "/api/v1/playbooks/validate",
+                json={
+                    "playbook": pb_active_no_param,
+                    "engagement_id": "test-eng",
+                },
+            )
+            self.assertEqual(res_val_no_param.status_code, 200)
+            scope_eval = res_val_no_param.json()["scope_evaluation"]
+            self.assertFalse(scope_eval["can_execute"])
+            self.assertEqual(scope_eval["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # /step/run con paso activo sin parámetro
+            res_step_no_param = client.post(
+                "/api/v1/playbooks/pb_web_recon/step/run",
                 json={
                     "engagement_id": "test-eng",
-                    "parameters": {"domain": "target.local"},
+                    "step_id": "step_02_web_probing",
+                    "parameters": {},
                     "dry_run": False,
                 },
             )
-            self.assertEqual(res_malformed_run.status_code, 200)
-            self.assertEqual(res_malformed_run.json()["status"], "BLOCKED")
-            self.assertFalse(res_malformed_run.json()["can_execute"])
+            self.assertEqual(res_step_no_param.status_code, 200)
+            step_res_no_param = res_step_no_param.json()["step_result"]
+            self.assertEqual(step_res_no_param["status"], "BLOCKED")
+            self.assertEqual(step_res_no_param["exit_code"], 126)
 
             client.close()
 

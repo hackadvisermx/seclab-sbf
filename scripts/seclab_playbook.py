@@ -284,6 +284,22 @@ def step_has_unverified_dynamic_targets(cmd_tpl: str) -> bool:
     return bool(DYNAMIC_SHELL_PATTERN.search(cmd_tpl))
 
 
+FLAGS_EXPECTING_NON_TARGET_VALUE = {
+    "-x", "-m", "--method", "-w", "--wordlist", "-o", "-on", "-oj", "-ox",
+    "--script", "--script-args", "-p", "--ports", "-t", "-t3", "-t4", "-timeout",
+    "-mc", "-h", "-content-type", "-d", "--data", "-f", "--format", "-l",
+}
+
+DNS_QUERY_TYPES = {
+    "any", "a", "aaaa", "cname", "mx", "ns", "ptr", "soa", "srv", "txt", "axfr", "ixfr",
+}
+
+COMMAND_SUBCOMMANDS = {
+    "openssl": {"s_client", "s_server", "x509", "req", "rsa"},
+    "ip": {"neighbor", "show", "route", "addr", "link", "rule"},
+}
+
+
 def _extract_literal_targets(cmd_tpl: str) -> List[str]:
     """Extrae de forma exhaustiva todos los destinos literales de red en una plantilla de comando.
 
@@ -292,6 +308,7 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
     - Direcciones IPv6 sin corchetes (ej. 2001:db8::bad) y con corchetes/puertos ([2001:db8::bad]:8080).
     - Direcciones IPv4 directas, con puertos o rutas (192.168.1.1:8080, 192.168.1.1/api).
     - Nombres de host/dominio/FQDN con o sin puertos y rutas (evil.com/path, evil.com:8080/path).
+    - Hosts de una sola etiqueta (localhost, db, service, etc.) en posición de argumento o asignación.
     - Asignaciones de flags de comandos (--url=ftp://evil.com, -u=evil.com/path).
     - Tokens sospechosos de red para verificación estricta en Scope Guard.
     """
@@ -303,19 +320,79 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
             if url not in targets:
                 targets.append(url)
 
-    # 2. Tokens crudos e inspección de flags
-    raw_tokens = re.findall(r"[^\s'\"`;|<>&]+", cmd_tpl)
+    # 2. Dividir comando en segmentos por operadores de control y tubería (;, |, &&, ||)
+    segments = re.split(r";|&&|\|\||\|", cmd_tpl)
     tokens_to_inspect: List[str] = []
-    for tok in raw_tokens:
-        tok_clean = tok.strip("'\"")
-        if tok_clean.startswith(("-", "--")) and "=" in tok_clean:
-            tokens_to_inspect.append(tok_clean.split("=", 1)[1].strip("'\""))
-        elif not tok_clean.startswith(("-", "@", "/")):
+
+    for seg in segments:
+        seg = seg.strip()
+        if not seg:
+            continue
+
+        try:
+            tokens = shlex.split(seg)
+        except ValueError:
+            tokens = seg.split()
+
+        if not tokens:
+            continue
+
+        cmd_bin = tokens[0].lower().strip("'\"")
+        args = tokens[1:]
+
+        skip_next = False
+        for tok in args:
+            tok_clean = tok.strip("'\"")
+
+            if skip_next:
+                skip_next = False
+                continue
+
+            # Redirecciones
+            if tok_clean in (">", ">>", "<", "2>&1", "1>&2", ">&"):
+                skip_next = True
+                continue
+            if tok_clean.startswith(("<", ">")):
+                continue
+
+            # Banderas con valores asignados via '='
+            if tok_clean.startswith(("-", "--")) and "=" in tok_clean:
+                flag_name, flag_val = tok_clean.split("=", 1)
+                flag_val = flag_val.strip("'\"")
+                if flag_name.lower() in ("-u", "--url", "--target", "--host", "--domain", "-s", "--server"):
+                    if flag_val and flag_val not in targets and "{" not in flag_val:
+                        tokens_to_inspect.append(flag_val)
+                continue
+
+            # Banderas que consumen el siguiente argumento no-objetivo
+            if tok_clean.lower() in FLAGS_EXPECTING_NON_TARGET_VALUE:
+                skip_next = True
+                continue
+
+            # Banderas comunes
+            if tok_clean.startswith(("-", "@", "+")):
+                continue
+
+            # Subcomandos específicos conocidos por herramienta
+            if cmd_bin in COMMAND_SUBCOMMANDS and tok_clean.lower() in COMMAND_SUBCOMMANDS[cmd_bin]:
+                continue
+            if cmd_bin == "dig" and tok_clean.lower() in DNS_QUERY_TYPES:
+                continue
+
             tokens_to_inspect.append(tok_clean)
 
     for tok in tokens_to_inspect:
         clean = tok.rstrip(",;")
-        if not clean or clean in targets or "://" in clean:
+        if not clean or clean in targets or "://" in clean or clean.startswith("{") or clean.endswith("}"):
+            continue
+
+        # Excluir rutas de archivos por extensión
+        clean_ext = "." + clean.rsplit(".", 1)[-1].lower() if "." in clean else ""
+        if clean_ext in EXCLUDED_FILE_EXTENSIONS:
+            continue
+
+        # Excluir números puros (ej. puertos o códigos HTTP)
+        if clean.isdigit() or re.fullmatch(r"[0-9,]+", clean):
             continue
 
         # IPv6 entre corchetes: [2001:db8::bad] o [2001:db8::bad]:8080
@@ -371,15 +448,28 @@ def _extract_literal_targets(cmd_tpl: str) -> List[str]:
         if host.startswith("[") and "]" in host:
             host = host[1:host.index("]")]
 
+        # Excluir si la parte de host termina con extensión de archivo
         if "." in host and not host.startswith((".", "-")):
             ext = "." + host.rsplit(".", 1)[-1].lower()
-            if ext not in EXCLUDED_FILE_EXTENSIONS:
-                if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host):
-                    if clean not in targets:
-                        targets.append(clean)
-                    if host not in targets:
-                        targets.append(host)
-                    continue
+            if ext in EXCLUDED_FILE_EXTENSIONS:
+                continue
+
+        # Dominio con punto (FQDN)
+        if "." in host and not host.startswith((".", "-")):
+            if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+", host):
+                if clean not in targets:
+                    targets.append(clean)
+                if host not in targets:
+                    targets.append(host)
+                continue
+
+        # Host de una sola etiqueta (RFC 1123: localhost, db, service, test, get, etc.)
+        if re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?", host):
+            if clean not in targets:
+                targets.append(clean)
+            if host not in targets:
+                targets.append(host)
+            continue
 
         # Posible IPv6 con múltiples colones que falló sintaxis estricta (para que Scope Guard evalúe y bloquee)
         if clean.count(":") >= 2:
@@ -685,7 +775,7 @@ def validate_playbook_against_scope(
                 reason = "El paso activo requiere un objetivo verificable contra Scope Guard pero no declara una fuente de destino resoluble."
                 can_execute = False
                 blocked_count += 1
-            elif is_active_step and not step_targets and not unexpanded_target_placeholders:
+            elif is_active_step and not step_targets:
                 status = "BLOCKED"
                 reason = "El paso activo requiere al menos un objetivo resoluble y verificable contra Scope Guard pero no produjo ningún candidato."
                 can_execute = False

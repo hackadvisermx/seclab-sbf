@@ -106,7 +106,7 @@ class TestSeclabPlaybook(unittest.TestCase):
         from authorization_fixture import AUTHORIZATION_YAML
         target_yaml = self.tmp_path / "target.yaml"
         target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
-        res = validate_playbook_against_scope(self.valid_playbook, target_yaml)
+        res = validate_playbook_against_scope(self.valid_playbook, target_yaml, parameters={"target": "target.local"})
         self.assertTrue(res["can_execute"])
         self.assertEqual(res["blocked_steps_count"], 0)
         for s in res["steps_evaluation"]:
@@ -370,7 +370,7 @@ class TestSeclabPlaybook(unittest.TestCase):
             "  allow_active: true\n"
         )
         eval_time = datetime(2026, 10, 12, 12, 0, 0, tzinfo=timezone.utc)
-        res = validate_playbook_against_scope(self.valid_playbook, target_yaml, now=eval_time)
+        res = validate_playbook_against_scope(self.valid_playbook, target_yaml, parameters={"target": "target.local"}, now=eval_time)
         self.assertTrue(res["can_execute"])
         self.assertTrue(res["authorization_state"]["allow_active"])
         self.assertTrue(res["authorization_state"]["allow_passive"])
@@ -850,11 +850,11 @@ class TestSeclabPlaybook(unittest.TestCase):
             "description": "Test B3 sin destinos",
             "steps": [
                 {
-                    "id": "step_cmd_printf",
-                    "title": "Printf Sin Destino",
+                    "id": "step_cmd_sleep",
+                    "title": "Sleep Sin Destino",
                     "objective": "Comando inocuo sin objetivos de red",
                     "interaction_type": "active_low",
-                    "command_template": "printf 'EXECUTED'",
+                    "command_template": "sleep 10",
                 }
             ],
         }
@@ -1133,6 +1133,207 @@ class TestSeclabPlaybook(unittest.TestCase):
         val_m5 = validate_playbook_against_scope(pb_m5, target_yaml, parameters={"domain": "target.local"})
         self.assertTrue(val_m5["can_execute"])
         self.assertEqual(val_m5["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+    def test_b3_m6_single_label_hosts_and_argument_collisions_blocked(self):
+        """B3/M6: Extracción y bloqueo fail-closed de hosts de una sola etiqueta y colisiones en posición de argumento."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_b3_m6.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+
+        # Casos requeridos por la auditoría: localhost, db, service, y colisiones test, get, query, true, false
+        commands_to_test = [
+            "curl target.local localhost",
+            "curl target.local db",
+            "curl target.local service",
+            "curl target.local test",
+            "curl target.local get",
+            "curl target.local query",
+            "curl target.local true",
+            "curl target.local false",
+            "printf '%s' target.local localhost",
+            "nmap -sT -p 80 target.local localhost",
+        ]
+
+        for idx, cmd in enumerate(commands_to_test):
+            step = {
+                "id": f"step_b3_m6_{idx}",
+                "title": f"Test {cmd}",
+                "objective": "Verificar bloqueo de host no autorizado",
+                "interaction_type": "active_low",
+                "command_template": cmd,
+            }
+            pb = {
+                "id": f"pb_b3_m6_{idx}",
+                "title": "Playbook B3/M6",
+                "version": "1.0",
+                "category": "recon",
+                "description": "B3 M6 single label test",
+                "steps": [step],
+            }
+
+            # 1. Validación estática debe bloquear
+            val = validate_playbook_against_scope(pb, target_yaml)
+            self.assertFalse(val["can_execute"], f"Fallo al bloquear estáticamente comando: {cmd}")
+            self.assertEqual(val["steps_evaluation"][0]["status"], "BLOCKED")
+
+            # 2. Ejecución real debe bloquear con código 126
+            step_res = execute_playbook_step(
+                step,
+                context={"allow_active": True, "scope_data": scope_data},
+                dry_run=False,
+            )
+            self.assertEqual(step_res["status"], "BLOCKED", f"Fallo al bloquear en ejecución comando: {cmd}")
+            self.assertEqual(step_res["exit_code"], 126)
+            self.assertTrue(step_res["stop_condition_met"])
+            self.assertIn("Scope Guard", step_res["output"])
+
+    def test_b3_subprocess_run_never_invoked_on_blocked_step(self):
+        """B3: Verificar mediante mock que ningún paso bloqueado invoque subprocess.run()."""
+        from unittest.mock import patch
+        from seclab_playbook import run_playbook, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_mock.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        step_blocked = {
+            "id": "step_blocked_test",
+            "title": "Paso Bloqueado",
+            "objective": "Comprobar no invocación de subprocesos",
+            "interaction_type": "active_low",
+            "command_template": "curl target.local localhost",
+        }
+        pb = {
+            "id": "pb_mock_run",
+            "title": "Playbook Mock Test",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Mock subprocess test",
+            "steps": [step_blocked],
+        }
+
+        with patch("subprocess.run") as mock_run:
+            # 1. execute_playbook_step directo
+            scope_data = {
+                "scope": {
+                    "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                    "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+                }
+            }
+            res_step = execute_playbook_step(
+                step_blocked,
+                context={"allow_active": True, "scope_data": scope_data},
+                dry_run=False,
+            )
+            self.assertEqual(res_step["status"], "BLOCKED")
+            self.assertEqual(res_step["exit_code"], 126)
+            mock_run.assert_not_called()
+
+            # 2. run_playbook orquestado
+            res_pb = run_playbook(
+                pb,
+                target_yaml_path=target_yaml,
+                dry_run=False,
+            )
+            self.assertEqual(res_pb["status"], "BLOCKED")
+            mock_run.assert_not_called()
+
+    def test_b3_single_label_hosts_in_scope_allowed(self):
+        """B3: Hosts de una sola etiqueta autorizados explícitamente en el scope son permitidos."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_single_label_in_scope.yaml"
+        scope_single_labels = (
+            "scope:\n"
+            "  in_scope:\n"
+            "    domains: ['target.local', 'localhost', 'db']\n"
+            "    ips: ['127.0.0.1']\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+            "  out_of_scope:\n"
+            "    domains: []\n"
+            "    ips: []\n"
+            "    cidrs: []\n"
+            "    endpoints: []\n"
+        )
+        target_yaml.write_text(scope_single_labels + AUTHORIZATION_YAML)
+
+        step_in_scope = {
+            "id": "step_in_scope_local",
+            "title": "Localhost y DB en Scope",
+            "objective": "Verificar autorización de single-label hosts autorizados",
+            "interaction_type": "active_low",
+            "command_template": "curl http://localhost http://db",
+        }
+        pb = {
+            "id": "pb_single_label_in_scope",
+            "title": "Playbook Single Labels In Scope",
+            "version": "1.0",
+            "category": "recon",
+            "description": "Single labels authorized",
+            "steps": [step_in_scope],
+        }
+
+        val = validate_playbook_against_scope(pb, target_yaml)
+        self.assertTrue(val["can_execute"])
+        self.assertEqual(val["steps_evaluation"][0]["status"], "AUTHORIZED")
+
+    def test_m4_unexpanded_placeholders_fail_closed_statically(self):
+        """M4: Placeholders de destino sin parámetros suministrados fallan cerrado estáticamente y en ejecución real."""
+        from seclab_playbook import validate_playbook_against_scope, execute_playbook_step
+        from authorization_fixture import AUTHORIZATION_YAML
+        target_yaml = self.tmp_path / "target_m4_placeholders.yaml"
+        target_yaml.write_text(DEFAULT_SCOPE_YAML + AUTHORIZATION_YAML)
+
+        step_unexpanded = {
+            "id": "step_active_placeholder",
+            "title": "Paso Activo con Placeholder sin Parámetro",
+            "objective": "Verificar paridad estática fail-closed",
+            "interaction_type": "active_low",
+            "command_template": "curl https://{domain}",
+        }
+        pb = {
+            "id": "pb_m4_unexpanded",
+            "title": "Playbook M4 Unexpanded Placeholder",
+            "version": "1.0",
+            "category": "recon",
+            "description": "M4 test placeholder without param",
+            "steps": [step_unexpanded],
+        }
+
+        # 1. Sin parámetro domain provisto -> validate_playbook_against_scope DEBE fallar cerrado (can_execute=False, BLOCKED)
+        val_no_param = validate_playbook_against_scope(pb, target_yaml)
+        self.assertFalse(val_no_param["can_execute"])
+        self.assertEqual(val_no_param["steps_evaluation"][0]["status"], "BLOCKED")
+        self.assertIn("no produjo ningún candidato", val_no_param["steps_evaluation"][0]["reason"])
+
+        # 2. Sin parámetro domain provisto en ejecución real -> execute_playbook_step bloquea con exit code 126
+        scope_data = {
+            "scope": {
+                "in_scope": {"domains": ["target.local"], "ips": ["127.0.0.1"], "cidrs": [], "endpoints": []},
+                "out_of_scope": {"domains": [], "ips": [], "cidrs": [], "endpoints": []},
+            }
+        }
+        res_exec_no_param = execute_playbook_step(
+            step_unexpanded,
+            context={"allow_active": True, "scope_data": scope_data},
+            dry_run=False,
+        )
+        self.assertEqual(res_exec_no_param["status"], "BLOCKED")
+        self.assertEqual(res_exec_no_param["exit_code"], 126)
+        self.assertTrue(res_exec_no_param["stop_condition_met"])
+
+        # 3. Con parámetro domain provisto en alcance -> autorizado estáticamente
+        val_with_param = validate_playbook_against_scope(pb, target_yaml, parameters={"domain": "target.local"})
+        self.assertTrue(val_with_param["can_execute"])
+        self.assertEqual(val_with_param["steps_evaluation"][0]["status"], "AUTHORIZED")
 
 
 if __name__ == "__main__":

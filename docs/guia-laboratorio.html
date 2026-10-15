@@ -20,6 +20,23 @@
     --accent-red: #f85149;
     --accent-cyan: #39c5bb;
   }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg-primary: #f6f8fa;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #eaeef2;
+      --border-color: #d0d7de;
+      --text-primary: #1f2328;
+      --text-muted: #656d76;
+      --accent-blue: #0969da;
+      --accent-green: #1a7f37;
+      --accent-amber: #9a6700;
+      --accent-purple: #8250df;
+      --accent-red: #cf222e;
+      --accent-cyan: #1b7c83;
+    }
+  }
   * { box-sizing: border-box; }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -37,7 +54,7 @@
     z-index: 100;
   }
   .header-inner {
-    max-width: 1100px;
+    max-width: 1150px;
     margin: 0 auto;
     display: flex;
     justify-content: space-between;
@@ -66,13 +83,14 @@
   .badge-green { background: #238636; color: #fff; }
   .badge-purple { background: #6e40c9; color: #fff; }
   .badge-amber { background: #9e6a03; color: #fff; }
+  .badge-teal { background: #007788; color: #fff; }
 
-  main { max-width: 1100px; margin: 0 auto; padding: 30px 20px 80px; }
+  main { max-width: 1150px; margin: 0 auto; padding: 30px 20px 80px; }
 
   /* Misiones / Tabs */
   .mission-selector {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     gap: 14px;
     margin-bottom: 30px;
   }
@@ -92,7 +110,7 @@
   }
   .mission-card.active {
     border-color: var(--accent-blue);
-    background: #1c2638;
+    background: var(--bg-tertiary);
     box-shadow: 0 0 12px rgba(88, 166, 255, 0.25);
   }
   .mission-card h3 {
@@ -130,7 +148,7 @@
   .card h3 {
     font-size: 1.1rem;
     margin: 20px 0 10px;
-    color: #f0f6fc;
+    color: var(--text-primary);
   }
 
   /* Command Generator */
@@ -209,7 +227,7 @@
     font-weight: 600;
     font-size: 1.1rem;
     margin-bottom: 6px;
-    color: #f0f6fc;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -283,7 +301,43 @@
     color: var(--text-muted);
   }
   .disc-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px; }
-  .disc-cmd { font-size: 0.85rem; background: #000; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-color); color: #58a6ff; cursor: pointer; }
+  .disc-cmd { font-size: 0.85rem; background: var(--bg-secondary); padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-color); color: var(--accent-blue); cursor: pointer; }
+
+  /* Feature Grid */
+  .grid-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .feature-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .feature-card h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .feature-card p {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .feature-meta {
+    font-size: 0.8rem;
+    font-family: ui-monospace, monospace;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-color);
+  }
 
   /* Search box */
   .search-box {
@@ -327,9 +381,9 @@
     margin: 16px 0;
     font-size: 0.92rem;
   }
-  .alert-info { background: #0c2d6b; border: 1px solid #1f6feb; }
-  .alert-warn { background: #2a1a05; border: 1px solid #9e6a03; }
-  .alert-success { background: #0e3015; border: 1px solid #238636; }
+  .alert-info { background: rgba(31, 111, 235, 0.15); border: 1px solid #1f6feb; }
+  .alert-warn { background: rgba(158, 106, 3, 0.15); border: 1px solid #9e6a03; }
+  .alert-success { background: rgba(35, 134, 54, 0.15); border: 1px solid #238636; }
 
   footer {
     border-top: 1px solid var(--border-color);
@@ -347,10 +401,11 @@
     <h1>🛡️ SecLab-SBF <span style="font-weight: 300; font-size: 1.1rem; color: var(--text-muted);">| Guía del Operador</span></h1>
     <div class="badges">
       <span class="badge badge-cyan">100+ Herramientas</span>
-      <span class="badge badge-purple">10 Agent Skills</span>
-      <span class="badge badge-green">8 Disciplinas</span>
-      <span class="badge badge-amber">Scope Guard &amp; BDT</span>
-      <span class="badge" style="background: #238636; color: #fff;">Evidence-First</span>
+      <span class="badge badge-purple">Playbooks Deterministas</span>
+      <span class="badge badge-green">Copiloto Local &amp; Fallback</span>
+      <span class="badge badge-amber">Scope Guard &amp; DNS Drift</span>
+      <span class="badge badge-teal">Supervisión Pedagógica</span>
+      <span class="badge" style="background: #238636; color: #fff;">Métricas &amp; SARIF</span>
     </div>
   </div>
 </header>
@@ -359,27 +414,35 @@
 
   <!-- SELECCIONADOR DE MISIÓN -->
   <section>
-    <h2 style="font-size: 1.25rem; margin-bottom: 12px; color: #f0f6fc;">¿Qué vas a realizar hoy? (Selecciona tu objetivo)</h2>
+    <h2 style="font-size: 1.25rem; margin-bottom: 12px; color: var(--text-primary);">¿Qué vas a realizar hoy? (Selecciona tu objetivo)</h2>
     <div class="mission-selector">
       <div class="mission-card active" onclick="seleccionarMision('engagement', this)">
         <h3>🌐 Auditoría Web / API</h3>
-        <p>Engagement profesional con Scope Guard, 8 disciplinas, BDT y compuertas de evidencia.</p>
+        <p>Engagement profesional con Scope Guard, 8 disciplinas, BDT y compuertas Evidence-First.</p>
+      </div>
+      <div class="mission-card" onclick="seleccionarMision('playbooks', this)">
+        <h3>📋 Playbooks Deterministas</h3>
+        <p>Ejecución interactiva paso a paso con Scope Guard, catálogo YAML y salvaguardas fail-closed.</p>
       </div>
       <div class="mission-card" onclick="seleccionarMision('ctf', this)">
         <h3>🏁 Reto CTF / Máquina</h3>
-        <p>Retos Jeopardy por categorías (web, crypto, pwn, rev) o Máquinas HTB/THM con VPN.</p>
+        <p>Retos Jeopardy por categorías (web, crypto, pwn, rev) o Máquinas HTB/THM con VPN tun0.</p>
       </div>
       <div class="mission-card" onclick="seleccionarMision('agent', this)">
         <h3>🤖 Orquestar con IA / Agentes</h3>
-        <p>Hermes Vault (AES-256-GCM), Copiloto táctico, subagentes enriquecidos y pt-context.</p>
+        <p>Copiloto local Ollama/vLLM con fallback offline, Hermes Vault, auditoría y pt-context.</p>
+      </div>
+      <div class="mission-card" onclick="seleccionarMision('supervision', this)">
+        <h3>🎓 Supervisión &amp; Métricas</h3>
+        <p>Checkpoints pedagógicos, autorreflexión, madurez longitudinal, DAG y exportación SARIF v2.1.0.</p>
       </div>
       <div class="mission-card" onclick="seleccionarMision('pivoting', this)">
         <h3>🔀 Pivoting & Redes</h3>
-        <p>Túneles SOCKS5, reenvío de puertos, Ligolo/Chisel y proxys controlados sobre tun0.</p>
+        <p>Túneles SOCKS5, reenvío de puertos TCP, Chisel/Ligolo y auditoría de subredes sobre tun0.</p>
       </div>
       <div class="mission-card" onclick="seleccionarMision('dashboard', this)">
         <h3>💻 Centro de Mando Web</h3>
-        <p>Dashboard :8080, Terminal Web :7681 multi-tab, telemetría IP y papelera .seclab-trash.</p>
+        <p>Dashboard táctico :8080, Terminal Web :7681 multi-tab, telemetría IP y papelera .seclab-trash.</p>
       </div>
     </div>
   </section>
@@ -411,7 +474,7 @@
   <!-- FLUJO METODOLÓGICO PASO A PASO -->
   <section class="card" id="seccion-flujo">
     <h2>🗺️ Metodología Paso a Paso: De Inicio a Fin</h2>
-    <p style="color: var(--text-muted); margin-top: -6px;">Sigue este flujo secuencial estandarizado para asegurar cobertura del 100%, rigor Evidence-First y cero omisiones:</p>
+    <p style="color: var(--text-muted); margin-top: -6px;">Sigue este flujo secuencial estandarizado para asegurar cobertura del 100%, rigor Evidence-First, playbooks deterministas y cero omisiones:</p>
 
     <div class="step-container">
 
@@ -419,16 +482,21 @@
       <div class="step-item">
         <div class="step-num">1</div>
         <div class="step-body">
-          <div class="step-title">Inicialización y Definición de Alcance (Scope Guard)</div>
+          <div class="step-title">Inicialización, Scope Guard &amp; Detección de Desvío DNS (DNS Drift)</div>
           <div class="step-desc">
-            Crea la estructura del engagement. SecLab inicializa las carpetas <code>evidence/</code>, <code>recon/</code>, <code>notes/</code>, <code>scope/</code> y genera el archivo <code>scope/target.yaml</code> con reglas estrictas de dominios, CIDRs y exclusiones.
+            Crea la estructura del engagement. SecLab inicializa <code>evidence/</code>, <code>recon/</code>, <code>notes/</code>, <code>scope/</code> y genera <code>scope/target.yaml</code> con autorización obligatoria (referencia, <code>valid_from</code> y <code>valid_until</code> con zona horaria UTC). El motor monitorea cambios de resolución IP para evitar escaneos hacia activos desvinculados o fuera de alcance.
           </div>
-          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code>pt-eng new mi-objetivo target.com
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Crear engagement con dominio objetivo:
+pt-eng new mi-objetivo target.com
 cd /workspace/engagements/mi-objetivo
-# Valida que un objetivo o URL pertenezca al alcance permitido:
-pt-eng scope https://target.com/api</code></pre>
+
+# Validar que un objetivo o URL pertenezca al alcance autorizado:
+pt-eng scope https://target.com/api
+
+# Consultar historial inmutable de revisiones y diffs de target.yaml:
+curl -s http://127.0.0.1:8080/api/v1/scope/mi-objetivo/revisions | jq .</code></pre>
           <div class="alert-box alert-info">
-            🔒 <strong>Scope Guard Activo:</strong> Cualquier herramienta del laboratorio consulta <code>target.yaml</code>. Intentar escanear destinos fuera de alcance bloqueará la ejecución para evitar ataques no autorizados.
+            🔒 <strong>Scope Guard &amp; DNS Drift Activos:</strong> Antes de despachar herramientas activas, el sistema verifica la pertenencia estricta al alcance y alerta ante discrepancias DNS. En la terminal libre <code>ttyd</code> rige una frontera operacional explícita para recordar el límite de autorización.
           </div>
         </div>
       </div>
@@ -437,15 +505,18 @@ pt-eng scope https://target.com/api</code></pre>
       <div class="step-item">
         <div class="step-num">2</div>
         <div class="step-body">
-          <div class="step-title">Reconocimiento Automatizado &amp; Fuzzing de Parámetros</div>
+          <div class="step-title">Reconocimiento Automatizado, Fuzzing &amp; Trazabilidad (DAG)</div>
           <div class="step-desc">
-            Ejecuta la batería de enumeración pasiva y activa: subdominios (assetfinder, findomain), sondeo HTTP (httprobe), scraping de endpoints (gau) y parámetros ocultos con <code>x8</code>.
+            Ejecuta la batería de enumeración pasiva y activa: subdominios (assetfinder, findomain), sondeo HTTP (httprobe), scraping de endpoints (gau) y fuzzing de parámetros ocultos con <code>x8</code>. Si ejecutas herramientas manuales por CLI externa, puedes ingestar su corrida en <code>recon_jobs.db</code> para mantener el grafo de procedencia intacto.
           </div>
-          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Reconocimiento continuo con scope guard:
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Reconocimiento continuo con Scope Guard:
 pt-recon mi-objetivo
 
 # Fuzzing determinista de parámetros ocultos con x8:
-pt-fuzz-params https://target.com/api/v1/user</code></pre>
+pt-fuzz-params https://target.com/api/v1/user
+
+# Ingestar una corrida manual externa en recon_jobs.db (badge CLI_EXTERNAL):
+python3 /usr/local/bin/scripts/seclab_record_job.py record mi-objetivo --tool nmap --target target.com --command "nmap -sV target.com"</code></pre>
         </div>
       </div>
 
@@ -453,18 +524,18 @@ pt-fuzz-params https://target.com/api/v1/user</code></pre>
       <div class="step-item">
         <div class="step-num">3</div>
         <div class="step-body">
-          <div class="step-title">El Asesor Táctico: ¿Qué hago ahora? (<code>pt-next</code>)</div>
+          <div class="step-title">Playbooks Deterministas &amp; Ejecución Paso a Paso</div>
           <div class="step-desc">
-            En cualquier momento de la auditoría, <code>pt-next</code> analiza los artefactos existentes, notas y hallazgos registrados para decirte exactamente qué paso metodológico sigue.
+            Ejecuta procedimientos estructurados y repetibles con esquema YAML estricto. El catálogo incluye OWASP Top 10, APIs GraphQL, flujos OAuth/JWT, recursos compartidos SMB y pivoteo interno. Cada paso evalúa Scope Guard de forma fail-closed (código de salida 126 si está fuera de alcance) y admite ejecución simulada (dry-run) o paso a paso con el botón «▶️ Paso».
           </div>
-          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Recomienda el próximo paso táctico con comandos listos:
-pt-next
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Listar catálogo de playbooks integrados:
+python3 /usr/local/bin/scripts/seclab_playbook.py list
 
-# Muestra el mapa de ruta completo de las 8 disciplinas:
-pt-next --all
+# Validar estáticamente un playbook contra el target.yaml del proyecto:
+python3 /usr/local/bin/scripts/seclab_playbook.py validate playbooks/api_graphql_audit.yaml scope/target.yaml
 
-# Genera un System Prompt enriquecido con el estado real para tu LLM / Agente:
-pt-next --prompt</code></pre>
+# Ejecutar paso individual evaluando Scope Guard en tiempo real:
+python3 /usr/local/bin/scripts/seclab_playbook.py run-step playbooks/api_graphql_audit.yaml step_graphql_introspection --context '{"target":"target.com"}'</code></pre>
         </div>
       </div>
 
@@ -472,19 +543,18 @@ pt-next --prompt</code></pre>
       <div class="step-item">
         <div class="step-num">4</div>
         <div class="step-body">
-          <div class="step-title">Auditoría Específica por Disciplinas (Agent Security Skills)</div>
+          <div class="step-title">Copiloto Táctico Local &amp; Modelos Aislados (Zero Data Leak)</div>
           <div class="step-desc">
-            Aplica playbooks profesionales categorizados. Si pruebas SSRF o inyecciones fuera de banda (OOB), usa el receptor local <code>pt-callback</code>.
+            Interactúa con modelos LLM locales (Ollama en <code>localhost:11434</code> o vLLM en <code>localhost:8000</code>) o proveedores cloud en Hermes Vault sin filtrar datos fuera de tu infraestructura. Si el modelo local se desconecta, el Copiloto activa automáticamente el <strong>Fallback Heurístico</strong> determinista sin interrumpir la sesión, registrando el consentimiento en <code>evidence/.copilot_consent.jsonl</code>.
           </div>
-          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Abre el selector interactivo fzf de playbooks de seguridad:
-pt-skills
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Verificar salud de los proveedores locales del Copiloto:
+curl -s http://127.0.0.1:8080/api/v1/copilot/providers/health | jq .
 
-# En otra pestaña/panel tmux, inicia el receptor de interacciones OOB para SSRF:
-pt-callback start 9001
+# Consultar historial inmutable de consentimiento y auditoría del Copiloto:
+curl -s http://127.0.0.1:8080/api/v1/copilot/consent/history | jq .
 
-# Comprueba el receptor local; esto no prueba SSRF en el objetivo:
-curl http://127.0.0.1:9001/prueba-local
-pt-callback show</code></pre>
+# Exportar transcripción del chat con re-verificación de citas en disco:
+curl -s "http://127.0.0.1:8080/api/v1/copilot/chat/export?engagement_id=mi-objetivo&format=markdown"</code></pre>
         </div>
       </div>
 
@@ -492,7 +562,7 @@ pt-callback show</code></pre>
       <div class="step-item">
         <div class="step-num">5</div>
         <div class="step-body">
-          <div class="step-title">Documentación Evidence-First &amp; Compuertas de Calidad Bug Bounty</div>
+          <div class="step-title">Documentación Evidence-First &amp; Compuertas Bug Bounty</div>
           <div class="step-desc">
             Todo hallazgo debe documentarse con evidencia reproducible, requests/responses HTTP sin alterar y scoring CVSS v3.1. SecLab incorpora compuertas estrictas para descartar falsos positivos y acotar pruebas:
           </div>
@@ -547,11 +617,13 @@ pt-callback show</code></pre>
               </div>
             </div>
           </div>
-          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Crea la plantilla estructurada del hallazgo:
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Crear plantilla estructurada de evidencia para el hallazgo:
 pt-finding new idor-panel-facturacion
 
-# Edita evidence/idor-panel-facturacion.md y valida la rigurosidad técnica:
-pt-finding lint</code></pre>
+# Validar rigor técnico, PoC y campos obligatorios:
+pt-finding lint
+
+# En el visor modal del Dashboard: activa el toggle de redacción de secretos para enmascarar tokens y JWTs.</code></pre>
         </div>
       </div>
 
@@ -559,15 +631,18 @@ pt-finding lint</code></pre>
       <div class="step-item">
         <div class="step-num">6</div>
         <div class="step-body">
-          <div class="step-title">Evaluación de Cobertura y Checklist Metodológico</div>
+          <div class="step-title">Supervisión Pedagógica Continua &amp; Autorreflexión</div>
           <div class="step-desc">
-            Comprueba el porcentaje de avance en las 8 disciplinas metodológicas. Para poder cerrar el engagement se exige un mínimo de 50% de cobertura.
+            En entornos académicos o formativos, SecLab evalúa checkpoints obligatorios vinculados a eventos clave (alcance aprobado, reconocimiento finalizado, primer hallazgo, precierre). El estudiante debe responder justificaciones pedagógicas en la pestaña Supervisión del Dashboard, y el docente cuenta con una vista consolidada de cohorte.
           </div>
-          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Evalúa la cobertura en vivo:
-pt-checklist
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Consultar estado de checkpoints pedagógicos del engagement:
+python3 /usr/local/bin/scripts/seclab_supervision.py status mi-objetivo
 
-# Genera tabla en formato Markdown para adjuntar al informe:
-pt-checklist --markdown</code></pre>
+# Exportar reporte formativo del alumno en Markdown:
+python3 /usr/local/bin/scripts/seclab_supervision.py export mi-objetivo --format markdown
+
+# Resumen de cohorte docente (vista agregada de aula):
+curl -s http://127.0.0.1:8080/api/v1/engagements/supervision/cohort/summary | jq .</code></pre>
         </div>
       </div>
 
@@ -575,17 +650,41 @@ pt-checklist --markdown</code></pre>
       <div class="step-item">
         <div class="step-num">7</div>
         <div class="step-body">
-          <div class="step-title">Compilación de Reportes, Cierre y Empaquetado Seguro</div>
+          <div class="step-title">Métricas Operacionales Longitudinales &amp; Calidad de Auditoría</div>
           <div class="step-desc">
-            Compila el reporte final, pasa la compuerta de calidad pre-cierre y genera el tarball sanitizado con SHA-256 en <code>dist/</code>.
+            Mide la madurez técnica de la auditoría en 4 pilares: Scope Rigor, Evidence-First Quality, Methodological Coverage y Reporting Readiness. SecLab captura snapshots históricos periódicos en <code>evidence/.metrics_history.jsonl</code> para visualizar la evolución temporal de la calidad.
           </div>
-          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Compila el reporte técnico y ejecutivo en Markdown:
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># Capturar instantánea de métricas operacionales del engagement:
+python3 /usr/local/bin/scripts/seclab_metrics.py snapshot mi-objetivo
+
+# Consultar historial temporal con gráficos de deltas y evolución:
+curl -s http://127.0.0.1:8080/api/v1/engagements/mi-objetivo/metrics/history | jq .
+
+# Resumen global de madurez transversal de todo el laboratorio:
+curl -s http://127.0.0.1:8080/api/v1/engagements/metrics/summary | jq .</code></pre>
+        </div>
+      </div>
+
+      <!-- PASO 8 -->
+      <div class="step-item">
+        <div class="step-num">8</div>
+        <div class="step-body">
+          <div class="step-title">Exportación SARIF, Firma Criptográfica, Cierre &amp; Empaquetado</div>
+          <div class="step-desc">
+            Compila el reporte final, exporta hallazgos en formato estándar OASIS SARIF v2.1.0 para CI/CD, sella criptográficamente el manifiesto de artefactos con firma de no repudio, verifica el grafo de procedencia técnica DAG y genera el tarball reproducible sanitizado en <code>dist/</code>.
+          </div>
+          <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Exportar hallazgos en formato estándar OASIS SARIF v2.1.0:
+curl -s http://127.0.0.1:8080/api/v1/findings/mi-objetivo/export/sarif -o dist/findings.sarif.json
+
+# 2. Generar y sellar criptográficamente el manifiesto de artefactos (firma SHA-256):
+python3 /usr/local/bin/scripts/seclab_signature.py sign mi-objetivo
+
+# 3. Exportar grafo estructurado de procedencia técnica (DAG) en formato Mermaid:
+curl -s "http://127.0.0.1:8080/api/v1/engagements/mi-objetivo/provenance/export?format=mermaid"
+
+# 4. Compilar reporte Markdown, verificar compuertas y empaquetar tarball sanitizado:
 pt-report compile
-
-# 2. Verifica la compuerta de calidad antes de cerrar:
 pt-eng close
-
-# 3. Sanitiza tokens/claves y empaqueta reproduciblemente con SHA-256:
 pt-eng pack</code></pre>
         </div>
       </div>
@@ -693,40 +792,128 @@ pt-eng pack</code></pre>
 
   <!-- CENTRO DE MANDO WEB, HERMES VAULT & TELEMETRÍA -->
   <section class="card" id="seccion-dashboard">
-    <h2>💻 Centro de Mando Web, Hermes API Vault &amp; Telemetría</h2>
-    <p style="color: var(--text-muted); margin-top: -6px;">SecLab proporciona un entorno gráfico táctico unificado y telemetría de red en tiempo real:</p>
+    <h2>💻 Centro de Mando Web, Playbooks, Copiloto &amp; Telemetría</h2>
+    <p style="color: var(--text-muted); margin-top: -6px;">SecLab proporciona un entorno gráfico táctico unificado, telemetría de red y herramientas avanzadas de auditoría:</p>
 
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
-      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
-        <h3 style="margin-top: 0; color: var(--accent-blue); font-size: 1rem;">🌐 Tactical Dashboard (:8080)</h3>
-        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px;">
-          Centro de gestión gráfica autenticado para auditar engagements y retos CTF Jeopardy, editar notas, explorar hallazgos con calculadora CVSS v3.1 y lanzar pipelines de reconocimiento con Scope Guard.
-        </p>
-        <div style="font-size: 0.8rem; color: var(--accent-green);">URL: http://127.0.0.1:8080</div>
+    <div class="grid-features">
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-blue);">🌐 Tactical Dashboard (:8080)</h3>
+          <p>
+            Centro de gestión gráfica autenticado para auditar engagements y retos CTF Jeopardy, editar notas, explorar hallazgos con calculadora CVSS v3.1, ejecutar playbooks y visualizar telemetría.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-green);">URL: http://127.0.0.1:8080</div>
       </div>
 
-      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
-        <h3 style="margin-top: 0; color: var(--accent-purple); font-size: 1rem;">🔑 Hermes API Key Vault (AES-256-GCM)</h3>
-        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px;">
-          Bóveda criptográfica aislada en <code>vault.db</code> con derivación segura para almacenar API keys de LLMs (OpenAI, Anthropic, Gemini, Groq, Ollama). Los subagentes y CLI acceden mediante <code>pt-vault-bridge</code> sin exponer claves en texto plano.
-        </p>
-        <div style="font-size: 0.8rem; color: var(--accent-purple);">Comando: pt-vault-bridge get &lt;provider&gt;</div>
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-purple);">⚡ Ejecutor de Playbooks Paso a Paso</h3>
+          <p>
+            Catálogo determinista en YAML (OWASP, GraphQL, OAuth, SMB, Pivot). Pestaña interactiva para simular corridas (dry-run), verificar Scope Guard fail-closed y avanzar paso a paso con el botón «▶️ Paso».
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-purple);">Endpoint: /api/v1/playbooks/{id}/step/run</div>
       </div>
 
-      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
-        <h3 style="margin-top: 0; color: var(--accent-green); font-size: 1rem;">📡 Telemetría de Red &amp; Terminal Multi-Tab</h3>
-        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px;">
-          La barra de navegación monitorea en vivo tu <strong>IP Local (LAN/Docker)</strong> y tu <strong>IP VPN (tun0)</strong> con copiado al portapapeles en 1 clic. La consola web en <code>:7681</code> admite pestañas concurrentes sincronizadas con la sesión tmux <code>pentest-lab</code> sin colisión de terminal.
-        </p>
-        <div style="font-size: 0.8rem; color: var(--accent-blue);">Terminal: http://127.0.0.1:7681</div>
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-green);">🔌 Copiloto Táctico Local &amp; Fallback</h3>
+          <p>
+            Integración nativa con Ollama y vLLM. Incluye botón «🔌 Estado Local», píldora de salud en vivo, fallback heurístico offline automático ante caídas y registro inmutable de consentimiento en disco.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-green);">Health: /api/v1/copilot/providers/health</div>
       </div>
 
-      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
-        <h3 style="margin-top: 0; color: var(--accent-amber); font-size: 1rem;">🗑️ Papelera Atómica (.seclab-trash)</h3>
-        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px;">
-          Eliminación segura sin <code>rm -rf</code> destructivo. Los proyectos eliminados se mueven atómicamente con <code>renameat2</code> a <code>.seclab-trash</code>, permitiendo restauración instantánea con verificación de colisiones desde la vista "Papelera" del Dashboard.
-        </p>
-        <div style="font-size: 0.8rem; color: var(--accent-amber);">Ruta: /workspace/.seclab-trash</div>
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-amber);">🔑 Hermes API Key Vault (AES-256-GCM)</h3>
+          <p>
+            Bóveda criptográfica aislada en <code>vault.db</code> con derivación segura para almacenar API keys de LLMs (OpenAI, Anthropic, Gemini, Groq, Ollama). Los subagentes acceden mediante <code>pt-vault-bridge</code> sin exponer texto plano.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-amber);">Comando: pt-vault-bridge get &lt;provider&gt;</div>
+      </div>
+
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-cyan);">📡 Telemetría de Red &amp; Terminal Multi-Tab</h3>
+          <p>
+            La barra superior monitorea en vivo tu <strong>IP Local (LAN)</strong> y tu <strong>IP VPN (tun0)</strong> con copiado al portapapeles. La consola web en <code>:7681</code> admite pestañas concurrentes sincronizadas con la sesión tmux sin colisión PTY.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-blue);">Terminal: http://127.0.0.1:7681</div>
+      </div>
+
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-purple);">🧬 Grafo de Procedencia DAG</h3>
+          <p>
+            Pestaña Línea de Tiempo con visualización reactiva del flujo de artefactos correlacionando alcance, escaneos de reconocimiento, hallazgos y reportes. Exportable a formato Mermaid y JSON.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-purple);">Export: /api/v1/engagements/{id}/provenance/export</div>
+      </div>
+
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-amber);">🛡️ Scope Guard DNS Drift &amp; Revisiones</h3>
+          <p>
+            Tarjeta táctica para detectar cambios de resolución DNS antes de ejecutar herramientas de red. Modal de historial de revisiones y diffs unificados de <code>target.yaml</code> con aviso de fronteras operacionales.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-amber);">Endpoint: /api/v1/scope/{id}/dns-drift</div>
+      </div>
+
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-blue);">🎓 Supervisión de Cohortes &amp; Autorreflexión</h3>
+          <p>
+            Pestaña de supervisión formativa para registrar justificaciones pedagógicas en checkpoints de auditoría. Permite a docentes inspeccionar el progreso agregado de aulas y cohortes estudiantiles.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-blue);">Endpoint: /api/v1/engagements/supervision/cohort/summary</div>
+      </div>
+
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-green);">📊 Historial de Métricas &amp; SARIF v2.1.0</h3>
+          <p>
+            Registro longitudinal de snapshots de madurez operacional y calidad de auditoría con gráficos de deltas. Exportación estandarizada de hallazgos en formato OASIS SARIF v2.1.0 para pipelines CI/CD.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-green);">SARIF: /api/v1/findings/{id}/export/sarif</div>
+      </div>
+
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-red);">🔒 Redacción de Secretos &amp; Firma Criptográfica</h3>
+          <p>
+            Conmutador táctico en el visor de artefactos para enmascarar contraseñas, bearer tokens, JWT y llaves privadas PEM. Sellado criptográfico de no repudio para <code>artifact-manifest.json</code>.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-red);">Comando: seclab_signature.py sign &lt;id&gt;</div>
+      </div>
+
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-amber);">🗑️ Papelera Atómica (.seclab-trash)</h3>
+          <p>
+            Eliminación segura sin <code>rm -rf</code> destructivo. Los proyectos eliminados se mueven atómicamente a <code>.seclab-trash</code>, permitiendo restauración instantánea con verificación de colisiones.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-amber);">Ruta: /workspace/.seclab-trash</div>
+      </div>
+
+      <div class="feature-card">
+        <div>
+          <h3 style="color: var(--accent-blue);">🌓 Modo Claro / Oscuro Táctico</h3>
+          <p>
+            Conmutador fluido de interfaz que conmuta entre modo oscuro táctico y modo claro de alto contraste para entornos de alta luminosidad, persistiendo la preferencia en <code>localStorage</code>.
+          </p>
+        </div>
+        <div class="feature-meta" style="color: var(--accent-blue);">Control: Barra de navegación superior</div>
       </div>
     </div>
   </section>
@@ -734,7 +921,7 @@ pt-eng pack</code></pre>
   <!-- BUSCADOR INTERACTIVO DE HERRAMIENTAS -->
   <section class="card">
     <h2>🔍 Buscador Rápido de Herramientas y Comandos (100+ Tools)</h2>
-    <p style="color: var(--text-muted); margin-top: -6px;">Escribe una herramienta o técnica (ej. <code>nmap</code>, <code>gau</code>, <code>x8</code>, <code>ligolo</code>, <code>hashcat</code>, <code>gef</code>):</p>
+    <p style="color: var(--text-muted); margin-top: -6px;">Escribe una herramienta o técnica (ej. <code>nmap</code>, <code>playbook</code>, <code>metrics</code>, <code>sarif</code>, <code>x8</code>, <code>ligolo</code>, <code>hashcat</code>, <code>supervision</code>):</p>
     
     <div class="search-box">
       <input type="text" class="search-input" id="tool-search" placeholder="Buscar por nombre, categoría o descripción..." oninput="filtrarHerramientas(this.value)">
@@ -749,7 +936,7 @@ pt-eng pack</code></pre>
     <h2>🔀 Pivoting Seguro y Conexión VPN</h2>
     <p style="color: var(--text-muted); margin-top: -6px;">Conexión a plataformas de pentest y túneles controlados con Route Guard perimetral:</p>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
       <div>
         <h3>Conexión VPN bajo demanda</h3>
         <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># TryHackMe:
@@ -775,7 +962,10 @@ pt-forward 8080:10.10.10.50:80
 
 # Chisel / Ligolo integrados:
 chisel client --help
-ligolo-proxy -h</code></pre>
+ligolo-proxy -h
+
+# Playbook de pivoteo interno:
+python3 /usr/local/bin/scripts/seclab_playbook.py show internal_pivot_audit</code></pre>
       </div>
     </div>
   </section>
@@ -804,6 +994,16 @@ const HERRAMIENTAS = [
   { name: 'pt-log', cat: 'auditoria', desc: 'Captura y firma continua de sesión de terminal con tmux pipe-pane', cmd: 'pt-log start [eng]' },
   { name: 'pt-serv-payloads', cat: 'post-exploit', desc: 'Servidor HTTP local para descargar linpeas, winpeas, nc o socat', cmd: 'pt-serv-payloads web 8000' },
   { name: 'pt-vault-bridge', cat: 'vault', desc: 'Puente seguro CLI para consultar llaves LLM del almacén cifrado Hermes', cmd: 'pt-vault-bridge get <provider>' },
+
+  // Módulos V3 Avanzados de SecLab
+  { name: 'seclab-playbook', cat: 'playbooks', desc: 'Ejecutor determinista de playbooks YAML paso a paso con Scope Guard fail-closed', cmd: 'python3 /usr/local/bin/scripts/seclab_playbook.py list' },
+  { name: 'seclab-metrics', cat: 'metricas', desc: 'Capturador de instantáneas históricas de madurez operacional y exportador Markdown/JSON', cmd: 'python3 /usr/local/bin/scripts/seclab_metrics.py snapshot <id>' },
+  { name: 'seclab-supervision', cat: 'supervision', desc: 'Motor de checkpoints formativos pedagógicos y reportes de autorreflexión', cmd: 'python3 /usr/local/bin/scripts/seclab_supervision.py status <id>' },
+  { name: 'seclab-provenance', cat: 'trazabilidad', desc: 'Grafo estructurado de procedencia técnica DAG correlacionando alcance y hallazgos', cmd: 'python3 /usr/local/bin/scripts/seclab_provenance.py graph <id>' },
+  { name: 'seclab-sarif', cat: 'reportes', desc: 'Exportador interoperable de hallazgos en estándar OASIS SARIF v2.1.0 para CI/CD', cmd: 'python3 /usr/local/bin/scripts/seclab_sarif.py export <id>' },
+  { name: 'seclab-signature', cat: 'cripto', desc: 'Firma y verificación criptográfica con sellado de no repudio de artifact-manifest.json', cmd: 'python3 /usr/local/bin/scripts/seclab_signature.py sign <id>' },
+  { name: 'seclab-copilot-export', cat: 'copiloto', desc: 'Exportador estructurado de conversaciones del Copiloto en Markdown y JSON con citas', cmd: 'python3 /usr/local/bin/scripts/seclab_copilot_export.py export <id>' },
+  { name: 'seclab-record-job', cat: 'recon', desc: 'Ingestión de corridas CLI manuales y externas en recon_jobs.db con badge CLI_EXTERNAL', cmd: 'python3 /usr/local/bin/scripts/seclab_record_job.py record <id> --tool nmap' },
 
   // Reconocimiento & Web
   { name: 'gau', cat: 'recon', desc: 'GetAllUrls: Recolección pasiva de URLs históricas desde AlienVault, Wayback y CommonCrawl', cmd: 'gau <dominio>' },
@@ -868,13 +1068,14 @@ pt-scope check https://${target}
 pt-recon ${nombre} --dry-run
 # Revisa alcance y límites antes de ejecutar sin --dry-run.
 
-# 3. Consultar recomendador táctico y generar prompt para IA
-pt-next --prompt
+# 3. Validar y ejecutar playbook determinista (ej. OWASP Top 10):
+python3 /usr/local/bin/scripts/seclab_playbook.py validate playbooks/web_owasp_top10.yaml scope/target.yaml
 
 # 4. Probar endpoints respetando Bounded Testing (BDT) y registrar hallazgo
 pt-finding new idor-usuarios
 
-# 5. Evaluar cobertura y compilar reporte
+# 5. Capturar instantánea de métricas y compilar reporte
+python3 /usr/local/bin/scripts/seclab_metrics.py snapshot ${nombre}
 pt-checklist --markdown
 pt-report compile
 pt-eng close</code></pre>
@@ -888,7 +1089,7 @@ function filtrarHerramientas(q) {
   const contenedor = document.getElementById('tool-results');
   
   if (!query) {
-    renderHerramientas(HERRAMIENTAS.slice(0, 8));
+    renderHerramientas(HERRAMIENTAS.slice(0, 10));
     return;
   }
 
@@ -935,6 +1136,27 @@ function seleccionarMision(mision, el) {
     genNombre.value = 'auditoria-web';
     genTarget.value = 'app.empresa.com';
     generarComandos();
+  } else if (mision === 'playbooks') {
+    genNombre.value = 'playbook-audit';
+    genTarget.value = 'api.empresa.com';
+    document.getElementById('plan-generado').innerHTML = `
+      <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <div style="font-weight: 600; color: var(--accent-purple); margin-bottom: 8px;">
+          📋 Secuencia de Playbooks Deterministas &amp; Scope Guard:
+        </div>
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Explorar catálogo de playbooks integrados:
+python3 /usr/local/bin/scripts/seclab_playbook.py list
+
+# 2. Validar estáticamente contra el target.yaml del proyecto:
+python3 /usr/local/bin/scripts/seclab_playbook.py validate playbooks/api_graphql_audit.yaml scope/target.yaml
+
+# 3. Simular corrida completa (dry-run):
+python3 /usr/local/bin/scripts/seclab_playbook.py run playbooks/api_graphql_audit.yaml --dry-run
+
+# 4. En el Dashboard (:8080 > Playbooks): avanzar interactivamente con el botón «▶️ Paso».
+# Cualquier paso fuera de alcance fallará cerrado con código de salida 126 (BLOCKED).</code></pre>
+      </div>
+    `;
   } else if (mision === 'ctf') {
     genNombre.value = 'htb-maquina';
     genTarget.value = '10.10.11.240';
@@ -963,31 +1185,52 @@ pt-cheat nmap</code></pre>
       </div>
     `;
   } else if (mision === 'agent') {
-    genNombre.value = 'audit-agent';
+    genNombre.value = 'copilot-agent';
     genTarget.value = 'api.empresa.com';
     document.getElementById('plan-generado').innerHTML = `
       <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
-        <div style="font-weight: 600; color: var(--accent-purple); margin-bottom: 8px;">
-          🤖 Secuencia para Modelos de Lenguaje & Agentes (Hermes Vault):
+        <div style="font-weight: 600; color: var(--accent-green); margin-bottom: 8px;">
+          🤖 Secuencia para Copiloto Táctico &amp; Modelos Locales (Zero Leak):
         </div>
-        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Configurar LLMs en Hermes API Vault (Dashboard > Vault o pt-vault-bridge)
-# Proveedores: OpenAI, Anthropic, Gemini, Groq, Ollama (cifrado AES-256-GCM)
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Verificar salud del proveedor local (Ollama en :11434 o vLLM en :8000):
+curl -s http://127.0.0.1:8080/api/v1/copilot/providers/health | jq .
+# O en el Dashboard, pulsa el botón interactivo «🔌 Estado Local» en la barra de chat.
 
-# 2. Generar System Prompt contextualizado para tu LLM:
-pt-next --prompt
+# 2. Si el proveedor local se apaga, el Copiloto opera en modo degradado con Fallback Heurístico.
 
-# 3. Extraer contexto completo del engagement en Markdown o JSON:
-pt-context mi-objetivo --json
+# 3. Configurar API keys para proveedores cloud en Hermes Vault (AES-256-GCM):
+pt-vault-bridge set openai "sk-..."
 
-# 4. Consultar plantilla de agente especializada:
-pt-skills prompt auth-agent</code></pre>
+# 4. Exportar transcripción de la sesión con re-verificación de citas en disco:
+curl -s "http://127.0.0.1:8080/api/v1/copilot/chat/export?engagement_id=mi-objetivo&format=markdown"</code></pre>
+      </div>
+    `;
+  } else if (mision === 'supervision') {
+    genNombre.value = 'evaluacion-estudiante';
+    genTarget.value = 'laboratorio.local';
+    document.getElementById('plan-generado').innerHTML = `
+      <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">
+          🎓 Secuencia de Supervisión Pedagógica, Métricas &amp; SARIF:
+        </div>
+        <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Inspeccionar checkpoints pedagógicos y responder autorreflexión de decisiones:
+# Abre en el Dashboard la pestaña «Supervisión» y completa el formulario.
+
+# 2. Capturar instantánea de madurez operacional y verificar gráficos longitudinales:
+python3 /usr/local/bin/scripts/seclab_metrics.py snapshot mi-objetivo
+
+# 3. Exportar grafo de procedencia técnica DAG en formato Mermaid:
+curl -s "http://127.0.0.1:8080/api/v1/engagements/mi-objetivo/provenance/export?format=mermaid"
+
+# 4. Exportar reporte estándar de hallazgos en formato OASIS SARIF v2.1.0:
+curl -s http://127.0.0.1:8080/api/v1/findings/mi-objetivo/export/sarif -o dist/findings.sarif.json</code></pre>
       </div>
     `;
   } else if (mision === 'pivoting') {
     document.getElementById('plan-generado').innerHTML = `
       <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
         <div style="font-weight: 600; color: var(--accent-amber); margin-bottom: 8px;">
-          🔀 Secuencia de Pivoting & Túneles Seguros:
+          🔀 Secuencia de Pivoting &amp; Túneles Seguros:
         </div>
         <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Iniciar proxy SOCKS5 local sobre tun0 (con Route Guard)
 pt-socks 1080
@@ -999,14 +1242,17 @@ pt-forward 8080:10.10.10.50:80
 proxychains4 nmap -sT -Pn -p 22,80,445 10.10.10.100
 
 # 4. Servidor de staging de payloads (chisel, ligolo, winpeas, nc)
-pt-serv-payloads web 8000</code></pre>
+pt-serv-payloads web 8000
+
+# 5. Playbook determinista de auditoría de pivoteo interno:
+python3 /usr/local/bin/scripts/seclab_playbook.py show internal_pivot_audit</code></pre>
       </div>
     `;
   } else if (mision === 'dashboard') {
     document.getElementById('plan-generado').innerHTML = `
       <div style="background: var(--bg-tertiary); padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
         <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">
-          💻 Centro de Mando Web & Telemetría:
+          💻 Centro de Mando Web, Playbooks &amp; Telemetría:
         </div>
         <pre><button class="copy-btn" onclick="copiarTexto(this)">copiar</button><code># 1. Tactical Dashboard (interfaz gráfica de gestión)
 http://127.0.0.1:8080
@@ -1014,9 +1260,14 @@ http://127.0.0.1:8080
 # 2. Terminal Web concurrente (multi-tab handoff sin colisión PTY)
 http://127.0.0.1:7681
 
-# 3. Monitoreo en tiempo real de IP Local y de IP VPN en la barra de navegación.
-
-# 4. Papelera Atómica (.seclab-trash): recuperación instantánea de proyectos.</code></pre>
+# 3. Pestañas avanzadas:
+# - Playbooks: ejecutor paso a paso con Scope Guard fail-closed.
+# - Copiloto: asistente local con fallback heurístico y exportación.
+# - Supervisión: checkpoints formativos y justificación reflexiva.
+# - Métricas: score de madurez operacional y tendencias longitudinales.
+# - Línea de Tiempo: grafo estructurado de procedencia DAG (Mermaid).
+# - Hallazgos: exportación estándar OASIS SARIF v2.1.0 y redacción de secretos.
+# - Papelera: recuperación atómica instantánea de proyectos (.seclab-trash).</code></pre>
       </div>
     `;
   }
@@ -1059,7 +1310,7 @@ function copiarTextoBoton(texto, btn) {
 // Inicializar al cargar
 document.addEventListener('DOMContentLoaded', () => {
   generarComandos();
-  renderHerramientas(HERRAMIENTAS.slice(0, 8));
+  renderHerramientas(HERRAMIENTAS.slice(0, 10));
 });
 </script>
 

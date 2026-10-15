@@ -59,7 +59,7 @@ jobs:
           format: table
           version: v0.74.0
       - name: Restore verified linter archives
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ runner.temp }}/ci-linter-cache
           key: ci-linters-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('supply-chain/ci-linters.lock.json') }}
